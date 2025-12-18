@@ -9,6 +9,10 @@
 		"ci": {
 			"description": "Run CI checks",
 			"command": "deno run --no-prompt --allow-run=deno @sekhmet/ci"
+		},
+		"add": {
+			"description": "Add a workspace to the repository",
+			"command": "deno run --no-prompt --allow-read --allow-write @sekhmet/add"
 		}
 	},
 
