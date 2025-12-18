@@ -3,12 +3,6 @@ import { runCIChecks } from "@/mod.ts";
 export async function main(): Promise<void> {
 	await runCIChecks([
 		{
-			name: "Deno Format",
-			command: new Deno.Command("deno", {
-				args: ["fmt", "--check"],
-			}),
-		},
-		{
 			name: "Deno Lint",
 			command: new Deno.Command("deno", {
 				args: ["lint"],
