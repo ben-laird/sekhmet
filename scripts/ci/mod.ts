@@ -5,6 +5,7 @@ export interface CICheck {
 	command: Deno.Command;
 	showIO?: boolean | ((status: CICheckResult["status"]) => boolean) | undefined;
 	skip?: boolean | (() => boolean) | undefined;
+	dependsOn?: string[] | undefined;
 }
 
 export type CICheckResult =
@@ -21,28 +22,7 @@ interface CICheckResultInternal {
 export async function runCIChecks(checks: CICheck[]): Promise<void> {
 	console.log(cyan(bold("Running CI checks...\n")));
 
-	const results = await Promise.all(
-		checks.map(async (check): Promise<CICheckResultInternal> => {
-			const shouldSkip = (() => {
-				if (typeof check.skip === "function") {
-					return check.skip();
-				}
-				return check.skip ?? false;
-			})();
-
-			if (shouldSkip) {
-				return { check, result: { status: "skipped" } };
-			}
-
-			const output = await check.command.output();
-
-			if (output.success) {
-				return { check, result: { status: "passed", output } };
-			}
-
-			return { check, result: { status: "failed", output } };
-		}),
-	);
+	const results = await runCheckGraph(checks);
 
 	let failed = false;
 
@@ -96,4 +76,71 @@ export async function runCIChecks(checks: CICheck[]): Promise<void> {
 	} else {
 		console.log(green(bold("\nAll CI checks passed")));
 	}
+}
+
+async function runCheckGraph(
+	checks: CICheck[],
+): Promise<CICheckResultInternal[]> {
+	const checkMap = new Map<string, CICheck>();
+	for (const check of checks) {
+		checkMap.set(check.name, check);
+	}
+
+	const completedResults = new Map<string, CICheckResultInternal>();
+
+	await Promise.all(checks.map((check) => runCheckWithDeps(check)));
+
+	return checks.map((check) => {
+		const result = completedResults.get(check.name);
+		if (!result) {
+			throw new Error(`Check "${check.name}" did not complete`);
+		}
+		return result;
+	});
+
+	async function runCheckWithDeps(check: CICheck): Promise<void> {
+		if (completedResults.has(check.name)) {
+			return;
+		}
+
+		if (check.dependsOn && check.dependsOn.length > 0) {
+			await Promise.all(
+				check.dependsOn.map((depName) => {
+					const depCheck = checkMap.get(depName);
+					if (!depCheck) {
+						throw new Error(
+							`Check "${check.name}" depends on "${
+								depName
+							}", but no such check exists`,
+						);
+					}
+
+					return runCheckWithDeps(depCheck);
+				}),
+			);
+		}
+
+		completedResults.set(check.name, await runCheck(check));
+	}
+}
+
+async function runCheck(check: CICheck): Promise<CICheckResultInternal> {
+	const shouldSkip = (() => {
+		if (typeof check.skip === "function") {
+			return check.skip();
+		}
+		return check.skip ?? false;
+	})();
+
+	if (shouldSkip) {
+		return { check, result: { status: "skipped" } };
+	}
+
+	const output = await check.command.output();
+
+	if (output.success) {
+		return { check, result: { status: "passed", output } };
+	}
+
+	return { check, result: { status: "failed", output } };
 }

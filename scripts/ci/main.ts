@@ -25,8 +25,8 @@ export async function main(): Promise<void> {
 		},
 		{
 			name: "Deno Coverage Report",
-			skip: !isCI,
 			showIO: true,
+			dependsOn: ["Deno Test"],
 			command: new Deno.Command("deno", {
 				args: ["coverage", "--detailed"],
 			}),
