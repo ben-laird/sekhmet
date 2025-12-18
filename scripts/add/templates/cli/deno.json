@@ -1,0 +1,15 @@
+{
+	"name": "@sekhmet/new-script",
+	"version": "0.1.0",
+	"publish": false,
+
+	"exports": {
+		".": "./main.ts",
+
+		"./lib": "./mod.ts"
+	},
+
+	"imports": {
+		"@/": "./"
+	}
+}
