@@ -8,7 +8,7 @@
 		},
 		"ci": {
 			"description": "Run CI checks",
-			"command": "deno run --no-prompt --allow-env=CI --allow-run=deno @sekhmet/ci"
+			"command": "deno run --no-prompt --allow-env --allow-run --allow-write --allow-read @sekhmet/ci"
 		},
 		"add": {
 			"description": "Add a workspace to the repository",

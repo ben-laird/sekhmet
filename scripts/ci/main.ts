@@ -1,14 +1,13 @@
-import { runCIChecks } from "@/mod.ts";
+import { runWorkflow } from "@/mod.ts";
 
 export async function main(): Promise<void> {
 	const isCI = Deno.env.get("CI") === "true";
 
-	await runCIChecks([
+	await runWorkflow([
+		// Parallel linting (no dependencies, will run concurrently)
 		{
 			name: "Deno Lint",
-			command: new Deno.Command("deno", {
-				args: ["lint"],
-			}),
+			command: new Deno.Command("deno", { args: ["lint"] }),
 		},
 		{
 			name: "Biome Check",
@@ -16,20 +15,32 @@ export async function main(): Promise<void> {
 				args: ["run", "--allow-env", "@biomejs/biome", "ci"],
 			}),
 		},
+
+		// Run tests (waits for lint to pass first)
 		{
 			name: "Deno Test",
-			showIO: (status) => isCI && status === "failed",
-			command: new Deno.Command("deno", {
-				args: ["test", "--parallel", "--coverage"],
-			}),
+			dependsOn: ["Deno Lint"],
+			showOutput: (status) => isCI && status === "failed",
+
+			command: new Deno.Command("deno", { args: ["test", "--coverage"] }),
 		},
+
+		// Generate coverage report (only if tests passed)
 		{
-			name: "Deno Coverage Report",
-			showIO: true,
+			name: "Generate coverage report",
 			dependsOn: ["Deno Test"],
-			command: new Deno.Command("deno", {
-				args: ["coverage", "--detailed"],
-			}),
+			showOutput: true,
+
+			command: new Deno.Command("deno", { args: ["coverage", "--detailed"] }),
+		},
+
+		// Cleanup (always runs, even if tests failed)
+		{
+			name: "Cleanup coverage data",
+			dependsOn: ["Generate coverage report"],
+			continueOnError: true,
+
+			command: new Deno.Command("rm", { args: ["-r", "coverage"] }),
 		},
 	]);
 }
