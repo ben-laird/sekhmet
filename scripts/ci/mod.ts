@@ -3,6 +3,11 @@ import { bold, cyan, green, red } from "@std/fmt/colors";
 export interface CICheck {
 	name: string;
 	command: Deno.Command;
+	showIO?: boolean | ((status: CICheckStatus) => boolean) | undefined;
+}
+
+export interface CICheckStatus {
+	passed: boolean;
 }
 
 export async function runCIChecks(checks: CICheck[]): Promise<void> {
@@ -22,6 +27,19 @@ export async function runCIChecks(checks: CICheck[]): Promise<void> {
 			console.log(green(`✓ ${check.name} passed`));
 		} else {
 			console.error(red(`✗ ${check.name} failed`));
+			failed = true;
+		}
+
+		const show = (() => {
+			if (typeof check.showIO === "function") {
+				return check.showIO({ passed: output.success });
+			} else if (typeof check.showIO === "boolean") {
+				return check.showIO;
+			}
+			return !output.success;
+		})();
+
+		if (show) {
 			const decoder = new TextDecoder();
 			if (output.stderr.length > 0) {
 				console.error(decoder.decode(output.stderr));
@@ -29,7 +47,6 @@ export async function runCIChecks(checks: CICheck[]): Promise<void> {
 			if (output.stdout.length > 0) {
 				console.log(decoder.decode(output.stdout));
 			}
-			failed = true;
 		}
 	}
 
