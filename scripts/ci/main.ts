@@ -18,9 +18,17 @@ export async function main(): Promise<void> {
 		},
 		{
 			name: "Deno Test",
-			showIO: ({ passed }) => isCI && !passed,
+			showIO: (status) => isCI && status === "failed",
 			command: new Deno.Command("deno", {
 				args: ["test", "--parallel", "--coverage"],
+			}),
+		},
+		{
+			name: "Deno Coverage Report",
+			skip: !isCI,
+			showIO: true,
+			command: new Deno.Command("deno", {
+				args: ["coverage", "--detailed"],
 			}),
 		},
 	]);
