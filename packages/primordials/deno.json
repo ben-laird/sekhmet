@@ -1,0 +1,13 @@
+{
+	"name": "@sekhmet/primordials",
+	"version": "0.1.0",
+
+	"exports": {
+		"./subtle": "./subtle.ts",
+		"./struct": "./struct.ts"
+	},
+
+	"imports": {
+		"@/": "./"
+	}
+}
