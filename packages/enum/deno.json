@@ -3,7 +3,10 @@
 	"version": "0.1.0",
 
 	"exports": {
-		".": "./mod.ts"
+		".": "./mod.ts",
+
+		"./core": "./src/core/main/mod.ts",
+		"./core/mini": "./src/core/mini/mod.ts"
 	},
 
 	"imports": {
