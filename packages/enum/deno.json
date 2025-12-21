@@ -6,7 +6,8 @@
 		".": "./mod.ts",
 
 		"./core": "./src/core/main/mod.ts",
-		"./core/mini": "./src/core/mini/mod.ts"
+		"./core/mini": "./src/core/mini/mod.ts",
+		"./core/mini/exit": "./src/core/mini/exit.ts"
 	},
 
 	"imports": {
