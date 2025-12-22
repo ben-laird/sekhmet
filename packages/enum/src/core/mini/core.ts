@@ -5,17 +5,21 @@ export type SomeVariant<K extends string = string> =
 	| [kind: K, value: unknown];
 // {}
 
-export interface SubtleEnum<T extends SomeVariant> {
+export interface RawEnum<T extends SomeVariant> {
 	variant: T;
 }
 
-export class Enum<out T extends SomeVariant> extends Struct<SubtleEnum<T>> {
+export class Enum<out T extends SomeVariant> extends Struct<RawEnum<T>> {
 	constructor(...variant: T) {
 		super({ variant });
 	}
 }
 
 // Types
+
+export type InferEnum<E extends Enum<SomeVariant>> =
+	E extends Enum<infer T> ? T : never;
+// {}
 
 export type Kinds<T extends SomeVariant> = T[0];
 
