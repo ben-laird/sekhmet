@@ -23,17 +23,17 @@ export async function runWorkflow(
 
 		// Format and display results
 		const decoder = new TextDecoder();
-		const failed = formatWorkflowOutput(steps, results, decoder);
+		const exitCode = formatWorkflowOutput(steps, results, decoder);
 
-		if (failed) {
+		if (exitCode !== 0) {
 			console.error(red(bold("\nWorkflow failed")));
-			Deno.exit(1);
+			Deno.exit(exitCode);
 		} else {
 			console.log(green(bold("\nWorkflow completed successfully")));
 		}
 
 		return {
-			success: !failed,
+			success: exitCode === 0,
 			steps: Array.from(results.values()),
 		};
 	} finally {

@@ -4,13 +4,14 @@ import type { StepResult, WorkflowStep } from "./types.ts";
 
 /**
  * Formats and displays workflow results to the console.
+ * Returns the exit code to use (0 for success, specific code for first failure).
  */
 export function formatWorkflowOutput(
 	steps: WorkflowStep[],
 	results: Map<string, StepResult>,
 	decoder: TextDecoder,
-): boolean {
-	let failed = false;
+): number {
+	let exitCode = 0;
 
 	for (const step of steps) {
 		const result = results.get(step.name);
@@ -55,10 +56,11 @@ export function formatWorkflowOutput(
 			);
 		}
 
-		if (result.status === "failed") {
-			failed = true;
+		// Track first failure's exit code
+		if (result.status === "failed" && exitCode === 0) {
+			exitCode = step.exitCode ?? 1;
 		}
 	}
 
-	return failed;
+	return exitCode;
 }

@@ -47,6 +47,7 @@ export interface WorkflowStep {
 	dependsOn?: string[]; // Explicit dependencies on other steps
 	continueOnError?: boolean; // Continue workflow even if this step fails
 	showOutput?: boolean | ((status: StepStatus) => boolean);
+	exitCode?: number; // Exit code to use if this step fails (defaults to 1)
 
 	// Capture outputs from this step for use in later steps
 	captureOutputs?: (
