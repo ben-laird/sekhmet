@@ -27,7 +27,7 @@ export async function main(): Promise<void> {
 			exitCode: EXIT_CODES.BIOME_CHECK_FAILED,
 
 			command: new Deno.Command("deno", {
-				args: ["run", "--allow-env", "@biomejs/biome", "ci"],
+				args: ["run", "--no-prompt", "--allow-env", "@biomejs/biome", "ci"],
 			}),
 		},
 
@@ -38,7 +38,9 @@ export async function main(): Promise<void> {
 			showOutput: (status) => isCI && status === "failed",
 			exitCode: EXIT_CODES.TESTS_FAILED,
 
-			command: new Deno.Command("deno", { args: ["test", "--coverage"] }),
+			command: new Deno.Command("deno", {
+				args: ["test", "--no-prompt", "--coverage"],
+			}),
 		},
 
 		// Show coverage report (only if tests passed)
