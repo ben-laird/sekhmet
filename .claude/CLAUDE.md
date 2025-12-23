@@ -24,12 +24,32 @@ deno test packages/enum/src/core/mini/eliminate.test.ts
 ### Code Quality
 
 ```bash
-# Format and lint with Biome
-deno run npm:@biomejs/biome check --write .
-
-# Run all CI checks (format, lint, test, type check)
+# **ALWAYS run this after making changes to verify your work**
 deno task ci
+
+# This runs ALL quality checks:
+# - Format and lint with Biome
+# - Type checking
+# - All tests
+
+# For manual formatting only:
+deno run npm:@biomejs/biome check --write .
 ```
+
+**IMPORTANT**: After implementing any feature, fix, or refactor, you MUST run
+`deno task ci` to verify your work passes all checks before considering the task
+complete.
+
+**Handling CI Failures**: If `deno task ci` fails:
+
+- **Analyze the failure**: Test failures, type errors, or lint issues may reveal
+  bugs in your implementation OR in existing code
+- **Don't assume you're wrong**: CI failures might catch mistakes in the
+  original codebase that your changes exposed
+- **Fix the root cause**: Whether it's your new code or a pre-existing bug,
+  address the actual issue rather than working around it
+- **Communicate findings**: If CI reveals issues in existing code, explain what
+  you found and what you're fixing
 
 ### Package Management
 
@@ -194,4 +214,30 @@ type MyVariants =
 - Use `@std/assert` for assertions
 - Import from source using `@/` alias within packages
 - Test file naming: `*.test.ts`
-- Follow BDD principles: Given-When-Then structure in tests
+- **REQUIRED**: Use Given-When-Then comments in ALL tests to document the test
+  structure
+
+### Given-When-Then Structure
+
+Every test MUST include explicit Given-When-Then comments:
+
+```typescript
+Deno.test("feature does something", () => {
+	// Given: initial state or setup
+	const input = createInput();
+
+	// When: action being tested
+	const result = feature(input);
+
+	// Then: expected outcome
+	assertEquals(result, expected);
+});
+```
+
+**Guidelines**:
+
+- **Given**: Describe the preconditions and test setup
+- **When**: Describe the action or operation being tested
+- **Then**: Describe the expected result or behavior
+- Use these comments even in simple tests for consistency
+- Multiple When-Then pairs are acceptable for complex scenarios
