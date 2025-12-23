@@ -7,9 +7,27 @@
 
 		"./core": "./src/core/main/mod.ts",
 		"./core/mini": "./src/core/mini/mod.ts",
+		"./core/mini/core": "./src/core/mini/core.ts",
 		"./core/mini/exit": "./src/core/mini/exit.ts",
 		"./core/mini/eliminate": "./src/core/mini/eliminate.ts",
-		"./core/mini/isolate": "./src/core/mini/isolate.ts"
+		"./core/mini/isolate": "./src/core/mini/isolate.ts",
+
+		"./latch": "./src/latch/main/mod.ts",
+		"./latch/mini": "./src/latch/mini/mod.ts",
+
+		"./option": "./src/option/main/mod.ts",
+		"./option/mini": "./src/option/mini/mod.ts",
+		"./option/mini/combinators": "./src/option/mini/combinators.ts",
+		"./option/mini/core": "./src/option/mini/core.ts",
+		"./option/mini/mutation": "./src/option/mini/mutation.ts",
+		"./option/mini/predicates": "./src/option/mini/predicates.ts",
+		"./option/mini/result": "./src/option/mini/result.ts",
+		"./option/mini/transform": "./src/option/mini/transform.ts",
+		"./option/mini/unwrap": "./src/option/mini/unwrap.ts",
+
+		"./result": "./src/result/main/mod.ts",
+		"./result/mini": "./src/result/mini/mod.ts",
+		"./result/mini/core": "./src/result/mini/core.ts"
 	},
 
 	"imports": {
