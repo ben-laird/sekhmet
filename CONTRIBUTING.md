@@ -1,0 +1,414 @@
+# Contributing to Sekhmet
+
+Thank you for your interest in contributing to Sekhmet! This guide will help you
+get started and understand the project conventions.
+
+## Table of Contents
+
+- [Standards & Conventions](#standards--conventions)
+- [Getting Started](#getting-started)
+- [Development Setup](#development-setup)
+- [Project Structure](#project-structure)
+- [Coding Standards](#coding-standards)
+- [Testing](#testing)
+- [Commit Guidelines](#commit-guidelines)
+- [Pull Request Process](#pull-request-process)
+- [Adding New Packages](#adding-new-packages)
+
+## Standards & Conventions
+
+This project follows established industry standards and conventions:
+
+### Version Control & Releases
+
+- **[Conventional Commits](https://www.conventionalcommits.org/)** - Structured
+  commit messages for clear history and automated changelog generation
+- **[Semantic Versioning](https://semver.org/)** - Version numbering scheme
+  (MAJOR.MINOR.PATCH)
+
+### Code Quality
+
+- **[Biome](https://biomejs.dev/)** - Fast formatter and linter for JavaScript
+  and TypeScript
+  - Configured in [biome.json](biome.json)
+  - Enforces consistent formatting and code quality rules
+- **[TypeScript Strict Mode](https://www.typescriptlang.org/tsconfig#strict)** -
+  Maximum type safety with additional strict compiler options
+- **[isolatedDeclarations](https://www.typescriptlang.org/tsconfig#isolatedDeclarations)** -
+  Explicit type annotations for better compatibility
+
+### Documentation
+
+- **[JSDoc](https://jsdoc.app/)** - Inline code documentation for functions and
+  types
+- **[Markdown](https://commonmark.org/)** - CommonMark specification for all
+  documentation files
+
+### Module System
+
+- **[ES Modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules)** -
+  Native JavaScript module system (ESM)
+- **[Deno Workspaces](https://docs.deno.com/runtime/fundamentals/workspaces/)** -
+  Monorepo management
+
+### Testing Framework
+
+- **[Deno Test](https://docs.deno.com/runtime/fundamentals/testing/)** -
+  Built-in test runner with coverage support
+- **[Behavior-Driven Development (BDD)](https://en.wikipedia.org/wiki/Behavior-driven_development)** -
+  Tests use Given-When-Then structure for clarity
+
+All contributions must adhere to these standards. The CI pipeline aims to
+enforce compliance automatically.
+
+## Getting Started
+
+Sekhmet is a collection of frameworks for type-safe, composable development.
+Before contributing:
+
+1. Read the main [README.md](README.md) to understand the project philosophy
+2. Explore existing packages to understand the patterns
+3. Check open issues for tasks that need help
+
+## Development Setup
+
+### Prerequisites
+
+- [Deno](https://deno.land/) (latest version recommended)
+- Git
+
+### Initial Setup
+
+1. Fork and clone the repository:
+
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/sekhmet.git
+   cd sekhmet
+   ```
+
+2. The project uses Deno workspaces. All dependencies are managed through
+   [deno.json](deno.json).
+
+3. Run CI checks to ensure everything works:
+
+   ```bash
+   deno task ci
+   ```
+
+## Project Structure
+
+```txt
+sekhmet/
+├── packages/         # Framework packages
+│   ├── enum/         # Enum framework
+│   ├── primordials/  # Core primitives
+│   └── ...
+├── scripts/          # Build and development scripts
+│   └── add/          # Package scaffolding tool
+├── deno.json         # Workspace configuration
+├── biome.json        # Linter/formatter config
+└── README.md
+```
+
+### Package Structure
+
+Each big package (any package with multiple feature exports and large classes)
+follows this structure:
+
+```txt
+package-name/
+├── src/
+│   ├── feature-name/
+│   │   ├── main/        # Full-featured exports
+│   │   └── mini/        # Tree-shakable minimal exports
+│   └── ...
+├── deno.json            # Package configuration
+└── README.md
+```
+
+Medium-sized packages (any package with multiple feature exports) follow this
+structure:
+
+```txt
+package-name/
+├── src/
+│   ├── feature-name/
+│   │   ├── mod.ts       # Exports
+│   │   ├── mod.test.ts  # Tests
+│   │   └── ...
+│   └── ...
+├── deno.json            # Package configuration
+└── README.md
+```
+
+Small packages will follow this structure:
+
+```txt
+package-name/
+├── mod.ts               # Exports
+├── mod.test.ts          # Tests
+├── deno.json            # Package configuration
+└── README.md
+```
+
+When in doubt, start with a small package, and start writing code in a
+`mod.test.ts` file right next to your tests. Soon, you'll get a big enough file
+that your main code you can move to a `mod.ts` file, and your tests will already
+be written for you!
+
+If you have multiple related `mod.ts` files written like this, refactor to the
+medium-sized configuration. Then, if you have big enough features, refactor to
+the big package configuration.
+
+## Coding Standards
+
+### TypeScript Configuration
+
+We use the strictest TypeScript settings:
+
+- `strict: true`
+- `exactOptionalPropertyTypes: true`
+- `useUnknownInCatchVariables: true`
+- `noImplicitOverride: true`
+- `noUncheckedIndexedAccess: true`
+- `isolatedDeclarations: true`
+
+All code must compile with these settings.
+
+### Code Style
+
+- **Formatting**: We use tabs for indentation (configured in Biome)
+- **Quotes**: Double quotes for strings
+- **Imports**: Use path aliases (`@~/` for root, `@/` within packages)
+- **Naming**:
+  - `camelCase` for variables and functions
+  - `PascalCase` for types and interfaces
+  - `SCREAMING_SNAKE_CASE` for constants
+
+### Format and Lint
+
+Run Biome to format and lint your code:
+
+```bash
+deno run npm:@biomejs/biome check --write .
+```
+
+Or use your editor's Biome integration.
+
+### Core Principles
+
+1. **Zero external dependencies**: Only use code within this monorepo for source
+   code. You may use any dependencies necessary for test code; be sure to check
+   the root `deno.json` for all external dependencies included, as you might
+   find one that suits your needs already installed.
+2. **Environment-agnostic**: Source code should work in all JavaScript runtimes.
+   Test code only needs to work in Deno.
+3. **Type-safe**: Leverage TypeScript's type system maximally
+4. **Composable**: Design primitives that can be combined
+5. **Tree-shakable**: Provide `mini` variants with granular exports
+6. **ESM-native**: Use ES modules exclusively
+
+### Architecture Patterns
+
+- Start with simple primitives
+- Build complex functionality through composition
+- Avoid classes when functions suffice
+- Prefer pure functions over stateful logic
+- Export both "kitchen sink" and individual functions
+
+## Testing
+
+### Writing Tests
+
+- Place tests next to source files: `feature.ts` → `feature.test.ts`
+- Use Deno's built-in test runner
+- Import from `@std/assert` and `@std/testing` (and other dependencies)
+- Follow BDD principles using **Given-When-Then** structure
+
+#### BDD Test Structure
+
+We use Behavior-Driven Development with Given-When-Then comments to make tests
+clear and maintainable:
+
+```ts
+import { assertEquals } from "@std/assert";
+import { myFunction } from "./feature.ts";
+
+Deno.test("myFunction handles basic case", () => {
+	// Given - Setup test data and preconditions
+	const input = "test";
+
+	// When - Execute the behavior being tested
+	const result = myFunction(input);
+
+	// Then - Assert expected outcomes
+	assertEquals(result, expected);
+});
+```
+
+For complex tests with multiple assertions, use nested steps:
+
+```ts
+import { assertEquals } from "@std/assert";
+import { assertType, type IsExact } from "@std/testing/types";
+
+Deno.test("Feature behaves correctly", async (t) => {
+	// Given
+	const input = setupTestData();
+
+	// When
+	const result = performOperation(input);
+
+	// Then
+	await t.step("validates output type", () => {
+		assertType<IsExact<typeof result, ExpectedType>>(true);
+	});
+
+	await t.step("validates output value", () => {
+		assertEquals(result, expectedValue);
+	});
+});
+```
+
+#### BDD Guidelines
+
+- **Given**: Set up test data, create instances, define preconditions
+- **When**: Execute the specific behavior or function being tested
+- **Then**: Assert expected outcomes using `assertEquals`, `assertType`, etc.
+- Use descriptive test names that describe the behavior, not implementation
+- Group related assertions using `t.step()` for better test output
+
+### Running Tests
+
+```bash
+# Run all tests
+deno test --no-prompt --parallel
+
+# Run tests with coverage
+deno task gaps
+
+# Run tests for specific package
+deno test packages/enum/
+```
+
+### Coverage Requirements
+
+- Aim for comprehensive test coverage
+- Use `deno task gaps` to identify untested code
+- Critical paths must be tested
+
+## Commit Guidelines
+
+We follow conventional commits for clear history:
+
+```txt
+type(scope): description
+
+[optional body]
+```
+
+### Types
+
+- `feat`: New feature
+- `fix`: Bug fix
+- `test`: Adding or updating tests
+- `refactor`: Code restructuring without behavior change
+- `docs`: Documentation changes
+- `chore`: Maintenance tasks
+- `perf`: Performance improvements
+
+### Scopes
+
+Use package names as scopes:
+
+- `@sekhmet/enum`
+- `@sekhmet/primordials`
+- Or specific areas within packages
+
+### Examples
+
+```txt
+feat(@sekhmet/enum): add eliminate function
+
+test(@sekhmet/enum): add exit tests
+
+chore(@sekhmet/enum): add eliminate mini exports
+```
+
+## Pull Request Process
+
+1. **Create a feature branch**:
+
+   ```bash
+   git checkout -b feat/my-feature
+   ```
+
+2. **Make your changes**:
+   - Write code following the standards above
+   - Add tests for new functionality
+   - Update documentation if needed
+
+3. **Run checks**:
+
+   ```bash
+   deno task ci
+   ```
+
+4. **Commit your changes** using conventional commits
+
+5. **Push and create a PR**:
+   - Provide a clear description of changes
+   - Reference any related issues
+   - Ensure CI passes
+
+6. **Address review feedback**:
+   - Make requested changes
+   - Keep commits clean (squash if needed)
+
+### PR Checklist
+
+- [ ] Code follows project style and conventions
+- [ ] Tests added/updated and passing
+- [ ] Documentation updated (README, JSDoc comments)
+- [ ] Commit messages follow conventional format
+- [ ] `isolatedDeclarations` compatibility maintained
+- [ ] No external dependencies added
+- [ ] CI checks passing
+
+## Adding New Packages
+
+Use the scaffolding tool to create a new workspace:
+
+```bash
+deno task add
+```
+
+This will guide you through creating either a library or CLI package with the
+correct structure.
+
+### Package Naming
+
+- Scoped: `@sekhmet/package-name`
+- Lowercase with hyphens
+- Descriptive and concise
+
+### Package Requirements
+
+New packages should:
+
+- Include both `main` and `mini` export paths
+- Have comprehensive README with usage examples
+- Follow the same TypeScript strictness
+- Include test coverage
+- Export type utilities where appropriate
+- Maintain composability with other Sekhmet packages
+
+## Questions?
+
+If you have questions or need clarification:
+
+1. Check existing issues and PRs
+2. Review package READMEs and source code
+3. Open a discussion or issue
+
+Thank you for contributing to Sekhmet!
