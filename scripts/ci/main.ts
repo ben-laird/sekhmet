@@ -25,9 +25,9 @@ export async function main(): Promise<void> {
 			command: new Deno.Command("deno", { args: ["test", "--coverage"] }),
 		},
 
-		// Generate coverage report (only if tests passed)
+		// Show coverage report (only if tests passed)
 		{
-			name: "Generate coverage report",
+			name: "Show coverage report",
 			dependsOn: ["Deno Test"],
 			showOutput: true,
 
@@ -37,8 +37,9 @@ export async function main(): Promise<void> {
 		// Cleanup (always runs, even if tests failed)
 		{
 			name: "Cleanup coverage data",
-			dependsOn: ["Generate coverage report"],
+			dependsOn: ["Show coverage report"],
 			continueOnError: true,
+			condition: () => !isCI,
 
 			command: new Deno.Command("rm", { args: ["-r", "coverage"] }),
 		},
