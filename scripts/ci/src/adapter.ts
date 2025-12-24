@@ -1,3 +1,4 @@
+// deno-coverage-ignore-file
 import * as core from "@actions/core";
 import { cyan, gray, red, yellow } from "@std/fmt/colors";
 
