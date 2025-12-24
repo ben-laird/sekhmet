@@ -216,6 +216,38 @@ Or use your editor's Biome integration.
 - Prefer pure functions over stateful logic
 - Export both "kitchen sink" and individual functions
 
+### Infrastructure Code Conventions
+
+Code in `scripts/`, CI configuration, GitHub Actions workflows, and other
+infrastructure has **relaxed conventions** compared to published packages:
+
+**Relaxed for infrastructure:**
+
+- **No package structure requirements**: Infrastructure code doesn't need to
+  follow the `main/`/`mini/` pattern
+- **No export conventions**: Scripts don't need dual export paths or specific
+  export patterns
+- **Backwards compatibility not required**: Breaking changes to internal tooling
+  are acceptable
+- **Pragmatic over pure**: Use classes, state, or any patterns that make the
+  tool easier to maintain
+- **Dependencies allowed**: Infrastructure can use external dependencies if they
+  improve maintainability
+- **TypeScript strictness still applies**: Infrastructure must still compile
+  with the global strict TypeScript settings (including `isolatedDeclarations`),
+  but the architectural constraints and API design principles for packages don't
+  apply
+
+**Still required for infrastructure:**
+
+- Pass `deno task ci` checks (formatting, linting, tests)
+- Clear code that future maintainers can understand
+- Tests for complex logic
+- Conventional commit messages
+
+Infrastructure exists to support package development; optimize for
+maintainability and developer experience over architectural purity.
+
 ## Testing
 
 ### Writing Tests
