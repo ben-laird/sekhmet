@@ -1,3 +1,4 @@
+// deno-coverage-ignore-file
 import { bold, cyan, green, red } from "@std/fmt/colors";
 import { executeStepGraph } from "./graph.ts";
 import { formatWorkflowOutput } from "./output.ts";

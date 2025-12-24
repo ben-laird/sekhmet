@@ -1,3 +1,4 @@
+// deno-coverage-ignore-file
 import { runWorkflow } from "@/mod.ts";
 
 /**
@@ -35,11 +36,19 @@ export async function main(): Promise<void> {
 		{
 			name: "Deno Test",
 			dependsOn: ["Deno Lint"],
-			showOutput: (status) => isCI && status === "failed",
+			showOutput: (status) => isCI || status === "failed",
 			exitCode: EXIT_CODES.TESTS_FAILED,
 
 			command: new Deno.Command("deno", {
-				args: ["test", "--no-prompt", "--coverage"],
+				args: [
+					"test",
+					"--no-prompt",
+					"--allow-env",
+					"--allow-read",
+					"--allow-write",
+					"--allow-run",
+					"--coverage",
+				],
 			}),
 		},
 

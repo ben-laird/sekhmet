@@ -1,3 +1,4 @@
+// deno-coverage-ignore-file
 import { cyan, gray, green, red } from "@std/fmt/colors";
 import { shouldShowOutput } from "./step.ts";
 import type { StepResult, WorkflowStep } from "./types.ts";

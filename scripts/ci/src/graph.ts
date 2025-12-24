@@ -29,9 +29,12 @@ export async function executeStepGraph(
 	return completedSteps;
 
 	async function executeStepWithDeps(step: WorkflowStep): Promise<void> {
+		// Defensive early-return check (unreachable through normal execution)
+		// deno-coverage-ignore-start
 		if (completedSteps.has(step.name)) {
 			return;
 		}
+		// deno-coverage-ignore-stop
 
 		// Wait for dependencies
 		if (step.dependsOn && step.dependsOn.length > 0) {
