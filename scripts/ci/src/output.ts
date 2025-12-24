@@ -1,5 +1,6 @@
 // deno-coverage-ignore-file
 import { cyan, gray, green, red } from "@std/fmt/colors";
+import type { CIAdapter } from "./adapter.ts";
 import { shouldShowOutput } from "./step.ts";
 import type { StepResult, WorkflowStep } from "./types.ts";
 
@@ -7,11 +8,12 @@ import type { StepResult, WorkflowStep } from "./types.ts";
  * Formats and displays workflow results to the console.
  * Returns the exit code to use (0 for success, specific code for first failure).
  */
-export function formatWorkflowOutput(
+export async function formatWorkflowOutput(
 	steps: WorkflowStep[],
 	results: Map<string, StepResult>,
 	decoder: TextDecoder,
-): number {
+	adapter: CIAdapter,
+): Promise<number> {
 	let exitCode = 0;
 
 	for (const step of steps) {
@@ -39,15 +41,14 @@ export function formatWorkflowOutput(
 
 		// Show output if configured
 		if (result.output && shouldShowOutput(step, result.status)) {
-			console.group();
+			const output = result.output;
+			await adapter.group(result.name, () => {
+				const stderr = decoder.decode(output.stderr);
+				if (stderr) console.error(stderr);
 
-			const stderr = decoder.decode(result.output.stderr);
-			if (stderr) console.error(stderr);
-
-			const stdout = decoder.decode(result.output.stdout);
-			if (stdout) console.log(stdout);
-
-			console.groupEnd();
+				const stdout = decoder.decode(output.stdout);
+				if (stdout) console.log(stdout);
+			});
 		}
 
 		// Show captured outputs

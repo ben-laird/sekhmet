@@ -1,5 +1,6 @@
 // deno-coverage-ignore-file
 import { bold, cyan, green, red } from "@std/fmt/colors";
+import { createAdapter } from "./adapter.ts";
 import { executeStepGraph } from "./graph.ts";
 import { formatWorkflowOutput } from "./output.ts";
 import type { WorkflowResult, WorkflowStep } from "./types.ts";
@@ -14,7 +15,12 @@ import type { WorkflowResult, WorkflowStep } from "./types.ts";
 export async function runWorkflow(
 	steps: WorkflowStep[],
 ): Promise<WorkflowResult> {
-	console.log(cyan(bold("Running workflow...\n")));
+	const adapter = createAdapter();
+
+	// Use grouping in GitHub Actions, plain output locally
+	await adapter.group("Running workflow", () => {
+		console.log(cyan(bold("Running workflow...\n")));
+	});
 
 	// Create artifacts directory
 	const artifactsDir = await Deno.makeTempDir({ prefix: "ci-artifacts-" });
@@ -24,12 +30,14 @@ export async function runWorkflow(
 
 		// Format and display results
 		const decoder = new TextDecoder();
-		const exitCode = formatWorkflowOutput(steps, results, decoder);
+		const exitCode = await formatWorkflowOutput(steps, results, decoder, adapter);
 
 		if (exitCode !== 0) {
+			adapter.error("Workflow failed");
 			console.error(red(bold("\nWorkflow failed")));
 			Deno.exit(exitCode);
 		} else {
+			adapter.notice("Workflow completed successfully");
 			console.log(green(bold("\nWorkflow completed successfully")));
 		}
 
