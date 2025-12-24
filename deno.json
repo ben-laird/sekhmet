@@ -4,7 +4,7 @@
 	"tasks": {
 		"gaps": {
 			"description": "Find gaps in test coverage",
-			"command": "deno test --no-prompt --coverage --parallel && deno coverage --detailed"
+			"command": "deno test --no-prompt --coverage --allow-env --allow-read --allow-write --allow-run --parallel && deno coverage --detailed"
 		},
 		"ci": {
 			"description": "Run CI checks",
