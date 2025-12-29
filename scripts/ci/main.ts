@@ -6,8 +6,8 @@ import { runWorkflow } from "@/mod.ts";
  * Each step has a unique exit code to identify which step failed.
  */
 export const EXIT_CODES = {
-	DENO_LINT_FAILED: 1,
-	BIOME_CHECK_FAILED: 2,
+	LINT_FAILED: 1,
+	CHECK_FAILED: 2,
 	TESTS_FAILED: 3,
 	COVERAGE_FAILED: 4,
 } as const;
@@ -19,16 +19,32 @@ export async function main(): Promise<void> {
 		// Parallel linting (no dependencies, will run concurrently)
 		{
 			name: "Deno Lint",
-			exitCode: EXIT_CODES.DENO_LINT_FAILED,
+			exitCode: EXIT_CODES.LINT_FAILED,
 
 			command: new Deno.Command("deno", { args: ["lint"] }),
 		},
 		{
 			name: "Biome Check",
-			exitCode: EXIT_CODES.BIOME_CHECK_FAILED,
+			exitCode: EXIT_CODES.CHECK_FAILED,
 
 			command: new Deno.Command("deno", {
 				args: ["run", "--no-prompt", "--allow-env", "@biomejs/biome", "ci"],
+			}),
+		},
+		{
+			name: "Documentation Lint",
+			exitCode: EXIT_CODES.LINT_FAILED,
+
+			command: new Deno.Command("deno", {
+				args: ["doc", "--lint", "./**/*.ts"],
+			}),
+		},
+		{
+			name: "JSR Publish Dry Run",
+			exitCode: EXIT_CODES.CHECK_FAILED,
+
+			command: new Deno.Command("deno", {
+				args: ["publish", "--dry-run"],
 			}),
 		},
 
