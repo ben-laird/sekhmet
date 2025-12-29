@@ -4,8 +4,8 @@ import { EXIT_CODES, main } from "./main.ts";
 Deno.test("EXIT_CODES are defined with unique values", () => {
 	// Given: EXIT_CODES constant
 	// Then: all exit codes should be defined and unique
-	assertEquals(EXIT_CODES.DENO_LINT_FAILED, 1);
-	assertEquals(EXIT_CODES.BIOME_CHECK_FAILED, 2);
+	assertEquals(EXIT_CODES.LINT_FAILED, 1);
+	assertEquals(EXIT_CODES.CHECK_FAILED, 2);
 	assertEquals(EXIT_CODES.TESTS_FAILED, 3);
 	assertEquals(EXIT_CODES.COVERAGE_FAILED, 4);
 
