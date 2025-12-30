@@ -2,6 +2,12 @@ import { getStructParams } from "@sekhmet/primordials/struct";
 import type { Enum, Isolate, SomeVariant, Values } from "./core.ts";
 import { union, unionKinds } from "./exit.ts";
 
+/**
+ * Type guard to check if an enum matches a specific variant kind.
+ * @param self The enum to check
+ * @param kind The variant kind to test for
+ * @returns True if the enum is of the specified kind, narrowing the type accordingly
+ */
 export function isolate<T extends SomeVariant, const K extends T[0]>(
 	self: Enum<T>,
 	kind: K,
@@ -9,6 +15,13 @@ export function isolate<T extends SomeVariant, const K extends T[0]>(
 	return unionKinds(self) === kind;
 }
 
+/**
+ * Type guard that checks if an enum matches a specific variant kind AND satisfies a predicate on its value.
+ * @param self The enum to check
+ * @param kind The variant kind to test for
+ * @param predicate Additional condition the variant's value must satisfy
+ * @returns True if both the kind matches and the predicate returns true
+ */
 export function isolateAnd<
 	T extends SomeVariant,
 	const K extends T[0],
@@ -23,6 +36,12 @@ export function isolateAnd<
 	return isolate(self, kind) && predicate(union(self));
 }
 
+/**
+ * Type guard to check if an enum matches any of the specified variant kinds.
+ * @param self The enum to check
+ * @param kinds Set of variant kinds to test against
+ * @returns True if the enum matches any of the provided kinds
+ */
 export function isolateAny<T extends SomeVariant, const K extends T[0]>(
 	self: Enum<T>,
 	kinds: ReadonlySet<K>,
@@ -34,6 +53,13 @@ export function isolateAny<T extends SomeVariant, const K extends T[0]>(
 	return false;
 }
 
+/**
+ * Asserts that an enum is of a specific variant kind, throwing an error if not.
+ * @param self The enum to assert
+ * @param kind The expected variant kind
+ * @param message Optional custom error message
+ * @throws {Error} If the enum is not of the specified kind
+ */
 export function assertIsolated<T extends SomeVariant, const K extends T[0]>(
 	self: Enum<T>,
 	kind: K,
@@ -50,6 +76,13 @@ export function assertIsolated<T extends SomeVariant, const K extends T[0]>(
 	throw new Error(panicMessage, { cause: self });
 }
 
+/**
+ * Asserts that an enum matches any of the specified variant kinds, throwing an error if not.
+ * @param self The enum to assert
+ * @param kinds Set of acceptable variant kinds
+ * @param message Optional custom error message
+ * @throws {Error} If the enum doesn't match any of the specified kinds
+ */
 export function assertAnyIsolated<T extends SomeVariant, const K extends T[0]>(
 	self: Enum<T>,
 	kinds: ReadonlySet<K>,
@@ -72,6 +105,12 @@ export function assertAnyIsolated<T extends SomeVariant, const K extends T[0]>(
 	throw new Error(panicMessage, { cause: self });
 }
 
+/**
+ * Executes an inspector function if the enum matches the specified variant kind.
+ * @param self The enum to inspect
+ * @param kind The variant kind to match
+ * @param inspector Function to execute with the variant's value if the kind matches
+ */
 export function inspectIsolated<T extends SomeVariant, const K extends T[0]>(
 	self: Enum<T>,
 	kind: K,
@@ -82,6 +121,12 @@ export function inspectIsolated<T extends SomeVariant, const K extends T[0]>(
 	}
 }
 
+/**
+ * Executes an inspector function if the enum matches any of the specified variant kinds.
+ * @param self The enum to inspect
+ * @param kinds Set of variant kinds to match against
+ * @param inspector Function to execute with the variant if any kind matches
+ */
 export function inspectAnyIsolated<T extends SomeVariant, const K extends T[0]>(
 	self: Enum<T>,
 	kinds: ReadonlySet<K>,
@@ -92,6 +137,12 @@ export function inspectAnyIsolated<T extends SomeVariant, const K extends T[0]>(
 	}
 }
 
+/**
+ * Generator that yields the enum's value if it matches the specified variant kind.
+ * @param self The enum to check
+ * @param kind The variant kind to match
+ * @yields The variant's value if the kind matches
+ */
 export function* iterIsolated<T extends SomeVariant, const K extends T[0]>(
 	self: Enum<T>,
 	kind: K,
@@ -101,6 +152,12 @@ export function* iterIsolated<T extends SomeVariant, const K extends T[0]>(
 	}
 }
 
+/**
+ * Generator that yields the enum if it matches any of the specified variant kinds.
+ * @param self The enum to check
+ * @param kinds Set of variant kinds to match against
+ * @yields The enum if any kind matches
+ */
 export function* iterAnyIsolated<T extends SomeVariant, const K extends T[0]>(
 	self: Enum<T>,
 	kinds: ReadonlySet<K>,
