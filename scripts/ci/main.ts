@@ -6,12 +6,27 @@ import { runWorkflow } from "@/mod.ts";
  * Each step has a unique exit code to identify which step failed.
  */
 export const EXIT_CODES = {
+	/** Exit code when linting fails (Deno lint or documentation lint) */
 	LINT_FAILED: 1,
+	/** Exit code when code checks fail (Biome check or JSR publish dry run) */
 	CHECK_FAILED: 2,
+	/** Exit code when tests fail */
 	TESTS_FAILED: 3,
+	/** Exit code when coverage report generation fails */
 	COVERAGE_FAILED: 4,
 } as const;
 
+/**
+ * Main entry point for the CI workflow.
+ * Runs a comprehensive continuous integration workflow including:
+ * - Parallel linting (Deno lint, Biome check, documentation lint, JSR dry run)
+ * - Type checking
+ * - Testing with coverage
+ * - Coverage reporting
+ * - Cleanup
+ *
+ * The workflow adapts behavior based on the CI environment variable.
+ */
 export async function main(): Promise<void> {
 	const isCI = Deno.env.get("CI") === "true";
 

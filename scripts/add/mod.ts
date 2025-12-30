@@ -1,11 +1,26 @@
 import { copy, ensureDir, walk } from "@std/fs";
 
+/**
+ * Options for creating a new workspace from a template.
+ */
 export interface CreateWorkspaceOptions {
+	/** Name of the template directory to use */
 	template: string;
+	/** Destination URL where the workspace will be created */
 	destination: URL;
+	/** Base directory URL containing all available templates */
 	templateBaseDir: URL;
 }
 
+/**
+ * Creates a new workspace by copying files from a template directory.
+ * Recursively copies all files from the specified template to the destination,
+ * preserving the directory structure.
+ *
+ * @param options - Configuration for workspace creation
+ * @throws {Error} If the template is not found at the specified path
+ * @throws {Error} If the template path is not a directory
+ */
 export async function createWorkspace(
 	options: CreateWorkspaceOptions,
 ): Promise<void> {

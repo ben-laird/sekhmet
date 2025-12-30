@@ -7,23 +7,79 @@ import { cyan, gray, red, yellow } from "@std/fmt/colors";
  * Automatically switches between GitHub Actions and console output based on environment.
  */
 export interface CIAdapter {
-	// Logging
+	/**
+	 * Logs an informational message.
+	 *
+	 * @param message - The message to log
+	 */
 	info(message: string): void;
+
+	/**
+	 * Logs a notice message (highlighted in CI environments).
+	 *
+	 * @param message - The notice message to log
+	 */
 	notice(message: string): void;
+
+	/**
+	 * Logs a warning message.
+	 *
+	 * @param message - The warning message to log
+	 */
 	warning(message: string): void;
+
+	/**
+	 * Logs an error message.
+	 *
+	 * @param message - The error message to log
+	 */
 	error(message: string): void;
+
+	/**
+	 * Logs a debug message (only shown when debug mode is enabled).
+	 *
+	 * @param message - The debug message to log
+	 */
 	debug(message: string): void;
 
-	// Grouping
+	/**
+	 * Starts a collapsible log group.
+	 *
+	 * @param name - Name of the log group
+	 */
 	startGroup(name: string): void;
+
+	/**
+	 * Ends the current log group.
+	 */
 	endGroup(): void;
+
+	/**
+	 * Executes a function within a collapsible log group.
+	 *
+	 * @param name - Name of the log group
+	 * @param fn - Function to execute within the group
+	 * @returns The result of the function execution
+	 */
 	group<T>(name: string, fn: () => T | Promise<T>): Promise<T>;
 
-	// Workflow commands
+	/**
+	 * Sets a workflow output variable (GitHub Actions) or logs it in debug mode.
+	 *
+	 * @param name - Name of the output variable
+	 * @param value - Value of the output variable
+	 */
 	setOutput(name: string, value: string): void;
+
+	/**
+	 * Marks the workflow as failed and exits the process.
+	 *
+	 * @param message - Failure message to log
+	 * @throws Never returns, always exits the process
+	 */
 	setFailed(message: string): never;
 
-	// Environment detection
+	/** true if running in GitHub Actions environment, false otherwise */
 	readonly isGitHubActions: boolean;
 }
 

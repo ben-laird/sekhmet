@@ -2,6 +2,14 @@ import { parseArgs } from "@std/cli";
 import { bold, green, red, yellow } from "@std/fmt/colors";
 import { createWorkspace } from "@/mod.ts";
 
+/**
+ * Main entry point for the workspace creation CLI.
+ * Parses command-line arguments and creates a new workspace from a template.
+ *
+ * @throws {Error} If template or destination arguments are missing
+ * @throws {Error} If the script directory cannot be determined
+ * @throws {Error} If workspace creation fails
+ */
 export async function main(): Promise<void> {
 	const { template, destination } = parseArgs(Deno.args, {
 		string: ["template", "destination"],
