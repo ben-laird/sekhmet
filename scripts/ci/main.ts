@@ -88,6 +88,7 @@ export async function main(): Promise<void> {
 		{
 			name: "Show coverage report",
 			dependsOn: ["Deno Test"],
+			condition: () => isCI,
 			showOutput: true,
 			exitCode: EXIT_CODES.COVERAGE_FAILED,
 
