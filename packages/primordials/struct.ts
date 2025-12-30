@@ -1,7 +1,7 @@
 /**
  * The internal symbol used to coordinate between a {@linkcode Struct} and the {@linkcode getStructParams} function
  */
-const struct: unique symbol = Symbol("@sekhmet/struct");
+export const struct: unique symbol = Symbol("@sekhmet/struct");
 
 /**
  * A construct that allows semi-private access to a variable. Useful for
@@ -9,10 +9,23 @@ const struct: unique symbol = Symbol("@sekhmet/struct");
  * throughout Sekhmet.
  */
 export interface Struct<T> {
+	/**
+	 * The internal field that stores the encapsulated value.
+	 * Access via {@linkcode getStructParams} instead of directly.
+	 */
 	[struct]: T;
 }
+/**
+ * A construct that allows semi-private access to a variable. Useful for
+ * mimicking Rust's structs and for facilitating common access patterns used
+ * throughout Sekhmet.
+ */
 // biome-ignore lint/suspicious/noUnsafeDeclarationMerging: hacky workaround for --isolatedDeclarations for now. See https://github.com/microsoft/TypeScript/issues/61892#issuecomment-2989433469
 export class Struct<T> {
+	/**
+	 * Creates a new Struct wrapping the given parameters.
+	 * @param params The value to encapsulate within this Struct
+	 */
 	constructor(params: T) {
 		this[struct] = params;
 	}

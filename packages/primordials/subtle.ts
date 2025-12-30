@@ -1,7 +1,7 @@
 /**
  * The internal symbol used to coordinate subtle operations
  */
-const subtle: unique symbol = Symbol("@sekhmet/subtle");
+export const subtle: unique symbol = Symbol("@sekhmet/subtle");
 
 /**
  * A general creator function that takes any parameters and produces an output.
@@ -29,10 +29,23 @@ export interface SubtleParams<T, U extends unknown[] = []> {
  * implementation mechanism.
  */
 export interface Subtle<T, U extends unknown[] = []> {
+	/**
+	 * The internal field that stores the creator function.
+	 * Access via {@linkcode useSubtle} instead of directly.
+	 */
 	[subtle]: Creator<T, U>;
 }
+/**
+ * A construct that encapsulates the logic behind creating a piece of subtle
+ * or sensitive functionality, like a controller or underlying
+ * implementation mechanism.
+ */
 // biome-ignore lint/suspicious/noUnsafeDeclarationMerging: hacky workaround for --isolatedDeclarations for now. See https://github.com/microsoft/TypeScript/issues/61892#issuecomment-2989433469
 export class Subtle<T, U extends unknown[] = []> {
+	/**
+	 * Creates a new Subtle wrapper around the given creator function.
+	 * @param params Configuration object containing the creator function
+	 */
 	constructor(params: SubtleParams<T, U>) {
 		this.#params = params;
 		this[subtle] = this.#params.create;
