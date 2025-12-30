@@ -6,14 +6,18 @@ import { runWorkflow } from "@/mod.ts";
  * Each step has a unique exit code to identify which step failed.
  */
 export const EXIT_CODES = {
-	/** Exit code when linting fails (Deno lint or documentation lint) */
-	LINT_FAILED: 1,
-	/** Exit code when code checks fail (Biome check or JSR publish dry run) */
-	CHECK_FAILED: 2,
+	/** Exit code when Deno lint fails */
+	DENO_LINT_FAILED: 1,
+	/** Exit code when Biome check fails */
+	BIOME_CHECK_FAILED: 2,
+	/** Exit code when documentation lint fails */
+	DOC_LINT_FAILED: 3,
+	/** Exit code when JSR publish dry run fails */
+	JSR_DRY_RUN_FAILED: 4,
 	/** Exit code when tests fail */
-	TESTS_FAILED: 3,
+	TESTS_FAILED: 5,
 	/** Exit code when coverage report generation fails */
-	COVERAGE_FAILED: 4,
+	COVERAGE_FAILED: 6,
 } as const;
 
 /**
@@ -34,13 +38,13 @@ export async function main(): Promise<void> {
 		// Parallel linting (no dependencies, will run concurrently)
 		{
 			name: "Deno Lint",
-			exitCode: EXIT_CODES.LINT_FAILED,
+			exitCode: EXIT_CODES.DENO_LINT_FAILED,
 
 			command: new Deno.Command("deno", { args: ["lint"] }),
 		},
 		{
 			name: "Biome Check",
-			exitCode: EXIT_CODES.CHECK_FAILED,
+			exitCode: EXIT_CODES.BIOME_CHECK_FAILED,
 
 			command: new Deno.Command("deno", {
 				args: ["run", "--no-prompt", "--allow-env", "@biomejs/biome", "ci"],
@@ -48,7 +52,7 @@ export async function main(): Promise<void> {
 		},
 		{
 			name: "Documentation Lint",
-			exitCode: EXIT_CODES.LINT_FAILED,
+			exitCode: EXIT_CODES.DOC_LINT_FAILED,
 
 			command: new Deno.Command("deno", {
 				args: ["doc", "--lint", "./**/*.ts"],
@@ -56,7 +60,7 @@ export async function main(): Promise<void> {
 		},
 		{
 			name: "JSR Publish Dry Run",
-			exitCode: EXIT_CODES.CHECK_FAILED,
+			exitCode: EXIT_CODES.JSR_DRY_RUN_FAILED,
 
 			command: new Deno.Command("deno", {
 				args: ["publish", "--dry-run"],
