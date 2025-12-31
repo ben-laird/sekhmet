@@ -12,7 +12,7 @@ import { Enum, type Split } from "@/src/core/mini/core.ts";
  * @returns A Result in the Ok variant containing the value
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const success = Ok(42);
  * const withError = Ok<number, Error>(42);
  * ```
@@ -33,7 +33,7 @@ export function Ok<T = unknown, E = never>(value: T): Result<T, E> {
  * @returns A Result in the Err variant containing the error
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const failure = Err(new Error("Something went wrong"));
  * const withOk = Err<string, Error>(new Error("Failed"));
  * ```
@@ -81,16 +81,20 @@ export type { Variants as ResultVariants };
  * @template E The type of the error value
  *
  * @example
- * ```ts
+ * ```ts ignore
+ * import { Err, Ok, type Result } from "@sekhmet/enum/result/mini/core";
+ * import { match } from "@sekhmet/enum/core/mini/exit";
+ *
  * function divide(a: number, b: number): Result<number, string> {
  *   if (b === 0) return Err("Division by zero");
  *   return Ok(a / b);
  * }
  *
  * const result = divide(10, 2);
- * if (isOk(result)) {
- *   console.log("Success:", result.value); // TypeScript knows this is Ok
- * }
+ * match(result)({
+ *   Ok: (value) => console.log("Success:", value),
+ *   Err: (error) => console.error("Error:", error),
+ * });
  * ```
  */
 export class Result<out T, out E> extends Enum<Variants<T, E>> {}

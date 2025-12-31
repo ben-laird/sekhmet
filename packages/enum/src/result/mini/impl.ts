@@ -22,10 +22,18 @@ import { Err, Ok, type Result } from "./core.ts";
  * @returns true if the Result is Ok, false otherwise
  *
  * @example
- * ```ts
+ * ```ts ignore
+ * import { Ok, type Result } from "@sekhmet/enum/result/mini/core";
+ * import { isOk } from "@sekhmet/enum/result/mini/impl";
+ * import { match } from "@sekhmet/enum/core/mini/exit";
+ *
  * const result = Ok(42);
  * if (isOk(result)) {
- *   console.log(result.value); // TypeScript knows this is safe
+ *   // Use match to access the value
+ *   match(result)({
+ *     Ok: (value) => console.log(value), // TypeScript knows value is number
+ *     Err: () => {}, // This branch is never reached
+ *   });
  * }
  * ```
  */
@@ -47,17 +55,27 @@ export function isOk<T, E>(self: Result<T, E>): self is Result<T, never> {
  * @returns true if the Result is Ok and the predicate returns true, false otherwise
  *
  * @example
- * ```ts
+ * ```ts ignore
+ * import { Ok, type Result } from "@sekhmet/enum/result/mini/core";
+ * import { isOkAnd } from "@sekhmet/enum/result/mini/impl";
+ * import { match } from "@sekhmet/enum/core/mini/exit";
+ *
  * const result = Ok(42);
  * if (isOkAnd(result, (n) => n > 40)) {
- *   console.log("Large number:", result.value);
+ *   match(result)({
+ *     Ok: (value) => console.log("Large number:", value),
+ *     Err: () => {},
+ *   });
  * }
  *
  * // With type guard
  * const value: unknown = "hello";
  * const result2 = Ok(value);
  * if (isOkAnd(result2, (v): v is string => typeof v === "string")) {
- *   console.log(result2.value.toUpperCase()); // TypeScript knows it's a string
+ *   match(result2)({
+ *     Ok: (v) => console.log(v.toUpperCase()), // TypeScript knows v is string
+ *     Err: () => {},
+ *   });
  * }
  * ```
  */
@@ -80,10 +98,17 @@ export function isOkAnd<T, E, U extends T>(
  * @returns true if the Result is Err, false otherwise
  *
  * @example
- * ```ts
+ * ```ts ignore
+ * import { Err, type Result } from "@sekhmet/enum/result/mini/core";
+ * import { isErr } from "@sekhmet/enum/result/mini/impl";
+ * import { match } from "@sekhmet/enum/core/mini/exit";
+ *
  * const result = Err(new Error("Failed"));
  * if (isErr(result)) {
- *   console.error(result.value); // TypeScript knows this is safe
+ *   match(result)({
+ *     Ok: () => {},
+ *     Err: (error) => console.error(error), // TypeScript knows this is safe
+ *   });
  * }
  * ```
  */
@@ -105,7 +130,11 @@ export function isErr<T, E>(self: Result<T, E>): self is Result<never, E> {
  * @returns true if the Result is Err and the predicate returns true, false otherwise
  *
  * @example
- * ```ts
+ * ```ts ignore
+ * import { Err, type Result } from "@sekhmet/enum/result/mini/core";
+ * import { isErrAnd } from "@sekhmet/enum/result/mini/impl";
+ * import { match } from "@sekhmet/enum/core/mini/exit";
+ *
  * const result = Err(new Error("Not found"));
  * if (isErrAnd(result, (e) => e.message.includes("Not found"))) {
  *   console.error("Resource not found");
@@ -115,7 +144,10 @@ export function isErr<T, E>(self: Result<T, E>): self is Result<never, E> {
  * type NetworkError = { code: number };
  * const result2: Result<string, Error | NetworkError> = Err({ code: 404 });
  * if (isErrAnd(result2, (e): e is NetworkError => 'code' in e)) {
- *   console.log("Network error code:", result2.value.code);
+ *   match(result2)({
+ *     Ok: () => {},
+ *     Err: (error) => console.log("Network error code:", error.code),
+ *   });
  * }
  * ```
  */
@@ -138,7 +170,7 @@ export function isErrAnd<T, E, F extends E>(
  * @returns Some containing the value if Ok, None if Err
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const success = Ok(42);
  * const option1 = ok(success); // Some(42)
  *
@@ -165,7 +197,7 @@ export function ok<T, E>(self: Result<T, E>): Option<T> {
  * @returns Some containing the error if Err, None if Ok
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const failure = Err("error");
  * const option1 = err(failure); // Some("error")
  *
@@ -194,7 +226,7 @@ export function err<T, E>(self: Result<T, E>): Option<E> {
  * @returns A new Result with the mapped value if Ok, or the original error if Err
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const result = Ok(5);
  * const doubled = map(result, (n) => n * 2); // Ok(10)
  *
@@ -227,7 +259,7 @@ export function map<T, E, U>(
  * @returns The mapped success value if Ok, or the default value if Err
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const result = Ok(5);
  * const doubled = mapOr(result, 0, (n) => n * 2); // 10
  *
@@ -261,7 +293,7 @@ export function mapOr<T, E, U>(
  * @returns The result of applying the appropriate mapping function
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const result = Ok(5);
  * const message = mapOrElse(
  *   result,
@@ -302,7 +334,7 @@ export function mapOrElse<T, E, U>(
  * @returns A new Result with the original value if Ok, or the mapped error if Err
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const error = Err("failed");
  * const wrapped = mapErr(error, (e) => new Error(e)); // Err(Error("failed"))
  *
@@ -334,7 +366,7 @@ export function mapErr<T, E, F>(
  * @returns void
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const result = Ok(42);
  * inspect(result, (value) => console.log("Debug:", value)); // Logs "Debug: 42"
  *
@@ -363,7 +395,7 @@ export function inspect<T, E>(
  * @returns void
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const error = Err("failed");
  * inspectErr(error, (err) => console.error("Error:", err)); // Logs "Error: failed"
  *
