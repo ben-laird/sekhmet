@@ -77,6 +77,7 @@ export async function main(): Promise<void> {
 			command: new Deno.Command("deno", {
 				args: [
 					"test",
+					"--doc",
 					"--parallel",
 					"--no-prompt",
 					"--allow-env",
