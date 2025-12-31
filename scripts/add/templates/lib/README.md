@@ -17,9 +17,13 @@ deno.json    - Package configuration
 ```typescript
 import { assertEquals } from "@std/assert";
 
+function add(a: number, b: number): number {
+	return a + b;
+}
+
 Deno.test("function does what it should", () => {
-	const result = myFunction(input);
-	assertEquals(result, expected);
+	const result = add(2, 3);
+	assertEquals(result, 5);
 });
 ```
 
@@ -28,9 +32,13 @@ Deno.test("function does what it should", () => {
 ```typescript
 import { assertEquals } from "@std/assert";
 
+async function fetchData(): Promise<string> {
+	return Promise.resolve("data");
+}
+
 Deno.test("async function works", async () => {
-	const result = await myAsyncFunction();
-	assertEquals(result, expected);
+	const result = await fetchData();
+	assertEquals(result, "data");
 });
 ```
 
@@ -61,21 +69,28 @@ import {
 	assertThrows,
 } from "@std/assert";
 
-// Equality
-assertEquals(actual, expected);
-assertNotEquals(actual, notExpected);
+Deno.test("common assertions", async () => {
+	// Equality
+	const actual = 42;
+	const expected = 42;
+	assertEquals(actual, expected);
 
-// Existence
-assertExists(value);
+	const notExpected = 0;
+	assertNotEquals(actual, notExpected);
 
-// Errors
-assertThrows(() => {
-	throwingFunction();
-}, Error, "expected message");
+	// Existence
+	const value = "exists";
+	assertExists(value);
 
-await assertRejects(async () => {
-	await asyncThrowingFunction();
-}, Error);
+	// Errors
+	assertThrows(() => {
+		throw new Error("expected message");
+	}, Error, "expected message");
+
+	await assertRejects(async () => {
+		throw new Error("async error");
+	}, Error);
+});
 ```
 
 ## Type Safety

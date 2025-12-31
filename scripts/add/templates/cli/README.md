@@ -54,7 +54,7 @@ console.log(bold("Important information"));
 
 ### File System Operations
 
-```typescript
+```typescript ignore
 import { ensureDir, exists } from "@std/fs";
 import { join } from "@std/path";
 
@@ -76,6 +76,8 @@ await Deno.writeTextFile("./output.txt", content);
 ### Error Handling
 
 ```typescript
+import { red } from "jsr:@std/fmt/colors";
+
 export async function main(): Promise<void> {
 	try {
 		// Your logic
