@@ -8,7 +8,7 @@ Quick-reference templates for common Sekhmet patterns.
 
 **File**: `packages/package-name/src/feature/mini/myFunction.ts`
 
-```typescript
+```ts ignore
 import { Struct, getStructParams } from "@sekhmet/primordials/struct";
 
 /**
@@ -26,7 +26,7 @@ export function myFunction<T>(param1: T): ReturnType {
 
 **File**: `packages/package-name/src/feature/mini/mod.ts`
 
-```typescript
+```ts ignore
 export * from "./myFunction.ts";
 export * from "./otherFunction.ts";
 ```
@@ -35,7 +35,7 @@ export * from "./otherFunction.ts";
 
 **File**: `packages/package-name/src/feature/main/mod.ts`
 
-```typescript
+```ts ignore
 export * from "../mini/mod.ts";
 ```
 
@@ -65,7 +65,7 @@ export * from "../mini/mod.ts";
 
 **File**: `feature.test.ts` (next to `feature.ts`)
 
-```typescript
+```ts ignore
 import { assertEquals, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import * as TestSubject from "./feature.ts";
@@ -116,7 +116,7 @@ Deno.test("function throws on invalid input", () => {
 
 ### Basic variant types
 
-```typescript
+```ts ignore
 import { Enum, type Split } from "@sekhmet/enum/core/mini";
 
 // Using Split for ergonomic variant definition
@@ -137,7 +137,7 @@ const pending = new MyEnum("Pending");
 
 ### Manual variant definition (without Split)
 
-```typescript
+```ts ignore
 import { Enum, type SomeVariant } from "@sekhmet/enum/core/mini";
 
 type MyVariants =
@@ -152,7 +152,7 @@ class MyEnum extends Enum<MyVariants> {}
 
 ### Creating a Struct wrapper
 
-```typescript
+```ts ignore
 import { Struct, getStructParams } from "@sekhmet/primordials/struct";
 
 // Define the internal structure
@@ -180,7 +180,7 @@ console.log(data.field1); // "hello"
 
 ### Creating subtle functionality
 
-```typescript
+```ts ignore
 import { Subtle, useSubtle, type Creator } from "@sekhmet/primordials/subtle";
 
 // Define what the subtle functionality creates
@@ -204,7 +204,7 @@ controller.start(); // "MyController started"
 
 ## Enum Pattern Matching
 
-```typescript
+```ts ignore
 import { match, unionKinds } from "@sekhmet/enum/core/mini";
 
 type Result = Split<{
@@ -230,7 +230,7 @@ const kind = unionKinds(result); // "Ok" | "Err"
 
 **All exported functions need explicit return types**:
 
-```typescript
+```ts ignore
 // ✅ Good - explicit return type
 export function myFunction<T>(input: T): string {
 	return input.toString();
@@ -254,7 +254,7 @@ export function myFunction<T>(input: T) {
 
 ## JSDoc Comments
 
-```typescript
+```ts ignore
 /**
  * Brief one-line description of what this does
  *

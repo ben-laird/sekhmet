@@ -231,7 +231,7 @@ The `@sekhmet/enum` package is central to the architecture:
 
 Example variant definition:
 
-```typescript
+```ts ignore
 type MyVariants =
 	| [kind: "success", value: string]
 	| [kind: "error", value: Error]
@@ -251,7 +251,7 @@ type MyVariants =
 
 Every test MUST include explicit Given-When-Then comments:
 
-```typescript
+```ts ignore
 Deno.test("feature does something", () => {
 	// Given: initial state or setup
 	const input = createInput();

@@ -6,7 +6,7 @@ Recurring implementation patterns found throughout Sekhmet.
 
 ### Type guard pattern (isolate)
 
-```typescript
+```ts ignore
 import { isolate, union } from "@sekhmet/enum/core/mini";
 
 type Result = Split<{
@@ -33,7 +33,7 @@ function processResult(result: ResultEnum): void {
 
 ### Assertion pattern (assertIsolated)
 
-```typescript
+```ts ignore
 import { assertIsolated, union } from "@sekhmet/enum/core/mini";
 
 function mustBeSuccess(result: ResultEnum): number {
@@ -47,7 +47,7 @@ function mustBeSuccess(result: ResultEnum): number {
 
 ### Elimination pattern (eliminate)
 
-```typescript
+```ts ignore
 import { eliminate, union } from "@sekhmet/enum/core/mini";
 
 function isNotPending(result: ResultEnum): boolean {
@@ -63,7 +63,7 @@ function isNotPending(result: ResultEnum): boolean {
 
 ### Inspection pattern (inspectIsolated)
 
-```typescript
+```ts ignore
 import { inspectIsolated } from "@sekhmet/enum/core/mini";
 
 function logIfError(result: ResultEnum): void {
@@ -77,7 +77,7 @@ function logIfError(result: ResultEnum): void {
 
 ### Iteration pattern (iterIsolated)
 
-```typescript
+```ts ignore
 import { iterIsolated } from "@sekhmet/enum/core/mini";
 
 function processSuccesses(results: ResultEnum[]): number[] {
@@ -98,7 +98,7 @@ function processSuccesses(results: ResultEnum[]): number[] {
 
 ### Exhaustive matching with match()
 
-```typescript
+```ts ignore
 import { match } from "@sekhmet/enum/core/mini";
 
 type Status = Split<{
@@ -121,7 +121,7 @@ function renderStatus(status: StatusEnum): string {
 
 ### Manual pattern matching
 
-```typescript
+```ts ignore
 import { unionKinds, union } from "@sekhmet/enum/core/mini";
 
 function manualMatch(status: StatusEnum): string {
@@ -150,7 +150,7 @@ function manualMatch(status: StatusEnum): string {
 
 ### Private data with public methods
 
-```typescript
+```ts ignore
 import { Struct, getStructParams } from "@sekhmet/primordials/struct";
 
 interface CounterData {
@@ -187,7 +187,7 @@ console.log(data.value); // 11
 
 ### Immutable wrapper pattern
 
-```typescript
+```ts ignore
 import { Struct, getStructParams } from "@sekhmet/primordials/struct";
 
 interface Point {
@@ -249,7 +249,7 @@ class ImmutablePoint extends Struct<Point> {
 
 ### Re-export pattern
 
-```typescript
+```ts ignore
 // packages/package/src/core/mini/mod.ts
 // Collect all mini exports in one barrel file
 export * from "./isolate.ts";
@@ -271,7 +271,7 @@ export * from "./src/utils/main/mod.ts";
 
 ### Extracting variant information
 
-```typescript
+```ts ignore
 import type { Kinds, Values, Isolate, Eliminate } from "@sekhmet/enum/core/mini";
 
 type MyVariants =
@@ -297,7 +297,7 @@ type ValueOfA = Values<Isolate<MyVariants, "A">>; // string
 
 ### Inferring enum type from instance
 
-```typescript
+```ts ignore
 import type { InferEnum } from "@sekhmet/enum/core/mini";
 
 class MyEnum extends Enum<MyVariants> {}
@@ -308,7 +308,7 @@ type ExtractedVariants = InferEnum<MyEnum>; // MyVariants
 
 ### Split helper for ergonomic variants
 
-```typescript
+```ts ignore
 import type { Split } from "@sekhmet/enum/core/mini";
 
 // Instead of writing tuples manually:
@@ -331,7 +331,7 @@ type ErgonomicVariants = Split<{
 
 ### Type assertion pattern
 
-```typescript
+```ts ignore
 import { assertType, type IsExact } from "@std/testing/types";
 
 Deno.test("validates type inference", () => {
@@ -350,7 +350,7 @@ Deno.test("validates type inference", () => {
 
 ### Nested step pattern for complex tests
 
-```typescript
+```ts ignore
 Deno.test("complex feature behavior", async (t) => {
 	// Given
 	const setup = createTestSetup();
@@ -387,7 +387,7 @@ Deno.test("complex feature behavior", async (t) => {
 
 ### Using enums for result types
 
-```typescript
+```ts ignore
 import { Enum, type Split } from "@sekhmet/enum/core/mini";
 import { match } from "@sekhmet/enum/core/mini";
 
@@ -427,7 +427,7 @@ const message = match(result)({
 
 ### Enum covariance
 
-```typescript
+```ts ignore
 // Enum<A> | Enum<B> is equivalent to Enum<A | B>
 type VariantA = [kind: "A", value: string];
 type VariantB = [kind: "B", value: number];
@@ -444,7 +444,7 @@ const combined: Enum<VariantA | VariantB> = either;
 
 ### Chaining operations
 
-```typescript
+```ts ignore
 import { isolate, union, eliminate } from "@sekhmet/enum/core/mini";
 
 function processChain(input: ResultEnum): string | null {
@@ -462,7 +462,7 @@ function processChain(input: ResultEnum): string | null {
 
 ### Using path aliases
 
-```typescript
+```ts ignore
 // Within a package - use @/ for package-local imports
 import { myUtil } from "@/src/utils/mini/myUtil.ts";
 
@@ -476,7 +476,7 @@ import type { Config } from "@~/config.ts";
 
 ### Importing for tree-shaking
 
-```typescript
+```ts ignore
 // ✅ Best - import individual functions
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { eliminate } from "@sekhmet/enum/core/mini/eliminate";
