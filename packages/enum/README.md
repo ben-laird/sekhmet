@@ -46,7 +46,7 @@ deno add jsr:@sekhmet/enum
 
 Then simply import the module you'd like to use.
 
-```ts
+```ts ignore
 import {} from "@sekhmet/framework/entrypoint";
 ```
 
