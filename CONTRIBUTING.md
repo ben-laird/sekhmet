@@ -262,7 +262,7 @@ maintainability and developer experience over architectural purity.
 We use Behavior-Driven Development with Given-When-Then comments to make tests
 clear and maintainable:
 
-```ts
+```ts ignore
 import { assertEquals } from "@std/assert";
 import { myFunction } from "./feature.ts";
 
@@ -280,7 +280,7 @@ Deno.test("myFunction handles basic case", () => {
 
 For complex tests with multiple assertions, use nested steps:
 
-```ts
+```ts ignore
 import { assertEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 
