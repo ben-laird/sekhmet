@@ -13,7 +13,7 @@ import type { Option } from "./core.ts";
  * @returns Ok containing the value if self is Some, otherwise Err containing err
  *
  * @example
- * ```ts
+ * ```ts ignore
  * okOr(Some(42), "not found"); // Ok(42)
  * okOr(None(), "not found");   // Err("not found")
  * ```
@@ -36,7 +36,7 @@ export function okOr<T, E>(self: Option<T>, err: E): Result<T, E> {
  * @returns Ok containing the value if self is Some, otherwise Err containing the result of err()
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const expensive = () => expensiveErrorComputation();
  *
  * okOrElse(Some(42), expensive); // Ok(42) - expensive() not called

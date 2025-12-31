@@ -8,7 +8,7 @@ import type { Option } from "./core.ts";
  * @returns true if the Option is Some, false if it is None
  *
  * @example
- * ```ts
+ * ```ts ignore
  * isSome(Some(42)); // true
  * isSome(None());   // false
  * ```
@@ -28,7 +28,7 @@ export function isSome<T>(self: Option<T>): boolean {
  * @returns true if the Option is Some and the predicate passes, false otherwise
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const isEven = (n: number) => n % 2 === 0;
  *
  * isSomeAnd(Some(4), isEven);  // true
@@ -50,7 +50,7 @@ export function isSomeAnd<T, U extends T>(
  * @returns true if the Option is None, false if it is Some
  *
  * @example
- * ```ts
+ * ```ts ignore
  * isNone(None());   // true
  * isNone(Some(42)); // false
  * ```

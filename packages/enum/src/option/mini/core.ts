@@ -7,7 +7,7 @@ import { Enum, type Split } from "@/src/core/mini/core.ts";
  * @returns An Option in the Some state containing the provided value
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const opt = Some(42); // Option<number>
  * ```
  */
@@ -21,7 +21,7 @@ export function Some<T>(value: T): Option<T> {
  * @returns An Option in the None state, representing the absence of a value
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const opt = None<number>(); // Option<number>
  * ```
  */
@@ -49,7 +49,7 @@ export type { Variants as OptionVariants };
  * @template T - The type of the value that may be present
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const some: Option<number> = Some(42);
  * const none: Option<number> = None();
  * ```

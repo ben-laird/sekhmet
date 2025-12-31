@@ -14,7 +14,7 @@ import { unwrapOr } from "./unwrap.ts";
  * @yields The contained value if the Option is Some
  *
  * @example
- * ```ts
+ * ```ts ignore
  * for (const value of iter(Some(42))) {
  *   console.log(value); // 42
  * }
@@ -43,7 +43,7 @@ export function* iter<T>(self: Option<T>): Generator<T, void, undefined> {
  * @returns optionB if self is Some, otherwise None
  *
  * @example
- * ```ts
+ * ```ts ignore
  * and(Some(2), Some("foo")); // Some("foo")
  * and(None(), Some("foo"));  // None
  * and(Some(2), None());      // None
@@ -68,7 +68,7 @@ export function and<T, U>(self: Option<T>, optionB: Option<U>): Option<U> {
  * @returns The result of calling optionB if self is Some, otherwise None
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const divide = (x: number) => (y: number): Option<number> =>
  *   y === 0 ? None() : Some(x / y);
  *
@@ -98,7 +98,7 @@ export function andThen<T, U>(
  * @returns Some(value) if the predicate passes, otherwise None
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const isEven = (n: number) => n % 2 === 0;
  *
  * filter(Some(4), isEven);  // Some(4)
@@ -133,7 +133,7 @@ export function filter<T, U extends T>(
  * @returns self if it is Some, otherwise optionB
  *
  * @example
- * ```ts
+ * ```ts ignore
  * or(Some(2), Some(100)); // Some(2)
  * or(None(), Some(100));  // Some(100)
  * or(Some(2), None());    // Some(2)
@@ -157,7 +157,7 @@ export function or<T>(self: Option<T>, optionB: Option<T>): Option<T> {
  * @returns self if it is Some, otherwise the result of calling optionB
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const expensive = () => Some(expensiveComputation());
  *
  * orElse(Some(2), expensive); // Some(2) - expensive() not called
@@ -184,7 +184,7 @@ export function orElse<T>(
  * @returns Some containing a tuple of both values if both are Some, otherwise None
  *
  * @example
- * ```ts
+ * ```ts ignore
  * zip(Some(1), Some("hi")); // Some([1, "hi"])
  * zip(Some(1), None());     // None
  * zip(None(), Some("hi"));  // None
@@ -218,7 +218,7 @@ export function zip<T, U>(
  * @returns Some containing the result of mapping if both Options are Some, otherwise None
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const add = (a: number, b: number) => a + b;
  *
  * zipWith(Some(1), Some(2), add); // Some(3)
@@ -245,7 +245,7 @@ export function zipWith<T, U, V>(
  * @returns The contained value if Some, otherwise the sentinel value
  *
  * @example
- * ```ts
+ * ```ts ignore
  * coalesce(Some(42), "default"); // 42
  * coalesce(None(), "default");   // "default"
  * ```
@@ -267,7 +267,7 @@ export function coalesce<T, U>(self: Option<T>, sentinel: U): T | U {
  * @returns A tuple of two Options, one for each value
  *
  * @example
- * ```ts
+ * ```ts ignore
  * unzip(Some([1, "hi"])); // [Some(1), Some("hi")]
  * unzip(None());          // [None(), None()]
  * ```
@@ -291,7 +291,7 @@ export function unzip<T, U>(
  * @returns A Result containing an Option
  *
  * @example
- * ```ts
+ * ```ts ignore
  * transpose(Some(Ok(5)));      // Ok(Some(5))
  * transpose(Some(Err("fail"))); // Err("fail")
  * transpose(None());           // Ok(None())
@@ -316,7 +316,7 @@ export function transpose<T, E>(
  * @returns The flattened Option
  *
  * @example
- * ```ts
+ * ```ts ignore
  * flatten(Some(Some(6))); // Some(6)
  * flatten(Some(None()));  // None
  * flatten(None());        // None

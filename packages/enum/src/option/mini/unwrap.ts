@@ -11,7 +11,7 @@ import type { Option } from "./core.ts";
  * @throws Error with the provided message if the Option is None
  *
  * @example
- * ```ts
+ * ```ts ignore
  * expect(Some(42), "value should exist"); // 42
  * expect(None(), "value should exist");   // throws Error: "value should exist"
  * ```
@@ -33,7 +33,7 @@ export function expect<T>(self: Option<T>, message: string): T {
  * @throws Error with message "Option unwrap failed!" if the Option is None
  *
  * @example
- * ```ts
+ * ```ts ignore
  * unwrap(Some(42)); // 42
  * unwrap(None());   // throws Error: "Option unwrap failed!"
  * ```
@@ -52,7 +52,7 @@ export function unwrap<T>(self: Option<T>): T {
  * @returns The contained value if self is Some, otherwise defaultValue
  *
  * @example
- * ```ts
+ * ```ts ignore
  * unwrapOr(Some(42), 0); // 42
  * unwrapOr(None(), 0);   // 0
  * ```

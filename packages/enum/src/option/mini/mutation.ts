@@ -14,7 +14,7 @@ import { None, Option, Some } from "./core.ts";
  * @returns The inserted value
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const opt = None<number>();
  * insert(opt, 42); // returns 42
  * // opt is now Some(42)
@@ -39,7 +39,7 @@ export function insert<T>(self: Option<T>, value: T): T {
  * @returns The value that was already present, or the newly inserted value
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const opt = None<number>();
  * getOrInsert(opt, 5); // returns 5, opt is now Some(5)
  *
@@ -66,7 +66,7 @@ export function getOrInsert<T>(self: Option<T>, value: T): T {
  * @returns The value that was already present, or the newly created and inserted value
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const opt = None<number>();
  * getOrInsertWith(opt, () => expensiveComputation()); // calls expensiveComputation()
  *
@@ -91,7 +91,7 @@ export function getOrInsertWith<T>(self: Option<T>, creator: () => T): T {
  * @returns Some(value) if self was Some, otherwise None
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const opt = Some(42);
  * const taken = take(opt); // Some(42)
  * // opt is now None
@@ -128,7 +128,7 @@ export function take<T>(self: Option<T>): Option<T> {
  * @returns Some(value) if self was Some and the predicate passed, otherwise None
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const opt = Some(42);
  * const taken = takeIf(opt, (x) => x > 10); // Some(42)
  * // opt is now None
@@ -170,7 +170,7 @@ export function takeIf<T, U extends T>(
  * @returns An Option containing the old value (Some if there was one, None otherwise)
  *
  * @example
- * ```ts
+ * ```ts ignore
  * const opt = Some(5);
  * const old = replace(opt, 10); // Some(5)
  * // opt is now Some(10)

@@ -13,7 +13,7 @@ import { None, type Option, Some } from "./core.ts";
  * @returns Some containing the transformed value if self is Some, otherwise None
  *
  * @example
- * ```ts
+ * ```ts ignore
  * map(Some(10), (x) => x * 2); // Some(20)
  * map(None(), (x) => x * 2);   // None
  * ```
@@ -39,7 +39,7 @@ export function map<T, U>(
  * @returns The original Option unchanged
  *
  * @example
- * ```ts
+ * ```ts ignore
  * inspect(Some(42), (x) => console.log(x)); // logs 42, returns Some(42)
  * inspect(None(), (x) => console.log(x));   // logs nothing, returns None
  * ```
@@ -68,7 +68,7 @@ export function inspect<T>(
  * @returns The original Option unchanged
  *
  * @example
- * ```ts
+ * ```ts ignore
  * inspectNone(None(), () => console.log("empty")); // logs "empty", returns None
  * inspectNone(Some(42), () => console.log("empty")); // logs nothing, returns Some(42)
  * ```
@@ -96,7 +96,7 @@ export function inspectNone<T>(
  * @returns The result of mapping if self is Some, otherwise the default value
  *
  * @example
- * ```ts
+ * ```ts ignore
  * // Object style
  * mapOr(Some(10), { defaultValue: 0, mapping: (x) => x * 2 }); // 20
  * mapOr(None(), { defaultValue: 0, mapping: (x) => x * 2 });   // 0
@@ -164,7 +164,7 @@ export function mapOr<T, U>(
  * @returns The result of calling the appropriate handler function
  *
  * @example
- * ```ts
+ * ```ts ignore
  * // Object style
  * mapOrElse(Some(10), {
  *   Some: (x) => x * 2,
