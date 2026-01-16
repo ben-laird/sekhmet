@@ -5,7 +5,8 @@
 
 	"exports": {
 		"./subtle": "./subtle.ts",
-		"./struct": "./struct.ts"
+		"./struct": "./struct.ts",
+		"./scoping": "./scoping.ts"
 	},
 
 	"imports": {
