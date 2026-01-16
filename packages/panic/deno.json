@@ -1,0 +1,18 @@
+{
+	"name": "@sekhmet/panic",
+	"version": "0.1.0",
+	"license": "MIT",
+
+	"exports": {
+		".": "./mod.ts",
+		"./prelude": "./prelude.ts",
+		"./mini": "./src/mini/mod.ts",
+		"./mini/core": "./src/mini/core.ts",
+		"./mini/hook": "./src/mini/hook.ts",
+		"./mini/registry": "./src/mini/registry.ts"
+	},
+
+	"imports": {
+		"@/": "./"
+	}
+}
