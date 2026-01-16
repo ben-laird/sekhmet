@@ -1,0 +1,15 @@
+{
+	"name": "@sekhmet/vow",
+	"version": "0.1.0",
+	"license": "MIT",
+
+	"exports": {
+		".": "./mod.ts",
+		"./mini": "./src/mini/mod.ts",
+		"./mini/core": "./src/mini/core.ts"
+	},
+
+	"imports": {
+		"@/": "./"
+	}
+}
