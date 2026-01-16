@@ -13,6 +13,12 @@
 
 		"./latch": "./src/latch/main/mod.ts",
 		"./latch/mini": "./src/latch/mini/mod.ts",
+		"./latch/mini/core": "./src/latch/mini/core.ts",
+		"./latch/mini/combinators": "./src/latch/mini/combinators.ts",
+		"./latch/mini/mutation": "./src/latch/mini/mutation.ts",
+		"./latch/mini/predicates": "./src/latch/mini/predicates.ts",
+		"./latch/mini/transform": "./src/latch/mini/transform.ts",
+		"./latch/mini/unwrap": "./src/latch/mini/unwrap.ts",
 
 		"./option": "./src/option/main/mod.ts",
 		"./option/mini": "./src/option/mini/mod.ts",
