@@ -2,7 +2,33 @@
 import { cyan, gray, green, red } from "@std/fmt/colors";
 import type { CIAdapter } from "./adapter.ts";
 import { shouldShowOutput } from "./step.ts";
-import type { StepResult, WorkflowStep } from "./types.ts";
+import type { StepResult, StepStatus, WorkflowStep } from "./types.ts";
+
+/**
+ * JSON output for a single workflow step in AI mode.
+ */
+export interface AIStepResult {
+	/** Name of the step */
+	name: string;
+	/** Execution status */
+	status: StepStatus;
+	/** Exit code if the step failed */
+	exitCode?: number | undefined;
+	/** Standard output from the step */
+	stdout?: string | undefined;
+	/** Standard error from the step */
+	stderr?: string | undefined;
+}
+
+/**
+ * JSON output for the entire workflow in AI mode.
+ */
+export interface AIWorkflowResult {
+	/** true if all steps passed, false if any failed */
+	success: boolean;
+	/** Results for each step in execution order */
+	steps: AIStepResult[];
+}
 
 /**
  * Formats and displays workflow results to the console.
@@ -65,4 +91,59 @@ export async function formatWorkflowOutput(
 	}
 
 	return exitCode;
+}
+
+/**
+ * Formats workflow results as structured JSON for AI agents.
+ * Respects the showOutput configuration for each step.
+ *
+ * @param steps - Workflow step configurations
+ * @param results - Map of step results
+ * @param decoder - TextDecoder for converting output bytes to strings
+ * @returns Structured workflow result object
+ */
+export function formatAIOutput(
+	steps: WorkflowStep[],
+	results: Map<string, StepResult>,
+	decoder: TextDecoder,
+): AIWorkflowResult {
+	let success = true;
+	const stepResults: AIStepResult[] = [];
+
+	for (const step of steps) {
+		const result = results.get(step.name);
+		if (!result) {
+			throw new Error(`Step "${step.name}" did not complete`);
+		}
+
+		const aiStep: AIStepResult = {
+			name: result.name,
+			status: result.status,
+		};
+
+		if (result.status === "failed") {
+			success = false;
+			aiStep.exitCode = step.exitCode ?? 1;
+		}
+
+		// Include output if configured to show
+		if (result.output && shouldShowOutput(step, result.status)) {
+			const stdout = decoder.decode(result.output.stdout);
+			const stderr = decoder.decode(result.output.stderr);
+
+			if (stdout) {
+				aiStep.stdout = stdout;
+			}
+			if (stderr) {
+				aiStep.stderr = stderr;
+			}
+		}
+
+		stepResults.push(aiStep);
+	}
+
+	return {
+		success,
+		steps: stepResults,
+	};
 }
