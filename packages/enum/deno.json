@@ -36,7 +36,11 @@
 
 		"./result": "./src/result/main/mod.ts",
 		"./result/mini": "./src/result/mini/mod.ts",
+		"./result/mini/combinators": "./src/result/mini/combinators.ts",
 		"./result/mini/core": "./src/result/mini/core.ts",
+		"./result/mini/predicates": "./src/result/mini/predicates.ts",
+		"./result/mini/transform": "./src/result/mini/transform.ts",
+		"./result/mini/unwrap": "./src/result/mini/unwrap.ts",
 
 		"./ordering": "./src/ordering/main/mod.ts",
 		"./ordering/mini": "./src/ordering/mini/mod.ts",
