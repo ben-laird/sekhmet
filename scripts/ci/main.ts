@@ -33,6 +33,7 @@ export const EXIT_CODES = {
  */
 export async function main(): Promise<void> {
 	const isCI = Deno.env.get("CI") === "true";
+	const isAI = Deno.env.get("CI_AI") === "true";
 
 	await runWorkflow([
 		// Parallel linting (no dependencies, will run concurrently)
@@ -63,7 +64,15 @@ export async function main(): Promise<void> {
 			exitCode: EXIT_CODES.JSR_DRY_RUN_FAILED,
 
 			command: new Deno.Command("deno", {
-				args: ["publish", "--dry-run"],
+				args: (() => {
+					const args = ["publish", "--dry-run"];
+
+					if (isAI) {
+						args.push("--allow-dirty");
+					}
+
+					return args;
+				})(),
 			}),
 		},
 
