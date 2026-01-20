@@ -2,9 +2,11 @@ import { assertEquals } from "@std/assert";
 import { createAdapter } from "./adapter.ts";
 
 Deno.test("createAdapter returns GitHubActionsAdapter when GITHUB_ACTIONS is true", () => {
-	// Given: GITHUB_ACTIONS environment variable is set to "true"
-	const original = Deno.env.get("GITHUB_ACTIONS");
+	// Given: GITHUB_ACTIONS environment variable is set to "true" and CI_AI is not set
+	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	const originalAI = Deno.env.get("CI_AI");
 	Deno.env.set("GITHUB_ACTIONS", "true");
+	Deno.env.delete("CI_AI");
 
 	try {
 		// When: creating an adapter
@@ -14,18 +16,23 @@ Deno.test("createAdapter returns GitHubActionsAdapter when GITHUB_ACTIONS is tru
 		assertEquals(adapter.isGitHubActions, true);
 	} finally {
 		// Cleanup
-		if (original === undefined) {
+		if (originalGH === undefined) {
 			Deno.env.delete("GITHUB_ACTIONS");
 		} else {
-			Deno.env.set("GITHUB_ACTIONS", original);
+			Deno.env.set("GITHUB_ACTIONS", originalGH);
+		}
+		if (originalAI !== undefined) {
+			Deno.env.set("CI_AI", originalAI);
 		}
 	}
 });
 
 Deno.test("createAdapter returns ConsoleAdapter when GITHUB_ACTIONS is not set", () => {
-	// Given: GITHUB_ACTIONS environment variable is not set
-	const original = Deno.env.get("GITHUB_ACTIONS");
+	// Given: GITHUB_ACTIONS and CI_AI environment variables are not set
+	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	const originalAI = Deno.env.get("CI_AI");
 	Deno.env.delete("GITHUB_ACTIONS");
+	Deno.env.delete("CI_AI");
 
 	try {
 		// When: creating an adapter
@@ -33,18 +40,24 @@ Deno.test("createAdapter returns ConsoleAdapter when GITHUB_ACTIONS is not set",
 
 		// Then: should return console adapter
 		assertEquals(adapter.isGitHubActions, false);
+		assertEquals(adapter.isAI, false);
 	} finally {
 		// Cleanup
-		if (original !== undefined) {
-			Deno.env.set("GITHUB_ACTIONS", original);
+		if (originalGH !== undefined) {
+			Deno.env.set("GITHUB_ACTIONS", originalGH);
+		}
+		if (originalAI !== undefined) {
+			Deno.env.set("CI_AI", originalAI);
 		}
 	}
 });
 
 Deno.test("createAdapter returns ConsoleAdapter when GITHUB_ACTIONS is false", () => {
-	// Given: GITHUB_ACTIONS environment variable is set to "false"
-	const original = Deno.env.get("GITHUB_ACTIONS");
+	// Given: GITHUB_ACTIONS is set to "false" and CI_AI is not set
+	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	const originalAI = Deno.env.get("CI_AI");
 	Deno.env.set("GITHUB_ACTIONS", "false");
+	Deno.env.delete("CI_AI");
 
 	try {
 		// When: creating an adapter
@@ -52,20 +65,26 @@ Deno.test("createAdapter returns ConsoleAdapter when GITHUB_ACTIONS is false", (
 
 		// Then: should return console adapter
 		assertEquals(adapter.isGitHubActions, false);
+		assertEquals(adapter.isAI, false);
 	} finally {
 		// Cleanup
-		if (original === undefined) {
+		if (originalGH === undefined) {
 			Deno.env.delete("GITHUB_ACTIONS");
 		} else {
-			Deno.env.set("GITHUB_ACTIONS", original);
+			Deno.env.set("GITHUB_ACTIONS", originalGH);
+		}
+		if (originalAI !== undefined) {
+			Deno.env.set("CI_AI", originalAI);
 		}
 	}
 });
 
 Deno.test("ConsoleAdapter.info logs to console", () => {
 	// Given: a console adapter
-	const original = Deno.env.get("GITHUB_ACTIONS");
+	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	const originalAI = Deno.env.get("CI_AI");
 	Deno.env.delete("GITHUB_ACTIONS");
+	Deno.env.delete("CI_AI");
 
 	try {
 		const adapter = createAdapter();
@@ -76,16 +95,21 @@ Deno.test("ConsoleAdapter.info logs to console", () => {
 		assertEquals(adapter.isGitHubActions, false);
 	} finally {
 		// Cleanup
-		if (original !== undefined) {
-			Deno.env.set("GITHUB_ACTIONS", original);
+		if (originalGH !== undefined) {
+			Deno.env.set("GITHUB_ACTIONS", originalGH);
+		}
+		if (originalAI !== undefined) {
+			Deno.env.set("CI_AI", originalAI);
 		}
 	}
 });
 
 Deno.test("ConsoleAdapter.group executes function and manages grouping", async () => {
 	// Given: a console adapter and a test function
-	const original = Deno.env.get("GITHUB_ACTIONS");
+	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	const originalAI = Deno.env.get("CI_AI");
 	Deno.env.delete("GITHUB_ACTIONS");
+	Deno.env.delete("CI_AI");
 
 	try {
 		const adapter = createAdapter();
@@ -103,16 +127,21 @@ Deno.test("ConsoleAdapter.group executes function and manages grouping", async (
 		assertEquals(result, testValue);
 	} finally {
 		// Cleanup
-		if (original !== undefined) {
-			Deno.env.set("GITHUB_ACTIONS", original);
+		if (originalGH !== undefined) {
+			Deno.env.set("GITHUB_ACTIONS", originalGH);
+		}
+		if (originalAI !== undefined) {
+			Deno.env.set("CI_AI", originalAI);
 		}
 	}
 });
 
 Deno.test("ConsoleAdapter.group executes async function", async () => {
 	// Given: a console adapter and an async test function
-	const original = Deno.env.get("GITHUB_ACTIONS");
+	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	const originalAI = Deno.env.get("CI_AI");
 	Deno.env.delete("GITHUB_ACTIONS");
+	Deno.env.delete("CI_AI");
 
 	try {
 		const adapter = createAdapter();
@@ -128,8 +157,11 @@ Deno.test("ConsoleAdapter.group executes async function", async () => {
 		assertEquals(result, testValue);
 	} finally {
 		// Cleanup
-		if (original !== undefined) {
-			Deno.env.set("GITHUB_ACTIONS", original);
+		if (originalGH !== undefined) {
+			Deno.env.set("GITHUB_ACTIONS", originalGH);
+		}
+		if (originalAI !== undefined) {
+			Deno.env.set("CI_AI", originalAI);
 		}
 	}
 });
@@ -137,8 +169,10 @@ Deno.test("ConsoleAdapter.group executes async function", async () => {
 Deno.test("ConsoleAdapter.debug logs when RUNNER_DEBUG is set", () => {
 	// Given: RUNNER_DEBUG is set to "1"
 	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	const originalAI = Deno.env.get("CI_AI");
 	const originalDebug = Deno.env.get("RUNNER_DEBUG");
 	Deno.env.delete("GITHUB_ACTIONS");
+	Deno.env.delete("CI_AI");
 	Deno.env.set("RUNNER_DEBUG", "1");
 
 	try {
@@ -153,6 +187,9 @@ Deno.test("ConsoleAdapter.debug logs when RUNNER_DEBUG is set", () => {
 		if (originalGH !== undefined) {
 			Deno.env.set("GITHUB_ACTIONS", originalGH);
 		}
+		if (originalAI !== undefined) {
+			Deno.env.set("CI_AI", originalAI);
+		}
 		if (originalDebug === undefined) {
 			Deno.env.delete("RUNNER_DEBUG");
 		} else {
@@ -164,8 +201,10 @@ Deno.test("ConsoleAdapter.debug logs when RUNNER_DEBUG is set", () => {
 Deno.test("ConsoleAdapter.setOutput is no-op in normal mode", () => {
 	// Given: a console adapter without RUNNER_DEBUG
 	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	const originalAI = Deno.env.get("CI_AI");
 	const originalDebug = Deno.env.get("RUNNER_DEBUG");
 	Deno.env.delete("GITHUB_ACTIONS");
+	Deno.env.delete("CI_AI");
 	Deno.env.delete("RUNNER_DEBUG");
 
 	try {
@@ -180,6 +219,9 @@ Deno.test("ConsoleAdapter.setOutput is no-op in normal mode", () => {
 		if (originalGH !== undefined) {
 			Deno.env.set("GITHUB_ACTIONS", originalGH);
 		}
+		if (originalAI !== undefined) {
+			Deno.env.set("CI_AI", originalAI);
+		}
 		if (originalDebug !== undefined) {
 			Deno.env.set("RUNNER_DEBUG", originalDebug);
 		}
@@ -188,8 +230,10 @@ Deno.test("ConsoleAdapter.setOutput is no-op in normal mode", () => {
 
 Deno.test("GitHubActionsAdapter.group executes function", async () => {
 	// Given: a GitHub Actions adapter
-	const original = Deno.env.get("GITHUB_ACTIONS");
+	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	const originalAI = Deno.env.get("CI_AI");
 	Deno.env.set("GITHUB_ACTIONS", "true");
+	Deno.env.delete("CI_AI");
 
 	try {
 		const adapter = createAdapter();
@@ -208,10 +252,152 @@ Deno.test("GitHubActionsAdapter.group executes function", async () => {
 		assertEquals(adapter.isGitHubActions, true);
 	} finally {
 		// Cleanup
-		if (original === undefined) {
+		if (originalGH === undefined) {
 			Deno.env.delete("GITHUB_ACTIONS");
 		} else {
-			Deno.env.set("GITHUB_ACTIONS", original);
+			Deno.env.set("GITHUB_ACTIONS", originalGH);
+		}
+		if (originalAI !== undefined) {
+			Deno.env.set("CI_AI", originalAI);
+		}
+	}
+});
+
+Deno.test("createAdapter returns AIAdapter when CI_AI is true", () => {
+	// Given: CI_AI environment variable is set to "true"
+	const originalAI = Deno.env.get("CI_AI");
+	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	Deno.env.set("CI_AI", "true");
+	Deno.env.delete("GITHUB_ACTIONS");
+
+	try {
+		// When: creating an adapter
+		const adapter = createAdapter();
+
+		// Then: should return AI adapter
+		assertEquals(adapter.isAI, true);
+		assertEquals(adapter.isGitHubActions, false);
+	} finally {
+		// Cleanup
+		if (originalAI === undefined) {
+			Deno.env.delete("CI_AI");
+		} else {
+			Deno.env.set("CI_AI", originalAI);
+		}
+		if (originalGH === undefined) {
+			Deno.env.delete("GITHUB_ACTIONS");
+		} else {
+			Deno.env.set("GITHUB_ACTIONS", originalGH);
+		}
+	}
+});
+
+Deno.test("createAdapter returns AIAdapter even when GITHUB_ACTIONS is also true", () => {
+	// Given: both CI_AI and GITHUB_ACTIONS are set to "true"
+	const originalAI = Deno.env.get("CI_AI");
+	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	Deno.env.set("CI_AI", "true");
+	Deno.env.set("GITHUB_ACTIONS", "true");
+
+	try {
+		// When: creating an adapter
+		const adapter = createAdapter();
+
+		// Then: AI mode takes precedence
+		assertEquals(adapter.isAI, true);
+		assertEquals(adapter.isGitHubActions, false);
+	} finally {
+		// Cleanup
+		if (originalAI === undefined) {
+			Deno.env.delete("CI_AI");
+		} else {
+			Deno.env.set("CI_AI", originalAI);
+		}
+		if (originalGH === undefined) {
+			Deno.env.delete("GITHUB_ACTIONS");
+		} else {
+			Deno.env.set("GITHUB_ACTIONS", originalGH);
+		}
+	}
+});
+
+Deno.test("AIAdapter.group executes function without grouping output", async () => {
+	// Given: an AI adapter and a test function
+	const originalAI = Deno.env.get("CI_AI");
+	Deno.env.set("CI_AI", "true");
+
+	try {
+		const adapter = createAdapter();
+		let executed = false;
+		const testValue = "ai result";
+
+		// When: using group with a function
+		const result = await adapter.group("AI Test Group", () => {
+			executed = true;
+			return testValue;
+		});
+
+		// Then: function should be executed and return value preserved
+		assertEquals(executed, true);
+		assertEquals(result, testValue);
+		assertEquals(adapter.isAI, true);
+	} finally {
+		// Cleanup
+		if (originalAI === undefined) {
+			Deno.env.delete("CI_AI");
+		} else {
+			Deno.env.set("CI_AI", originalAI);
+		}
+	}
+});
+
+Deno.test("ConsoleAdapter.isAI is false", () => {
+	// Given: a console adapter
+	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	const originalAI = Deno.env.get("CI_AI");
+	Deno.env.delete("GITHUB_ACTIONS");
+	Deno.env.delete("CI_AI");
+
+	try {
+		// When: creating a console adapter
+		const adapter = createAdapter();
+
+		// Then: isAI should be false
+		assertEquals(adapter.isAI, false);
+	} finally {
+		// Cleanup
+		if (originalGH !== undefined) {
+			Deno.env.set("GITHUB_ACTIONS", originalGH);
+		}
+		if (originalAI !== undefined) {
+			Deno.env.set("CI_AI", originalAI);
+		}
+	}
+});
+
+Deno.test("GitHubActionsAdapter.isAI is false", () => {
+	// Given: a GitHub Actions adapter
+	const originalGH = Deno.env.get("GITHUB_ACTIONS");
+	const originalAI = Deno.env.get("CI_AI");
+	Deno.env.set("GITHUB_ACTIONS", "true");
+	Deno.env.delete("CI_AI");
+
+	try {
+		// When: creating a GitHub Actions adapter
+		const adapter = createAdapter();
+
+		// Then: isAI should be false
+		assertEquals(adapter.isAI, false);
+		assertEquals(adapter.isGitHubActions, true);
+	} finally {
+		// Cleanup
+		if (originalGH === undefined) {
+			Deno.env.delete("GITHUB_ACTIONS");
+		} else {
+			Deno.env.set("GITHUB_ACTIONS", originalGH);
+		}
+		if (originalAI !== undefined) {
+			Deno.env.set("CI_AI", originalAI);
 		}
 	}
 });
