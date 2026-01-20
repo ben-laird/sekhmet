@@ -2,7 +2,7 @@
 import { bold, cyan, green, red } from "@std/fmt/colors";
 import { createAdapter } from "./adapter.ts";
 import { executeStepGraph } from "./graph.ts";
-import { formatWorkflowOutput } from "./output.ts";
+import { formatAIOutput, formatWorkflowOutput } from "./output.ts";
 import type { WorkflowResult, WorkflowStep } from "./types.ts";
 
 /**
@@ -27,10 +27,22 @@ export async function runWorkflow(
 
 	try {
 		const results = await executeStepGraph(steps, artifactsDir);
-
-		// Format and display results
 		const decoder = new TextDecoder();
-		const exitCode = await formatWorkflowOutput(steps, results, decoder, adapter);
+
+		// AI mode: output structured JSON
+		if (adapter.isAI) {
+			const aiResult = formatAIOutput(steps, results, decoder);
+			console.log(JSON.stringify(aiResult, null, 2));
+			Deno.exit(aiResult.success ? 0 : 1);
+		}
+
+		// Standard mode: format and display results
+		const exitCode = await formatWorkflowOutput(
+			steps,
+			results,
+			decoder,
+			adapter,
+		);
 
 		if (exitCode !== 0) {
 			adapter.error("Workflow failed");
