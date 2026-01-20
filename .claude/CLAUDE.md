@@ -277,3 +277,18 @@ Deno.test("feature does something", () => {
 - **Then**: Describe the expected result or behavior
 - Use these comments even in simple tests for consistency
 - Multiple When-Then pairs are acceptable for complex scenarios
+
+## Additional Resources
+
+This directory contains additional reference material for common patterns and
+templates:
+
+- **[patterns.md](.claude/patterns.md)**: Detailed implementation patterns
+  including enum narrowing, pattern matching, struct encapsulation, type
+  utilities, error handling, and composition patterns
+- **[templates.md](.claude/templates.md)**: Quick-reference code templates for
+  new features, BDD tests, enum variants, Struct wrappers, JSDoc comments, and
+  package structures
+
+These files provide concrete examples and can be consulted when implementing
+specific features or following established patterns in the codebase.
