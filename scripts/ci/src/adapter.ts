@@ -81,6 +81,9 @@ export interface CIAdapter {
 
 	/** true if running in GitHub Actions environment, false otherwise */
 	readonly isGitHubActions: boolean;
+
+	/** true if running in AI agent mode (CI_AI=true), false otherwise */
+	readonly isAI: boolean;
 }
 
 /**
@@ -89,6 +92,7 @@ export interface CIAdapter {
  */
 class ConsoleAdapter implements CIAdapter {
 	readonly isGitHubActions = false;
+	readonly isAI = false;
 
 	info(message: string): void {
 		console.log(message);
@@ -147,6 +151,7 @@ class ConsoleAdapter implements CIAdapter {
  */
 class GitHubActionsAdapter implements CIAdapter {
 	readonly isGitHubActions = true;
+	readonly isAI = false;
 
 	info(message: string): void {
 		core.info(message);
@@ -191,12 +196,68 @@ class GitHubActionsAdapter implements CIAdapter {
 }
 
 /**
+ * AI agent adapter for structured JSON output.
+ * Provides minimal console output since JSON handles results.
+ */
+class AIAdapter implements CIAdapter {
+	readonly isGitHubActions = false;
+	readonly isAI = true;
+
+	info(_message: string): void {
+		// Silent - JSON output handles this
+	}
+
+	notice(_message: string): void {
+		// Silent - JSON output handles this
+	}
+
+	warning(_message: string): void {
+		// Silent - JSON output handles this
+	}
+
+	error(_message: string): void {
+		// Silent - JSON output handles this
+	}
+
+	debug(_message: string): void {
+		// Silent - JSON output handles this
+	}
+
+	startGroup(_name: string): void {
+		// Silent - no grouping in AI mode
+	}
+
+	endGroup(): void {
+		// Silent - no grouping in AI mode
+	}
+
+	async group<T>(_name: string, fn: () => T | Promise<T>): Promise<T> {
+		return await fn();
+	}
+
+	setOutput(_name: string, _value: string): void {
+		// Silent - JSON output handles this
+	}
+
+	setFailed(_message: string): never {
+		// Exit handled by workflow.ts with JSON output
+		Deno.exit(1);
+	}
+}
+
+/**
  * Creates an appropriate CI adapter based on the environment.
- * Detects GitHub Actions via the GITHUB_ACTIONS environment variable.
+ * Checks CI_AI first for AI agent mode, then GITHUB_ACTIONS for CI,
+ * otherwise falls back to console output.
  *
- * @returns CIAdapter instance (GitHubActionsAdapter or ConsoleAdapter)
+ * @returns CIAdapter instance (AIAdapter, GitHubActionsAdapter, or ConsoleAdapter)
  */
 export function createAdapter(): CIAdapter {
-	const isGitHubActions = Deno.env.get("GITHUB_ACTIONS") === "true";
-	return isGitHubActions ? new GitHubActionsAdapter() : new ConsoleAdapter();
+	if (Deno.env.get("CI_AI") === "true") {
+		return new AIAdapter();
+	}
+	if (Deno.env.get("GITHUB_ACTIONS") === "true") {
+		return new GitHubActionsAdapter();
+	}
+	return new ConsoleAdapter();
 }
