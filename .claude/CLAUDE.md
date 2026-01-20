@@ -25,7 +25,7 @@ deno test packages/enum/src/core/mini/eliminate.test.ts
 
 ```bash
 # **ALWAYS run this after making changes to verify your work**
-deno task ci
+CI_AI=true deno task ci
 
 # This runs ALL quality checks:
 # - Format and lint with Biome
@@ -37,10 +37,16 @@ deno run npm:@biomejs/biome check --write .
 ```
 
 **IMPORTANT**: After implementing any feature, fix, or refactor, you MUST run
-`deno task ci` to verify your work passes all checks before considering the task
-complete.
+`CI_AI=true deno task ci` to verify your work passes all checks before
+considering the task complete.
 
-**Handling CI Failures**: If `deno task ci` fails:
+**AI Mode (`CI_AI=true`)**: Always use the `CI_AI=true` environment variable
+when running CI as an AI agent. This mode:
+
+- Allows dirty worktree (JSR publish dry-run won't fail on uncommitted changes)
+- Outputs structured JSON for programmatic parsing
+
+**Handling CI Failures**: If CI fails:
 
 - **Analyze the failure**: Test failures, type errors, or lint issues may reveal
   bugs in your implementation OR in existing code
