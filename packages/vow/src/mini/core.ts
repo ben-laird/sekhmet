@@ -66,10 +66,26 @@ export class Vow<T> extends Enum<Variants<T>> {
 			// by tracking when the executor finishes
 
 			match(this)({
-				Pending: (deps) => {
+				Pending: (dependencies) => {
 					getStructParams(this).variant = ["Resolved", value];
 
-					resolveDependencies(value, deps);
+					let aggregate: AggregateError | undefined;
+
+					for (const resolve of dependencies) {
+						try {
+							resolve(value);
+						} catch (cause: unknown) {
+							if (!aggregate) {
+								aggregate = new AggregateError([]);
+							}
+
+							aggregate.errors.push(cause);
+						}
+					}
+
+					if (aggregate) {
+						throw aggregate;
+					}
 				},
 				Resolved: () => {},
 			});
@@ -78,101 +94,5 @@ export class Vow<T> extends Enum<Variants<T>> {
 		// ---
 		// (1.2) If at this point the Vow is resolved, it was resolved
 		// synchronously within the executor
-	}
-
-	/**
-	 * Chains a transformation to run when the vow is resolved.
-	 *
-	 * If the vow is already resolved, the transformation runs immediately.
-	 * If pending, the transformation is queued and runs when resolved.
-	 *
-	 * @template U The type of the transformed value
-	 * @param onResolution Function to transform the resolved value
-	 * @returns A new Vow that resolves with the transformed value
-	 *
-	 * @example
-	 * ```ts ignore
-	 * const vow = new Vow<number>((resolve) => resolve(5));
-	 * const squared = vow.andThen((n) => n * n); // Resolves to 25
-	 * ```
-	 */
-	andThen<U>(onResolution: (value: T) => U): Vow<U> {
-		return new Vow<U>((resolve) => {
-			match(this)({
-				Pending(deps) {
-					deps.push(resolveMap);
-				},
-				Resolved: resolveMap,
-			});
-
-			function resolveMap(value: T): void {
-				resolve(onResolution(value));
-			}
-		});
-	}
-}
-
-/**
- * The result of calling vowWithResolver, containing both the vow and its resolver.
- *
- * @template T The type of the resolved value
- */
-export interface VowWithResolver<T> {
-	/** Function to resolve the vow with a value */
-	resolve: Resolver<T>;
-	/** The vow that will be resolved */
-	vow: Vow<T>;
-}
-
-/**
- * Creates a Vow along with its resolver function for deferred resolution.
- *
- * This is useful when you need to create a vow that will be resolved later
- * by external code, rather than resolved immediately in the executor.
- *
- * @template T The type of the resolved value
- * @returns An object containing the vow and its resolve function
- *
- * @example
- * ```ts ignore
- * const { vow, resolve } = vowWithResolver<string>();
- *
- * // Set up what happens when resolved
- * vow.andThen((value) => {
- *   console.log("Got:", value);
- * });
- *
- * // Later, resolve it
- * resolve("hello world");
- * // Logs: "Got: hello world"
- * ```
- */
-export function vowWithResolver<T>(): VowWithResolver<T> {
-	let resolve!: Resolver<T>;
-
-	const vow = new Vow<T>((res) => {
-		resolve = res;
-	});
-
-	return { resolve, vow };
-}
-
-function resolveDependencies<T>(value: T, dependencies: Resolver<T>[]): void {
-	let aggregate: AggregateError | undefined;
-
-	for (const resolve of dependencies) {
-		try {
-			resolve(value);
-		} catch (cause: unknown) {
-			if (!aggregate) {
-				aggregate = new AggregateError([]);
-			}
-
-			aggregate.errors.push(cause);
-		}
-	}
-
-	if (aggregate) {
-		throw aggregate;
 	}
 }
