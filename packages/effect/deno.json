@@ -1,0 +1,13 @@
+{
+	"name": "@sekhmet/effect",
+	"version": "0.1.0",
+	"publish": false,
+
+	"exports": {
+		".": "./mod.ts"
+	},
+
+	"imports": {
+		"@/": "./"
+	}
+}
