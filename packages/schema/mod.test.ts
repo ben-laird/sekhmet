@@ -25,7 +25,7 @@ type PotentialVariants<T> = Split<{
 
 class Potential<T> extends Enum<PotentialVariants<T>> {}
 
-function from<T>(value: T | Promise<T>): Potential<T> {
+function from<T>(value: MaybePromise<T>): Potential<T> {
 	if (value instanceof Promise) {
 		return Async(value);
 	}
@@ -45,7 +45,9 @@ function mapPotential<T, U>(
 	});
 }
 
-type Parser<I, O, E> = (input: I) => Potential<Result<O, E>>;
+type MaybePromise<T> = T | Promise<T>;
+
+type Parser<I, O, E> = (input: I) => MaybePromise<Result<O, E>>;
 
 class Schema<I, O, E> extends Struct<Parser<I, O, E>> {}
 
@@ -53,7 +55,7 @@ function parse<I, O, E>(
 	self: Schema<I, O, E>,
 	input: I,
 ): Potential<Result<O, E>> {
-	return getStructParams(self)(input);
+	return from(getStructParams(self)(input));
 }
 
 function UnexpectedAsyncParse<E>(): ParseSyncError<E> {
@@ -98,9 +100,11 @@ function map<I, O, E, P>(
 	return new Schema((input) => {
 		const potentialResult = parse(self, input);
 
-		return mapPotential(potentialResult, (result) => {
-			return mapResult(result, mapping);
-		});
+		return union(
+			mapPotential(potentialResult, (result) => {
+				return mapResult(result, mapping);
+			}),
+		);
 	});
 }
 
@@ -111,9 +115,11 @@ function mapErr<I, O, E, F>(
 	return new Schema((input) => {
 		const potentialResult = parse(self, input);
 
-		return mapPotential(potentialResult, (result) => {
-			return mapErrResult(result, mapping);
-		});
+		return union(
+			mapPotential(potentialResult, (result) => {
+				return mapErrResult(result, mapping);
+			}),
+		);
 	});
 }
 
@@ -123,24 +129,17 @@ function pipe<I, O, E, P>(
 ): Schema<I, P, E> {
 	return new Schema((input) => {
 		return match(parse(self, input))({
-			Sync: (result) => {
-				return match(result)({
-					Ok: (output) => parse(nextSchema, output),
-					Err: (error) => Sync(Err(error)),
-				});
-			},
-			Async: (promisedResult) => {
-				return Async(
-					promisedResult.then((result) => {
-						return match(result)({
-							Ok: (output) => union(parse(nextSchema, output)),
-							Err: (error) => Err(error),
-						});
-					}),
-				);
-			},
+			Sync: (result) => handleResult(result),
+			Async: async (promisedResult) => handleResult(await promisedResult),
 		});
 	});
+
+	function handleResult(result: Result<O, E>): MaybePromise<Result<P, E>> {
+		return match(result)({
+			Ok: (output) => getStructParams(nextSchema)(output),
+			Err: (error) => Err(error),
+		});
+	}
 }
 
 function filter<I, O, E, P extends O>(
@@ -149,13 +148,9 @@ function filter<I, O, E, P extends O>(
 	filtering: (output: O) => output is P,
 ): Schema<I, P, E> {
 	return new Schema((input) => {
-		return match(parse(self, input))({
-			Sync: (result) => {
-				return Sync(handleResult(result));
-			},
-			Async: (promisedResult) => {
-				return Async(promisedResult.then((result) => handleResult(result)));
-			},
+		return match(parse(self, input))<MaybePromise<Result<P, E>>>({
+			Sync: (result) => handleResult(result),
+			Async: async (promisedResult) => handleResult(await promisedResult),
 		});
 	});
 
@@ -183,13 +178,13 @@ function string({
 	return new Schema((input) => {
 		if (typeof input !== "string") {
 			if (coerce) {
-				return Sync(Ok(String(input)));
+				return Ok(String(input));
 			}
 
-			return Sync(Err(new TypeError()));
+			return Err(new TypeError());
 		}
 
-		return Sync(Ok(input));
+		return Ok(input);
 	});
 }
 
@@ -211,13 +206,13 @@ function number({
 	return new Schema((input) => {
 		if (typeof input !== "number") {
 			if (coerce) {
-				return Sync(Ok(Number(input)));
+				return Ok(Number(input));
 			}
 
-			return Sync(Err(new TypeError()));
+			return Err(new TypeError());
 		}
 
-		return Sync(Ok(input));
+		return Ok(input);
 	});
 }
 
@@ -231,13 +226,13 @@ function boolean({
 	return new Schema((input) => {
 		if (typeof input !== "boolean") {
 			if (coerce) {
-				return Sync(Ok(Boolean(input)));
+				return Ok(Boolean(input));
 			}
 
-			return Sync(Err(new TypeError()));
+			return Err(new TypeError());
 		}
 
-		return Sync(Ok(input));
+		return Ok(input);
 	});
 }
 
