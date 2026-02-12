@@ -173,6 +173,74 @@ function filter<I, O, E, P extends O>(
 	}
 }
 
+interface StringSchemaOptions {
+	coerce?: boolean;
+}
+
+function string({
+	coerce = false,
+}: StringSchemaOptions = {}): Schema<unknown, string, TypeError> {
+	return new Schema((input) => {
+		if (typeof input !== "string") {
+			if (coerce) {
+				return Sync(Ok(String(input)));
+			}
+
+			return Sync(Err(new TypeError()));
+		}
+
+		return Sync(Ok(input));
+	});
+}
+
+type Bound = [number, "inclusive" | "non-inclusive"];
+
+interface Range {
+	min: Bound;
+	max: Bound;
+}
+
+interface NumberSchemaOptions {
+	coerce?: boolean;
+	range?: Range;
+}
+
+function number({
+	coerce = false,
+}: NumberSchemaOptions = {}): Schema<unknown, number, TypeError> {
+	return new Schema((input) => {
+		if (typeof input !== "number") {
+			if (coerce) {
+				return Sync(Ok(Number(input)));
+			}
+
+			return Sync(Err(new TypeError()));
+		}
+
+		return Sync(Ok(input));
+	});
+}
+
+interface BooleanSchemaOptions {
+	coerce?: boolean;
+}
+
+function boolean({
+	coerce = false,
+}: BooleanSchemaOptions = {}): Schema<unknown, boolean, TypeError> {
+	return new Schema((input) => {
+		if (typeof input !== "boolean") {
+			if (coerce) {
+				return Sync(Ok(Boolean(input)));
+			}
+
+			return Sync(Err(new TypeError()));
+		}
+
+		return Sync(Ok(input));
+	});
+}
+
 Deno.test("Lab test", () => {
 	assertEquals(1 + 1, 2);
 });
