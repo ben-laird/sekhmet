@@ -4,7 +4,16 @@
 	"publish": false,
 
 	"exports": {
-		".": "./mod.ts"
+		".": "./mod.ts",
+		"./core": "./src/core/main/mod.ts",
+		"./core/mini": "./src/core/mini/mod.ts",
+		"./core/mini/potential": "./src/core/mini/potential.ts",
+		"./core/mini/schema": "./src/core/mini/schema.ts",
+		"./primitives": "./src/primitives/main/mod.ts",
+		"./primitives/mini": "./src/primitives/mini/mod.ts",
+		"./primitives/mini/string": "./src/primitives/mini/string.ts",
+		"./primitives/mini/number": "./src/primitives/mini/number.ts",
+		"./primitives/mini/boolean": "./src/primitives/mini/boolean.ts"
 	},
 
 	"imports": {
