@@ -22,7 +22,7 @@ function fork<I, T, E>(
 		id: crypto.randomUUID(),
 		effect,
 		runtime: self,
-		state: new FiberState("Queued"),
+		fiberState: new FiberState("Queued"),
 	});
 
 	step(fiber, "init");
@@ -42,14 +42,14 @@ class FiberState<T, E> extends Enum<FiberStateVariants<T, E>> {}
 interface FiberParams<I, T, E> {
 	id: string;
 	effect: Effect<I, T, E>;
-	state: FiberState<T, E>;
+	fiberState: FiberState<T, E>;
 	runtime: Runtime<I>;
 }
 
 class Fiber<I, T, E> extends Struct<FiberParams<I, T, E>> {}
 
 function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
-	const { effect, runtime, state, id: fiberId } = getStructParams(self);
+	const { effect, runtime, fiberState, id: fiberId } = getStructParams(self);
 
 	console.log({ fiberId, label });
 
@@ -57,9 +57,9 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 
 	const runner = getStructParams(effect);
 
-	match(state)({
+	match(fiberState)({
 		Queued: () => {
-			getStructParams(state).variant = ["Complete", runner(input)];
+			getStructParams(fiberState).variant = ["Complete", runner(input)];
 		},
 		Running: () => {},
 		Suspended: () => {},
