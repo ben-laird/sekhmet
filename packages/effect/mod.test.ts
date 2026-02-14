@@ -37,6 +37,52 @@ function map<I, T, E, U>(
 	});
 }
 
+function mapError<I, T, E, F>(
+	self: Effect<I, T, E>,
+	mapping: (error: E) => F,
+): Effect<I, T, F> {
+	return new Effect((input) => {
+		return loop(getStructParams(self)(input));
+
+		function loop(c: Continuation<Result<T, E>>): Continuation<Result<T, F>> {
+			return match(c)({
+				Ready: (result) => {
+					return match(result)({
+						Ok: (value) => Ready(Ok(value)),
+						Err: (error) => Deferred(() => Ready(Err(mapping(error)))),
+					});
+				},
+				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+			});
+		}
+	});
+}
+
+function and<I, T, E, U>(
+	self: Effect<I, T, E>,
+	nextStep: Effect<T, U, E>,
+): Effect<I, U, E> {
+	return new Effect((input) => {
+		return loop(getStructParams(self)(input));
+
+		function loop(c: Continuation<Result<T, E>>): Continuation<Result<U, E>> {
+			return match(c)({
+				Ready: (result) => {
+					return match(result)({
+						Ok: (value) => {
+							return Deferred(() => {
+								return getStructParams(nextStep)(value);
+							});
+						},
+						Err: (error) => Ready(Err(error)),
+					});
+				},
+				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+			});
+		}
+	});
+}
+
 function andThen<I, T, E, U>(
 	self: Effect<I, T, E>,
 	nextStep: (value: T) => Effect<I, U, E>,
@@ -54,6 +100,56 @@ function andThen<I, T, E, U>(
 							});
 						},
 						Err: (error) => Ready(Err(error)),
+					});
+				},
+				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+			});
+		}
+	});
+}
+
+function or<I, T, E, F>(
+	self: Effect<I, T, E>,
+	fallbackStep: Effect<E, T, F>,
+): Effect<I, T, F> {
+	return new Effect((input) => {
+		return loop(getStructParams(self)(input));
+
+		function loop(c: Continuation<Result<T, E>>): Continuation<Result<T, F>> {
+			return match(c)({
+				Ready: (result) => {
+					return match(result)({
+						Ok: (value) => Ready(Ok(value)),
+						Err: (error) => {
+							return Deferred(() => {
+								return getStructParams(fallbackStep)(error);
+							});
+						},
+					});
+				},
+				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+			});
+		}
+	});
+}
+
+function orElse<I, T, E, F>(
+	self: Effect<I, T, E>,
+	fallbackStep: (error: E) => Effect<I, T, F>,
+): Effect<I, T, F> {
+	return new Effect((input) => {
+		return loop(getStructParams(self)(input));
+
+		function loop(c: Continuation<Result<T, E>>): Continuation<Result<T, F>> {
+			return match(c)({
+				Ready: (result) => {
+					return match(result)({
+						Ok: (value) => Ready(Ok(value)),
+						Err: (error) => {
+							return Deferred(() => {
+								return getStructParams(fallbackStep(error))(input);
+							});
+						},
 					});
 				},
 				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
