@@ -25,7 +25,7 @@ function fork<I, T, E>(
 		fiberState: new FiberState("Queued"),
 	});
 
-	step(fiber, "init");
+	runFiber(fiber);
 
 	return fiber;
 }
@@ -48,6 +48,31 @@ interface FiberParams<I, T, E> {
 
 class Fiber<I, T, E> extends Struct<FiberParams<I, T, E>> {}
 
+function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
+	const { fiberState } = getStructParams(self);
+
+	const loopState: LoopState = {
+		continueExecution: true,
+		index: 0,
+	};
+
+	while (loopState.continueExecution) {
+		step(self, `step ${loopState.index++}`);
+
+		loopState.continueExecution = match(fiberState)({
+			Queued: () => true,
+			Running: () => true,
+			Suspended: () => false,
+			Complete: () => false,
+		});
+	}
+}
+
+interface LoopState {
+	continueExecution: boolean;
+	index: number;
+}
+
 function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 	const { effect, runtime, fiberState, id: fiberId } = getStructParams(self);
 
@@ -59,9 +84,11 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 
 	match(fiberState)({
 		Queued: () => {
+			getStructParams(fiberState).variant = ["Running"];
+		},
+		Running: () => {
 			getStructParams(fiberState).variant = ["Complete", runner(input)];
 		},
-		Running: () => {},
 		Suspended: () => {},
 		Complete: () => {},
 	});
