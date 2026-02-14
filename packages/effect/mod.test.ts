@@ -4,16 +4,16 @@ import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
 
-type EffectFn<I, T, E> = (input: I) => Result<T, E>;
+type EffectFn<I, T, E> = (input: I) => Continuation<Result<T, E>>;
 
 class Effect<I, T, E> extends Struct<EffectFn<I, T, E>> {}
 
 function Success<T>(value: T): Effect<void, T, never> {
-	return new Effect(() => Ok(value));
+	return new Effect(() => Ready(Ok(value)));
 }
 
 function Failure<E>(error: E): Effect<void, never, E> {
-	return new Effect(() => Err(error));
+	return new Effect(() => Ready(Err(error)));
 }
 
 function map<I, T, E, U>(
@@ -21,14 +21,36 @@ function map<I, T, E, U>(
 	mapping: (value: T) => U,
 ): Effect<I, U, E> {
 	return new Effect((input) => {
-		const result = getStructParams(self)(input);
+		return loop(getStructParams(self)(input));
 
-		return match(result)({
-			Ok: (value) => Ok(mapping(value)),
-			Err,
-		});
+		function loop(c: Continuation<Result<T, E>>): Continuation<Result<U, E>> {
+			return match(c)({
+				Ready: (result) => {
+					return match(result)({
+						Ok: (value) => Deferred(() => Ready(Ok(mapping(value)))),
+						Err: (error) => Ready(Err(error)),
+					});
+				},
+				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+			});
+		}
 	});
 }
+
+function Ready<T>(value: T): Continuation<T> {
+	return new Continuation<T>("Ready", value);
+}
+
+function Deferred<T>(fn: () => Continuation<T>): Continuation<T> {
+	return new Continuation<T>("Deferred", fn);
+}
+
+type ContinuationVariants<T> = Split<{
+	Ready: [value: T];
+	Deferred: [fn: () => Continuation<T>];
+}>;
+
+class Continuation<T> extends Enum<ContinuationVariants<T>> {}
 
 interface RuntimeParams<I> {
 	input: I;
@@ -54,7 +76,7 @@ function fork<I, T, E>(
 
 type FiberStateVariants<T, E> = Split<{
 	Queued: [];
-	Running: [];
+	Running: [currentContinuation: Continuation<Result<T, E>>];
 	Suspended: [];
 	Complete: [result: Result<T, E>];
 }>;
@@ -96,20 +118,30 @@ interface LoopState {
 }
 
 function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
-	const { effect, runtime, fiberState, id: fiberId } = getStructParams(self);
+	const fiberParams = getStructParams(self);
+	const { effect, runtime, fiberState, id: fiberId } = fiberParams;
 
 	console.log({ fiberId, label });
 
 	const { input } = getStructParams(runtime);
 
-	const runner = getStructParams(effect);
-
 	match(fiberState)({
 		Queued: () => {
-			getStructParams(fiberState).variant = ["Running"];
+			// Initialize: start the effect and store the initial continuation
+			const runner = getStructParams(effect);
+			getStructParams(fiberState).variant = ["Running", runner(input)];
 		},
-		Running: () => {
-			getStructParams(fiberState).variant = ["Complete", runner(input)];
+		Running: (currentContinuation) => {
+			// Process one step: unwrap one Deferred or complete with Ready
+			match(currentContinuation)({
+				Ready: (result) => {
+					getStructParams(fiberState).variant = ["Complete", result];
+				},
+				Deferred: (fn) => {
+					// Unwrap one level and store the next continuation
+					getStructParams(fiberState).variant = ["Running", fn()];
+				},
+			});
 		},
 		Suspended: () => {},
 		Complete: () => {},
