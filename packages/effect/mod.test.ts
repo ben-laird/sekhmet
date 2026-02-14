@@ -1,12 +1,34 @@
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { match } from "@sekhmet/enum/core/mini/exit";
-import type { Result } from "@sekhmet/enum/result/mini";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
 
 type EffectFn<I, T, E> = (input: I) => Result<T, E>;
 
 class Effect<I, T, E> extends Struct<EffectFn<I, T, E>> {}
+
+function Success<T>(value: T): Effect<void, T, never> {
+	return new Effect(() => Ok(value));
+}
+
+function Failure<E>(error: E): Effect<void, never, E> {
+	return new Effect(() => Err(error));
+}
+
+function map<I, T, E, U>(
+	self: Effect<I, T, E>,
+	mapping: (value: T) => U,
+): Effect<I, U, E> {
+	return new Effect((input) => {
+		const result = getStructParams(self)(input);
+
+		return match(result)({
+			Ok: (value) => Ok(mapping(value)),
+			Err,
+		});
+	});
+}
 
 interface RuntimeParams<I> {
 	input: I;
