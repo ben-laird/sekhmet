@@ -37,6 +37,31 @@ function map<I, T, E, U>(
 	});
 }
 
+function andThen<I, T, E, U>(
+	self: Effect<I, T, E>,
+	nextStep: (value: T) => Effect<I, U, E>,
+): Effect<I, U, E> {
+	return new Effect((input) => {
+		return loop(getStructParams(self)(input));
+
+		function loop(c: Continuation<Result<T, E>>): Continuation<Result<U, E>> {
+			return match(c)({
+				Ready: (result) => {
+					return match(result)({
+						Ok: (value) => {
+							return Deferred(() => {
+								return getStructParams(nextStep(value))(input);
+							});
+						},
+						Err: (error) => Ready(Err(error)),
+					});
+				},
+				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+			});
+		}
+	});
+}
+
 function Ready<T>(value: T): Continuation<T> {
 	return new Continuation<T>("Ready", value);
 }
