@@ -257,6 +257,7 @@ type FiberStateVariants<T, E> = Split<{
 	Queued: [];
 	Running: [currentContinuation: Continuation<Result<T, E>>];
 	Suspended: [cancellation: Cancellation];
+	Cancelled: [];
 	Complete: [result: Result<T, E>];
 }>;
 
@@ -286,6 +287,7 @@ function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
 			Queued: () => true,
 			Running: () => true,
 			Suspended: () => false,
+			Cancelled: () => false,
 			Complete: () => false,
 		});
 	}
@@ -333,6 +335,26 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 			});
 		},
 		Suspended: () => {},
+		Cancelled: () => {},
+		Complete: () => {},
+	});
+}
+
+function cancel<I, T, E>(self: Fiber<I, T, E>): void {
+	const { fiberState } = getStructParams(self);
+
+	match(fiberState)({
+		Queued: () => {
+			getStructParams(fiberState).variant = ["Cancelled"];
+		},
+		Running: () => {
+			getStructParams(fiberState).variant = ["Cancelled"];
+		},
+		Suspended: (cancellation) => {
+			getStructParams(fiberState).variant = ["Cancelled"];
+			cancellation?.();
+		},
+		Cancelled: () => {},
 		Complete: () => {},
 	});
 }
@@ -366,6 +388,9 @@ Deno.test("simple success effect with map", () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber suspended");
+		},
+		Cancelled: () => {
+			throw new Error("Fiber was cancelled");
 		},
 	});
 });
@@ -403,6 +428,9 @@ Deno.test("chaining effects with andThen", () => {
 		Suspended: () => {
 			throw new Error("Fiber suspended");
 		},
+		Cancelled: () => {
+			throw new Error("Fiber was cancelled");
+		},
 	});
 });
 
@@ -438,6 +466,9 @@ Deno.test("error handling with mapError and orElse", () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber suspended");
+		},
+		Cancelled: () => {
+			throw new Error("Fiber was cancelled");
 		},
 	});
 });
@@ -476,6 +507,9 @@ Deno.test("async effect with setTimeout", async () => {
 		Running: () => {
 			throw new Error("Should not be running");
 		},
+		Cancelled: () => {
+			throw new Error("Should not be cancelled");
+		},
 	});
 
 	// Wait for async operation to complete
@@ -501,6 +535,9 @@ Deno.test("async effect with setTimeout", async () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber should be complete");
+		},
+		Cancelled: () => {
+			throw new Error("Fiber should be complete, not cancelled");
 		},
 	});
 });
@@ -543,6 +580,9 @@ Deno.test("combining success paths with and", () => {
 		Suspended: () => {
 			throw new Error("Fiber suspended");
 		},
+		Cancelled: () => {
+			throw new Error("Fiber was cancelled");
+		},
 	});
 });
 
@@ -578,6 +618,9 @@ Deno.test("deeply nested deferred continuations", () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber suspended");
+		},
+		Cancelled: () => {
+			throw new Error("Fiber was cancelled");
 		},
 	});
 });
