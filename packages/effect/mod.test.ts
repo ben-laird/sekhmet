@@ -38,7 +38,7 @@ function map<I, T, E, U>(
 						});
 					});
 				},
-				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
 			});
 		}
 	});
@@ -59,14 +59,14 @@ function mapError<I, T, E, F>(
 						Err: (error) => Deferred(() => Ready(Err(mapping(error)))),
 					});
 				},
-				Async: (resultFn) => {
+				Async: (continuationFn) => {
 					return Async((resolve) => {
-						return resultFn((continuation) => {
+						return continuationFn((continuation) => {
 							resolve(loop(continuation));
 						});
 					});
 				},
-				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
 			});
 		}
 	});
@@ -98,7 +98,7 @@ function and<I, T, E, U>(
 						});
 					});
 				},
-				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
 			});
 		}
 	});
@@ -130,7 +130,7 @@ function andThen<I, T, E, U>(
 						});
 					});
 				},
-				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
 			});
 		}
 	});
@@ -162,7 +162,7 @@ function or<I, T, E, F>(
 						});
 					});
 				},
-				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
 			});
 		}
 	});
@@ -194,7 +194,7 @@ function orElse<I, T, E, F>(
 						});
 					});
 				},
-				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
+				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
 			});
 		}
 	});
@@ -204,24 +204,29 @@ function Ready<T>(value: T): Continuation<T> {
 	return new Continuation<T>("Ready", value);
 }
 
-function Async<T>(
-	fn: (resolve: (continuation: Continuation<T>) => void) => void | (() => void),
-): Continuation<T> {
+type AsyncContinuation<T> = (
+	resolve: (continuation: Continuation<T>) => void,
+) => Cancellation;
+
+// biome-ignore lint/suspicious/noConfusingVoidType: necessary for types to work properly
+type Cancellation = void | CancellationFn;
+
+type CancellationFn = () => void;
+
+function Async<T>(fn: AsyncContinuation<T>): Continuation<T> {
 	return new Continuation<T>("Async", fn);
 }
 
-function Deferred<T>(fn: () => Continuation<T>): Continuation<T> {
+type DeferredContinuation<T> = () => Continuation<T>;
+
+function Deferred<T>(fn: DeferredContinuation<T>): Continuation<T> {
 	return new Continuation<T>("Deferred", fn);
 }
 
 type ContinuationVariants<T> = Split<{
 	Ready: [value: T];
-	Async: [
-		fn: (
-			resolve: (continuation: Continuation<T>) => void,
-		) => void | (() => void),
-	];
-	Deferred: [fn: () => Continuation<T>];
+	Async: [fn: AsyncContinuation<T>];
+	Deferred: [fn: DeferredContinuation<T>];
 }>;
 
 class Continuation<T> extends Enum<ContinuationVariants<T>> {}
@@ -251,7 +256,7 @@ function fork<I, T, E>(
 type FiberStateVariants<T, E> = Split<{
 	Queued: [];
 	Running: [currentContinuation: Continuation<Result<T, E>>];
-	Suspended: [canceler: void | (() => void)];
+	Suspended: [cancellation: Cancellation];
 	Complete: [result: Result<T, E>];
 }>;
 
