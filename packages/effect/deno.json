@@ -4,7 +4,13 @@
 	"publish": false,
 
 	"exports": {
-		".": "./mod.ts"
+		".": "./mod.ts",
+		"./core": "./src/core/main/mod.ts",
+		"./core/mini": "./src/core/mini/mod.ts",
+		"./core/mini/effect": "./src/core/mini/effect.ts",
+		"./core/mini/continuation": "./src/core/mini/continuation.ts",
+		"./core/mini/operations": "./src/core/mini/operations.ts",
+		"./core/mini/runtime": "./src/core/mini/runtime.ts"
 	},
 
 	"imports": {
