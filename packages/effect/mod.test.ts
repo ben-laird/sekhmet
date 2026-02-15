@@ -31,6 +31,13 @@ function map<I, T, E, U>(
 						Err: (error) => Ready(Err(error)),
 					});
 				},
+				Async: (continuationFn) => {
+					return Async((resolve) => {
+						return continuationFn((continuation) => {
+							resolve(loop(continuation));
+						});
+					});
+				},
 				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
 			});
 		}
@@ -50,6 +57,13 @@ function mapError<I, T, E, F>(
 					return match(result)({
 						Ok: (value) => Ready(Ok(value)),
 						Err: (error) => Deferred(() => Ready(Err(mapping(error)))),
+					});
+				},
+				Async: (resultFn) => {
+					return Async((resolve) => {
+						return resultFn((continuation) => {
+							resolve(loop(continuation));
+						});
 					});
 				},
 				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
@@ -77,6 +91,13 @@ function and<I, T, E, U>(
 						Err: (error) => Ready(Err(error)),
 					});
 				},
+				Async: (continuationFn) => {
+					return Async((resolve) => {
+						return continuationFn((continuation) => {
+							resolve(loop(continuation));
+						});
+					});
+				},
 				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
 			});
 		}
@@ -100,6 +121,13 @@ function andThen<I, T, E, U>(
 							});
 						},
 						Err: (error) => Ready(Err(error)),
+					});
+				},
+				Async: (continuationFn) => {
+					return Async((resolve) => {
+						return continuationFn((continuation) => {
+							resolve(loop(continuation));
+						});
 					});
 				},
 				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
@@ -127,6 +155,13 @@ function or<I, T, E, F>(
 						},
 					});
 				},
+				Async: (continuationFn) => {
+					return Async((resolve) => {
+						return continuationFn((continuation) => {
+							resolve(loop(continuation));
+						});
+					});
+				},
 				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
 			});
 		}
@@ -152,6 +187,13 @@ function orElse<I, T, E, F>(
 						},
 					});
 				},
+				Async: (continuationFn) => {
+					return Async((resolve) => {
+						return continuationFn((continuation) => {
+							resolve(loop(continuation));
+						});
+					});
+				},
 				Deferred: (resultFn) => Deferred(() => loop(resultFn())),
 			});
 		}
@@ -162,12 +204,23 @@ function Ready<T>(value: T): Continuation<T> {
 	return new Continuation<T>("Ready", value);
 }
 
+function Async<T>(
+	fn: (resolve: (continuation: Continuation<T>) => void) => void | (() => void),
+): Continuation<T> {
+	return new Continuation<T>("Async", fn);
+}
+
 function Deferred<T>(fn: () => Continuation<T>): Continuation<T> {
 	return new Continuation<T>("Deferred", fn);
 }
 
 type ContinuationVariants<T> = Split<{
 	Ready: [value: T];
+	Async: [
+		fn: (
+			resolve: (continuation: Continuation<T>) => void,
+		) => void | (() => void),
+	];
 	Deferred: [fn: () => Continuation<T>];
 }>;
 
@@ -198,7 +251,7 @@ function fork<I, T, E>(
 type FiberStateVariants<T, E> = Split<{
 	Queued: [];
 	Running: [currentContinuation: Continuation<Result<T, E>>];
-	Suspended: [];
+	Suspended: [canceler: void | (() => void)];
 	Complete: [result: Result<T, E>];
 }>;
 
@@ -239,8 +292,7 @@ interface LoopState {
 }
 
 function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
-	const fiberParams = getStructParams(self);
-	const { effect, runtime, fiberState, id: fiberId } = fiberParams;
+	const { effect, runtime, fiberState, id: fiberId } = getStructParams(self);
 
 	console.log({ fiberId, label });
 
@@ -257,6 +309,17 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 			match(currentContinuation)({
 				Ready: (result) => {
 					getStructParams(fiberState).variant = ["Complete", result];
+				},
+				Async: (asyncFn) => {
+					// Suspend the fiber and set up async callback
+					getStructParams(fiberState).variant = [
+						"Suspended",
+						asyncFn((continuation) => {
+							getStructParams(fiberState).variant = ["Running", continuation];
+
+							runFiber(self);
+						}),
+					];
 				},
 				Deferred: (fn) => {
 					// Unwrap one level and store the next continuation
