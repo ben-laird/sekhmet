@@ -5,17 +5,6 @@
  * @module
  */
 
-export type {
-	AsyncContinuation,
-	Cancellation,
-	CancellationFn,
-	ContinuationVariants,
-	DeferredContinuation,
-	EffectFn,
-	FiberParams,
-	FiberStateVariants,
-	RuntimeParams,
-} from "../mini/mod.ts";
 export {
 	and,
 	andThen,
@@ -28,7 +17,6 @@ export {
 	Fiber,
 	FiberState,
 	fork,
-	getEffectFn,
 	map,
 	mapError,
 	or,
@@ -36,4 +24,15 @@ export {
 	Ready,
 	Runtime,
 	Success,
+} from "../mini/mod.ts";
+export type {
+	AsyncContinuation,
+	Cancellation,
+	CancellationFn,
+	ContinuationVariants,
+	DeferredContinuation,
+	EffectFn,
+	FiberParams,
+	FiberStateVariants,
+	RuntimeParams,
 } from "../mini/mod.ts";

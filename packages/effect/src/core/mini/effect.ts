@@ -5,7 +5,7 @@
  */
 
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
-import { getStructParams, Struct } from "@sekhmet/primordials/struct";
+import { Struct } from "@sekhmet/primordials/struct";
 import type { Continuation } from "./continuation.ts";
 import { Ready } from "./continuation.ts";
 
@@ -58,15 +58,4 @@ export function Success<T>(value: T): Effect<void, T, never> {
  */
 export function Failure<E>(error: E): Effect<void, never, E> {
 	return new Effect(() => Ready(Err(error)));
-}
-
-/**
- * Extracts the effect function from an Effect struct.
- *
- * @internal
- */
-export function getEffectFn<I, T, E>(
-	effect: Effect<I, T, E>,
-): EffectFn<I, T, E> {
-	return getStructParams(effect);
 }
