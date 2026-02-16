@@ -6,10 +6,10 @@
 
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { match } from "@sekhmet/enum/core/mini/exit";
-import type { Result } from "@sekhmet/enum/result/mini";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
-import type { Cancellation, Continuation } from "./continuation.ts";
-import type { Effect } from "./effect.ts";
+import type { Cancellation } from "./continuation.ts";
+import type { Effect, EffectOutput } from "./effect.ts";
 
 /**
  * Parameters for the Runtime struct.
@@ -45,9 +45,10 @@ export class Runtime<I> extends Struct<RuntimeParams<I>> {}
  */
 export type FiberStateVariants<T, E> = Split<{
 	Queued: [];
-	Running: [currentContinuation: Continuation<Result<T, E>>];
+	Running: [currentOutput: EffectOutput<T, E>];
 	Suspended: [cancellation: Cancellation];
 	Cancelled: [];
+	Panicked: [exception: unknown];
 	Complete: [result: Result<T, E>];
 }>;
 
@@ -169,6 +170,7 @@ function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
 			Running: () => true,
 			Suspended: () => false,
 			Cancelled: () => false,
+			Panicked: () => false,
 			Complete: () => false,
 		});
 	}
@@ -199,8 +201,28 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 		Running: (currentContinuation) => {
 			// Process one step: unwrap one Deferred or complete with Ready
 			match(currentContinuation)({
-				Ready: (result) => {
-					getStructParams(fiberState).variant = ["Complete", result];
+				Ready: (effectResult) => {
+					match(effectResult)({
+						Ok: (value) => {
+							getStructParams(fiberState).variant = [
+								"Complete",
+								Ok<T, E>(value),
+							];
+						},
+						Err: (effectError) => {
+							match(effectError)({
+								Failed: (error) => {
+									getStructParams(fiberState).variant = [
+										"Complete",
+										Err<T, E>(error),
+									];
+								},
+								ExceptionOccurred: (exception) => {
+									getStructParams(fiberState).variant = ["Panicked", exception];
+								},
+							});
+						},
+					});
 				},
 				Async: (asyncFn) => {
 					// Suspend the fiber and set up async callback
@@ -221,6 +243,7 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 		},
 		Suspended: () => {},
 		Cancelled: () => {},
+		Panicked: () => {},
 		Complete: () => {},
 	});
 }
@@ -253,6 +276,7 @@ export function cancel<I, T, E>(self: Fiber<I, T, E>): void {
 			cancellation?.();
 		},
 		Cancelled: () => {},
+		Panicked: () => {},
 		Complete: () => {},
 	});
 }

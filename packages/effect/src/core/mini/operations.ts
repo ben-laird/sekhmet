@@ -5,10 +5,15 @@
  */
 
 import { match } from "@sekhmet/enum/core/mini/exit";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
-import { Async, type Continuation, Deferred, Ready } from "./continuation.ts";
-import { Effect } from "./effect.ts";
+import { Async, Deferred, Ready } from "./continuation.ts";
+import {
+	Effect,
+	type EffectOutput,
+	ExceptionOccurred,
+	Failed,
+} from "./effect.ts";
 
 /**
  * Maps the success value of an effect using the provided function.
@@ -31,13 +36,25 @@ export function map<I, T, E, U>(
 	mapping: (value: T) => U,
 ): Effect<I, U, E> {
 	return new Effect((input) => {
-		return loop(getStructParams(self)(input));
+		try {
+			return loop(getStructParams(self)(input));
+		} catch (exception: unknown) {
+			return Ready(Err(ExceptionOccurred(exception)));
+		}
 
-		function loop(c: Continuation<Result<T, E>>): Continuation<Result<U, E>> {
-			return match(c)({
+		function loop(output: EffectOutput<T, E>): EffectOutput<U, E> {
+			return match(output)({
 				Ready: (result) => {
 					return match(result)({
-						Ok: (value) => Deferred(() => Ready(Ok(mapping(value)))),
+						Ok: (value) => {
+							return Deferred(() => {
+								try {
+									return Ready(Ok(mapping(value)));
+								} catch (exception: unknown) {
+									return Ready(Err(ExceptionOccurred(exception)));
+								}
+							});
+						},
 						Err: (error) => Ready(Err(error)),
 					});
 				},
@@ -75,14 +92,33 @@ export function mapError<I, T, E, F>(
 	mapping: (error: E) => F,
 ): Effect<I, T, F> {
 	return new Effect((input) => {
-		return loop(getStructParams(self)(input));
+		try {
+			return loop(getStructParams(self)(input));
+		} catch (exception: unknown) {
+			return Ready(Err(ExceptionOccurred(exception)));
+		}
 
-		function loop(c: Continuation<Result<T, E>>): Continuation<Result<T, F>> {
-			return match(c)({
+		function loop(output: EffectOutput<T, E>): EffectOutput<T, F> {
+			return match(output)({
 				Ready: (result) => {
 					return match(result)({
 						Ok: (value) => Ready(Ok(value)),
-						Err: (error) => Deferred(() => Ready(Err(mapping(error)))),
+						Err: (effectError) => {
+							return match(effectError)({
+								Failed: (err) => {
+									return Deferred(() => {
+										try {
+											return Ready(Err(Failed(mapping(err))));
+										} catch (exception: unknown) {
+											return Ready(Err(ExceptionOccurred(exception)));
+										}
+									});
+								},
+								ExceptionOccurred: (exception) => {
+									return Ready(Err(ExceptionOccurred(exception)));
+								},
+							});
+						},
 					});
 				},
 				Async: (continuationFn) => {
@@ -119,15 +155,23 @@ export function and<I, T, E, U>(
 	nextStep: Effect<T, U, E>,
 ): Effect<I, U, E> {
 	return new Effect((input) => {
-		return loop(getStructParams(self)(input));
+		try {
+			return loop(getStructParams(self)(input));
+		} catch (exception: unknown) {
+			return Ready(Err(ExceptionOccurred(exception)));
+		}
 
-		function loop(c: Continuation<Result<T, E>>): Continuation<Result<U, E>> {
-			return match(c)({
+		function loop(output: EffectOutput<T, E>): EffectOutput<U, E> {
+			return match(output)({
 				Ready: (result) => {
 					return match(result)({
 						Ok: (value) => {
 							return Deferred(() => {
-								return getStructParams(nextStep)(value);
+								try {
+									return getStructParams(nextStep)(value);
+								} catch (exception: unknown) {
+									return Ready(Err(ExceptionOccurred(exception)));
+								}
 							});
 						},
 						Err: (error) => Ready(Err(error)),
@@ -168,15 +212,23 @@ export function andThen<I, T, E, U>(
 	nextStep: (value: T) => Effect<I, U, E>,
 ): Effect<I, U, E> {
 	return new Effect((input) => {
-		return loop(getStructParams(self)(input));
+		try {
+			return loop(getStructParams(self)(input));
+		} catch (exception: unknown) {
+			return Ready(Err(ExceptionOccurred(exception)));
+		}
 
-		function loop(c: Continuation<Result<T, E>>): Continuation<Result<U, E>> {
-			return match(c)({
+		function loop(output: EffectOutput<T, E>): EffectOutput<U, E> {
+			return match(output)({
 				Ready: (result) => {
 					return match(result)({
 						Ok: (value) => {
 							return Deferred(() => {
-								return getStructParams(nextStep(value))(input);
+								try {
+									return getStructParams(nextStep(value))(input);
+								} catch (exception: unknown) {
+									return Ready(Err(ExceptionOccurred(exception)));
+								}
 							});
 						},
 						Err: (error) => Ready(Err(error)),
@@ -217,17 +269,36 @@ export function or<I, T, E, F>(
 	fallbackStep: Effect<E, T, F>,
 ): Effect<I, T, F> {
 	return new Effect((input) => {
-		return loop(getStructParams(self)(input));
+		try {
+			return loop(getStructParams(self)(input));
+		} catch (exception: unknown) {
+			return Ready(Err(ExceptionOccurred(exception)));
+		}
 
-		function loop(c: Continuation<Result<T, E>>): Continuation<Result<T, F>> {
-			return match(c)({
+		function loop(output: EffectOutput<T, E>): EffectOutput<T, F> {
+			return match(output)({
 				Ready: (result) => {
 					return match(result)({
 						Ok: (value) => Ready(Ok(value)),
-						Err: (error) => {
-							return Deferred(() => {
-								return getStructParams(fallbackStep)(error);
+						Err: (effectError) => {
+							return match(effectError)({
+								Failed: (error) => {
+									return Deferred(() => {
+										try {
+											return getStructParams(fallbackStep)(error);
+										} catch (exception: unknown) {
+											return Ready(Err(ExceptionOccurred(exception)));
+										}
+									});
+								},
+								ExceptionOccurred: (exception) => {
+									return Ready(Err(ExceptionOccurred(exception)));
+								},
 							});
+
+							// return Deferred(() => {
+							// 	return getStructParams(fallbackStep)(error);
+							// });
 						},
 					});
 				},
@@ -266,16 +337,31 @@ export function orElse<I, T, E, F>(
 	fallbackStep: (error: E) => Effect<I, T, F>,
 ): Effect<I, T, F> {
 	return new Effect((input) => {
-		return loop(getStructParams(self)(input));
+		try {
+			return loop(getStructParams(self)(input));
+		} catch (exception: unknown) {
+			return Ready(Err(ExceptionOccurred(exception)));
+		}
 
-		function loop(c: Continuation<Result<T, E>>): Continuation<Result<T, F>> {
-			return match(c)({
+		function loop(output: EffectOutput<T, E>): EffectOutput<T, F> {
+			return match(output)({
 				Ready: (result) => {
 					return match(result)({
 						Ok: (value) => Ready(Ok(value)),
-						Err: (error) => {
-							return Deferred(() => {
-								return getStructParams(fallbackStep(error))(input);
+						Err: (effectError) => {
+							return match(effectError)({
+								Failed: (error) => {
+									return Deferred(() => {
+										try {
+											return getStructParams(fallbackStep(error))(input);
+										} catch (exception: unknown) {
+											return Ready(Err(ExceptionOccurred(exception)));
+										}
+									});
+								},
+								ExceptionOccurred: (exception) => {
+									return Ready(Err(ExceptionOccurred(exception)));
+								},
 							});
 						},
 					});

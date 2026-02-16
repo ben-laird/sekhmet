@@ -4,10 +4,26 @@
  * @module
  */
 
+import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { Struct } from "@sekhmet/primordials/struct";
 import type { Continuation } from "./continuation.ts";
 import { Ready } from "./continuation.ts";
+
+export function Failed<T>(error: T): EffectError<T> {
+	return new EffectError<T>("Failed", error);
+}
+
+export function ExceptionOccurred<T>(error: unknown): EffectError<T> {
+	return new EffectError<T>("ExceptionOccurred", error);
+}
+
+export type EffectErrorVariants<T> = Split<{
+	Failed: [error: T];
+	ExceptionOccurred: [error: unknown];
+}>;
+
+export class EffectError<T> extends Enum<EffectErrorVariants<T>> {}
 
 /**
  * Function that represents an effect computation.
@@ -16,7 +32,11 @@ import { Ready } from "./continuation.ts";
  * @template T - Success value type
  * @template E - Error type
  */
-export type EffectFn<I, T, E> = (input: I) => Continuation<Result<T, E>>;
+export type EffectFn<I, T, E> = (input: I) => EffectOutput<T, E>;
+
+export type EffectOutput<T, E> = Continuation<EffectResult<T, E>>;
+
+export type EffectResult<T, E> = Result<T, EffectError<E>>;
 
 /**
  * An Effect represents a computation that takes input I, may succeed with value T,
@@ -57,5 +77,5 @@ export function Success<T>(value: T): Effect<void, T, never> {
  * ```
  */
 export function Failure<E>(error: E): Effect<void, never, E> {
-	return new Effect(() => Ready(Err(error)));
+	return new Effect(() => Ready(Err(Failed(error))));
 }
