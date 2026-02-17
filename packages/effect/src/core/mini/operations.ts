@@ -71,6 +71,107 @@ export function map<I, T, E, U>(
 	});
 }
 
+export function mapOr<I, T, E, U>(
+	self: Effect<I, T, E>,
+	defaultValue: U,
+	mapping: (value: T) => U,
+): Effect<I, U, never> {
+	return new Effect((input) => {
+		try {
+			return loop(getStructParams(self)(input));
+		} catch (exception: unknown) {
+			return Ready(Err(ExceptionOccurred(exception)));
+		}
+
+		function loop(output: EffectOutput<T, E>): EffectOutput<U, never> {
+			return match(output)({
+				Ready: (result) => {
+					return match(result)({
+						Ok: (value) => {
+							return Deferred(() => {
+								try {
+									return Ready(Ok(mapping(value)));
+								} catch (exception: unknown) {
+									return Ready(Err(ExceptionOccurred(exception)));
+								}
+							});
+						},
+						Err: () => Ready(Ok(defaultValue)),
+					});
+				},
+				Async: (continuationFn) => {
+					return Async((resolve) => {
+						return continuationFn((continuation) => {
+							resolve(loop(continuation));
+						});
+					});
+				},
+				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
+			});
+		}
+	});
+}
+
+export interface ResultArms<T, E, U> {
+	Ok: (value: T) => U;
+	Err: (error: E) => U;
+}
+
+export function mapOrElse<I, T, E, U>(
+	self: Effect<I, T, E>,
+	arms: ResultArms<T, E, U>,
+): Effect<I, U, never> {
+	return new Effect((input) => {
+		try {
+			return loop(getStructParams(self)(input));
+		} catch (exception: unknown) {
+			return Ready(Err(ExceptionOccurred(exception)));
+		}
+
+		function loop(output: EffectOutput<T, E>): EffectOutput<U, never> {
+			return match(output)({
+				Ready: (result) => {
+					return match(result)({
+						Ok: (value) => {
+							return Deferred(() => {
+								try {
+									return Ready(Ok(arms.Ok(value)));
+								} catch (exception: unknown) {
+									return Ready(Err(ExceptionOccurred(exception)));
+								}
+							});
+						},
+						Err: (effectError) => {
+							return match(effectError)({
+								Failed: (error) => {
+									return Deferred(() => {
+										try {
+											return Ready(Ok(arms.Err(error)));
+										} catch (exception: unknown) {
+											return Ready(Err(ExceptionOccurred(exception)));
+										}
+									});
+								},
+								ExceptionOccurred: (exception) => {
+									return Ready(Err(ExceptionOccurred(exception)));
+								},
+							});
+						},
+					});
+				},
+				Async: (continuationFn) => {
+					return Async((resolve) => {
+						return continuationFn((continuation) => {
+							resolve(loop(continuation));
+						});
+					});
+				},
+				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
+			});
+		}
+	});
+}
+
 /**
  * Maps the error value of an effect using the provided function.
  *
@@ -116,6 +217,144 @@ export function mapError<I, T, E, F>(
 								},
 								ExceptionOccurred: (exception) => {
 									return Ready(Err(ExceptionOccurred(exception)));
+								},
+							});
+						},
+					});
+				},
+				Async: (continuationFn) => {
+					return Async((resolve) => {
+						return continuationFn((continuation) => {
+							resolve(loop(continuation));
+						});
+					});
+				},
+				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
+			});
+		}
+	});
+}
+
+export function inspect<I, T, E>(
+	self: Effect<I, T, E>,
+	inspector: (value: T) => void,
+): Effect<I, T, E> {
+	return new Effect((input) => {
+		try {
+			return loop(getStructParams(self)(input));
+		} catch (exception: unknown) {
+			return Ready(Err(ExceptionOccurred(exception)));
+		}
+
+		function loop(output: EffectOutput<T, E>): EffectOutput<T, E> {
+			return match(output)<EffectOutput<T, E>>({
+				Ready: (result) => {
+					return match(result)({
+						Ok: (value) => {
+							return Deferred(() => {
+								try {
+									inspector(value);
+
+									return Ready(Ok(value));
+								} catch (exception: unknown) {
+									return Ready(Err(ExceptionOccurred(exception)));
+								}
+							});
+						},
+						Err: (effectError) => Ready(Err(effectError)),
+					});
+				},
+				Async: (continuationFn) => {
+					return Async((resolve) => {
+						return continuationFn((continuation) => {
+							resolve(loop(continuation));
+						});
+					});
+				},
+				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
+			});
+		}
+	});
+}
+
+export function inspectError<I, T, E>(
+	self: Effect<I, T, E>,
+	inspector: (error: E) => void,
+): Effect<I, T, E> {
+	return new Effect((input) => {
+		try {
+			return loop(getStructParams(self)(input));
+		} catch (exception: unknown) {
+			return Ready(Err(ExceptionOccurred(exception)));
+		}
+
+		function loop(output: EffectOutput<T, E>): EffectOutput<T, E> {
+			return match(output)<EffectOutput<T, E>>({
+				Ready: (result) => {
+					return match(result)({
+						Ok: (value) => Ready(Ok(value)),
+						Err: (effectError) => {
+							return match(effectError)({
+								Failed: (error) => {
+									return Deferred(() => {
+										try {
+											inspector(error);
+
+											return Ready(Err(Failed(error)));
+										} catch (exception: unknown) {
+											return Ready(Err(ExceptionOccurred(exception)));
+										}
+									});
+								},
+								ExceptionOccurred: (exception) => {
+									return Ready(Err(ExceptionOccurred(exception)));
+								},
+							});
+						},
+					});
+				},
+				Async: (continuationFn) => {
+					return Async((resolve) => {
+						return continuationFn((continuation) => {
+							resolve(loop(continuation));
+						});
+					});
+				},
+				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
+			});
+		}
+	});
+}
+
+export function inspectException<I, T, E>(
+	self: Effect<I, T, E>,
+	inspector: (exception: unknown) => void,
+): Effect<I, T, E> {
+	return new Effect((input) => {
+		try {
+			return loop(getStructParams(self)(input));
+		} catch (exception: unknown) {
+			return Ready(Err(ExceptionOccurred(exception)));
+		}
+
+		function loop(output: EffectOutput<T, E>): EffectOutput<T, E> {
+			return match(output)<EffectOutput<T, E>>({
+				Ready: (result) => {
+					return match(result)({
+						Ok: (value) => Ready(Ok(value)),
+						Err: (effectError) => {
+							return match(effectError)({
+								Failed: (error) => Ready(Err(Failed(error))),
+								ExceptionOccurred: (exception) => {
+									return Deferred(() => {
+										try {
+											inspector(exception);
+
+											return Ready(Err(ExceptionOccurred(exception)));
+										} catch (exception: unknown) {
+											return Ready(Err(ExceptionOccurred(exception)));
+										}
+									});
 								},
 							});
 						},
