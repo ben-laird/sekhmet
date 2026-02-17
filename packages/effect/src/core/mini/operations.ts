@@ -295,10 +295,6 @@ export function or<I, T, E, F>(
 									return Ready(Err(ExceptionOccurred(exception)));
 								},
 							});
-
-							// return Deferred(() => {
-							// 	return getStructParams(fallbackStep)(error);
-							// });
 						},
 					});
 				},
