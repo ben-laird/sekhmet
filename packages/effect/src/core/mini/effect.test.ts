@@ -3,7 +3,7 @@ import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
 import { Ready } from "./continuation.ts";
-import { Effect, Failure, Success } from "./effect.ts";
+import { Effect, Failed, Failure, Success } from "./effect.ts";
 import { fork, Runtime } from "./runtime.ts";
 
 Deno.test("Success creates an effect that completes with Ok", () => {
@@ -37,6 +37,9 @@ Deno.test("Success creates an effect that completes with Ok", () => {
 		},
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
+		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
 		},
 	});
 });
@@ -73,6 +76,9 @@ Deno.test("Failure creates an effect that completes with Err", () => {
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
 		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
+		},
 	});
 });
 
@@ -80,7 +86,7 @@ Deno.test("Effect can be constructed with custom logic", () => {
 	// Given: a custom effect that parses a number from a string
 	const parseEffect = new Effect<string, number, string>((input) => {
 		const num = Number(input);
-		return Ready(Number.isNaN(num) ? Err("not a number") : Ok(num));
+		return Ready(Number.isNaN(num) ? Err(Failed("not a number")) : Ok(num));
 	});
 	const runtime = new Runtime({ input: "123" });
 
@@ -110,6 +116,9 @@ Deno.test("Effect can be constructed with custom logic", () => {
 		},
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
+		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
 		},
 	});
 });

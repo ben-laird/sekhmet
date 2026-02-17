@@ -3,7 +3,7 @@ import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
 import { Ready } from "./continuation.ts";
-import { Effect, Failure, Success } from "./effect.ts";
+import { Effect, Failed, Failure, Success } from "./effect.ts";
 import { and, andThen, map, mapError, or, orElse } from "./operations.ts";
 import { fork, Runtime } from "./runtime.ts";
 
@@ -39,6 +39,9 @@ Deno.test("map transforms success value", () => {
 		},
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
+		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
 		},
 	});
 });
@@ -76,6 +79,9 @@ Deno.test("map preserves errors", () => {
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
 		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
+		},
 	});
 });
 
@@ -111,6 +117,9 @@ Deno.test("mapError transforms error value", () => {
 		},
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
+		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
 		},
 	});
 });
@@ -148,6 +157,9 @@ Deno.test("mapError preserves success", () => {
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
 		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
+		},
 	});
 });
 
@@ -155,7 +167,7 @@ Deno.test("and sequences two effects", () => {
 	// Given: two effects that take specific inputs
 	const parseNumber = new Effect<string, number, string>((input) => {
 		const num = Number(input);
-		return Ready(Number.isNaN(num) ? Err("not a number") : Ok(num));
+		return Ready(Number.isNaN(num) ? Err(Failed("not a number")) : Ok(num));
 	});
 
 	const doubleIt = new Effect<number, number, never>((input) => {
@@ -191,6 +203,9 @@ Deno.test("and sequences two effects", () => {
 		},
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
+		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
 		},
 	});
 });
@@ -230,6 +245,9 @@ Deno.test("andThen chains effects with computed next step", () => {
 		},
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
+		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
 		},
 	});
 });
@@ -272,6 +290,9 @@ Deno.test("or provides fallback on error", () => {
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
 		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
+		},
 	});
 });
 
@@ -311,6 +332,9 @@ Deno.test("orElse provides computed fallback on error", () => {
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
 		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
+		},
 	});
 });
 
@@ -349,6 +373,9 @@ Deno.test("deeply nested map operations", () => {
 		},
 		Cancelled: () => {
 			throw new Error("Fiber was cancelled");
+		},
+		Panicked: () => {
+			throw new Error("Fiber panicked");
 		},
 	});
 });
