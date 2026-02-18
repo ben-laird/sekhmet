@@ -10,7 +10,11 @@
 		"./core/mini/effect": "./src/core/mini/effect.ts",
 		"./core/mini/continuation": "./src/core/mini/continuation.ts",
 		"./core/mini/operations": "./src/core/mini/operations.ts",
-		"./core/mini/runtime": "./src/core/mini/runtime.ts"
+		"./core/mini/runtime": "./src/core/mini/runtime.ts",
+		"./scheduler": "./src/scheduler/main/mod.ts",
+		"./scheduler/mini": "./src/scheduler/mini/mod.ts",
+		"./scheduler/mini/schedules": "./src/scheduler/mini/schedules.ts",
+		"./scheduler/mini/scheduler": "./src/scheduler/mini/scheduler.ts"
 	},
 
 	"imports": {
