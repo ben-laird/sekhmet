@@ -4,6 +4,13 @@
  * @module
  */
 
+export { Scheduler, SchedulerState } from "./scheduler.ts";
+export type {
+	ScheduleContext,
+	ScheduleFn,
+	SchedulerOptions,
+	SchedulerStateVariants,
+} from "./scheduler.ts";
 export {
 	adaptive,
 	batched,
@@ -18,12 +25,3 @@ export type {
 	MacrotaskOptions,
 	ThrottledOptions,
 } from "./schedules.ts";
-
-export { Scheduler, SchedulerState } from "./scheduler.ts";
-export type {
-	ScheduleContext,
-	ScheduleFn,
-	SchedulerOptions,
-	SchedulerStateVariants,
-} from "./scheduler.ts";
-

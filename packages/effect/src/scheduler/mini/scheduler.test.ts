@@ -11,9 +11,15 @@ Deno.test("scheduler state is Idle on construction", () => {
 
 	// Then: the state should be Idle
 	match(state)({
-		Idle: () => { /* Expected */ },
-		Scheduled: () => { throw new Error("Expected Idle, got Scheduled"); },
-		Running: () => { throw new Error("Expected Idle, got Running"); },
+		Idle: () => {
+			/* Expected */
+		},
+		Scheduled: () => {
+			throw new Error("Expected Idle, got Scheduled");
+		},
+		Running: () => {
+			throw new Error("Expected Idle, got Running");
+		},
 	});
 });
 
@@ -23,7 +29,9 @@ Deno.test("scheduler runs a single task synchronously", () => {
 	const scheduler = new Scheduler({ schedule: (runStep) => runStep() });
 
 	// When: a single task is enqueued
-	scheduler.run(() => { ran++; });
+	scheduler.run(() => {
+		ran++;
+	});
 
 	// Then: the task runs immediately (sync scheduler)
 	assertEquals(ran, 1);
@@ -38,9 +46,15 @@ Deno.test("scheduler state returns to Idle after synchronous drain", () => {
 
 	// Then: state should be Idle again
 	match(scheduler.state)({
-		Idle: () => { /* Expected */ },
-		Scheduled: () => { throw new Error("Expected Idle, got Scheduled"); },
-		Running: () => { throw new Error("Expected Idle, got Running"); },
+		Idle: () => {
+			/* Expected */
+		},
+		Scheduled: () => {
+			throw new Error("Expected Idle, got Scheduled");
+		},
+		Running: () => {
+			throw new Error("Expected Idle, got Running");
+		},
 	});
 });
 
@@ -52,9 +66,15 @@ Deno.test("scheduler state is Running when observed from within a task", () => {
 	// When: a task checks the scheduler state during execution
 	scheduler.run(() => {
 		match(scheduler.state)({
-			Running: () => { stateWhileRunning = "Running"; },
-			Idle: () => { stateWhileRunning = "Idle"; },
-			Scheduled: () => { stateWhileRunning = "Scheduled"; },
+			Running: () => {
+				stateWhileRunning = "Running";
+			},
+			Idle: () => {
+				stateWhileRunning = "Idle";
+			},
+			Scheduled: () => {
+				stateWhileRunning = "Scheduled";
+			},
 		});
 	});
 
@@ -68,9 +88,15 @@ Deno.test("scheduler runs tasks in FIFO order", () => {
 	const scheduler = new Scheduler({ schedule: (runStep) => runStep() });
 
 	// When: three tasks are enqueued
-	scheduler.run(() => { order.push(1); });
-	scheduler.run(() => { order.push(2); });
-	scheduler.run(() => { order.push(3); });
+	scheduler.run(() => {
+		order.push(1);
+	});
+	scheduler.run(() => {
+		order.push(2);
+	});
+	scheduler.run(() => {
+		order.push(3);
+	});
 
 	// Then: tasks execute in the order they were enqueued
 	assertEquals(order, [1, 2, 3]);
@@ -84,7 +110,9 @@ Deno.test("scheduler handles tasks that enqueue more tasks", () => {
 	// When: a task enqueues another task during its own execution
 	scheduler.run(() => {
 		results.push(1);
-		scheduler.run(() => { results.push(2); });
+		scheduler.run(() => {
+			results.push(2);
+		});
 	});
 
 	// Then: both the parent and child tasks run
@@ -118,7 +146,9 @@ Deno.test("scheduler uses default step budget and completes all tasks", () => {
 
 	// When: 200 tasks are enqueued (more than the default budget of 128)
 	for (let i = 0; i < 200; i++) {
-		scheduler.run(() => { count++; });
+		scheduler.run(() => {
+			count++;
+		});
 	}
 
 	// Then: all tasks complete (synchronous scheduler processes across multiple turns)
@@ -141,7 +171,9 @@ Deno.test("scheduler respects step budget with synchronous scheduler", () => {
 	// (so all 7 are in the queue before the drain begins processing them)
 	scheduler.run(() => {
 		for (let i = 1; i <= 7; i++) {
-			scheduler.run(() => { order.push(i); });
+			scheduler.run(() => {
+				order.push(i);
+			});
 		}
 	});
 
@@ -161,16 +193,24 @@ Deno.test("scheduler does not run tasks until dispatch with async scheduler", as
 	});
 
 	// When: a task is enqueued
-	scheduler.run(() => { ran = true; });
+	scheduler.run(() => {
+		ran = true;
+	});
 
 	// Then: the task has NOT run synchronously
 	assertEquals(ran, false);
 
 	// Then: state is Scheduled (waiting for dispatch)
 	match(scheduler.state)({
-		Scheduled: () => { /* Expected */ },
-		Idle: () => { throw new Error("Expected Scheduled, got Idle"); },
-		Running: () => { throw new Error("Expected Scheduled, got Running"); },
+		Scheduled: () => {
+			/* Expected */
+		},
+		Idle: () => {
+			throw new Error("Expected Scheduled, got Idle");
+		},
+		Running: () => {
+			throw new Error("Expected Scheduled, got Running");
+		},
 	});
 
 	// When: we wait for the macrotask to fire
@@ -194,9 +234,15 @@ Deno.test("scheduler state is Idle after async drain completes", async () => {
 
 	// Then: state is Idle
 	match(scheduler.state)({
-		Idle: () => { /* Expected */ },
-		Scheduled: () => { throw new Error("Expected Idle, got Scheduled"); },
-		Running: () => { throw new Error("Expected Idle, got Running"); },
+		Idle: () => {
+			/* Expected */
+		},
+		Scheduled: () => {
+			throw new Error("Expected Idle, got Scheduled");
+		},
+		Running: () => {
+			throw new Error("Expected Idle, got Running");
+		},
 	});
 });
 
@@ -206,19 +252,31 @@ Deno.test("scheduler is reusable after a turn fully drains", () => {
 	const scheduler = new Scheduler({ schedule: (runStep) => runStep() });
 
 	// When: a first batch of tasks runs and completes
-	scheduler.run(() => { results.push("a"); });
-	scheduler.run(() => { results.push("b"); });
+	scheduler.run(() => {
+		results.push("a");
+	});
+	scheduler.run(() => {
+		results.push("b");
+	});
 
 	// Then: first batch completed and state is Idle
 	assertEquals(results, ["a", "b"]);
 	match(scheduler.state)({
-		Idle: () => { /* Expected */ },
-		Scheduled: () => { throw new Error("Expected Idle"); },
-		Running: () => { throw new Error("Expected Idle"); },
+		Idle: () => {
+			/* Expected */
+		},
+		Scheduled: () => {
+			throw new Error("Expected Idle");
+		},
+		Running: () => {
+			throw new Error("Expected Idle");
+		},
 	});
 
 	// When: a second batch is enqueued after the first completes
-	scheduler.run(() => { results.push("c"); });
+	scheduler.run(() => {
+		results.push("c");
+	});
 
 	// Then: the second batch also runs correctly
 	assertEquals(results, ["a", "b", "c"]);
@@ -252,7 +310,11 @@ Deno.test("scheduler enforces budget across multiple async turns", async () => {
 	const order: number[] = [];
 	let turnCount = 0;
 	const scheduler = new Scheduler({
-		schedule: (runStep) => queueMicrotask(() => { turnCount++; runStep(); }),
+		schedule: (runStep) =>
+			queueMicrotask(() => {
+				turnCount++;
+				runStep();
+			}),
 		stepBudget: 2,
 	});
 
@@ -260,7 +322,9 @@ Deno.test("scheduler enforces budget across multiple async turns", async () => {
 	// before the drain begins processing them
 	scheduler.run(() => {
 		for (let i = 1; i <= 5; i++) {
-			scheduler.run(() => { order.push(i); });
+			scheduler.run(() => {
+				order.push(i);
+			});
 		}
 	});
 

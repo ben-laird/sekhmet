@@ -17,7 +17,9 @@ Deno.test("sync() runs tasks immediately in the same call stack", () => {
 	const scheduler = new Scheduler({ schedule: sync() });
 
 	// When: a task is enqueued
-	scheduler.run(() => { ran = true; });
+	scheduler.run(() => {
+		ran = true;
+	});
 
 	// Then: the task ran synchronously before run() returned
 	assertEquals(ran, true);
@@ -32,7 +34,10 @@ Deno.test("sync() completes 10_000 chained tasks without stack overflow", () => 
 	// When: tasks are chained
 	function enqueueNext(i: number): void {
 		if (i > TASK_COUNT) return;
-		scheduler.run(() => { count++; enqueueNext(i + 1); });
+		scheduler.run(() => {
+			count++;
+			enqueueNext(i + 1);
+		});
 	}
 	enqueueNext(1);
 
@@ -48,7 +53,9 @@ Deno.test("microtask() defers task until microtask queue", async () => {
 	const scheduler = new Scheduler({ schedule: microtask() });
 
 	// When: a task is enqueued
-	scheduler.run(() => { ran = true; });
+	scheduler.run(() => {
+		ran = true;
+	});
 
 	// Then: the task has NOT run synchronously
 	assertEquals(ran, false);
@@ -68,7 +75,9 @@ Deno.test("microtask() runs all tasks after flushing", async () => {
 	// When: tasks are enqueued from a seed task
 	scheduler.run(() => {
 		for (let i = 1; i <= 4; i++) {
-			scheduler.run(() => { results.push(i); });
+			scheduler.run(() => {
+				results.push(i);
+			});
 		}
 	});
 
@@ -87,7 +96,9 @@ Deno.test("macrotask() defers task to macrotask queue", async () => {
 	const scheduler = new Scheduler({ schedule: macrotask() });
 
 	// When: a task is enqueued
-	scheduler.run(() => { ran = true; });
+	scheduler.run(() => {
+		ran = true;
+	});
 
 	// Then: the task has NOT run synchronously
 	assertEquals(ran, false);
@@ -109,7 +120,9 @@ Deno.test("macrotask() with delay waits at least the specified time", async () =
 	const scheduler = new Scheduler({ schedule: macrotask({ delay: 20 }) });
 
 	// When: a task is enqueued
-	scheduler.run(() => { ran = true; });
+	scheduler.run(() => {
+		ran = true;
+	});
 
 	// Then: the task has not run after 10ms (less than the delay)
 	await new Promise<void>((resolve) => setTimeout(resolve, 10));
@@ -138,7 +151,9 @@ Deno.test("adaptive() uses microtask when queueDepth is above busyThreshold", as
 	// Seed task enqueues 4 more — queueDepth will be 4 when budget is exhausted
 	scheduler.run(() => {
 		for (let i = 0; i < 4; i++) {
-			scheduler.run(() => { dispatchTiming.push("ran"); });
+			scheduler.run(() => {
+				dispatchTiming.push("ran");
+			});
 		}
 	});
 
@@ -155,10 +170,15 @@ Deno.test("adaptive() uses microtask when queueDepth is above busyThreshold", as
 Deno.test("adaptive() uses macrotask when queueDepth is below busyThreshold", async () => {
 	// Given: an adaptive scheduler with busyThreshold=10 and only 1 task
 	let ran = false;
-	const scheduler = new Scheduler({ schedule: adaptive({ busyThreshold: 10 }) });
+	const scheduler = new Scheduler({
+		schedule: adaptive({ busyThreshold: 10 }),
+	});
 
 	// When: a single task is enqueued (queueDepth=1 < busyThreshold=10)
-	scheduler.run(() => { ran = false; ran = true; });
+	scheduler.run(() => {
+		ran = false;
+		ran = true;
+	});
 
 	// Then: not run synchronously
 	assertEquals(ran, false);
@@ -191,8 +211,12 @@ Deno.test("throttled() runs first turn synchronously then yields", () => {
 
 	scheduler.run(() => {
 		callLog.push("seed");
-		scheduler.run(() => { callLog.push("task1"); });
-		scheduler.run(() => { callLog.push("task2"); });
+		scheduler.run(() => {
+			callLog.push("task1");
+		});
+		scheduler.run(() => {
+			callLog.push("task2");
+		});
 	});
 
 	// Then: turn 0 used setTimeout (turnIndex=0 % 2 === 0 → setTimeout)
@@ -211,7 +235,9 @@ Deno.test("throttled() completes all tasks", async () => {
 	// When: tasks are enqueued from a seed
 	scheduler.run(() => {
 		for (let i = 1; i <= 6; i++) {
-			scheduler.run(() => { results.push(i); });
+			scheduler.run(() => {
+				results.push(i);
+			});
 		}
 	});
 
@@ -244,7 +270,9 @@ Deno.test("throttled() yields to macrotask on every Nth turn", async () => {
 	// When: a seed task enqueues 5 tasks (6 total turns: 0–5)
 	scheduler.run(() => {
 		for (let i = 1; i <= 5; i++) {
-			scheduler.run(() => { results.push(i); });
+			scheduler.run(() => {
+				results.push(i);
+			});
 		}
 	});
 
@@ -265,7 +293,9 @@ Deno.test("batched() uses microtask on first call (stepsLastTurn === 0)", async 
 	const scheduler = new Scheduler({ schedule: batched() });
 
 	// When: a single task is enqueued (first call: stepsLastTurn=0 → microtask)
-	scheduler.run(() => { ran = true; });
+	scheduler.run(() => {
+		ran = true;
+	});
 
 	// Then: not run synchronously
 	assertEquals(ran, false);
@@ -288,7 +318,9 @@ Deno.test("batched() uses microtask when last turn hit the threshold", async () 
 	// When: we queue enough tasks to trigger multiple turns
 	scheduler.run(() => {
 		for (let i = 1; i <= 4; i++) {
-			scheduler.run(() => { results.push(i); });
+			scheduler.run(() => {
+				results.push(i);
+			});
 		}
 	});
 
@@ -315,7 +347,9 @@ Deno.test("batched() uses macrotask when last turn ran below threshold", async (
 	// first turn) with stepsLastTurn=0 → microtask. A second call only happens if the
 	// budget is exhausted. Here we directly verify the scheduling logic.
 	scheduler.run(() => {
-		scheduler.run(() => { ran = true; });
+		scheduler.run(() => {
+			ran = true;
+		});
 	});
 
 	// The first turn uses microtask (stepsLastTurn=0). After flushing microtasks all work is done.

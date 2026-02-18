@@ -63,7 +63,10 @@ export interface ScheduleContext {
  * };
  * ```
  */
-export type ScheduleFn = (runStep: () => void, context: ScheduleContext) => void;
+export type ScheduleFn = (
+	runStep: () => void,
+	context: ScheduleContext,
+) => void;
 
 /**
  * Configuration options for creating a {@linkcode Scheduler}.
