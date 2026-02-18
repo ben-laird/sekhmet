@@ -43,8 +43,8 @@ export class Runtime<I> extends Struct<RuntimeParams<I>> {}
  * @template T - Success value type
  * @template E - Error type
  */
-export type FiberStateVariants<T, E> = Split<{
-	Queued: [];
+export type FiberStateVariants<I, T, E> = Split<{
+	Queued: [effect: Effect<I, T, E>];
 	Running: [currentOutput: EffectOutput<T, E>];
 	Suspended: [cancellation: Cancellation];
 	Cancelled: [];
@@ -58,7 +58,7 @@ export type FiberStateVariants<T, E> = Split<{
  * @template T - Success value type
  * @template E - Error type
  */
-export class FiberState<T, E> extends Enum<FiberStateVariants<T, E>> {}
+export class FiberState<I, T, E> extends Enum<FiberStateVariants<I, T, E>> {}
 
 /**
  * Parameters for the Fiber struct.
@@ -74,14 +74,9 @@ export interface FiberParams<I, T, E> {
 	id: string;
 
 	/**
-	 * The effect this fiber is executing.
-	 */
-	effect: Effect<I, T, E>;
-
-	/**
 	 * Current execution state of the fiber.
 	 */
-	fiberState: FiberState<T, E>;
+	fiberState: FiberState<I, T, E>;
 
 	/**
 	 * The runtime environment this fiber executes within.
@@ -121,9 +116,8 @@ export function fork<I, T, E>(
 ): Fiber<I, T, E> {
 	const fiber = new Fiber<I, T, E>({
 		id: crypto.randomUUID(),
-		effect,
 		runtime: self,
-		fiberState: new FiberState("Queued"),
+		fiberState: new FiberState("Queued", effect),
 	});
 
 	runFiber(fiber);
@@ -186,17 +180,19 @@ function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
  * @param label - Debug label for this step
  */
 function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
-	const { effect, runtime, fiberState, id: fiberId } = getStructParams(self);
+	const { runtime, fiberState, id: fiberId } = getStructParams(self);
 
 	console.log({ fiberId, label, variant: getStructParams(fiberState).variant });
 
 	const { input } = getStructParams(runtime);
 
 	match(fiberState)({
-		Queued: () => {
+		Queued: (effect) => {
 			// Initialize: start the effect and store the initial continuation
-			const runner = getStructParams(effect);
-			getStructParams(fiberState).variant = ["Running", runner(input)];
+			getStructParams(fiberState).variant = [
+				"Running",
+				getStructParams(effect)(input),
+			];
 		},
 		Running: (currentContinuation) => {
 			// Process one step: unwrap one Deferred or complete with Ready
