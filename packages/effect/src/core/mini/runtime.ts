@@ -189,10 +189,14 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 	match(fiberState)({
 		Queued: (effect) => {
 			// Initialize: start the effect and store the initial continuation
-			getStructParams(fiberState).variant = [
-				"Running",
-				getStructParams(effect)(input),
-			];
+			try {
+				getStructParams(fiberState).variant = [
+					"Running",
+					getStructParams(effect)(input),
+				];
+			} catch (exception: unknown) {
+				getStructParams(fiberState).variant = ["Panicked", exception];
+			}
 		},
 		Running: (currentContinuation) => {
 			// Process one step: unwrap one Deferred or complete with Ready
@@ -221,19 +225,27 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 					});
 				},
 				Async: (asyncFn) => {
-					// Suspend the fiber and set up async callback
-					getStructParams(fiberState).variant = [
-						"Suspended",
-						asyncFn((continuation) => {
-							getStructParams(fiberState).variant = ["Running", continuation];
+					try {
+						// Suspend the fiber and set up async callback
+						getStructParams(fiberState).variant = [
+							"Suspended",
+							asyncFn((continuation) => {
+								getStructParams(fiberState).variant = ["Running", continuation];
 
-							runFiber(self);
-						}),
-					];
+								runFiber(self);
+							}),
+						];
+					} catch (exception: unknown) {
+						getStructParams(fiberState).variant = ["Panicked", exception];
+					}
 				},
 				Deferred: (fn) => {
-					// Unwrap one level and store the next continuation
-					getStructParams(fiberState).variant = ["Running", fn()];
+					try {
+						// Unwrap one level and store the next continuation
+						getStructParams(fiberState).variant = ["Running", fn()];
+					} catch (exception: unknown) {
+						getStructParams(fiberState).variant = ["Panicked", exception];
+					}
 				},
 			});
 		},
