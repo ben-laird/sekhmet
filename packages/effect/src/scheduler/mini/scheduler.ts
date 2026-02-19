@@ -164,7 +164,7 @@ export class Scheduler {
 		match(this.#state)({
 			Idle: () => {
 				getStructParams(this.#state).variant = ["Scheduled"];
-				this.#dispatch();
+				this.#dispatch(() => this.#drain());
 			},
 			Scheduled: () => {},
 			Running: () => {},
@@ -175,7 +175,7 @@ export class Scheduler {
 	 * Calls the scheduling function with a context snapshot and a drain callback.
 	 * Increments the turn index for each dispatch.
 	 */
-	#dispatch(runStep: () => void = () => this.#drain()): void {
+	#dispatch(runStep: () => void): void {
 		const context: ScheduleContext = {
 			queueDepth: this.#queue.length,
 			turnIndex: this.#turnIndex++,
@@ -187,66 +187,48 @@ export class Scheduler {
 
 	/**
 	 * Internal drain loop. Runs tasks up to the step budget per turn.
-	 * Uses a trampoline to handle synchronous scheduling functions
-	 * without stack overflow: synchronous re-scheduling is detected via
-	 * a flag and handled by looping rather than recursing.
+	 *
+	 * Uses a trampoline to handle synchronous scheduling functions without
+	 * stack overflow. When the budget is exhausted, `#dispatch` is called with
+	 * a continuation. A `stillInDispatch` flag detects whether the scheduling
+	 * function called back synchronously (loop again) or asynchronously (return
+	 * and let the callback start a fresh drain). Stack depth stays O(1).
 	 */
 	#drain(): void {
 		getStructParams(this.#state).variant = ["Running"];
 
-		// Outer trampoline loop: for synchronous schedulers, instead of
-		// recursing into a new #drain() call when the budget is exhausted,
-		// we detect the synchronous re-schedule and loop back. Stack depth O(1).
-		let keepGoing = true;
-
-		while (keepGoing) {
-			keepGoing = false;
-
-			let steps = 0;
-
-			while (this.#queue.length > 0 && steps < this.#stepBudget) {
-				const task = this.#queue.shift();
-				if (task === undefined) break;
-				steps++;
+		while (true) {
+			const batch = this.#queue.splice(0, this.#stepBudget);
+			for (const task of batch) {
 				task();
 			}
 
-			this.#stepsLastTurn = steps;
+			this.#stepsLastTurn = batch.length;
 
-			if (this.#queue.length > 0) {
-				// Budget exhausted with tasks remaining.
-				// We need to yield and re-schedule. Detect whether the scheduling
-				// function dispatches synchronously (before returning) or asynchronously.
-				//
-				// The callback uses a closed-over flag to decide what to do:
-				// - If called synchronously: set keepGoing=true so the outer loop
-				//   continues (trampoline — no new stack frame).
-				// - If called asynchronously: start a fresh #drain() call.
-				let stillInDispatchCall = true;
-
-				this.#dispatch(() => {
-					if (stillInDispatchCall) {
-						// Synchronous path: we're still inside the #dispatch() call.
-						// Signal the outer loop to continue rather than recursing.
-						keepGoing = true;
-					} else {
-						// Async path: #drain() has already returned. Start a fresh drain.
-						this.#drain();
-					}
-				});
-
-				stillInDispatchCall = false;
-
-				if (!keepGoing) {
-					// Async scheduler: yield and let the callback handle resumption.
-					getStructParams(this.#state).variant = ["Scheduled"];
-					return;
-				}
-				// Synchronous scheduler: keepGoing=true, state stays Running,
-				// the outer while loop handles the next turn without a new stack frame.
-			} else {
+			if (this.#queue.length === 0) {
 				getStructParams(this.#state).variant = ["Idle"];
+				break;
 			}
+
+			// Budget exhausted with tasks remaining — detect sync vs async dispatch.
+			let stillInDispatch = true;
+			let syncReschedule = false;
+
+			this.#dispatch(() => {
+				if (stillInDispatch) {
+					syncReschedule = true; // sync: loop again without recursing
+				} else {
+					this.#drain(); // async: start a fresh drain from the callback
+				}
+			});
+
+			stillInDispatch = false;
+
+			if (!syncReschedule) {
+				getStructParams(this.#state).variant = ["Scheduled"];
+				break;
+			}
+			// sync: loop continues without recursing
 		}
 	}
 }
