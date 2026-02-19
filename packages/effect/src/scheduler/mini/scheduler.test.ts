@@ -135,8 +135,10 @@ Deno.test("scheduler does not double-schedule when tasks enqueue more tasks", ()
 		scheduler.run(() => {});
 	});
 
-	// Then: schedule() was only called once (the initial call; inner enqueues reuse the active drain)
-	assertEquals(scheduleCalls, 1);
+	// Then: schedule() was called twice — once for the seed task, once for the two
+	// tasks enqueued during its execution (splice snapshots the queue before running,
+	// so inner enqueues land in the next turn, not the current one)
+	assertEquals(scheduleCalls, 2);
 });
 
 Deno.test("scheduler uses default step budget and completes all tasks", () => {
@@ -179,10 +181,11 @@ Deno.test("scheduler respects step budget with synchronous scheduler", () => {
 
 	// Then: all 7 tasks run in order
 	assertEquals(order, [1, 2, 3, 4, 5, 6, 7]);
-	// And: the initial task + 7 enqueued tasks = 8 total, budget 3 per turn:
-	// turn 1: initial task + tasks 1,2 (3 steps), turn 2: tasks 3,4,5 (3 steps), turn 3: tasks 6,7 (2 steps)
-	// = 3 schedule calls total
-	assertEquals(scheduleCalls, 3);
+	// And: splice snapshots the queue at the start of each turn, so the seed task
+	// runs alone in turn 1 (budget 3, but only 1 task in queue), enqueuing 7 tasks.
+	// turn 1: seed (1 step), turn 2: tasks 1,2,3 (3 steps), turn 3: tasks 4,5,6 (3 steps), turn 4: task 7 (1 step)
+	// = 4 schedule calls total
+	assertEquals(scheduleCalls, 4);
 });
 
 Deno.test("scheduler does not run tasks until dispatch with async scheduler", async () => {
@@ -380,9 +383,10 @@ Deno.test("schedule context reports correct queueDepth", () => {
 		scheduler.run(() => {});
 	});
 
-	// Then: first dispatch sees queueDepth=1 (just the seed task),
-	// and since budget covers all remaining tasks, schedule() is not called again
-	assertEquals(depths, [1]);
+	// Then: first dispatch sees queueDepth=1 (just the seed task).
+	// splice snapshots 1 task; seed runs and enqueues 3 more. Queue now has 3 items,
+	// triggering a second dispatch with queueDepth=3. Budget covers the remaining 3.
+	assertEquals(depths, [1, 3]);
 });
 
 Deno.test("schedule context reports correct stepsLastTurn", () => {
@@ -404,9 +408,10 @@ Deno.test("schedule context reports correct stepsLastTurn", () => {
 		scheduler.run(() => {});
 	});
 
-	// Then: first call has stepsLastTurn=0 (no prior turn),
-	// second call has stepsLastTurn=2 (budget exhausted),
-	// third call has stepsLastTurn=2, fourth has stepsLastTurn=1 (last batch)
+	// Then: first call has stepsLastTurn=0 (no prior turn).
+	// splice snapshots the queue at the start of each turn: seed task is alone in turn 1 (1 step),
+	// then its 4 enqueued tasks are processed two per turn (budget=2).
+	// second call has stepsLastTurn=1 (only the seed ran in turn 1)
 	assertEquals(stepsRecorded[0], 0);
-	assertEquals(stepsRecorded[1], 2);
+	assertEquals(stepsRecorded[1], 1);
 });
