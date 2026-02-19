@@ -10,19 +10,48 @@ import { Struct } from "@sekhmet/primordials/struct";
 import type { Continuation } from "./continuation.ts";
 import { Ready } from "./continuation.ts";
 
+/**
+ * Creates an `EffectError` representing a typed failure.
+ *
+ * @template T - The error value type
+ * @param error - The error value
+ * @returns An `EffectError` in the `Failed` variant
+ */
 export function Failed<T>(error: T): EffectError<T> {
 	return new EffectError<T>("Failed", error);
 }
 
+/**
+ * Creates an `EffectError` representing an unhandled exception (thrown value).
+ *
+ * @template T - The typed error type (unused in this variant)
+ * @param error - The thrown exception
+ * @returns An `EffectError` in the `ExceptionOccurred` variant
+ */
 export function ExceptionOccurred<T>(error: unknown): EffectError<T> {
 	return new EffectError<T>("ExceptionOccurred", error);
 }
 
+/**
+ * Variant definitions for {@linkcode EffectError}.
+ *
+ * - `Failed`: A typed error value of type `T`
+ * - `ExceptionOccurred`: An unhandled exception (any thrown value)
+ *
+ * @template T - The typed error value type
+ */
 export type EffectErrorVariants<T> = Split<{
 	Failed: [error: T];
 	ExceptionOccurred: [error: unknown];
 }>;
 
+/**
+ * Represents the error channel of an effect.
+ * An `EffectError` is either a typed `Failed` value or an `ExceptionOccurred`
+ * wrapping an unexpected thrown exception.
+ *
+ * @template T - The typed error value type
+ */
 export class EffectError<T> extends Enum<EffectErrorVariants<T>> {}
 
 /**
@@ -34,8 +63,23 @@ export class EffectError<T> extends Enum<EffectErrorVariants<T>> {}
  */
 export type EffectFn<I, T, E> = (input: I) => EffectOutput<T, E>;
 
+/**
+ * The continuation type produced by an effect computation.
+ * Wraps an {@linkcode EffectResult} in a {@linkcode Continuation} to support
+ * synchronous, deferred, and asynchronous execution.
+ *
+ * @template T - Success value type
+ * @template E - Error value type
+ */
 export type EffectOutput<T, E> = Continuation<EffectResult<T, E>>;
 
+/**
+ * The result type of a completed effect computation.
+ * Either `Ok<T>` on success or `Err<EffectError<E>>` on failure.
+ *
+ * @template T - Success value type
+ * @template E - Error value type
+ */
 export type EffectResult<T, E> = Result<T, EffectError<E>>;
 
 /**

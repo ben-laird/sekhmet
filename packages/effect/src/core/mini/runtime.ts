@@ -15,7 +15,7 @@ import type { Effect, EffectOutput } from "./effect.ts";
 /**
  * Configuration for fiber execution.
  */
-interface FiberConfig {
+export interface FiberConfig {
 	/**
 	 * Maximum number of steps to execute before yielding to the scheduler.
 	 * After this budget is exhausted, the fiber reschedules itself.
@@ -38,7 +38,13 @@ export interface RuntimeParams<I> {
 	 * The input value that will be provided to effects when they run.
 	 */
 	input: I;
+	/**
+	 * The scheduler that manages fiber execution turns.
+	 */
 	scheduler: Scheduler;
+	/**
+	 * Optional fiber execution configuration. Defaults to a step budget of 1024.
+	 */
 	fiberConfig?: FiberConfig | undefined;
 }
 

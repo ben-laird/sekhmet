@@ -133,6 +133,11 @@ export class Scheduler {
 	#turnIndex: number;
 	#stepsLastTurn: number;
 
+	/**
+	 * Creates a new `Scheduler` with the given options.
+	 *
+	 * @param options - Configuration for scheduling behaviour and step budget
+	 */
 	constructor(options: SchedulerOptions) {
 		this.#schedule = options.schedule;
 		this.#stepBudget = options.stepBudget ?? DEFAULT_STEP_BUDGET;

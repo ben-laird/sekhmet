@@ -84,6 +84,24 @@ export function map<I, T, E, U>(
 	});
 }
 
+/**
+ * Maps the success value of an effect, or returns a default value on failure.
+ * Exceptions are not caught and propagate as `ExceptionOccurred`.
+ *
+ * @template I - Input type
+ * @template T - Original success type
+ * @template E - Error type
+ * @template U - New success type
+ * @param self - The effect to map
+ * @param defaultValue - Value to use when the effect fails
+ * @param mapping - Function to transform the success value
+ * @returns A new effect that always succeeds
+ *
+ * @example
+ * ```ts ignore
+ * const safe = mapOr(effect, 0, x => x * 2);
+ * ```
+ */
 export function mapOr<I, T, E, U>(
 	self: Effect<I, T, E>,
 	defaultValue: U,
@@ -97,11 +115,45 @@ export function mapOr<I, T, E, U>(
 	});
 }
 
+/**
+ * A pair of handlers for matching both arms of a {@linkcode Result}.
+ * Used with {@linkcode mapOrElse} to exhaustively handle success and failure.
+ *
+ * @template T - Success value type
+ * @template E - Error value type
+ * @template U - Output type produced by both arms
+ */
 export interface ResultArms<T, E, U> {
+	/**
+	 * Handler for the `Ok` variant, receiving the success value.
+	 */
 	Ok: (value: T) => U;
+	/**
+	 * Handler for the `Err` variant, receiving the typed error value.
+	 */
 	Err: (error: E) => U;
 }
 
+/**
+ * Maps both the success and failure arms of an effect using a pair of handlers.
+ * Exceptions still propagate as `ExceptionOccurred` and are not passed to `Err`.
+ *
+ * @template I - Input type
+ * @template T - Original success type
+ * @template E - Original error type
+ * @template U - Output type produced by both arms
+ * @param self - The effect to map
+ * @param arms - Handlers for `Ok` and `Err` variants
+ * @returns A new effect that always succeeds
+ *
+ * @example
+ * ```ts ignore
+ * const result = mapOrElse(effect, {
+ *   Ok: value => `success: ${value}`,
+ *   Err: error => `failed: ${error}`,
+ * });
+ * ```
+ */
 export function mapOrElse<I, T, E, U>(
 	self: Effect<I, T, E>,
 	arms: ResultArms<T, E, U>,
@@ -156,6 +208,22 @@ export function mapError<I, T, E, F>(
 	});
 }
 
+/**
+ * Runs a side-effecting inspector on the success value without altering the effect.
+ * If the inspector throws, the exception is captured as `ExceptionOccurred`.
+ *
+ * @template I - Input type
+ * @template T - Success value type
+ * @template E - Error type
+ * @param self - The effect to inspect
+ * @param inspector - Function called with the success value for side effects
+ * @returns The original effect, unchanged
+ *
+ * @example
+ * ```ts ignore
+ * const logged = inspect(effect, value => console.log("got:", value));
+ * ```
+ */
 export function inspect<I, T, E>(
 	self: Effect<I, T, E>,
 	inspector: (value: T) => void,
@@ -174,6 +242,23 @@ export function inspect<I, T, E>(
 	});
 }
 
+/**
+ * Runs a side-effecting inspector on the typed error value without altering the effect.
+ * Only called for `Failed` errors, not for `ExceptionOccurred`.
+ * If the inspector throws, the exception is captured as `ExceptionOccurred`.
+ *
+ * @template I - Input type
+ * @template T - Success value type
+ * @template E - Error type
+ * @param self - The effect to inspect
+ * @param inspector - Function called with the typed error value for side effects
+ * @returns The original effect, unchanged
+ *
+ * @example
+ * ```ts ignore
+ * const logged = inspectError(effect, error => console.error("error:", error));
+ * ```
+ */
 export function inspectError<I, T, E>(
 	self: Effect<I, T, E>,
 	inspector: (error: E) => void,
@@ -199,6 +284,23 @@ export function inspectError<I, T, E>(
 	});
 }
 
+/**
+ * Runs a side-effecting inspector on an `ExceptionOccurred` error without altering the effect.
+ * Only called for unhandled exceptions, not for typed `Failed` errors.
+ * If the inspector throws, the new exception replaces the original.
+ *
+ * @template I - Input type
+ * @template T - Success value type
+ * @template E - Error type
+ * @param self - The effect to inspect
+ * @param inspector - Function called with the thrown exception for side effects
+ * @returns The original effect, unchanged
+ *
+ * @example
+ * ```ts ignore
+ * const logged = inspectException(effect, ex => console.error("exception:", ex));
+ * ```
+ */
 export function inspectException<I, T, E>(
 	self: Effect<I, T, E>,
 	inspector: (exception: unknown) => void,
