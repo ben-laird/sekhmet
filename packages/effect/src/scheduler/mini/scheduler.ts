@@ -186,24 +186,26 @@ export class Scheduler {
 	}
 
 	/**
-	 * Internal drain loop. Runs tasks up to the step budget per turn.
-	 *
-	 * Uses a trampoline to handle synchronous scheduling functions without
-	 * stack overflow. When the budget is exhausted, `#dispatch` is called with
-	 * a continuation. A `stillInDispatch` flag detects whether the scheduling
-	 * function called back synchronously (loop again) or asynchronously (return
-	 * and let the callback start a fresh drain). Stack depth stays O(1).
+	 * Entry point for execution. Sets state to `Running` and starts the turn loop.
 	 */
 	#drain(): void {
 		getStructParams(this.#state).variant = ["Running"];
+		this.#runTurns();
+	}
 
+	/**
+	 * Drives the turn loop. Runs one turn at a time, yielding between turns via
+	 * the scheduling function.
+	 *
+	 * Uses a trampoline to handle synchronous scheduling functions without stack
+	 * overflow. When the budget is exhausted, `#dispatch` is called with a
+	 * continuation. A `stillInDispatch` flag detects whether the scheduling
+	 * function called back synchronously (loop again) or asynchronously (start a
+	 * fresh `#runTurns` from the callback). Stack depth stays O(1).
+	 */
+	#runTurns(): void {
 		while (true) {
-			const batch = this.#queue.splice(0, this.#stepBudget);
-			for (const task of batch) {
-				task();
-			}
-
-			this.#stepsLastTurn = batch.length;
+			this.#runOneTurn();
 
 			if (this.#queue.length === 0) {
 				getStructParams(this.#state).variant = ["Idle"];
@@ -218,7 +220,7 @@ export class Scheduler {
 				if (stillInDispatch) {
 					syncReschedule = true; // sync: loop again without recursing
 				} else {
-					this.#drain(); // async: start a fresh drain from the callback
+					this.#runTurns(); // async: start a fresh turn loop from the callback
 				}
 			});
 
@@ -230,5 +232,17 @@ export class Scheduler {
 			}
 			// sync: loop continues without recursing
 		}
+	}
+
+	/**
+	 * Executes one batch of tasks up to the step budget. Pure work — no control
+	 * flow decisions, just state mutation.
+	 */
+	#runOneTurn(): void {
+		const batch = this.#queue.splice(0, this.#stepBudget);
+		for (const task of batch) {
+			task();
+		}
+		this.#stepsLastTurn = batch.length;
 	}
 }
