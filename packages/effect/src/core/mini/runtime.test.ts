@@ -1,3 +1,5 @@
+import { Scheduler } from "@sekhmet/effect/scheduler/mini/scheduler";
+import { sync } from "@sekhmet/effect/scheduler/mini/schedules";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
@@ -9,7 +11,10 @@ import { cancel, fork, Runtime } from "./runtime.ts";
 Deno.test("fork creates and runs a fiber", () => {
 	// Given: a simple success effect
 	const effect = Success(42);
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we fork the effect
 	const fiber = fork(runtime, effect);
@@ -57,7 +62,10 @@ Deno.test("async effect suspends and resumes", async () => {
 		});
 	});
 
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we fork the async effect
 	const fiber = fork(runtime, asyncEffect);
@@ -122,7 +130,10 @@ Deno.test("async effect suspends and resumes", async () => {
 Deno.test("cancel stops a queued fiber", () => {
 	// Given: a simple effect
 	const effect = Success(42);
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we fork and immediately cancel before running
 	// (This is a bit artificial since fork runs immediately, but tests the cancel logic)
@@ -173,7 +184,10 @@ Deno.test("cancel calls cleanup function for suspended fiber", async () => {
 		});
 	});
 
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we fork and then cancel the suspended fiber
 	const fiber = fork(runtime, asyncEffect);
@@ -237,7 +251,10 @@ Deno.test("runtime provides input to effects", () => {
 	const effect = new Effect<number, number, never>((input) => {
 		return Ready(Ok(input * 2));
 	});
-	const runtime = new Runtime({ input: 21 });
+	const runtime = new Runtime({
+		input: 21,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we fork the effect
 	const fiber = fork(runtime, effect);

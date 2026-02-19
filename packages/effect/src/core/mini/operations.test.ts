@@ -1,3 +1,5 @@
+import { Scheduler } from "@sekhmet/effect/scheduler/mini/scheduler";
+import { sync } from "@sekhmet/effect/scheduler/mini/schedules";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
@@ -10,7 +12,10 @@ import { fork, Runtime } from "./runtime.ts";
 Deno.test("map transforms success value", () => {
 	// Given: a success effect with value 10
 	const effect = Success(10);
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we map the value to double it
 	const mapped = map(effect, (x) => x * 2);
@@ -49,7 +54,10 @@ Deno.test("map transforms success value", () => {
 Deno.test("map preserves errors", () => {
 	// Given: a failure effect
 	const effect = Failure("error");
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we map the value
 	const mapped = map(effect, (x) => x * 2);
@@ -88,7 +96,10 @@ Deno.test("map preserves errors", () => {
 Deno.test("mapError transforms error value", () => {
 	// Given: a failure effect with string error
 	const effect = Failure("error");
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we map the error to its length
 	const mapped = mapError(effect, (err: string) => err.length);
@@ -127,7 +138,10 @@ Deno.test("mapError transforms error value", () => {
 Deno.test("mapError preserves success", () => {
 	// Given: a success effect
 	const effect = Success(10);
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we map the error
 	const mapped = mapError(effect, (err) => err);
@@ -174,7 +188,10 @@ Deno.test("and sequences two effects", () => {
 		return Ready(Ok(input * 2));
 	});
 
-	const runtime = new Runtime({ input: "42" });
+	const runtime = new Runtime({
+		input: "42",
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we chain them with 'and'
 	const combined = and(parseNumber, doubleIt);
@@ -213,7 +230,10 @@ Deno.test("and sequences two effects", () => {
 Deno.test("andThen chains effects with computed next step", () => {
 	// Given: an initial success effect and a chained effect
 	const initial = Success(5);
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we chain multiple operations
 	const chained = andThen(
@@ -255,7 +275,10 @@ Deno.test("andThen chains effects with computed next step", () => {
 Deno.test("or provides fallback on error", () => {
 	// Given: a failure effect and a fallback
 	const effect = Failure("not found");
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we provide a fallback using 'or'
 	const withFallback = or(
@@ -299,7 +322,10 @@ Deno.test("or provides fallback on error", () => {
 Deno.test("orElse provides computed fallback on error", () => {
 	// Given: a failure effect with error "not found"
 	const effect = Failure("not found");
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we map the error to a number and provide fallback
 	const handled = orElse(
@@ -345,7 +371,10 @@ Deno.test("deeply nested map operations", () => {
 		effect = map(effect, (x) => x + 1);
 	}
 
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we run the deeply nested effect
 	const fiber = fork(runtime, effect);

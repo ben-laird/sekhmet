@@ -1,3 +1,5 @@
+import { Scheduler } from "@sekhmet/effect/scheduler/mini/scheduler";
+import { sync } from "@sekhmet/effect/scheduler/mini/schedules";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
@@ -9,7 +11,10 @@ import { fork, Runtime } from "./runtime.ts";
 Deno.test("Success creates an effect that completes with Ok", () => {
 	// Given: a success effect with value 42
 	const effect = Success(42);
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we fork the effect
 	const fiber = fork(runtime, effect);
@@ -47,7 +52,10 @@ Deno.test("Success creates an effect that completes with Ok", () => {
 Deno.test("Failure creates an effect that completes with Err", () => {
 	// Given: a failure effect with error "not found"
 	const effect = Failure("not found");
-	const runtime = new Runtime({ input: undefined });
+	const runtime = new Runtime({
+		input: undefined,
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we fork the effect
 	const fiber = fork(runtime, effect);
@@ -88,7 +96,10 @@ Deno.test("Effect can be constructed with custom logic", () => {
 		const num = Number(input);
 		return Ready(Number.isNaN(num) ? Err(Failed("not a number")) : Ok(num));
 	});
-	const runtime = new Runtime({ input: "123" });
+	const runtime = new Runtime({
+		input: "123",
+		scheduler: new Scheduler({ schedule: sync() }),
+	});
 
 	// When: we fork the effect with valid input
 	const fiber = fork(runtime, parseEffect);
