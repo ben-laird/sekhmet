@@ -4,12 +4,29 @@
  * @module
  */
 
+import type { Scheduler } from "@sekhmet/effect/scheduler/mini";
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import type { Cancellation } from "./continuation.ts";
 import type { Effect, EffectOutput } from "./effect.ts";
+
+/**
+ * Configuration for fiber execution.
+ */
+interface FiberConfig {
+	/**
+	 * Maximum number of steps to execute before yielding to the scheduler.
+	 * After this budget is exhausted, the fiber reschedules itself.
+	 * @default 1024
+	 */
+	readonly stepBudget: number;
+}
+
+const DEFAULT_FIBER_CONFIG: FiberConfig = {
+	stepBudget: 1024,
+};
 
 /**
  * Parameters for the Runtime struct.
@@ -21,6 +38,8 @@ export interface RuntimeParams<I> {
 	 * The input value that will be provided to effects when they run.
 	 */
 	input: I;
+	scheduler: Scheduler;
+	fiberConfig?: FiberConfig | undefined;
 }
 
 /**
@@ -114,30 +133,17 @@ export function fork<I, T, E>(
 	self: Runtime<I>,
 	effect: Effect<I, T, E>,
 ): Fiber<I, T, E> {
+	const { scheduler } = getStructParams(self);
+
 	const fiber = new Fiber<I, T, E>({
 		id: crypto.randomUUID(),
 		runtime: self,
 		fiberState: new FiberState("Queued", effect),
 	});
 
-	runFiber(fiber);
+	scheduler.run(() => runFiber(fiber));
 
 	return fiber;
-}
-
-/**
- * Internal state for the execution loop.
- */
-interface LoopState {
-	/**
-	 * Whether to continue executing steps.
-	 */
-	continueExecution: boolean;
-
-	/**
-	 * Current step index for debugging.
-	 */
-	index: number;
 }
 
 /**
@@ -149,17 +155,22 @@ interface LoopState {
  * @param self - The fiber to run
  */
 function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
-	const { fiberState } = getStructParams(self);
+	const { fiberState, runtime } = getStructParams(self);
 
-	const loopState: LoopState = {
-		continueExecution: true,
-		index: 0,
-	};
+	const {
+		scheduler,
+		fiberConfig = DEFAULT_FIBER_CONFIG,
+		// {}
+	} = getStructParams(runtime);
 
-	while (loopState.continueExecution) {
-		step(self, `step ${loopState.index++}`);
+	let remainingBudget = fiberConfig.stepBudget;
 
-		loopState.continueExecution = match(fiberState)({
+	while (remainingBudget > 0) {
+		remainingBudget--;
+
+		step(self, `step: budget - ${remainingBudget}`);
+
+		const shouldContinue = match(fiberState)({
 			Queued: () => true,
 			Running: () => true,
 			Suspended: () => false,
@@ -167,7 +178,14 @@ function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
 			Panicked: () => false,
 			Complete: () => false,
 		});
+
+		if (!shouldContinue) {
+			return;
+		}
 	}
+
+	// Budget exhausted but fiber still running - reschedule
+	scheduler.run(() => runFiber(self));
 }
 
 /**
@@ -184,7 +202,7 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 
 	console.log({ fiberId, label, variant: getStructParams(fiberState).variant });
 
-	const { input } = getStructParams(runtime);
+	const { input, scheduler } = getStructParams(runtime);
 
 	match(fiberState)({
 		Queued: (effect) => {
@@ -198,6 +216,7 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 				getStructParams(fiberState).variant = ["Panicked", exception];
 			}
 		},
+
 		Running: (currentContinuation) => {
 			// Process one step: unwrap one Deferred or complete with Ready
 			match(currentContinuation)({
@@ -224,21 +243,35 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 						},
 					});
 				},
+
 				Async: (asyncFn) => {
 					try {
 						// Suspend the fiber and set up async callback
 						getStructParams(fiberState).variant = [
 							"Suspended",
 							asyncFn((continuation) => {
-								getStructParams(fiberState).variant = ["Running", continuation];
+								match(fiberState)({
+									Queued: () => {},
+									Running: () => {},
+									Suspended: () => {
+										getStructParams(fiberState).variant = [
+											"Running",
+											continuation,
+										];
 
-								runFiber(self);
+										scheduler.run(() => runFiber(self));
+									},
+									Cancelled: () => {},
+									Panicked: () => {},
+									Complete: () => {},
+								});
 							}),
 						];
 					} catch (exception: unknown) {
 						getStructParams(fiberState).variant = ["Panicked", exception];
 					}
 				},
+
 				Deferred: (fn) => {
 					try {
 						// Unwrap one level and store the next continuation
@@ -249,6 +282,7 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 				},
 			});
 		},
+
 		Suspended: () => {},
 		Cancelled: () => {},
 		Panicked: () => {},
