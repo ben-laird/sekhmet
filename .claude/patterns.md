@@ -216,6 +216,49 @@ class ImmutablePoint extends Struct<Point> {
 
 ## Export Organization Pattern
 
+### When to use main/mini split vs. flat structure
+
+The standard package structure uses a `main/`/`mini/` split to support both kitchen-sink
+and tree-shakable imports. However, **small features with only one or two files don't
+benefit from this split** — the overhead of the extra barrel files adds complexity with no
+value.
+
+**Use main/mini split when:**
+
+- The feature has multiple independently tree-shakable exports (e.g. `isolate`, `eliminate`, `exit` in `@sekhmet/enum/core`)
+- The feature has a meaningful difference between "kitchen sink" and "individual function" bundles
+
+**Use flat structure (no main/mini) when:**
+
+- The feature has only one implementation file (e.g. `continuation`, `runtime`)
+- The feature has a small, cohesive set of exports that don't need individual splitting (e.g. `scheduler`)
+
+**Flat feature structure:**
+
+```txt
+feature/
+├── mod.ts          # Single barrel re-exporting from implementation files
+├── feature.ts      # Implementation (instead of mini/feature.ts)
+└── feature.test.ts # Tests (instead of mini/feature.test.ts)
+```
+
+**Corresponding deno.json exports for flat features:**
+
+```json
+{
+	"./feature": "./src/feature/mod.ts",
+	"./feature/feature": "./src/feature/feature.ts"
+}
+```
+
+**Real examples in `@sekhmet/effect`:**
+
+- `continuation/` — flat (single file, no tree-shaking benefit)
+- `runtime/` — flat (single file, no tree-shaking benefit)
+- `scheduler/` — flat (cohesive scheduler + schedules, no benefit to splitting further)
+- `effect/` — uses mini split (multiple composable operations worth tree-shaking individually)
+- `fiber/` — uses mini split (fiber + fiber-error are individually importable)
+
 ### Granular exports in deno.json
 
 ```json
