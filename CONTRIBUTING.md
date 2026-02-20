@@ -113,14 +113,18 @@ sekhmet/
 ### Package Structure
 
 Each big package (any package with multiple feature exports and large classes)
-follows this structure:
+follows this structure. Large features use a `main/`/`mini/` split; small
+features (one or two files) use a flat structure with just a `mod.ts`:
 
 ```txt
 package-name/
 ├── src/
-│   ├── feature-name/
-│   │   ├── main/        # Full-featured exports
-│   │   └── mini/        # Tree-shakable minimal exports
+│   ├── large-feature/
+│   │   ├── main/        # Full-featured exports (large features only)
+│   │   └── mini/        # Tree-shakable minimal exports (large features only)
+│   ├── small-feature/
+│   │   ├── mod.ts       # Flat barrel (small features — no main/mini split)
+│   │   └── feature.ts   # Implementation
 │   └── ...
 ├── deno.json            # Package configuration
 └── README.md
@@ -428,7 +432,7 @@ correct structure.
 
 New packages should:
 
-- Include both `main` and `mini` export paths
+- Include `main`/`mini` export paths for large features, or a flat structure for small features
 - Have comprehensive README with usage examples
 - Follow the same TypeScript strictness
 - Include test coverage

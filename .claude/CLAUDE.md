@@ -78,15 +78,19 @@ collection. The workspace is defined in the root `deno.json` with packages under
    into complex systems
 2. **Zero external dependencies**: Only uses Deno standard library (`@std/*`)
    and internal monorepo code
-3. **Tree-shakable architecture**: Each package provides both `main` (kitchen
-   sink) and `mini` (granular) export paths
+3. **Tree-shakable architecture**: Packages use `main`/`mini` export paths for
+   large features; small features use a flat structure (see [patterns.md](patterns.md))
 4. **Environment-agnostic**: Code runs in any JavaScript runtime (Deno, Node,
    browser)
 5. **ESM-native**: Exclusively uses ES modules
 
 ### Package Structure Pattern
 
-Every package follows this dual-export structure:
+Large features use a dual-export `main`/`mini` structure. Small features (one or
+two files) use a flat structure with no split. See [patterns.md](patterns.md) for
+the full decision guide.
+
+**Large feature (main/mini split):**
 
 ```txt
 package-name/
@@ -104,12 +108,24 @@ package-name/
 └── mod.ts                 # Top-level re-export
 ```
 
+**Small feature (flat, no split):**
+
+```txt
+package-name/
+├── src/
+│   └── feature/
+│       ├── mod.ts          # Single barrel re-export
+│       └── feature.ts      # Implementation
+├── deno.json
+└── mod.ts
+```
+
 **Export path convention**:
 
 - `@sekhmet/package` → full kitchen sink
-- `@sekhmet/package/feature` → full feature exports
-- `@sekhmet/package/feature/mini` → tree-shakable feature exports
-- `@sekhmet/package/feature/mini/function` → individual functions
+- `@sekhmet/package/feature` → full feature exports (main/mini or flat)
+- `@sekhmet/package/feature/mini` → tree-shakable feature exports (main/mini only)
+- `@sekhmet/package/feature/mini/function` → individual functions (main/mini only)
 
 ### Key Primitives
 
@@ -214,7 +230,10 @@ maintainability and developer experience over architectural purity.
 
 ## Adding New Features
 
-When adding new functionality to a package:
+When adding new functionality to a package, first decide the structure (see
+[patterns.md](patterns.md) — "When to use main/mini split vs. flat structure").
+
+**For features using a main/mini split:**
 
 1. **Add to `mini/` first**: Create the individual export in
    `src/feature/mini/function.ts`
@@ -224,6 +243,14 @@ When adding new functionality to a package:
    entry point
 5. **Write tests**: Place `function.test.ts` next to `function.ts`
 6. **Document**: Add JSDoc comments to all exported functions and types
+
+**For flat features (no main/mini split):**
+
+1. **Create `src/feature/feature.ts`**: Implementation file at the feature root
+2. **Create `src/feature/mod.ts`**: Barrel re-exporting from the implementation
+3. **Update package `deno.json`**: Add `./feature` and `./feature/feature` export paths
+4. **Write tests**: Place `feature.test.ts` next to `feature.ts`
+5. **Document**: Add JSDoc comments to all exported functions and types
 
 ## Working with Enums
 
@@ -285,10 +312,13 @@ templates:
 
 - **[patterns.md](.claude/patterns.md)**: Detailed implementation patterns
   including enum narrowing, pattern matching, struct encapsulation, type
-  utilities, error handling, and composition patterns
+  utilities, error handling, composition patterns, and when to use main/mini
+  split vs. flat feature structure
 - **[templates.md](.claude/templates.md)**: Quick-reference code templates for
   new features, BDD tests, enum variants, Struct wrappers, JSDoc comments, and
   package structures
+- **[CONTRIBUTING.md](CONTRIBUTING.md)**: Contributor-facing guide covering
+  package structure tiers, coding standards, testing, and PR process
 
 These files provide concrete examples and can be consulted when implementing
 specific features or following established patterns in the codebase.
