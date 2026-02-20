@@ -40,12 +40,6 @@ Deno.test("fork creates and runs a fiber", () => {
 		Suspended: () => {
 			throw new Error("Fiber suspended");
 		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
-		},
 	});
 });
 
@@ -86,12 +80,6 @@ Deno.test("async effect suspends and resumes", async () => {
 		Running: () => {
 			throw new Error("Should not be running");
 		},
-		Cancelled: () => {
-			throw new Error("Should not be cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
-		},
 	});
 
 	// Wait for async operation to complete
@@ -118,12 +106,6 @@ Deno.test("async effect suspends and resumes", async () => {
 		Suspended: () => {
 			throw new Error("Fiber should be complete");
 		},
-		Cancelled: () => {
-			throw new Error("Fiber should be complete, not cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
-		},
 	});
 });
 
@@ -149,9 +131,6 @@ Deno.test("cancel stops a queued fiber", () => {
 		Complete: () => {
 			/* Expected - already complete */
 		},
-		Cancelled: () => {
-			/* Also acceptable */
-		},
 		Queued: () => {
 			throw new Error("Fiber should not be queued");
 		},
@@ -160,9 +139,6 @@ Deno.test("cancel stops a queued fiber", () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber should not be suspended");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
 		},
 	});
 });
@@ -207,12 +183,6 @@ Deno.test("cancel calls cleanup function for suspended fiber", async () => {
 		Running: () => {
 			throw new Error("Should not be running");
 		},
-		Cancelled: () => {
-			throw new Error("Should not be cancelled yet");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
-		},
 	});
 
 	// Cancel the fiber
@@ -222,11 +192,28 @@ Deno.test("cancel calls cleanup function for suspended fiber", async () => {
 	({ fiberState } = getStructParams(fiber));
 
 	match(fiberState)({
-		Cancelled: () => {
-			assertEquals(cleanupCalled, true, "Cleanup function should be called");
-		},
-		Complete: () => {
-			throw new Error("Should be cancelled, not complete");
+		Complete: (result) => {
+			match(result)({
+				Ok: () => {
+					throw new Error("Expected Err(Cancelled), got Ok");
+				},
+				Err: (fiberError) =>
+					match(fiberError)({
+						Cancelled: () => {
+							assertEquals(
+								cleanupCalled,
+								true,
+								"Cleanup function should be called",
+							);
+						},
+						Failed: () => {
+							throw new Error("Expected Cancelled, got Failed");
+						},
+						Panicked: () => {
+							throw new Error("Expected Cancelled, got Panicked");
+						},
+					}),
+			});
 		},
 		Queued: () => {
 			throw new Error("Should be cancelled");
@@ -236,9 +223,6 @@ Deno.test("cancel calls cleanup function for suspended fiber", async () => {
 		},
 		Suspended: () => {
 			throw new Error("Should be cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
 		},
 	});
 
@@ -279,12 +263,6 @@ Deno.test("runtime provides input to effects", () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber suspended");
-		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
 		},
 	});
 });

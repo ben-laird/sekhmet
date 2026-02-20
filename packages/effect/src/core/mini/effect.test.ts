@@ -40,12 +40,6 @@ Deno.test("Success creates an effect that completes with Ok", () => {
 		Suspended: () => {
 			throw new Error("Fiber suspended");
 		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
-		},
 	});
 });
 
@@ -69,7 +63,16 @@ Deno.test("Failure creates an effect that completes with Err", () => {
 				Ok: () => {
 					throw new Error("Expected Err, got Ok");
 				},
-				Err: (error) => assertEquals(error, "not found"),
+				Err: (fiberError) =>
+				match(fiberError)({
+					Failed: (error) => assertEquals(error, "not found"),
+					Cancelled: () => {
+						throw new Error("Expected Failed, got Cancelled");
+					},
+					Panicked: () => {
+						throw new Error("Expected Failed, got Panicked");
+					},
+				}),
 			});
 		},
 		Queued: () => {
@@ -80,12 +83,6 @@ Deno.test("Failure creates an effect that completes with Err", () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber suspended");
-		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
 		},
 	});
 });
@@ -124,12 +121,6 @@ Deno.test("Effect can be constructed with custom logic", () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber suspended");
-		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
 		},
 	});
 });

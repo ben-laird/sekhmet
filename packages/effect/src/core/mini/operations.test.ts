@@ -42,12 +42,6 @@ Deno.test("map transforms success value", () => {
 		Suspended: () => {
 			throw new Error("Fiber suspended");
 		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
-		},
 	});
 });
 
@@ -72,25 +66,28 @@ Deno.test("map preserves errors", () => {
 				Ok: () => {
 					throw new Error("Expected Err, got Ok");
 				},
-				Err: (error) => assertEquals(error, "error"),
-			});
-		},
-		Queued: () => {
-			throw new Error("Fiber still queued");
-		},
-		Running: () => {
-			throw new Error("Fiber still running");
-		},
-		Suspended: () => {
-			throw new Error("Fiber suspended");
-		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
-		},
-	});
+				Err: (fiberError) =>
+				match(fiberError)({
+					Failed: (error) => assertEquals(error, "error"),
+					Cancelled: () => {
+						throw new Error("Expected Failed, got Cancelled");
+					},
+					Panicked: () => {
+						throw new Error("Expected Failed, got Panicked");
+					},
+				}),
+		});
+	},
+	Queued: () => {
+		throw new Error("Fiber still queued");
+	},
+	Running: () => {
+		throw new Error("Fiber still running");
+	},
+	Suspended: () => {
+		throw new Error("Fiber suspended");
+	},
+});
 });
 
 Deno.test("mapError transforms error value", () => {
@@ -114,7 +111,16 @@ Deno.test("mapError transforms error value", () => {
 				Ok: () => {
 					throw new Error("Expected Err, got Ok");
 				},
-				Err: (error) => assertEquals(error, 5),
+				Err: (fiberError) =>
+				match(fiberError)({
+					Failed: (error) => assertEquals(error, 5),
+					Cancelled: () => {
+						throw new Error("Expected Failed, got Cancelled");
+					},
+					Panicked: () => {
+						throw new Error("Expected Failed, got Panicked");
+					},
+				}),
 			});
 		},
 		Queued: () => {
@@ -125,12 +131,6 @@ Deno.test("mapError transforms error value", () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber suspended");
-		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
 		},
 	});
 });
@@ -167,12 +167,6 @@ Deno.test("mapError preserves success", () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber suspended");
-		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
 		},
 	});
 });
@@ -218,12 +212,6 @@ Deno.test("and sequences two effects", () => {
 		Suspended: () => {
 			throw new Error("Fiber suspended");
 		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
-		},
 	});
 });
 
@@ -262,12 +250,6 @@ Deno.test("andThen chains effects with computed next step", () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber suspended");
-		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
 		},
 	});
 });
@@ -310,12 +292,6 @@ Deno.test("or provides fallback on error", () => {
 		Suspended: () => {
 			throw new Error("Fiber suspended");
 		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
-		},
 	});
 });
 
@@ -355,12 +331,6 @@ Deno.test("orElse provides computed fallback on error", () => {
 		Suspended: () => {
 			throw new Error("Fiber suspended");
 		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
-		},
 	});
 });
 
@@ -399,12 +369,6 @@ Deno.test("deeply nested map operations", () => {
 		},
 		Suspended: () => {
 			throw new Error("Fiber suspended");
-		},
-		Cancelled: () => {
-			throw new Error("Fiber was cancelled");
-		},
-		Panicked: () => {
-			throw new Error("Fiber panicked");
 		},
 	});
 });
