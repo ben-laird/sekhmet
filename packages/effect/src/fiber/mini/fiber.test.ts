@@ -1,12 +1,12 @@
-import { Scheduler } from "@sekhmet/effect/scheduler/mini/scheduler";
-import { sync } from "@sekhmet/effect/scheduler/mini/schedules";
+import { Scheduler } from "@sekhmet/effect/scheduler/scheduler";
+import { sync } from "@sekhmet/effect/scheduler/schedules";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
-import { Async, Ready } from "../../continuation/mini/continuation.ts";
+import { Async, Ready } from "../../continuation/continuation.ts";
 import { Effect, Success } from "../../effect/mini/effect.ts";
-import { Runtime } from "../../runtime/mini/runtime.ts";
+import { Runtime } from "../../runtime/runtime.ts";
 import { cancel, fork } from "./fiber.ts";
 
 Deno.test("fork creates and runs a fiber", () => {

@@ -5,20 +5,19 @@
 
 	"exports": {
 		".": "./mod.ts",
-		"./continuation/mini": "./src/continuation/mini/mod.ts",
-		"./continuation/mini/continuation": "./src/continuation/mini/continuation.ts",
+		"./continuation": "./src/continuation/mod.ts",
+		"./continuation/continuation": "./src/continuation/continuation.ts",
 		"./effect/mini": "./src/effect/mini/mod.ts",
 		"./effect/mini/effect": "./src/effect/mini/effect.ts",
 		"./effect/mini/operations": "./src/effect/mini/operations.ts",
 		"./fiber/mini": "./src/fiber/mini/mod.ts",
 		"./fiber/mini/fiber": "./src/fiber/mini/fiber.ts",
 		"./fiber/mini/fiber-error": "./src/fiber/mini/fiber-error.ts",
-"./runtime/mini": "./src/runtime/mini/mod.ts",
-		"./runtime/mini/runtime": "./src/runtime/mini/runtime.ts",
-		"./scheduler": "./src/scheduler/main/mod.ts",
-		"./scheduler/mini": "./src/scheduler/mini/mod.ts",
-		"./scheduler/mini/schedules": "./src/scheduler/mini/schedules.ts",
-		"./scheduler/mini/scheduler": "./src/scheduler/mini/scheduler.ts"
+		"./runtime": "./src/runtime/mod.ts",
+		"./runtime/runtime": "./src/runtime/runtime.ts",
+		"./scheduler": "./src/scheduler/mod.ts",
+		"./scheduler/schedules": "./src/scheduler/schedules.ts",
+		"./scheduler/scheduler": "./src/scheduler/scheduler.ts"
 	},
 
 	"imports": {

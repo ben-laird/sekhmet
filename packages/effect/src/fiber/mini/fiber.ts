@@ -8,11 +8,11 @@ import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
-import type { Cancellation } from "../../continuation/mini/continuation.ts";
+import type { Cancellation } from "../../continuation/continuation.ts";
 import type { Effect, EffectOutput } from "../../effect/mini/effect.ts";
 import { Cancelled, Failed, Panicked } from "./fiber-error.ts";
 import type { FiberError, FiberResult } from "./fiber-error.ts";
-import type { Runtime } from "../../runtime/mini/runtime.ts";
+import type { Runtime } from "../../runtime/runtime.ts";
 
 const DEFAULT_STEP_BUDGET = 1024;
 

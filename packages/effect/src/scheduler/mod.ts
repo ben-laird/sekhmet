@@ -1,5 +1,5 @@
 /**
- * Tree-shakable mini exports for the scheduler module.
+ * Scheduler exports for cooperative concurrency.
  *
  * @module
  */

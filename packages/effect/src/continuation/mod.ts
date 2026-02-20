@@ -1,5 +1,5 @@
 /**
- * Tree-shakable mini exports for the continuation module.
+ * Continuation types for representing computation steps.
  *
  * @module
  */

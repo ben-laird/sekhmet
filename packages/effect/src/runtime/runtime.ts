@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { Scheduler } from "@sekhmet/effect/scheduler/mini";
+import type { Scheduler } from "@sekhmet/effect/scheduler";
 import { Struct } from "@sekhmet/primordials/struct";
 
 /**

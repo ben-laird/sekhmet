@@ -1,12 +1,12 @@
-import { Scheduler } from "@sekhmet/effect/scheduler/mini/scheduler";
-import { sync } from "@sekhmet/effect/scheduler/mini/schedules";
+import { Scheduler } from "@sekhmet/effect/scheduler/scheduler";
+import { sync } from "@sekhmet/effect/scheduler/schedules";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
-import { Ready } from "../../continuation/mini/continuation.ts";
+import { Ready } from "../../continuation/continuation.ts";
 import { fork } from "../../fiber/mini/fiber.ts";
-import { Runtime } from "../../runtime/mini/runtime.ts";
+import { Runtime } from "../../runtime/runtime.ts";
 import { Effect, Failed, Failure, Success } from "./effect.ts";
 import { and, andThen, map, mapError, or, orElse } from "./operations.ts";
 

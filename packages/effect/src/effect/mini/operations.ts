@@ -7,7 +7,7 @@
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
-import { Async, Deferred, Ready } from "../../continuation/mini/continuation.ts";
+import { Async, Deferred, Ready } from "../../continuation/continuation.ts";
 import {
 	Effect,
 	type EffectOutput,

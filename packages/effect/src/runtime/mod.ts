@@ -1,5 +1,5 @@
 /**
- * Tree-shakable mini exports for the runtime module.
+ * Runtime execution environment for effects.
  *
  * @module
  */

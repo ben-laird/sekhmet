@@ -7,8 +7,8 @@
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { Struct } from "@sekhmet/primordials/struct";
-import type { Continuation } from "../../continuation/mini/continuation.ts";
-import { Ready } from "../../continuation/mini/continuation.ts";
+import type { Continuation } from "../../continuation/continuation.ts";
+import { Ready } from "../../continuation/continuation.ts";
 
 /**
  * Creates an `EffectError` representing a typed failure.
