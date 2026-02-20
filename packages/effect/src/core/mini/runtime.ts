@@ -57,6 +57,71 @@ export interface RuntimeParams<I> {
 export class Runtime<I> extends Struct<RuntimeParams<I>> {}
 
 /**
+ * Creates a {@linkcode FiberError} in the `Failed` variant, representing a typed error.
+ *
+ * @template T - The error value type
+ * @param error - The typed error value
+ * @returns A `FiberError` in the `Failed` variant
+ */
+export function Failed<T>(error: T): FiberError<T> {
+	return new FiberError<T>("Failed", error);
+}
+
+/**
+ * Creates a {@linkcode FiberError} in the `Cancelled` variant, representing a cancelled fiber.
+ *
+ * @template T - The error value type (unused in this variant)
+ * @returns A `FiberError` in the `Cancelled` variant
+ */
+export function Cancelled<T>(): FiberError<T> {
+	return new FiberError<T>("Cancelled");
+}
+
+/**
+ * Creates a {@linkcode FiberError} in the `Panicked` variant, representing an unhandled exception.
+ *
+ * @template T - The error value type (unused in this variant)
+ * @param exception - The thrown exception
+ * @returns A `FiberError` in the `Panicked` variant
+ */
+export function Panicked<T>(exception: unknown): FiberError<T> {
+	return new FiberError<T>("Panicked", exception);
+}
+
+/**
+ * Variant definitions for {@linkcode FiberError}.
+ *
+ * - `Failed`: A typed error value of type `T`
+ * - `Cancelled`: The fiber was cancelled before completing
+ * - `Panicked`: An unhandled exception was thrown during execution
+ *
+ * @template T - The typed error value type
+ */
+export type FiberErrorVariants<T> = Split<{
+	Failed: [error: T];
+	Cancelled: [];
+	Panicked: [exception: unknown];
+}>;
+
+/**
+ * Represents the error channel of a completed fiber.
+ * A `FiberError` is either a typed `Failed` value, a `Cancelled` signal,
+ * or a `Panicked` wrapping an unexpected thrown exception.
+ *
+ * @template T - The typed error value type
+ */
+export class FiberError<T> extends Enum<FiberErrorVariants<T>> {}
+
+/**
+ * The result type of a completed fiber.
+ * Either `Ok<T>` on success or `Err<FiberError<E>>` on failure.
+ *
+ * @template T - Success value type
+ * @template E - Error value type
+ */
+export type FiberResult<T, E> = Result<T, FiberError<E>>;
+
+/**
  * Variants representing the state of a fiber's execution.
  *
  * - Queued: Fiber is waiting to start
@@ -72,9 +137,7 @@ export type FiberStateVariants<I, T, E> = Split<{
 	Queued: [effect: Effect<I, T, E>];
 	Running: [currentOutput: EffectOutput<T, E>];
 	Suspended: [cancellation: Cancellation];
-	Cancelled: [];
-	Panicked: [exception: unknown];
-	Complete: [result: Result<T, E>];
+	Complete: [result: FiberResult<T, E>];
 }>;
 
 /**
@@ -180,8 +243,6 @@ function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
 			Queued: () => true,
 			Running: () => true,
 			Suspended: () => false,
-			Cancelled: () => false,
-			Panicked: () => false,
 			Complete: () => false,
 		});
 
@@ -219,7 +280,10 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 					getStructParams(effect)(input),
 				];
 			} catch (exception: unknown) {
-				getStructParams(fiberState).variant = ["Panicked", exception];
+				getStructParams(fiberState).variant = [
+					"Complete",
+					Err<T, FiberError<E>>(Panicked(exception)),
+				];
 			}
 		},
 
@@ -231,7 +295,7 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 						Ok: (value) => {
 							getStructParams(fiberState).variant = [
 								"Complete",
-								Ok<T, E>(value),
+								Ok<T, FiberError<E>>(value),
 							];
 						},
 						Err: (effectError) => {
@@ -239,11 +303,14 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 								Failed: (error) => {
 									getStructParams(fiberState).variant = [
 										"Complete",
-										Err<T, E>(error),
+										Err<T, FiberError<E>>(Failed(error)),
 									];
 								},
 								ExceptionOccurred: (exception) => {
-									getStructParams(fiberState).variant = ["Panicked", exception];
+									getStructParams(fiberState).variant = [
+										"Complete",
+										Err<T, FiberError<E>>(Panicked(exception)),
+									];
 								},
 							});
 						},
@@ -267,14 +334,15 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 
 										scheduler.run(() => runFiber(self));
 									},
-									Cancelled: () => {},
-									Panicked: () => {},
 									Complete: () => {},
 								});
 							}),
 						];
 					} catch (exception: unknown) {
-						getStructParams(fiberState).variant = ["Panicked", exception];
+						getStructParams(fiberState).variant = [
+							"Complete",
+							Err<T, FiberError<E>>(Panicked(exception)),
+						];
 					}
 				},
 
@@ -283,15 +351,16 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 						// Unwrap one level and store the next continuation
 						getStructParams(fiberState).variant = ["Running", fn()];
 					} catch (exception: unknown) {
-						getStructParams(fiberState).variant = ["Panicked", exception];
+						getStructParams(fiberState).variant = [
+							"Complete",
+							Err<T, FiberError<E>>(Panicked(exception)),
+						];
 					}
 				},
 			});
 		},
 
 		Suspended: () => {},
-		Cancelled: () => {},
-		Panicked: () => {},
 		Complete: () => {},
 	});
 }
@@ -314,17 +383,24 @@ export function cancel<I, T, E>(self: Fiber<I, T, E>): void {
 
 	match(fiberState)({
 		Queued: () => {
-			getStructParams(fiberState).variant = ["Cancelled"];
+			getStructParams(fiberState).variant = [
+				"Complete",
+				Err<T, FiberError<E>>(Cancelled()),
+			];
 		},
 		Running: () => {
-			getStructParams(fiberState).variant = ["Cancelled"];
+			getStructParams(fiberState).variant = [
+				"Complete",
+				Err<T, FiberError<E>>(Cancelled()),
+			];
 		},
 		Suspended: (cancellation) => {
-			getStructParams(fiberState).variant = ["Cancelled"];
+			getStructParams(fiberState).variant = [
+				"Complete",
+				Err<T, FiberError<E>>(Cancelled()),
+			];
 			cancellation?.();
 		},
-		Cancelled: () => {},
-		Panicked: () => {},
 		Complete: () => {},
 	});
 }
