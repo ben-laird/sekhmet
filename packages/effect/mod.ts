@@ -23,7 +23,7 @@ export {
 	Ready,
 	Runtime,
 	Success,
-} from "./src/core/main/mod.ts";
+} from "./src/main/mod.ts";
 export type {
 	AsyncContinuation,
 	Cancellation,
@@ -34,4 +34,4 @@ export type {
 	FiberParams,
 	FiberStateVariants,
 	RuntimeParams,
-} from "./src/core/main/mod.ts";
+} from "./src/main/mod.ts";

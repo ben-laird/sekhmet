@@ -1,125 +1,20 @@
 /**
- * Runtime execution for effects via fibers.
+ * Fiber execution state machine and lifecycle functions.
  *
  * @module
  */
 
-import type { Scheduler } from "@sekhmet/effect/scheduler/mini";
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { match } from "@sekhmet/enum/core/mini/exit";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
-import type { Cancellation } from "./continuation.ts";
-import type { Effect, EffectOutput } from "./effect.ts";
+import type { Cancellation } from "../../continuation/mini/continuation.ts";
+import type { Effect, EffectOutput } from "../../effect/mini/effect.ts";
+import { Cancelled, Failed, Panicked } from "./fiber-error.ts";
+import type { FiberError, FiberResult } from "./fiber-error.ts";
+import type { Runtime } from "../../runtime/mini/runtime.ts";
 
-/**
- * Configuration for fiber execution.
- */
-export interface FiberConfig {
-	/**
-	 * Maximum number of steps to execute before yielding to the scheduler.
-	 * After this budget is exhausted, the fiber reschedules itself.
-	 * @default 1024
-	 */
-	readonly stepBudget: number;
-}
-
-const DEFAULT_FIBER_CONFIG: FiberConfig = {
-	stepBudget: 1024,
-};
-
-/**
- * Parameters for the Runtime struct.
- *
- * @template I - Input type for effects
- */
-export interface RuntimeParams<I> {
-	/**
-	 * The input value that will be provided to effects when they run.
-	 */
-	input: I;
-	/**
-	 * The scheduler that manages fiber execution turns.
-	 */
-	scheduler: Scheduler;
-	/**
-	 * Optional fiber execution configuration. Defaults to a step budget of 1024.
-	 */
-	fiberConfig?: FiberConfig | undefined;
-}
-
-/**
- * A Runtime provides the execution environment for effects.
- * It holds the input value that effects receive when they start.
- *
- * @template I - Input type for effects
- */
-export class Runtime<I> extends Struct<RuntimeParams<I>> {}
-
-/**
- * Creates a {@linkcode FiberError} in the `Failed` variant, representing a typed error.
- *
- * @template T - The error value type
- * @param error - The typed error value
- * @returns A `FiberError` in the `Failed` variant
- */
-export function Failed<T>(error: T): FiberError<T> {
-	return new FiberError<T>("Failed", error);
-}
-
-/**
- * Creates a {@linkcode FiberError} in the `Cancelled` variant, representing a cancelled fiber.
- *
- * @template T - The error value type (unused in this variant)
- * @returns A `FiberError` in the `Cancelled` variant
- */
-export function Cancelled<T>(): FiberError<T> {
-	return new FiberError<T>("Cancelled");
-}
-
-/**
- * Creates a {@linkcode FiberError} in the `Panicked` variant, representing an unhandled exception.
- *
- * @template T - The error value type (unused in this variant)
- * @param exception - The thrown exception
- * @returns A `FiberError` in the `Panicked` variant
- */
-export function Panicked<T>(exception: unknown): FiberError<T> {
-	return new FiberError<T>("Panicked", exception);
-}
-
-/**
- * Variant definitions for {@linkcode FiberError}.
- *
- * - `Failed`: A typed error value of type `T`
- * - `Cancelled`: The fiber was cancelled before completing
- * - `Panicked`: An unhandled exception was thrown during execution
- *
- * @template T - The typed error value type
- */
-export type FiberErrorVariants<T> = Split<{
-	Failed: [error: T];
-	Cancelled: [];
-	Panicked: [exception: unknown];
-}>;
-
-/**
- * Represents the error channel of a completed fiber.
- * A `FiberError` is either a typed `Failed` value, a `Cancelled` signal,
- * or a `Panicked` wrapping an unexpected thrown exception.
- *
- * @template T - The typed error value type
- */
-export class FiberError<T> extends Enum<FiberErrorVariants<T>> {}
-
-/**
- * The result type of a completed fiber.
- * Either `Ok<T>` on success or `Err<FiberError<E>>` on failure.
- *
- * @template T - Success value type
- * @template E - Error value type
- */
-export type FiberResult<T, E> = Result<T, FiberError<E>>;
+const DEFAULT_STEP_BUDGET = 1024;
 
 /**
  * Variants representing the state of a fiber's execution.
@@ -127,9 +22,9 @@ export type FiberResult<T, E> = Result<T, FiberError<E>>;
  * - Queued: Fiber is waiting to start
  * - Running: Fiber is actively executing with the current continuation
  * - Suspended: Fiber is waiting for async work with optional cancellation
- * - Cancelled: Fiber was cancelled and stopped
  * - Complete: Fiber finished with a result
  *
+ * @template I - Input type
  * @template T - Success value type
  * @template E - Error type
  */
@@ -143,6 +38,7 @@ export type FiberStateVariants<I, T, E> = Split<{
 /**
  * Represents the execution state of a fiber.
  *
+ * @template I - Input type
  * @template T - Success value type
  * @template E - Error type
  */
@@ -226,13 +122,10 @@ export function fork<I, T, E>(
 function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
 	const { fiberState, runtime } = getStructParams(self);
 
-	const {
-		scheduler,
-		fiberConfig = DEFAULT_FIBER_CONFIG,
-		// {}
-	} = getStructParams(runtime);
+	const { scheduler, fiberConfig } = getStructParams(runtime);
+	const stepBudget = fiberConfig?.stepBudget ?? DEFAULT_STEP_BUDGET;
 
-	let remainingBudget = fiberConfig.stepBudget;
+	let remainingBudget = stepBudget;
 
 	while (remainingBudget > 0) {
 		remainingBudget--;

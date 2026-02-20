@@ -4,9 +4,10 @@ import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
-import { Ready } from "./continuation.ts";
+import { Ready } from "../../continuation/mini/continuation.ts";
+import { fork } from "../../fiber/mini/fiber.ts";
+import { Runtime } from "../../runtime/mini/runtime.ts";
 import { Effect, Failed, Failure, Success } from "./effect.ts";
-import { fork, Runtime } from "./runtime.ts";
 
 Deno.test("Success creates an effect that completes with Ok", () => {
 	// Given: a success effect with value 42
