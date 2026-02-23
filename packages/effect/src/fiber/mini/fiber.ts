@@ -98,7 +98,7 @@ export function fork<I, T, E>(
 	self: Runtime<I>,
 	effect: Effect<I, T, E>,
 ): Fiber<I, T, E> {
-	const { scheduler } = getStructParams(self);
+	const { config: { scheduler } } = getStructParams(self);
 
 	const fiber = new Fiber<I, T, E>({
 		id: crypto.randomUUID(),
@@ -122,7 +122,7 @@ export function fork<I, T, E>(
 function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
 	const { fiberState, runtime } = getStructParams(self);
 
-	const { scheduler, fiberConfig } = getStructParams(runtime);
+	const { config: { scheduler, fiberConfig } } = getStructParams(runtime);
 	const stepBudget = fiberConfig?.stepBudget ?? DEFAULT_STEP_BUDGET;
 
 	let remainingBudget = stepBudget;
@@ -162,7 +162,7 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 
 	console.log({ fiberId, label, variant: getStructParams(fiberState).variant });
 
-	const { input, scheduler } = getStructParams(runtime);
+	const { input, config: { scheduler } } = getStructParams(runtime);
 
 	match(fiberState)({
 		Queued: (effect) => {

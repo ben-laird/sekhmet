@@ -14,7 +14,7 @@ Deno.test("Success creates an effect that completes with Ok", () => {
 	const effect = Success(42);
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we fork the effect
@@ -49,7 +49,7 @@ Deno.test("Failure creates an effect that completes with Err", () => {
 	const effect = Failure("not found");
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we fork the effect
@@ -96,7 +96,7 @@ Deno.test("Effect can be constructed with custom logic", () => {
 	});
 	const runtime = new Runtime({
 		input: "123",
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we fork the effect with valid input

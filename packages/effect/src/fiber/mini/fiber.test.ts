@@ -14,7 +14,7 @@ Deno.test("fork creates and runs a fiber", () => {
 	const effect = Success(42);
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we fork the effect
@@ -59,7 +59,7 @@ Deno.test("async effect suspends and resumes", async () => {
 
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we fork the async effect
@@ -115,7 +115,7 @@ Deno.test("cancel stops a queued fiber", () => {
 	const effect = Success(42);
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we fork and immediately cancel before running
@@ -163,7 +163,7 @@ Deno.test("cancel calls cleanup function for suspended fiber", async () => {
 
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we fork and then cancel the suspended fiber

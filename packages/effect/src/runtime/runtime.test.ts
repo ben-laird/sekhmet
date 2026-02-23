@@ -16,7 +16,7 @@ Deno.test("runtime provides input to effects", () => {
 	});
 	const runtime = new Runtime({
 		input: 21,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we fork the effect

@@ -15,7 +15,7 @@ Deno.test("map transforms success value", () => {
 	const effect = Success(10);
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we map the value to double it
@@ -51,7 +51,7 @@ Deno.test("map preserves errors", () => {
 	const effect = Failure("error");
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we map the value
@@ -96,7 +96,7 @@ Deno.test("mapError transforms error value", () => {
 	const effect = Failure("error");
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we map the error to its length
@@ -141,7 +141,7 @@ Deno.test("mapError preserves success", () => {
 	const effect = Success(10);
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we map the error
@@ -185,7 +185,7 @@ Deno.test("and sequences two effects", () => {
 
 	const runtime = new Runtime({
 		input: "42",
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we chain them with 'and'
@@ -221,7 +221,7 @@ Deno.test("andThen chains effects with computed next step", () => {
 	const initial = Success(5);
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we chain multiple operations
@@ -260,7 +260,7 @@ Deno.test("or provides fallback on error", () => {
 	const effect = Failure("not found");
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we provide a fallback using 'or'
@@ -301,7 +301,7 @@ Deno.test("orElse provides computed fallback on error", () => {
 	const effect = Failure("not found");
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we map the error to a number and provide fallback
@@ -344,7 +344,7 @@ Deno.test("deeply nested map operations", () => {
 
 	const runtime = new Runtime({
 		input: undefined,
-		scheduler: new Scheduler({ schedule: sync() }),
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
 	});
 
 	// When: we run the deeply nested effect
