@@ -170,7 +170,7 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 			try {
 				getStructParams(fiberState).variant = [
 					"Running",
-					getStructParams(effect)(input),
+					getStructParams(effect)(input, runtime.createContext()),
 				];
 			} catch (exception: unknown) {
 				getStructParams(fiberState).variant = [

@@ -8,6 +8,7 @@ import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { Async, Deferred, Ready } from "../../continuation/continuation.ts";
+import type { ExecutionContext } from "../../runtime/runtime.ts";
 import {
 	Effect,
 	type EffectOutput,
@@ -35,14 +36,14 @@ function safeDeferred<T, E>(compute: () => EffectOutput<T, E>): EffectOutput<T, 
  */
 function transformEffect<I, T, E, U, F>(
 	self: Effect<I, T, E>,
-	handleReady: (result: EffectResult<T, E>, input: I) => EffectOutput<U, F>,
+	handleReady: (result: EffectResult<T, E>, input: I, ctx: ExecutionContext) => EffectOutput<U, F>,
 ): Effect<I, U, F> {
-	return new Effect((input) => {
-		return safeDeferred(() => loop(getStructParams(self)(input)));
+	return new Effect((input, ctx) => {
+		return safeDeferred(() => loop(getStructParams(self)(input, ctx)));
 
 		function loop(output: EffectOutput<T, E>): EffectOutput<U, F> {
 			return match(output)({
-				Ready: (result) => handleReady(result, input),
+				Ready: (result) => handleReady(result, input, ctx),
 				Async: (continuationFn) => {
 					return Async((resolve) => {
 						return continuationFn((continuation) => {
@@ -344,9 +345,9 @@ export function and<I, T, E, U>(
 	self: Effect<I, T, E>,
 	nextStep: Effect<T, U, E>,
 ): Effect<I, U, E> {
-	return transformEffect(self, (result) => {
+	return transformEffect(self, (result, _input, ctx) => {
 		return match(result)({
-			Ok: (value) => safeDeferred(() => getStructParams(nextStep)(value)),
+			Ok: (value) => safeDeferred(() => getStructParams(nextStep)(value, ctx)),
 			Err: (error) => Ready(Err(error)),
 		});
 	});
@@ -373,9 +374,9 @@ export function andThen<I, T, E, U>(
 	self: Effect<I, T, E>,
 	nextStep: (value: T) => Effect<I, U, E>,
 ): Effect<I, U, E> {
-	return transformEffect(self, (result, input) => {
+	return transformEffect(self, (result, input, ctx) => {
 		return match(result)({
-			Ok: (value) => safeDeferred(() => getStructParams(nextStep(value))(input)),
+			Ok: (value) => safeDeferred(() => getStructParams(nextStep(value))(input, ctx)),
 			Err: (error) => Ready(Err(error)),
 		});
 	});
@@ -402,12 +403,12 @@ export function or<I, T, E, F>(
 	self: Effect<I, T, E>,
 	fallbackStep: Effect<E, T, F>,
 ): Effect<I, T, F> {
-	return transformEffect(self, (result) => {
+	return transformEffect(self, (result, _input, ctx) => {
 		return match(result)({
 			Ok: (value) => Ready(Ok(value)),
 			Err: (effectError) => {
 				return match(effectError)({
-					Failed: (error) => safeDeferred(() => getStructParams(fallbackStep)(error)),
+					Failed: (error) => safeDeferred(() => getStructParams(fallbackStep)(error, ctx)),
 					ExceptionOccurred: (exception) => {
 						return Ready(Err(ExceptionOccurred(exception)));
 					},
@@ -438,13 +439,13 @@ export function orElse<I, T, E, F>(
 	self: Effect<I, T, E>,
 	fallbackStep: (error: E) => Effect<I, T, F>,
 ): Effect<I, T, F> {
-	return transformEffect(self, (result, input) => {
+	return transformEffect(self, (result, input, ctx) => {
 		return match(result)({
 			Ok: (value) => Ready(Ok(value)),
 			Err: (effectError) => {
 				return match(effectError)({
 					Failed: (error) => {
-						return safeDeferred(() => getStructParams(fallbackStep(error))(input));
+						return safeDeferred(() => getStructParams(fallbackStep(error))(input, ctx));
 					},
 					ExceptionOccurred: (exception) => {
 						return Ready(Err(ExceptionOccurred(exception)));

@@ -4,6 +4,7 @@
  * @module
  */
 
+import type { ExecutionContext } from "@sekhmet/effect/runtime/runtime";
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { Struct } from "@sekhmet/primordials/struct";
@@ -61,7 +62,10 @@ export class EffectError<T> extends Enum<EffectErrorVariants<T>> {}
  * @template T - Success value type
  * @template E - Error type
  */
-export type EffectFn<I, T, E> = (input: I) => EffectOutput<T, E>;
+export type EffectFn<I, T, E> = (
+	input: I,
+	ctx: ExecutionContext,
+) => EffectOutput<T, E>;
 
 /**
  * The continuation type produced by an effect computation.
