@@ -4,14 +4,19 @@
  * @module
  */
 
+import { Failed as FailedEffect } from "@sekhmet/effect/effect/mini/effect";
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
-import type { Cancellation } from "../../continuation/continuation.ts";
-import type { Effect, EffectOutput } from "../../effect/mini/effect.ts";
+import {
+	Async,
+	type Cancellation,
+	Ready,
+} from "../../continuation/continuation.ts";
+import { Effect, type EffectOutput } from "../../effect/mini/effect.ts";
 import type { Runtime } from "../../runtime/runtime.ts";
-import type { FiberResult } from "./fiber-error.ts";
+import type { FiberError, FiberResult } from "./fiber-error.ts";
 import { Cancelled, Failed, Panicked } from "./fiber-error.ts";
 
 const DEFAULT_STEP_BUDGET = 1024;
@@ -329,6 +334,25 @@ export function join<I, T, E>(
 		Complete: (result) => {
 			finalizer(result);
 		},
+	});
+}
+
+export function joinEffect<I, T, E>(
+	self: Fiber<I, T, E>,
+): Effect<void, T, FiberError<E>> {
+	return new Effect(() => {
+		return Async((resolve) => {
+			join(self, (result) => {
+				match(result)({
+					Ok: (value) => {
+						resolve(Ready(Ok(value)));
+					},
+					Err: (fiberError) => {
+						resolve(Ready(Err(FailedEffect(fiberError))));
+					},
+				});
+			});
+		});
 	});
 }
 
