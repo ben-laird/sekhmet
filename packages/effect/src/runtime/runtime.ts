@@ -4,6 +4,9 @@
  * @module
  */
 
+import type { Effect } from "@sekhmet/effect/effect/mini";
+import type { Fiber } from "@sekhmet/effect/fiber/mini";
+import { fork } from "@sekhmet/effect/fiber/mini/fiber";
 import type { Scheduler } from "@sekhmet/effect/scheduler";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 
@@ -77,4 +80,23 @@ export interface ExecutionContextParams {
 /**
  * Holds the runtime configuration for a single fiber execution turn.
  */
-export class ExecutionContext extends Struct<ExecutionContextParams> {}
+export class ExecutionContext extends Struct<ExecutionContextParams> {
+	/**
+	 * Forks an effect into a new fiber with the given input, sharing this context's runtime configuration.
+	 *
+	 * @template I - Input type
+	 * @template T - Success value type
+	 * @template E - Error type
+	 * @param effect - The effect to execute
+	 * @param input - The input value for the effect
+	 * @returns A new fiber running the effect
+	 */
+	fork<I, T, E>(effect: Effect<I, T, E>, input: I): Fiber<I, T, E> {
+		const runtime = new Runtime({
+			input,
+			config: getStructParams(this).config,
+		});
+
+		return fork(runtime, effect);
+	}
+}
