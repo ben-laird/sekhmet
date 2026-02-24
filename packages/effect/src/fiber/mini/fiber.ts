@@ -10,11 +10,28 @@ import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import type { Cancellation } from "../../continuation/continuation.ts";
 import type { Effect, EffectOutput } from "../../effect/mini/effect.ts";
-import { Cancelled, Failed, Panicked } from "./fiber-error.ts";
-import type { FiberError, FiberResult } from "./fiber-error.ts";
 import type { Runtime } from "../../runtime/runtime.ts";
+import type { FiberResult } from "./fiber-error.ts";
+import { Cancelled, Failed, Panicked } from "./fiber-error.ts";
 
 const DEFAULT_STEP_BUDGET = 1024;
+
+export type Finalizer<T, E> = (result: FiberResult<T, E>) => void;
+
+export interface QueuedFiberState<I, T, E> {
+	effect: Effect<I, T, E>;
+	finalizers: Finalizer<T, E>[];
+}
+
+export interface RunningFiberState<T, E> {
+	currentOutput: EffectOutput<T, E>;
+	finalizers: Finalizer<T, E>[];
+}
+
+export interface SuspendedFiberState<T, E> {
+	cancellation: Cancellation;
+	finalizers: Finalizer<T, E>[];
+}
 
 /**
  * Variants representing the state of a fiber's execution.
@@ -29,9 +46,9 @@ const DEFAULT_STEP_BUDGET = 1024;
  * @template E - Error type
  */
 export type FiberStateVariants<I, T, E> = Split<{
-	Queued: [effect: Effect<I, T, E>];
-	Running: [currentOutput: EffectOutput<T, E>];
-	Suspended: [cancellation: Cancellation];
+	Queued: [state: QueuedFiberState<I, T, E>];
+	Running: [state: RunningFiberState<T, E>];
+	Suspended: [state: SuspendedFiberState<T, E>];
 	Complete: [result: FiberResult<T, E>];
 }>;
 
@@ -98,12 +115,14 @@ export function fork<I, T, E>(
 	self: Runtime<I>,
 	effect: Effect<I, T, E>,
 ): Fiber<I, T, E> {
-	const { config: { scheduler } } = getStructParams(self);
+	const {
+		config: { scheduler },
+	} = getStructParams(self);
 
 	const fiber = new Fiber<I, T, E>({
 		id: crypto.randomUUID(),
 		runtime: self,
-		fiberState: new FiberState("Queued", effect),
+		fiberState: new FiberState("Queued", { effect, finalizers: [] }),
 	});
 
 	scheduler.run(() => runFiber(fiber));
@@ -122,7 +141,9 @@ export function fork<I, T, E>(
 function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
 	const { fiberState, runtime } = getStructParams(self);
 
-	const { config: { scheduler, fiberConfig } } = getStructParams(runtime);
+	const {
+		config: { scheduler, fiberConfig },
+	} = getStructParams(runtime);
 	const stepBudget = fiberConfig?.stepBudget ?? DEFAULT_STEP_BUDGET;
 
 	let remainingBudget = stepBudget;
@@ -162,48 +183,44 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 
 	console.log({ fiberId, label, variant: getStructParams(fiberState).variant });
 
-	const { input, config: { scheduler } } = getStructParams(runtime);
+	const {
+		input,
+		config: { scheduler },
+	} = getStructParams(runtime);
 
 	match(fiberState)({
-		Queued: (effect) => {
+		Queued: ({ effect, finalizers }) => {
 			// Initialize: start the effect and store the initial continuation
 			try {
+				const currentOutput = getStructParams(effect)(
+					input,
+					runtime.createContext(),
+				);
+
 				getStructParams(fiberState).variant = [
 					"Running",
-					getStructParams(effect)(input, runtime.createContext()),
+					{ currentOutput, finalizers },
 				];
 			} catch (exception: unknown) {
-				getStructParams(fiberState).variant = [
-					"Complete",
-					Err<T, FiberError<E>>(Panicked(exception)),
-				];
+				complete(self, Err(Panicked(exception)));
 			}
 		},
 
-		Running: (currentContinuation) => {
+		Running: ({ currentOutput, finalizers }) => {
 			// Process one step: unwrap one Deferred or complete with Ready
-			match(currentContinuation)({
+			match(currentOutput)({
 				Ready: (effectResult) => {
 					match(effectResult)({
 						Ok: (value) => {
-							getStructParams(fiberState).variant = [
-								"Complete",
-								Ok<T, FiberError<E>>(value),
-							];
+							complete(self, Ok(value));
 						},
 						Err: (effectError) => {
 							match(effectError)({
 								Failed: (error) => {
-									getStructParams(fiberState).variant = [
-										"Complete",
-										Err<T, FiberError<E>>(Failed(error)),
-									];
+									complete(self, Err(Failed(error)));
 								},
 								ExceptionOccurred: (exception) => {
-									getStructParams(fiberState).variant = [
-										"Complete",
-										Err<T, FiberError<E>>(Panicked(exception)),
-									];
+									complete(self, Err(Panicked(exception)));
 								},
 							});
 						},
@@ -213,41 +230,40 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 				Async: (asyncFn) => {
 					try {
 						// Suspend the fiber and set up async callback
+						const cancellation = asyncFn((continuation) => {
+							match(fiberState)({
+								Queued: () => {},
+								Running: () => {},
+								Suspended: () => {
+									getStructParams(fiberState).variant = [
+										"Running",
+										{ currentOutput: continuation, finalizers },
+									];
+
+									scheduler.run(() => runFiber(self));
+								},
+								Complete: () => {},
+							});
+						});
+
 						getStructParams(fiberState).variant = [
 							"Suspended",
-							asyncFn((continuation) => {
-								match(fiberState)({
-									Queued: () => {},
-									Running: () => {},
-									Suspended: () => {
-										getStructParams(fiberState).variant = [
-											"Running",
-											continuation,
-										];
-
-										scheduler.run(() => runFiber(self));
-									},
-									Complete: () => {},
-								});
-							}),
+							{ cancellation, finalizers },
 						];
 					} catch (exception: unknown) {
-						getStructParams(fiberState).variant = [
-							"Complete",
-							Err<T, FiberError<E>>(Panicked(exception)),
-						];
+						complete(self, Err(Panicked(exception)));
 					}
 				},
 
 				Deferred: (fn) => {
 					try {
 						// Unwrap one level and store the next continuation
-						getStructParams(fiberState).variant = ["Running", fn()];
-					} catch (exception: unknown) {
 						getStructParams(fiberState).variant = [
-							"Complete",
-							Err<T, FiberError<E>>(Panicked(exception)),
+							"Running",
+							{ currentOutput: fn(), finalizers },
 						];
+					} catch (exception: unknown) {
+						complete(self, Err(Panicked(exception)));
 					}
 				},
 			});
@@ -255,6 +271,64 @@ function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
 
 		Suspended: () => {},
 		Complete: () => {},
+	});
+}
+
+function complete<I, T, E>(
+	self: Fiber<I, T, E>,
+	result: FiberResult<T, E>,
+): void {
+	const { fiberState } = getStructParams(self);
+
+	match(fiberState)({
+		Queued: ({ finalizers }) => {
+			runFinalizers(finalizers);
+
+			getStructParams(fiberState).variant = ["Complete", result];
+		},
+		Running: ({ finalizers }) => {
+			runFinalizers(finalizers);
+
+			getStructParams(fiberState).variant = ["Complete", result];
+		},
+		Suspended: ({ finalizers }) => {
+			runFinalizers(finalizers);
+
+			getStructParams(fiberState).variant = ["Complete", result];
+		},
+		Complete: () => {},
+	});
+
+	function runFinalizers(finalizers: Finalizer<T, E>[]): void {
+		try {
+			for (const finalizer of finalizers) {
+				finalizer(result);
+			}
+		} catch (err: unknown) {
+			console.error({ err });
+		}
+	}
+}
+
+export function join<I, T, E>(
+	self: Fiber<I, T, E>,
+	finalizer: Finalizer<T, E>,
+): void {
+	const { fiberState } = getStructParams(self);
+
+	match(fiberState)({
+		Queued: ({ finalizers }) => {
+			finalizers.push(finalizer);
+		},
+		Running: ({ finalizers }) => {
+			finalizers.push(finalizer);
+		},
+		Suspended: ({ finalizers }) => {
+			finalizers.push(finalizer);
+		},
+		Complete: (result) => {
+			finalizer(result);
+		},
 	});
 }
 
@@ -276,23 +350,15 @@ export function cancel<I, T, E>(self: Fiber<I, T, E>): void {
 
 	match(fiberState)({
 		Queued: () => {
-			getStructParams(fiberState).variant = [
-				"Complete",
-				Err<T, FiberError<E>>(Cancelled()),
-			];
+			complete(self, Err(Cancelled()));
 		},
 		Running: () => {
-			getStructParams(fiberState).variant = [
-				"Complete",
-				Err<T, FiberError<E>>(Cancelled()),
-			];
+			complete(self, Err(Cancelled()));
 		},
-		Suspended: (cancellation) => {
-			getStructParams(fiberState).variant = [
-				"Complete",
-				Err<T, FiberError<E>>(Cancelled()),
-			];
+		Suspended: ({ cancellation }) => {
 			cancellation?.();
+
+			complete(self, Err(Cancelled()));
 		},
 		Complete: () => {},
 	});
