@@ -4,7 +4,12 @@
  * @module
  */
 
+import { cancel, join } from "@sekhmet/effect/fiber/mini/fiber";
+import type { FiberError } from "@sekhmet/effect/fiber/mini/fiber-error";
 import { match } from "@sekhmet/enum/core/mini/exit";
+import { None, type Option } from "@sekhmet/enum/option/mini/core";
+import { insert } from "@sekhmet/enum/option/mini/mutation";
+import { inspect as inspectOption } from "@sekhmet/enum/option/mini/transform";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { Async, Deferred, Ready } from "../../continuation/continuation.ts";
@@ -20,7 +25,9 @@ import {
 /**
  * Internal helper: wraps a computation in a try-catch that converts exceptions to ExceptionOccurred.
  */
-function safeDeferred<T, E>(compute: () => EffectOutput<T, E>): EffectOutput<T, E> {
+function safeDeferred<T, E>(
+	compute: () => EffectOutput<T, E>,
+): EffectOutput<T, E> {
 	return Deferred(() => {
 		try {
 			return compute();
@@ -36,7 +43,11 @@ function safeDeferred<T, E>(compute: () => EffectOutput<T, E>): EffectOutput<T, 
  */
 function transformEffect<I, T, E, U, F>(
 	self: Effect<I, T, E>,
-	handleReady: (result: EffectResult<T, E>, input: I, ctx: ExecutionContext) => EffectOutput<U, F>,
+	handleReady: (
+		result: EffectResult<T, E>,
+		input: I,
+		ctx: ExecutionContext,
+	) => EffectOutput<U, F>,
 ): Effect<I, U, F> {
 	return new Effect((input, ctx) => {
 		return safeDeferred(() => loop(getStructParams(self)(input, ctx)));
@@ -376,7 +387,11 @@ export function andThen<I, T, E, U>(
 ): Effect<I, U, E> {
 	return transformEffect(self, (result, input, ctx) => {
 		return match(result)({
-			Ok: (value) => safeDeferred(() => getStructParams(nextStep(value))(input, ctx)),
+			Ok: (value) => {
+				return safeDeferred(() => {
+					return getStructParams(nextStep(value))(input, ctx);
+				});
+			},
 			Err: (error) => Ready(Err(error)),
 		});
 	});
@@ -408,7 +423,11 @@ export function or<I, T, E, F>(
 			Ok: (value) => Ready(Ok(value)),
 			Err: (effectError) => {
 				return match(effectError)({
-					Failed: (error) => safeDeferred(() => getStructParams(fallbackStep)(error, ctx)),
+					Failed: (error) => {
+						return safeDeferred(() => {
+							return getStructParams(fallbackStep)(error, ctx);
+						});
+					},
 					ExceptionOccurred: (exception) => {
 						return Ready(Err(ExceptionOccurred(exception)));
 					},
@@ -445,13 +464,89 @@ export function orElse<I, T, E, F>(
 			Err: (effectError) => {
 				return match(effectError)({
 					Failed: (error) => {
-						return safeDeferred(() => getStructParams(fallbackStep(error))(input, ctx));
+						return safeDeferred(() => {
+							return getStructParams(fallbackStep(error))(input, ctx);
+						});
 					},
 					ExceptionOccurred: (exception) => {
 						return Ready(Err(ExceptionOccurred(exception)));
 					},
 				});
 			},
+		});
+	});
+}
+
+export function zip<I, T, E, U>(
+	self: Effect<I, T, E>,
+	other: Effect<I, U, E>,
+): Effect<I, [left: T, right: U], E> {
+	return new Effect((input, ctx) => {
+		return Deferred(() => {
+			const selfFiber = ctx.fork(self, input);
+			const otherFiber = ctx.fork(other, input);
+
+			return Async((resolve) => {
+				const left: Option<T> = None();
+				const right: Option<U> = None();
+				let settled = false;
+
+				join(selfFiber, (result) => {
+					match(result)({
+						Ok: (leftValue) => {
+							insert(left, leftValue);
+
+							inspectOption(right, (rightValue) => {
+								if (settled) return;
+								settled = true;
+
+								resolve(Ready(Ok([leftValue, rightValue])));
+							});
+						},
+						Err: fail,
+					});
+				});
+				join(otherFiber, (result) => {
+					match(result)({
+						Ok: (rightValue) => {
+							insert(right, rightValue);
+
+							inspectOption(left, (leftValue) => {
+								if (settled) return;
+								settled = true;
+
+								resolve(Ready(Ok([leftValue, rightValue])));
+							});
+						},
+						Err: fail,
+					});
+				});
+
+				return () => {
+					cancel(selfFiber);
+					cancel(otherFiber);
+				};
+
+				function fail(fiberError: FiberError<E>): void {
+					if (settled) return;
+					settled = true;
+
+					cancel(selfFiber);
+					cancel(otherFiber);
+
+					match(fiberError)({
+						Failed: (error) => resolve(Ready(Err(Failed(error)))),
+						Cancelled: () => {
+							resolve(
+								Ready(Err(ExceptionOccurred(new Error("Fiber was cancelled")))),
+							);
+						},
+						Panicked: (exception) => {
+							resolve(Ready(Err(ExceptionOccurred(exception))));
+						},
+					});
+				}
+			});
 		});
 	});
 }
