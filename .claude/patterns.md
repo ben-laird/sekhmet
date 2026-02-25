@@ -256,8 +256,8 @@ feature/
 - `continuation/` — flat (single file, no tree-shaking benefit)
 - `runtime/` — flat (single file, no tree-shaking benefit)
 - `scheduler/` — flat (cohesive scheduler + schedules, no benefit to splitting further)
-- `effect/` — uses mini split (multiple composable operations worth tree-shaking individually)
-- `fiber/` — uses mini split (fiber + fiber-error are individually importable)
+- `effect/` — main/mini split: `./effect` → fluent `Effect` class; `./effect/mini` → functional API
+- `fiber/` — main/mini split: `./fiber` → placeholder (re-exports mini); `./fiber/mini` → functional API
 
 ### Granular exports in deno.json
 
@@ -301,14 +301,59 @@ export * from "./exit.ts";
 export * from "./core.ts";
 
 // packages/package/src/core/main/mod.ts
-// Main just re-exports everything from mini
-export * from "../mini/mod.ts";
+// Main provides a richer, method-based API on top of mini.
+// It does NOT re-export mini — callers import from mini directly for the functional API.
+// Use the memento pattern to convert mini instances into main instances for chaining.
+import * as mini from "../mini/mod.ts";
+import { getStructParams } from "@sekhmet/primordials/struct";
+
+function fromMini<T>(instance: mini.MyClass<T>): MyClass<T> {
+	return new MyClass(getStructParams(instance));
+}
+
+export class MyClass<T> extends mini.MyClass<T> {
+	// Each method delegates to the mini function and wraps the result
+	// back into a main instance so callers can chain method calls.
+	transform<U>(fn: (value: T) => U): MyClass<U> {
+		return fromMini(mini.transform(this, fn));
+	}
+}
 
 // packages/package/mod.ts
 // Top-level re-exports all main features
 export * from "./src/core/main/mod.ts";
 export * from "./src/utils/main/mod.ts";
 ```
+
+### Which mini functions become main methods
+
+**The rule**: every exported mini function whose first parameter is named `self`
+and typed as the module's primary class becomes a method on the main class.
+Functions that don't follow this shape (constructors, utilities, combinators
+that take other types as `self`) remain free functions only.
+
+```ts ignore
+// mini/fiber.ts — exported functions with self: Fiber become Fiber methods
+export function join<I, T, E>(self: Fiber<I, T, E>, finalizer: Finalizer<T, E>): void { … }
+export function cancel<I, T, E>(self: Fiber<I, T, E>): void { … }
+export function joinEffect<I, T, E>(self: Fiber<I, T, E>): Effect<…> { … }
+
+// fork takes self: Runtime (not Fiber), so it stays a free function
+export function fork<I, T, E>(self: Runtime<I>, effect: Effect<I, T, E>): Fiber<I, T, E> { … }
+```
+
+Methods that return a new instance of the same main class use `fromMini` to
+wrap the result. Methods that return `void` or a different type delegate
+directly without wrapping.
+
+### Whether to include fromMini
+
+Only include `fromMini` in `main/mod.ts` when at least one method returns a
+new instance of the main class. If all methods return `void` or a different
+type (like `Effect`), omit `fromMini` entirely.
+
+- `effect/main` — **includes** `fromMini` because `map`, `andThen`, etc. return a new `Effect`
+- `fiber/main` — **omits** `fromMini` because `join`/`cancel`/`joinEffect` return `void`/`Effect`
 
 ## Type Utility Patterns
 

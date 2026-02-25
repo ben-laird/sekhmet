@@ -220,6 +220,29 @@ Or use your editor's Biome integration.
 - Prefer pure functions over stateful logic
 - Export both "kitchen sink" and individual functions
 
+#### The `self` parameter convention
+
+Mini functions that operate on a primary class instance use `self` as their
+first parameter name. This is the signal that the function should become a
+method on the corresponding `main` class:
+
+```ts ignore
+// mini: free function with self
+export function cancel<I, T, E>(self: Fiber<I, T, E>): void { … }
+
+// main: instance method delegating to mini
+export class Fiber<I, T, E> extends mini.Fiber<I, T, E> {
+  cancel(): void { mini.cancel(this); }
+}
+```
+
+Functions whose first parameter is typed as a *different* class (e.g. `fork`
+takes `self: Runtime`, not `self: Fiber`) remain free functions only.
+
+When a main method returns a new instance of the same class, use `fromMini`
+(the memento pattern) to convert the mini result into a main instance so
+callers can continue chaining. Omit `fromMini` when no methods need it.
+
 ### Infrastructure Code Conventions
 
 Code in `scripts/`, CI configuration, GitHub Actions workflows, and other
