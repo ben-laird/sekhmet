@@ -4,7 +4,32 @@
  * @module
  */
 
-export { Effect, Failure, Success } from "./effect.ts";
-export type { EffectFn } from "./effect.ts";
-
-export { and, andThen, map, mapError, or, orElse } from "./operations.ts";
+export {
+	Effect,
+	EffectError,
+	ExceptionOccurred,
+	Failed,
+	Failure,
+	Success,
+} from "./effect.ts";
+export type {
+	EffectErrorVariants,
+	EffectFn,
+	EffectOutput,
+	EffectResult,
+} from "./effect.ts";
+export {
+	and,
+	andThen,
+	inspect,
+	inspectError,
+	inspectException,
+	map,
+	mapError,
+	mapOr,
+	mapOrElse,
+	or,
+	orElse,
+	zip,
+} from "./operations.ts";
+export type { ResultArms } from "./operations.ts";

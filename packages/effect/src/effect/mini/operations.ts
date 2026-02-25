@@ -477,6 +477,23 @@ export function orElse<I, T, E, F>(
 	});
 }
 
+/**
+ * Runs two effects concurrently using fibers and combines their results into a tuple.
+ * If either effect fails, the other is cancelled and the error is propagated.
+ *
+ * @template I - Input type
+ * @template T - First effect success type
+ * @template E - Error type (shared by both effects)
+ * @template U - Second effect success type
+ * @param self - The first effect
+ * @param other - The second effect to run in parallel
+ * @returns A new effect that succeeds with a tuple of both results
+ *
+ * @example
+ * ```ts ignore
+ * const both = zip(fetchUser, fetchPosts);
+ * ```
+ */
 export function zip<I, T, E, U>(
 	self: Effect<I, T, E>,
 	other: Effect<I, U, E>,

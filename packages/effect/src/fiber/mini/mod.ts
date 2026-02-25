@@ -4,8 +4,15 @@
  * @module
  */
 
-export { cancel, Fiber, FiberState, fork } from "./fiber.ts";
-export type { FiberParams, FiberStateVariants } from "./fiber.ts";
+export { Fiber, FiberState, cancel, fork, join, joinEffect } from "./fiber.ts";
+export type {
+	FiberParams,
+	FiberStateVariants,
+	Finalizer,
+	QueuedFiberState,
+	RunningFiberState,
+	SuspendedFiberState,
+} from "./fiber.ts";
 
 export {
 	Cancelled,
