@@ -21,20 +21,51 @@ import { Cancelled, Failed, Panicked } from "./fiber-error.ts";
 
 const DEFAULT_STEP_BUDGET = 1024;
 
+/**
+ * Callback invoked when a fiber completes, receiving its final result.
+ *
+ * @template T - Success value type
+ * @template E - Error type
+ */
 export type Finalizer<T, E> = (result: FiberResult<T, E>) => void;
 
+/**
+ * State of a fiber that is waiting to begin execution.
+ *
+ * @template I - Input type
+ * @template T - Success value type
+ * @template E - Error type
+ */
 export interface QueuedFiberState<I, T, E> {
+	/** The effect this fiber will run. */
 	effect: Effect<I, T, E>;
+	/** Callbacks to invoke when the fiber completes. */
 	finalizers: Finalizer<T, E>[];
 }
 
+/**
+ * State of a fiber that is actively executing.
+ *
+ * @template T - Success value type
+ * @template E - Error type
+ */
 export interface RunningFiberState<T, E> {
+	/** The current continuation being processed. */
 	currentOutput: EffectOutput<T, E>;
+	/** Callbacks to invoke when the fiber completes. */
 	finalizers: Finalizer<T, E>[];
 }
 
+/**
+ * State of a fiber that is suspended, waiting for an async operation.
+ *
+ * @template T - Success value type
+ * @template E - Error type
+ */
 export interface SuspendedFiberState<T, E> {
+	/** Function to cancel the pending async operation. */
 	cancellation: Cancellation;
+	/** Callbacks to invoke when the fiber completes. */
 	finalizers: Finalizer<T, E>[];
 }
 
@@ -156,7 +187,7 @@ function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
 	while (remainingBudget > 0) {
 		remainingBudget--;
 
-		step(self, `step: budget - ${remainingBudget}`);
+		step(self);
 
 		const shouldContinue = match(fiberState)({
 			Queued: () => true,
@@ -181,12 +212,9 @@ function runFiber<I, T, E>(self: Fiber<I, T, E>): void {
  * @template T - Success value type
  * @template E - Error type
  * @param self - The fiber to step
- * @param label - Debug label for this step
  */
-function step<I, T, E>(self: Fiber<I, T, E>, label = "step"): void {
-	const { runtime, fiberState, id: fiberId } = getStructParams(self);
-
-	console.log({ fiberId, label, variant: getStructParams(fiberState).variant });
+function step<I, T, E>(self: Fiber<I, T, E>): void {
+	const { runtime, fiberState } = getStructParams(self);
 
 	const {
 		input,
@@ -315,6 +343,16 @@ function complete<I, T, E>(
 	}
 }
 
+/**
+ * Registers a finalizer callback to be invoked when the fiber completes.
+ * If the fiber has already completed, the callback is invoked immediately.
+ *
+ * @template I - Input type
+ * @template T - Success value type
+ * @template E - Error type
+ * @param self - The fiber to observe
+ * @param finalizer - Callback to invoke with the fiber's result
+ */
 export function join<I, T, E>(
 	self: Fiber<I, T, E>,
 	finalizer: Finalizer<T, E>,
@@ -337,6 +375,16 @@ export function join<I, T, E>(
 	});
 }
 
+/**
+ * Returns an effect that completes when the fiber completes, propagating the
+ * fiber's result as the effect's result.
+ *
+ * @template I - Input type
+ * @template T - Success value type
+ * @template E - Error type
+ * @param self - The fiber to await
+ * @returns An effect that resolves with the fiber's result
+ */
 export function joinEffect<I, T, E>(
 	self: Fiber<I, T, E>,
 ): Effect<void, T, FiberError<E>> {
