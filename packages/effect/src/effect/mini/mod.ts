@@ -18,6 +18,7 @@ export type {
 	EffectOutput,
 	EffectResult,
 } from "./effect.ts";
+export { zip } from "../../concurrency/concurrency.ts";
 export {
 	and,
 	andThen,
@@ -30,6 +31,5 @@ export {
 	mapOrElse,
 	or,
 	orElse,
-	zip,
 } from "./operations.ts";
 export type { ResultArms } from "./operations.ts";

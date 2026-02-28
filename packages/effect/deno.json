@@ -5,6 +5,8 @@
 
 	"exports": {
 		".": "./mod.ts",
+		"./concurrency": "./src/concurrency/mod.ts",
+		"./concurrency/concurrency": "./src/concurrency/concurrency.ts",
 		"./continuation": "./src/continuation/mod.ts",
 		"./continuation/continuation": "./src/continuation/continuation.ts",
 		"./effect": "./src/effect/main/mod.ts",

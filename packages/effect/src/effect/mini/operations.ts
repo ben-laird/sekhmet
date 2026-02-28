@@ -4,12 +4,7 @@
  * @module
  */
 
-import { cancel, join } from "@sekhmet/effect/fiber/mini/fiber";
-import type { FiberError } from "@sekhmet/effect/fiber/mini/fiber-error";
 import { match } from "@sekhmet/enum/core/mini/exit";
-import { None, type Option } from "@sekhmet/enum/option/mini/core";
-import { insert } from "@sekhmet/enum/option/mini/mutation";
-import { inspect as inspectOption } from "@sekhmet/enum/option/mini/transform";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { Async, Deferred, Ready } from "../../continuation/continuation.ts";
@@ -477,93 +472,3 @@ export function orElse<I, T, E, F>(
 	});
 }
 
-/**
- * Runs two effects concurrently using fibers and combines their results into a tuple.
- * If either effect fails, the other is cancelled and the error is propagated.
- *
- * @template I - Input type
- * @template T - First effect success type
- * @template E - Error type (shared by both effects)
- * @template U - Second effect success type
- * @param self - The first effect
- * @param other - The second effect to run in parallel
- * @returns A new effect that succeeds with a tuple of both results
- *
- * @example
- * ```ts ignore
- * const both = zip(fetchUser, fetchPosts);
- * ```
- */
-export function zip<I, T, E, U>(
-	self: Effect<I, T, E>,
-	other: Effect<I, U, E>,
-): Effect<I, [left: T, right: U], E> {
-	return new Effect((input, ctx) => {
-		return Deferred(() => {
-			const selfFiber = ctx.fork(self, input);
-			const otherFiber = ctx.fork(other, input);
-
-			return Async((resolve) => {
-				const left: Option<T> = None();
-				const right: Option<U> = None();
-				let settled = false;
-
-				join(selfFiber, (result) => {
-					match(result)({
-						Ok: (leftValue) => {
-							insert(left, leftValue);
-
-							inspectOption(right, (rightValue) => {
-								if (settled) return;
-								settled = true;
-
-								resolve(Ready(Ok([leftValue, rightValue])));
-							});
-						},
-						Err: fail,
-					});
-				});
-				join(otherFiber, (result) => {
-					match(result)({
-						Ok: (rightValue) => {
-							insert(right, rightValue);
-
-							inspectOption(left, (leftValue) => {
-								if (settled) return;
-								settled = true;
-
-								resolve(Ready(Ok([leftValue, rightValue])));
-							});
-						},
-						Err: fail,
-					});
-				});
-
-				return () => {
-					cancel(selfFiber);
-					cancel(otherFiber);
-				};
-
-				function fail(fiberError: FiberError<E>): void {
-					if (settled) return;
-					settled = true;
-
-					cancel(selfFiber);
-					cancel(otherFiber);
-
-					match(fiberError)({
-						Failed: (error) => resolve(Ready(Err(Failed(error)))),
-						Cancelled: () => {
-							resolve(
-								Ready(Err(ExceptionOccurred(new Error("Fiber was cancelled")))),
-							);
-						},
-						Panicked: (exception) => {
-							resolve(Ready(Err(ExceptionOccurred(exception))));
-						},
-					});
-				}
-			});
-		});
-	});
-}
