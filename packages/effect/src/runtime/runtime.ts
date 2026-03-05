@@ -5,8 +5,8 @@
  */
 
 import type { Effect } from "@sekhmet/effect/effect/mini";
+import { fork } from "@sekhmet/effect/execution";
 import type { Fiber } from "@sekhmet/effect/fiber/mini";
-import { fork } from "@sekhmet/effect/fiber/mini/fiber";
 import type { Scheduler } from "@sekhmet/effect/scheduler";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 

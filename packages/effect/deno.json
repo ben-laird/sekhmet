@@ -10,6 +10,7 @@
 		"./continuation": "./src/continuation/mod.ts",
 		"./continuation/continuation": "./src/continuation/continuation.ts",
 		"./effect": "./src/effect/main/mod.ts",
+		"./execution": "./src/execution/mod.ts",
 		"./effect/mini": "./src/effect/mini/mod.ts",
 		"./effect/mini/effect": "./src/effect/mini/effect.ts",
 		"./effect/mini/operations": "./src/effect/mini/operations.ts",

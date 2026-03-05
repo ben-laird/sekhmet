@@ -5,7 +5,8 @@
  */
 
 export { joinEffect } from "../../concurrency/concurrency.ts";
-export { Fiber, FiberState, cancel, fork, join } from "./fiber.ts";
+export { fork } from "../../execution/mod.ts";
+export { Fiber, FiberState, cancel, join } from "./fiber.ts";
 export type {
 	FiberParams,
 	FiberStateVariants,
