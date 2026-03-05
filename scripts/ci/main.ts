@@ -44,6 +44,12 @@ export async function main(): Promise<void> {
 			command: new Deno.Command("deno", { args: ["lint"] }),
 		},
 		{
+			name: "Deno Check",
+			exitCode: EXIT_CODES.DENO_LINT_FAILED,
+
+			command: new Deno.Command("deno", { args: ["check"] }),
+		},
+		{
 			name: "Biome Check",
 			exitCode: EXIT_CODES.BIOME_CHECK_FAILED,
 
