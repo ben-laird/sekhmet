@@ -2,7 +2,9 @@ import {
 	assertEquals,
 	assertInstanceOf,
 	assertStrictEquals,
+	unreachable,
 } from "@std/assert";
+import { assertType, type IsExact } from "@std/testing/types";
 import * as coreMini from "@/src/core/mini/mod.ts";
 import { Err, Ok, Result } from "@/src/result/main/mod.ts";
 import * as mini from "../mini/mod.ts";
@@ -144,4 +146,126 @@ Deno.test("transpose returns a main Result holding a main Option", () => {
 	assertInstanceOf(inner, Option);
 	assertEquals(inner.map((n) => n * 2).unwrap(), 10);
 	assertEquals(transpose(errInside).unwrapErr(), "bad");
+});
+
+Deno.test("main isSome() narrows to Some and keeps a main Option<T>", async (t) => {
+	await t.step(
+		"the guarded option matches on Some alone and keeps its methods",
+		() => {
+			// Given: a main Option typed as either variant
+			const option: Option<number> = Some(42);
+
+			// When: guarding it with isSome()
+			if (option.isSome()) {
+				// Then: only the Some arm is required, the payload is a number,
+				// and main methods still chain
+				const value = coreMini.match(option)({ Some: (n) => n });
+				assertType<IsExact<typeof value, number>>(true);
+				assertEquals(option.map((n) => n + 1).unwrap(), 43);
+			} else {
+				unreachable();
+			}
+		},
+	);
+
+	await t.step("an unguarded option needs the None arm too", () => {
+		// Given: a main Option typed as either variant
+		const option: Option<number> = Some(42);
+
+		// When: matching it with only a Some arm
+		// @ts-expect-error: the None arm is missing
+		const value = coreMini.match(option)({ Some: (n: number) => n });
+
+		// Then: the match is rejected at compile time
+		assertEquals(value, 42);
+	});
+
+	await t.step("the else-branch is not narrowed", () => {
+		// Given: a main Option typed as either variant
+		const option: Option<number> = None();
+
+		// When: the guard fails
+		if (option.isSome()) {
+			unreachable();
+		} else {
+			// Then: the option keeps its declared type
+			assertType<IsExact<typeof option, Option<number>>>(true);
+		}
+	});
+});
+
+Deno.test("main isSomeAnd() narrows to Some and a main Option<U>", async (t) => {
+	await t.step("a type-guard predicate narrows the payload", () => {
+		// Given: a main Option whose value may be a string or a number
+		const option: Option<string | number> = Some(42);
+
+		// When: guarding it with a guard for numbers
+		if (option.isSomeAnd((x): x is number => typeof x === "number")) {
+			// Then: only the Some arm is required, and it is a main Option<number>
+			const value = coreMini.match(option)({ Some: (n) => n });
+			assertType<IsExact<typeof value, number>>(true);
+			const narrowed: Option<number> = option;
+			assertEquals(narrowed.map((n) => n + 1).unwrap(), 43);
+		} else {
+			unreachable();
+		}
+	});
+
+	await t.step("the else-branch is not narrowed", () => {
+		// Given: a main Option holding a string
+		const option: Option<string | number> = Some("hello");
+
+		// When: the numeric guard fails
+		if (option.isSomeAnd((x): x is number => typeof x === "number")) {
+			unreachable();
+		} else {
+			// Then: the option keeps its declared type
+			assertType<IsExact<typeof option, Option<string | number>>>(true);
+		}
+	});
+});
+
+Deno.test("main isNone() narrows to None and to a main Option<never>", async (t) => {
+	await t.step(
+		"the guarded option matches on None alone and fits any Option",
+		() => {
+			// Given: a main Option typed as either variant
+			const option: Option<number> = None();
+
+			// When: guarding it with isNone()
+			if (option.isNone()) {
+				// Then: only the None arm is required, and it is a main Option of any type
+				assertEquals(coreMini.match(option)({ None: () => "empty" }), "empty");
+				const other: Option<string> = option;
+				assertEquals(other.map((s) => s.length).isNone(), true);
+			} else {
+				unreachable();
+			}
+		},
+	);
+
+	await t.step("an unguarded option needs the Some arm too", () => {
+		// Given: a main Option typed as either variant
+		const option: Option<number> = None();
+
+		// When: matching it with only a None arm
+		// @ts-expect-error: the Some arm is missing
+		const label = coreMini.match(option)({ None: () => "empty" });
+
+		// Then: the match is rejected at compile time
+		assertEquals(label, "empty");
+	});
+
+	await t.step("the else-branch is not narrowed", () => {
+		// Given: a main Option typed as either variant
+		const option: Option<number> = Some(42);
+
+		// When: the guard fails
+		if (option.isNone()) {
+			unreachable();
+		} else {
+			// Then: the option keeps its declared type
+			assertType<IsExact<typeof option, Option<number>>>(true);
+		}
+	});
 });

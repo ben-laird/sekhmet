@@ -21,6 +21,7 @@
  */
 
 import { getStructParams, struct } from "@sekhmet/primordials/struct";
+import type { Enum, Isolate } from "@/src/core/mini/core.ts";
 import type { Result as MiniResult } from "@/src/result/mini/core.ts";
 import { Result } from "../../result/main/mod.ts";
 import * as mini from "../mini/mod.ts";
@@ -456,20 +457,32 @@ export class Option<out T> extends mini.Option<T> {
 	}
 
 	/**
-	 * Checks if the Option contains a value (is in the Some state).
+	 * Type guard to check if the Option contains a value (is in the Some state).
+	 *
+	 * Narrows both the variant and the type parameter: the Option becomes its
+	 * Some variant, so its value can be read directly, and stays an `Option<T>`.
 	 *
 	 * @returns true if the Option is Some, false if it is None
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { None, Some } from "@sekhmet/enum/option";
+	 * import { union } from "@sekhmet/enum/core/mini";
+	 * import { None, type Option, Some } from "@sekhmet/enum/option";
 	 *
 	 * assertEquals(Some(42).isSome(), true);
 	 * assertEquals(None().isSome(), false);
+	 *
+	 * const option: Option<number> = Some(42);
+	 * if (option.isSome()) {
+	 *   const value: number = union(option); // the variant: option is Some
+	 *   const same: Option<number> = option; // the type parameter: still an Option<number>
+	 *   assertEquals(value, 42);
+	 *   assertEquals(same, option);
+	 * }
 	 * ```
 	 * @see {@link mini.isSome}
 	 */
-	isSome(): boolean {
+	isSome(): this is Enum<Isolate<mini.OptionVariants<T>, "Some">> & Option<T> {
 		return mini.isSome(this);
 	}
 
@@ -479,42 +492,70 @@ export class Option<out T> extends mini.Option<T> {
 	 * Returns false if the Option is None or if the predicate returns false.
 	 * Supports both type guards and regular boolean predicates.
 	 *
+	 * Narrows both the variant and the type parameter: the Option becomes its
+	 * Some variant and an `Option<U>`, where `U` is the type a type-guard
+	 * predicate guards (or `T` for a boolean predicate).
+	 *
 	 * @param predicate - Function that tests the value, can be a type guard or boolean predicate
 	 * @returns true if the Option is Some and the predicate passes, false otherwise
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { None, Some } from "@sekhmet/enum/option";
+	 * import { union } from "@sekhmet/enum/core/mini";
+	 * import { None, type Option, Some } from "@sekhmet/enum/option";
 	 *
 	 * const isEven = (n: number) => n % 2 === 0;
 	 *
 	 * assertEquals(Some(4).isSomeAnd(isEven), true);
 	 * assertEquals(Some(3).isSomeAnd(isEven), false);
 	 * assertEquals(None<number>().isSomeAnd(isEven), false);
+	 *
+	 * const option: Option<string | number> = Some(42);
+	 * if (option.isSomeAnd((v): v is number => typeof v === "number")) {
+	 *   const value: number = union(option); // the variant: option is Some, holding a number
+	 *   const narrowed: Option<number> = option; // the type parameter: an Option<number>
+	 *   assertEquals(value, 42);
+	 *   assertEquals(narrowed, option);
+	 * }
 	 * ```
 	 * @see {@link mini.isSomeAnd}
 	 */
 	isSomeAnd<U extends T>(
 		predicate: ((value: T) => value is U) | ((value: T) => boolean),
-	): this is Option<U> {
+	): this is Enum<Isolate<mini.OptionVariants<U>, "Some">> & Option<U> {
 		return mini.isSomeAnd(this, predicate);
 	}
 
 	/**
-	 * Checks if the Option is empty (is in the None state).
+	 * Type guard to check if the Option is empty (is in the None state).
+	 *
+	 * Narrows both the variant and the type parameter: the Option becomes its
+	 * None variant, which holds no value, and an `Option<never>`, which fits an
+	 * Option of any type.
 	 *
 	 * @returns true if the Option is None, false if it is Some
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { None, Some } from "@sekhmet/enum/option";
+	 * import { match } from "@sekhmet/enum/core/mini";
+	 * import { None, type Option, Some } from "@sekhmet/enum/option";
 	 *
 	 * assertEquals(None().isNone(), true);
 	 * assertEquals(Some(42).isNone(), false);
+	 *
+	 * const option: Option<number> = None();
+	 * if (option.isNone()) {
+	 *   // the variant: option is None, so no Some arm is needed
+	 *   assertEquals(match(option)({ None: () => "empty" }), "empty");
+	 *   // the type parameter: option is an Option<never>, so it fits any Option
+	 *   const other: Option<string> = option;
+	 *   assertEquals(other, None());
+	 * }
 	 * ```
 	 * @see {@link mini.isNone}
 	 */
-	isNone(): this is Option<never> {
+	isNone(): this is Enum<Isolate<mini.OptionVariants<T>, "None">> &
+		Option<never> {
 		return mini.isNone(this);
 	}
 
