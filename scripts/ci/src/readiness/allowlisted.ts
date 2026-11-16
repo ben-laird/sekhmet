@@ -72,6 +72,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	),
 	privateTypeRef("vow/src/mini/core.ts", "Variants", "Split"),
 	privateTypeRef("vow/src/mini/core.ts", "Vow", "Enum"),
+	privateTypeRef("vow/src/mini/impl.ts", "fromPromise", "Result"),
 ];
 
 function missingReadme(name: string): AllowlistEntry {
