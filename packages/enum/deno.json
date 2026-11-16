@@ -4,8 +4,6 @@
 	"license": "MIT",
 
 	"exports": {
-		".": "./mod.ts",
-
 		"./core": "./src/core/main/mod.ts",
 		"./core/mini": "./src/core/mini/mod.ts",
 		"./core/mini/core": "./src/core/mini/core.ts",
