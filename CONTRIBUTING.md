@@ -299,16 +299,24 @@ import { assertEquals } from "@std/assert";
 import { myFunction } from "./feature.ts";
 
 Deno.test("myFunction handles basic case", () => {
-	// Given - Setup test data and preconditions
+	// Given: setup test data and preconditions
 	const input = "test";
 
-	// When - Execute the behavior being tested
+	// When: execute the behavior being tested
 	const result = myFunction(input);
 
-	// Then - Assert expected outcomes
+	// Then: assert expected outcomes
 	assertEquals(result, expected);
 });
 ```
+
+`deno task ci` enforces this (the Publish Readiness step): every `Deno.test`
+and every `t.step` must be covered by `// Given:`, `// When:` and `// Then:`
+comments (a bare `// Given` also counts, and `// When/Then:` names two). A
+marker covers the block it is written in and every step nested inside it, and
+a test is also covered by a marker that each of its steps has. So a test's
+shared `// Given:` covers its steps, but a step never borrows a sibling's
+markers.
 
 For complex tests with multiple assertions, use nested steps:
 

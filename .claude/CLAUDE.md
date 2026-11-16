@@ -28,9 +28,14 @@ deno test packages/enum/src/core/mini/eliminate.test.ts
 CI_AI=true deno task ci
 
 # This runs ALL quality checks:
-# - Format and lint with Biome
+# - Format and lint with Biome, and deno lint
 # - Type checking
-# - All tests
+# - Documentation lint
+# - Publish readiness: README/LICENSE, exports, no external imports,
+#   tests excluded from publish, Given/When/Then comments, README/JSDoc
+#   import specifiers (known failures: scripts/ci/src/readiness/allowlisted.ts)
+# - JSR publish dry run
+# - All tests, with coverage
 
 # For manual formatting only:
 deno run npm:@biomejs/biome check --write .
@@ -90,7 +95,7 @@ Scripts (`scripts/`, unpublished):
 
 - `@sekhmet/add`: scaffolds a new workspace from `scripts/add/templates/`
   (`deno task add`)
-- `@sekhmet/ci`: runs lint, type check, JSR dry run and tests (`deno task ci`)
+- `@sekhmet/ci`: runs lint, type check, doc lint, publish readiness, JSR dry run and tests (`deno task ci`)
 
 ### Core Design Principles
 
@@ -327,6 +332,8 @@ Deno.test("feature does something", () => {
 - **Then**: Describe the expected result or behavior
 - Use these comments even in simple tests for consistency
 - Multiple When-Then pairs are acceptable for complex scenarios
+- `deno task ci` enforces them on every `Deno.test` and `t.step`; a marker
+  covers its block and the steps nested in it (see CONTRIBUTING.md)
 
 ## Additional Resources
 

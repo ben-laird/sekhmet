@@ -29,6 +29,7 @@ Deno.test("EXIT_CODES are defined with unique values", () => {
 	assertEquals(EXIT_CODES.COVERAGE_FAILED, 6);
 	assertEquals(EXIT_CODES.DENO_CHECK_FAILED, 7);
 	assertEquals(EXIT_CODES.CLEANUP_FAILED, 8);
+	assertEquals(EXIT_CODES.PUBLISH_READINESS_FAILED, 9);
 	const uniqueValues = new Set(values);
 	assertEquals(values.length, uniqueValues.size, "Exit codes should be unique");
 });

@@ -1,4 +1,5 @@
 // deno-coverage-ignore-file
+import { fromFileUrl } from "@std/path";
 import { runWorkflow, type StepCommand, type WorkflowStep } from "@/mod.ts";
 
 /**
@@ -22,6 +23,8 @@ export const EXIT_CODES = {
 	DENO_CHECK_FAILED: 7,
 	/** Exit code when removing local coverage data fails */
 	CLEANUP_FAILED: 8,
+	/** Exit code when the publish-readiness checks fail */
+	PUBLISH_READINESS_FAILED: 9,
 } as const;
 
 /**
@@ -64,8 +67,36 @@ export function biomeCiCommand({
 }
 
 /**
+ * A publish-readiness run (see `readiness.ts`):
+ * - `doc-lint`: `deno doc --lint` per workspace member over its export set,
+ *   which is what JSR documents
+ * - `static`: README/LICENSE, exports, imports, `publish.exclude`,
+ *   Given/When/Then and README/JSDoc specifier checks
+ *
+ * Known failures are allowlisted in `src/readiness/allowlisted.ts`.
+ *
+ * @param mode - Which checks to run
+ * @returns The command to run
+ */
+export function readinessCommand(mode: "doc-lint" | "static"): StepCommand {
+	return {
+		program: "deno",
+		args: [
+			"run",
+			"--no-prompt",
+			"--allow-read",
+			"--allow-env",
+			"--allow-run=deno",
+			fromFileUrl(new URL("./readiness.ts", import.meta.url)),
+			mode,
+		],
+	};
+}
+
+/**
  * The CI workflow's steps for an environment:
- * - Parallel linting (Deno lint, Biome check, documentation lint, JSR dry run)
+ * - Parallel linting (Deno lint, Biome check, per-package documentation lint,
+ *   publish readiness, JSR dry run)
  * - Type checking
  * - Testing with coverage
  * - Coverage reporting
@@ -96,10 +127,19 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 		},
 		{
 			name: "Documentation Lint",
+			showOutput: (status) => isCI || status === "failed",
 			exitCode: EXIT_CODES.DOC_LINT_FAILED,
 
 			command: { program: "deno", args: ["doc", "--lint", "./**/*.ts"] },
 		},
+		{
+			name: "Publish Readiness",
+			showOutput: (status) => isCI || status === "failed",
+			exitCode: EXIT_CODES.PUBLISH_READINESS_FAILED,
+
+			command: readinessCommand("static"),
+		},
+		// `dv validate` (#5) joins here once the .dv/ release config lands (#6)
 		{
 			name: "JSR Publish Dry Run",
 			exitCode: EXIT_CODES.JSR_DRY_RUN_FAILED,
