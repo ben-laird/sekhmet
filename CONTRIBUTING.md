@@ -453,6 +453,23 @@ chore(@sekhmet/enum): add eliminate mini exports
    - Make requested changes
    - Keep commits clean (squash if needed)
 
+### Documenting your change
+
+- **JSDoc** on every export, with an `@example` that runs. Every entrypoint
+  module starts with a `@module` doc. JSR renders these as the API reference.
+- **Examples are tests.** `deno test --doc` (part of `deno task ci`)
+  type-checks and runs every `ts` code block in JSDoc and in markdown files,
+  so write examples with explicit imports from the public entrypoint (e.g.
+  `@sekhmet/enum/option/mini`) and assert their claims with `@std/assert`.
+  Fence a block as `ts ignore` only when it cannot run.
+- **Mini examples feed main.** `deno task gen:main` copies mini examples into
+  the generated main modules, rewriting calls to method form and imports to
+  the main entrypoint, so both forms are checked.
+- **Guides** live in each package's `docs/` folder (`getting-started.md`,
+  `concepts.md`, `recipes.md` lead the sidebar, in that order).
+  `deno task docs:dev` serves the site that assembles them with every README;
+  `deno task docs:build` builds it.
+
 ### PR Checklist
 
 - [ ] Code follows project style and conventions
