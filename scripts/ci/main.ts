@@ -32,6 +32,8 @@ export const EXIT_CODES = {
 	PUBLISH_READINESS_FAILED: 9,
 	/** Exit code when the coverage summary cannot be built */
 	COVERAGE_SUMMARY_FAILED: 10,
+	/** Exit code when generated main modules are stale versus their mini source */
+	GENERATED_MAIN_STALE: 11,
 } as const;
 
 /**
@@ -145,6 +147,13 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 			exitCode: EXIT_CODES.PUBLISH_READINESS_FAILED,
 
 			command: readinessCommand("static"),
+		},
+		{
+			name: "Generated Main Freshness",
+			showOutput: (status) => isCI || status === "failed",
+			exitCode: EXIT_CODES.GENERATED_MAIN_STALE,
+
+			command: { program: "deno", args: ["task", "gen:main", "--check"] },
 		},
 		// `dv validate` (#5) joins here once the .dv/ release config lands (#6)
 		{
