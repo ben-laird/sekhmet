@@ -116,6 +116,10 @@ Scripts (`scripts/`, unpublished):
   to JSR
 - `@sekhmet/gen-main`: generates each feature's main (method-chaining)
   `main/mod.ts` from its mini barrel (`deno task gen:main`; `--check` in CI)
+- `@sekhmet/playground`: `deno task play` opens a REPL with every package's
+  features discovered from `packages/*/deno.json` and imported as globals;
+  `deno task play:notebook` starts a Jupyter notebook in the gitignored
+  `playground/` (see CONTRIBUTING.md, "Playground")
 - `@sekhmet/release`: the release driver `.github/workflows/release.yml` runs
   on every push to main: versions pending Records, tags, publishes, and opens
   GitHub Releases
@@ -248,8 +252,8 @@ fix(@sekhmet/primordials): correct Struct type inference
 **Scopes**: Use package names: `@sekhmet/effect`, `@sekhmet/enum`,
 `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/vow`,
 and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`,
-`@sekhmet/dv`, `@sekhmet/dv-plugin`, `@sekhmet/gen-main`, `@sekhmet/release`
-for scripts
+`@sekhmet/dv`, `@sekhmet/dv-plugin`, `@sekhmet/gen-main`, `@sekhmet/playground`,
+`@sekhmet/release` for scripts
 
 ## Infrastructure Code Conventions
 

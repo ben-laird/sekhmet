@@ -1,0 +1,16 @@
+{
+	"name": "@sekhmet/playground",
+	"version": "0.1.0",
+	"publish": false,
+
+	"exports": {
+		"./repl": "./repl.ts",
+		"./notebook": "./notebook.ts",
+
+		"./lib": "./mod.ts"
+	},
+
+	"imports": {
+		"@/": "./"
+	}
+}

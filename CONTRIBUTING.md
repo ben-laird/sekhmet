@@ -98,6 +98,64 @@ Before contributing:
    deno task ci
    ```
 
+### Playground
+
+`playground/` at the repository root is gitignored and excluded from every
+check `deno task ci` runs, so keep scratch scripts and notebooks there. Imports
+of `@sekhmet/*` resolve to the checked-out source, so you are always playing
+with the current branch:
+
+```bash
+deno run playground/try.ts         # any script that imports @sekhmet/*
+deno run --check playground/try.ts # type-check it too
+```
+
+`deno check playground/…` reports "No matching files found", because the
+folder is excluded; `deno run --check` checks it anyway.
+
+- **`deno task play`** opens `deno repl` with every package's public features
+  imported as globals and prints a table of what loaded. It reads each
+  `packages/*/deno.json` at startup, so packages that exist only on your branch
+  show up too. A package with a root export is one namespace named after the
+  package (`effect`, `vow`); one without exposes each main (method-chaining)
+  feature (`option`, `result`); `mini` entrypoints are skipped, and a name two
+  packages share is qualified (`enumCore`). A feature that fails to import is
+  listed as a warning and the REPL still opens.
+
+  ```ts ignore
+  > option.Some(2).map((n) => n * 21).unwrap()
+  42
+  ```
+
+- **`deno task play:notebook`** copies a starter notebook to
+  `playground/start.ipynb` (it never overwrites yours). Open it in VS Code with
+  the Jupyter extension and pick the Deno kernel; if the kernel isn't listed,
+  run `deno jupyter --install` once.
+
+#### Using your checkout from another Deno project
+
+To try the packages in another Deno project, point its `deno.json` `links` at
+your checkout. The `imports` keep their `jsr:` specifiers; `links` overrides
+them with the local source, and works for unpublished packages too:
+
+```json
+{
+	"imports": {
+		"@sekhmet/schema": "jsr:@sekhmet/schema@^0.1.0"
+	},
+	"links": [
+		"../sekhmet/packages/schema",
+		"../sekhmet/packages/enum",
+		"../sekhmet/packages/primordials"
+	]
+}
+```
+
+- **Link every sibling a linked package depends on**, or its `@sekhmet/*`
+  imports go to JSR instead: `schema` needs `enum` and `primordials`.
+- **Links follow your checkout's current branch.** Switching branches in the
+  sekhmet repo changes what the other project runs.
+
 ## Project Structure
 
 ```txt
@@ -416,7 +474,7 @@ Use package names as scopes:
 - `@sekhmet/panic`
 - `@sekhmet/primordials`
 - `@sekhmet/vow`
-- `@sekhmet/add`, `@sekhmet/ci` (scripts)
+- `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/playground` (scripts)
 - Or specific areas within packages
 
 ### Examples
