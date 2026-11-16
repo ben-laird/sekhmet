@@ -1,5 +1,7 @@
 import { assertEquals } from "@std/assert";
-import { executeStep, shouldRunStep, shouldShowOutput } from "./step.ts";
+import { createStepContext } from "./context.ts";
+import { executeStep, gateStep, shouldShowOutput } from "./step.ts";
+import { ranResult } from "./testing.ts";
 import type {
 	AccumulatedOutputs,
 	StepContext,
@@ -7,7 +9,6 @@ import type {
 	StepStatus,
 	WorkflowStep,
 } from "./types.ts";
-import { createStepContext } from "./context.ts";
 
 // Helper to create a mock command that succeeds
 function createMockCommand(success = true): Deno.Command {
@@ -16,167 +17,200 @@ function createMockCommand(success = true): Deno.Command {
 	});
 }
 
+// Helper to build a context from completed step statuses
+function contextOf(results: StepResult[]): StepContext {
+	return createStepContext({
+		completedSteps: new Map(results.map((result) => [result.name, result])),
+		accumulatedOutputs: { env: new Map(), context: new Map() },
+		artifactsDir: "/tmp",
+	});
+}
 
-Deno.test("shouldRunStep returns true for success condition with all passed", () => {
-	// Given: a step with success condition and all dependencies passed
+Deno.test("gateStep runs a success-condition step when every dependency passed or was skipped", () => {
+	// Given: a success-condition step whose dependencies passed and skipped
 	const step: WorkflowStep = {
 		name: "Test",
 		command: createMockCommand(),
 		condition: "success",
+		dependsOn: ["Dep1", "Dep2"],
 	};
-	const completedSteps = new Map<string, StepResult>([
-		["Dep1", { name: "Dep1", status: "passed" }],
-		["Dep2", { name: "Dep2", status: "passed" }],
+	const context = contextOf([
+		{ name: "Dep1", status: "passed" },
+		{ name: "Dep2", status: "skipped" },
 	]);
-	const context = createStepContext({
-		completedSteps,
-		accumulatedOutputs: { env: new Map(), context: new Map() },
-		artifactsDir: "/tmp",
-	});
 
-	// When: checking if step should run
-	const result = shouldRunStep(step, context);
+	// When: gating the step
+	const gate = gateStep({ step, context });
 
-	// Then: should return true
-	assertEquals(result, true);
+	// Then: it runs
+	assertEquals(gate, { kind: "run" });
 });
 
-Deno.test("shouldRunStep returns false for success condition with failures", () => {
-	// Given: a step with success condition and a failed dependency
+Deno.test("gateStep blocks a success-condition step whose dependency failed", () => {
+	// Given: a success-condition step with one failed dependency
 	const step: WorkflowStep = {
 		name: "Test",
 		command: createMockCommand(),
 		condition: "success",
+		dependsOn: ["Dep1", "Dep2"],
 	};
-	const completedSteps = new Map<string, StepResult>([
-		["Dep1", { name: "Dep1", status: "passed" }],
-		["Dep2", { name: "Dep2", status: "failed" }],
+	const context = contextOf([
+		{ name: "Dep1", status: "passed" },
+		{ name: "Dep2", status: "failed" },
 	]);
-	const context = createStepContext({
-		completedSteps,
-		accumulatedOutputs: { env: new Map(), context: new Map() },
-		artifactsDir: "/tmp",
-	});
 
-	// When: checking if step should run
-	const result = shouldRunStep(step, context);
+	// When: gating the step
+	const gate = gateStep({ step, context });
 
-	// Then: should return false
-	assertEquals(result, false);
+	// Then: it is blocked by the failed dependency
+	assertEquals(gate, { kind: "blocked", blockedBy: ["Dep2"] });
 });
 
-Deno.test("shouldRunStep returns true for failure condition with failures", () => {
-	// Given: a step with failure condition and a failed dependency
+Deno.test("gateStep blocks a step whose dependency was itself blocked", () => {
+	// Given: a step depending on a blocked step
+	const step: WorkflowStep = {
+		name: "Cleanup",
+		command: createMockCommand(),
+		dependsOn: ["Report"],
+	};
+	const context = contextOf([
+		{ name: "Report", status: "blocked", blockedBy: ["Test"] },
+	]);
+
+	// When: gating the step
+	const gate = gateStep({ step, context });
+
+	// Then: blocking propagates
+	assertEquals(gate, { kind: "blocked", blockedBy: ["Report"] });
+});
+
+Deno.test("gateStep ignores failures of steps that are not dependencies", () => {
+	// Given: a step with no dependencies while an unrelated step has failed
+	const step: WorkflowStep = { name: "Test", command: createMockCommand() };
+	const context = contextOf([{ name: "Unrelated", status: "failed" }]);
+
+	// When: gating the step
+	const gate = gateStep({ step, context });
+
+	// Then: it runs, since only dependencies gate a step
+	assertEquals(gate, { kind: "run" });
+});
+
+Deno.test("gateStep defaults to the success condition when not specified", () => {
+	// Given: a step without an explicit condition and a failed dependency
 	const step: WorkflowStep = {
 		name: "Test",
 		command: createMockCommand(),
-		condition: "failure",
+		dependsOn: ["Dep1"],
 	};
-	const completedSteps = new Map<string, StepResult>([
-		["Dep1", { name: "Dep1", status: "failed" }],
-	]);
-	const context = createStepContext({
-		completedSteps,
-		accumulatedOutputs: { env: new Map(), context: new Map() },
-		artifactsDir: "/tmp",
-	});
+	const context = contextOf([{ name: "Dep1", status: "failed" }]);
 
-	// When: checking if step should run
-	const result = shouldRunStep(step, context);
+	// When: gating the step
+	const gate = gateStep({ step, context });
 
-	// Then: should return true
-	assertEquals(result, true);
+	// Then: it is blocked, as with "success"
+	assertEquals(gate, { kind: "blocked", blockedBy: ["Dep1"] });
 });
 
-Deno.test("shouldRunStep returns false for failure condition without failures", () => {
-	// Given: a step with failure condition and no failed dependencies
+Deno.test("gateStep blocks a function-condition step whose dependency failed, without calling it", () => {
+	// Given: a function-condition step that would run, and a failed dependency
+	let called = false;
 	const step: WorkflowStep = {
+		name: "Show coverage report",
+		command: createMockCommand(),
+		dependsOn: ["Deno Test"],
+		condition: () => {
+			called = true;
+			return true;
+		},
+	};
+	const context = contextOf([{ name: "Deno Test", status: "failed" }]);
+
+	// When: gating the step
+	const gate = gateStep({ step, context });
+
+	// Then: it is blocked and the condition was never consulted
+	assertEquals(gate, { kind: "blocked", blockedBy: ["Deno Test"] });
+	assertEquals(called, false);
+});
+
+Deno.test("gateStep runs or skips a function-condition step with healthy dependencies", () => {
+	// Given: function-condition steps with a passed dependency
+	const context = contextOf([{ name: "Build", status: "passed" }]);
+	const stepWith = (
+		condition: (ctx: StepContext) => boolean,
+	): WorkflowStep => ({
 		name: "Test",
 		command: createMockCommand(),
-		condition: "failure",
-	};
-	const completedSteps = new Map<string, StepResult>([
-		["Dep1", { name: "Dep1", status: "passed" }],
-	]);
-	const context = createStepContext({
-		completedSteps,
-		accumulatedOutputs: { env: new Map(), context: new Map() },
-		artifactsDir: "/tmp",
+		dependsOn: ["Build"],
+		condition,
 	});
 
-	// When: checking if step should run
-	const result = shouldRunStep(step, context);
+	// When: gating with a condition that holds
+	const runs = gateStep({
+		step: stepWith((ctx) => ctx.succeeded("Build")),
+		context,
+	});
+	// Then: it runs
+	assertEquals(runs, { kind: "run" });
 
-	// Then: should return false
-	assertEquals(result, false);
+	// When: gating with a condition that does not hold
+	const skips = gateStep({ step: stepWith(() => false), context });
+	// Then: it is skipped
+	assertEquals(skips, { kind: "skipped" });
 });
 
-Deno.test("shouldRunStep returns true for always condition", () => {
-	// Given: a step with always condition
+Deno.test("gateStep runs a failure-condition step only after an unhealthy dependency", () => {
+	// Given: a failure-condition step
 	const step: WorkflowStep = {
-		name: "Test",
+		name: "Report failure",
+		command: createMockCommand(),
+		condition: "failure",
+		dependsOn: ["Dep1"],
+	};
+
+	// When: its dependency failed
+	const afterFailure = gateStep({
+		step,
+		context: contextOf([{ name: "Dep1", status: "failed" }]),
+	});
+	// Then: it runs
+	assertEquals(afterFailure, { kind: "run" });
+
+	// When: its dependency was blocked
+	const afterBlocked = gateStep({
+		step,
+		context: contextOf([
+			{ name: "Dep1", status: "blocked", blockedBy: ["Dep0"] },
+		]),
+	});
+	// Then: it runs
+	assertEquals(afterBlocked, { kind: "run" });
+
+	// When: its dependency passed
+	const afterPass = gateStep({
+		step,
+		context: contextOf([{ name: "Dep1", status: "passed" }]),
+	});
+	// Then: it is skipped
+	assertEquals(afterPass, { kind: "skipped" });
+});
+
+Deno.test("gateStep runs an always-condition step even after a failed dependency", () => {
+	// Given: an always-condition step with a failed dependency
+	const step: WorkflowStep = {
+		name: "Cleanup",
 		command: createMockCommand(),
 		condition: "always",
+		dependsOn: ["Dep1"],
 	};
-	const completedSteps = new Map<string, StepResult>([
-		["Dep1", { name: "Dep1", status: "failed" }],
-	]);
-	const context = createStepContext({
-		completedSteps,
-		accumulatedOutputs: { env: new Map(), context: new Map() },
-		artifactsDir: "/tmp",
-	});
+	const context = contextOf([{ name: "Dep1", status: "failed" }]);
 
-	// When: checking if step should run
-	const result = shouldRunStep(step, context);
+	// When: gating the step
+	const gate = gateStep({ step, context });
 
-	// Then: should return true
-	assertEquals(result, true);
-});
-
-Deno.test("shouldRunStep uses custom function condition", () => {
-	// Given: a step with custom condition function
-	const step: WorkflowStep = {
-		name: "Test",
-		command: createMockCommand(),
-		condition: (ctx: StepContext) => ctx.succeeded("Build"),
-	};
-	const completedSteps = new Map<string, StepResult>([
-		["Build", { name: "Build", status: "passed" }],
-	]);
-	const context = createStepContext({
-		completedSteps,
-		accumulatedOutputs: { env: new Map(), context: new Map() },
-		artifactsDir: "/tmp",
-	});
-
-	// When: checking if step should run
-	const result = shouldRunStep(step, context);
-
-	// Then: should return true
-	assertEquals(result, true);
-});
-
-Deno.test("shouldRunStep defaults to success condition when not specified", () => {
-	// Given: a step without explicit condition
-	const step: WorkflowStep = {
-		name: "Test",
-		command: createMockCommand(),
-	};
-	const completedSteps = new Map<string, StepResult>([
-		["Dep1", { name: "Dep1", status: "passed" }],
-	]);
-	const context = createStepContext({
-		completedSteps,
-		accumulatedOutputs: { env: new Map(), context: new Map() },
-		artifactsDir: "/tmp",
-	});
-
-	// When: checking if step should run
-	const result = shouldRunStep(step, context);
-
-	// Then: should return true (defaults to success)
-	assertEquals(result, true);
+	// Then: it runs
+	assertEquals(gate, { kind: "run" });
 });
 
 Deno.test("shouldShowOutput returns false for skipped steps", () => {
@@ -278,9 +312,7 @@ Deno.test("executeStep returns skipped status when condition is false", async ()
 	});
 
 	// Then: should return skipped status
-	assertEquals(result.name, "Test");
-	assertEquals(result.status, "skipped");
-	assertEquals(result.output, undefined);
+	assertEquals(result, { name: "Test", status: "skipped" });
 });
 
 Deno.test("executeStep returns passed status for successful command", async () => {
@@ -306,7 +338,7 @@ Deno.test("executeStep returns passed status for successful command", async () =
 	// Then: should return passed status
 	assertEquals(result.name, "Test");
 	assertEquals(result.status, "passed");
-	assertEquals(result.output?.success, true);
+	assertEquals(ranResult(result).output?.success, true);
 });
 
 Deno.test("executeStep returns failed status for failing command", async () => {
@@ -334,7 +366,7 @@ Deno.test("executeStep returns failed status for failing command", async () => {
 	// Then: should return failed status
 	assertEquals(result.name, "Test");
 	assertEquals(result.status, "failed");
-	assertEquals(result.output?.success, false);
+	assertEquals(ranResult(result).output?.success, false);
 });
 
 Deno.test("executeStep sets ARTIFACTS_DIR environment variable", async () => {
@@ -363,7 +395,9 @@ Deno.test("executeStep sets ARTIFACTS_DIR environment variable", async () => {
 
 		// Then: ARTIFACTS_DIR should be set correctly
 		assertEquals(result.status, "passed");
-		const output = new TextDecoder().decode(result.output?.stdout).trim();
+		const output = new TextDecoder()
+			.decode(ranResult(result).output?.stdout)
+			.trim();
 		assertEquals(output, artifactsDir);
 	} finally {
 		// Cleanup
@@ -429,6 +463,6 @@ Deno.test("executeStep captures outputs when captureOutputs is defined", async (
 	});
 
 	// Then: outputs should be captured
-	assertEquals(result.outputs?.env?.TEST_ENV, "value");
-	assertEquals(result.outputs?.context?.testData, 42);
+	assertEquals(ranResult(result).outputs?.env?.TEST_ENV, "value");
+	assertEquals(ranResult(result).outputs?.context?.testData, 42);
 });

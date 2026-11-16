@@ -1,5 +1,5 @@
 // deno-coverage-ignore-file
-import { runWorkflow } from "@/mod.ts";
+import { runWorkflow, type WorkflowStep } from "@/mod.ts";
 
 /**
  * Exit codes for CI workflow failures.
@@ -18,24 +18,62 @@ export const EXIT_CODES = {
 	TESTS_FAILED: 5,
 	/** Exit code when coverage report generation fails */
 	COVERAGE_FAILED: 6,
+	/** Exit code when Deno type checking fails */
+	DENO_CHECK_FAILED: 7,
+	/** Exit code when removing local coverage data fails */
+	CLEANUP_FAILED: 8,
 } as const;
 
 /**
- * Main entry point for the CI workflow.
- * Runs a comprehensive continuous integration workflow including:
+ * The environment the CI workflow adapts to.
+ */
+export interface CIEnvironment {
+	/** Running in a CI service (`CI=true`) */
+	isCI: boolean;
+	/** Running for an AI agent (`CI_AI=true`) */
+	isAI: boolean;
+}
+
+/**
+ * The Biome CI check, over the whole project or the given paths.
+ *
+ * The npm launcher needs `--allow-env` (reads `BIOME_BINARY`) and
+ * `--allow-run` (spawns the native binary). Without `--allow-run` it prints
+ * nothing and exits 0, so the check silently passes.
+ *
+ * @param options.paths - Files or directories to check (default: the project)
+ * @returns The command to run
+ */
+export function biomeCiCommand({
+	paths = [],
+}: {
+	paths?: string[];
+} = {}): Deno.Command {
+	return new Deno.Command("deno", {
+		args: [
+			"run",
+			"--no-prompt",
+			"--allow-env",
+			"--allow-run",
+			"@biomejs/biome",
+			"ci",
+			...paths,
+		],
+	});
+}
+
+/**
+ * The CI workflow's steps for an environment:
  * - Parallel linting (Deno lint, Biome check, documentation lint, JSR dry run)
  * - Type checking
  * - Testing with coverage
  * - Coverage reporting
- * - Cleanup
+ * - Local cleanup of coverage data
  *
- * The workflow adapts behavior based on the CI environment variable.
+ * Every step has its own entry in {@linkcode EXIT_CODES}.
  */
-export async function main(): Promise<void> {
-	const isCI = Deno.env.get("CI") === "true";
-	const isAI = Deno.env.get("CI_AI") === "true";
-
-	await runWorkflow([
+export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
+	return [
 		// Parallel linting (no dependencies, will run concurrently)
 		{
 			name: "Deno Lint",
@@ -45,7 +83,7 @@ export async function main(): Promise<void> {
 		},
 		{
 			name: "Deno Check",
-			exitCode: EXIT_CODES.DENO_LINT_FAILED,
+			exitCode: EXIT_CODES.DENO_CHECK_FAILED,
 
 			command: new Deno.Command("deno", { args: ["check"] }),
 		},
@@ -53,9 +91,7 @@ export async function main(): Promise<void> {
 			name: "Biome Check",
 			exitCode: EXIT_CODES.BIOME_CHECK_FAILED,
 
-			command: new Deno.Command("deno", {
-				args: ["run", "--no-prompt", "--allow-env", "@biomejs/biome", "ci"],
-			}),
+			command: biomeCiCommand(),
 		},
 		{
 			name: "Documentation Lint",
@@ -82,7 +118,7 @@ export async function main(): Promise<void> {
 			}),
 		},
 
-		// Run tests (waits for lint to pass first)
+		// Run tests (blocked if lint fails)
 		{
 			name: "Deno Test",
 			dependsOn: ["Deno Lint"],
@@ -104,7 +140,7 @@ export async function main(): Promise<void> {
 			}),
 		},
 
-		// Show coverage report (only if tests passed)
+		// Show coverage report (blocked if tests failed)
 		{
 			name: "Show coverage report",
 			dependsOn: ["Deno Test"],
@@ -115,16 +151,34 @@ export async function main(): Promise<void> {
 			command: new Deno.Command("deno", { args: ["coverage", "--detailed"] }),
 		},
 
-		// Cleanup (always runs, even if tests failed)
-		{
-			name: "Cleanup coverage data",
-			dependsOn: ["Show coverage report"],
-			continueOnError: true,
-			condition: () => !isCI,
+		// Local cleanup (runs even if tests failed); CI keeps the coverage data
+		...(isCI ? [] : [cleanupStep()]),
+	];
+}
 
-			command: new Deno.Command("rm", { args: ["-r", "coverage"] }),
-		},
-	]);
+function cleanupStep(): WorkflowStep {
+	return {
+		name: "Cleanup coverage data",
+		dependsOn: ["Show coverage report"],
+		continueOnError: true,
+		condition: "always",
+		exitCode: EXIT_CODES.CLEANUP_FAILED,
+
+		command: new Deno.Command("rm", { args: ["-r", "coverage"] }),
+	};
+}
+
+/**
+ * Main entry point for the CI workflow. Reads the environment and runs
+ * {@linkcode ciSteps}.
+ */
+export async function main(): Promise<void> {
+	await runWorkflow(
+		ciSteps({
+			isCI: Deno.env.get("CI") === "true",
+			isAI: Deno.env.get("CI_AI") === "true",
+		}),
+	);
 }
 
 if (import.meta.main) {

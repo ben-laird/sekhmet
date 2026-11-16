@@ -1,4 +1,5 @@
 import { assertEquals } from "@std/assert";
+import { FakeTime } from "@std/testing/time";
 import { Scheduler } from "./scheduler.ts";
 import {
 	adaptive,
@@ -8,6 +9,16 @@ import {
 	sync,
 	throttled,
 } from "./schedules.ts";
+
+/**
+ * Fires fake timers one at a time, flushing microtasks before each, until no
+ * timer is pending. Deterministic regardless of real event-loop load.
+ */
+async function settle(time: FakeTime): Promise<void> {
+	do {
+		await time.runMicrotasks();
+	} while (time.next());
+}
 
 // ─── sync ────────────────────────────────────────────────────────────────────
 
@@ -137,34 +148,40 @@ Deno.test("macrotask() with delay waits at least the specified time", async () =
 
 // ─── adaptive ────────────────────────────────────────────────────────────────
 
-Deno.test("adaptive() uses microtask when queueDepth is above busyThreshold", async () => {
-	// Given: an adaptive scheduler with busyThreshold=3
-	// We track which mechanism was used by recording whether the callback
-	// fired synchronously after dispatch (macrotask) or not (microtask)
-	const dispatchTiming: string[] = [];
+Deno.test("adaptive() uses microtask when queueDepth is at or above busyThreshold", async () => {
+	// Given: fake timers, and an adaptive scheduler with busyThreshold=3 and stepBudget=1
+	using time = new FakeTime();
+	const ran: number[] = [];
 	const scheduler = new Scheduler({
 		schedule: adaptive({ busyThreshold: 3 }),
 		stepBudget: 1,
 	});
 
-	// When: we enqueue enough tasks to exceed busyThreshold
-	// Seed task enqueues 4 more — queueDepth will be 4 when budget is exhausted
+	// When: a seed task is enqueued (queueDepth=1, below the threshold)
 	scheduler.run(() => {
-		for (let i = 0; i < 4; i++) {
+		for (let i = 1; i <= 4; i++) {
 			scheduler.run(() => {
-				dispatchTiming.push("ran");
+				ran.push(i);
 			});
 		}
 	});
+	await time.runMicrotasks();
 
-	// Then: microtask turns have not run synchronously yet
-	assertEquals(dispatchTiming.length, 0);
+	// Then: the seed waits on a macrotask, so nothing ran
+	assertEquals(ran, []);
 
-	// When: we flush microtasks
-	await new Promise<void>((resolve) => setTimeout(resolve, 10));
+	// When: the seed's macrotask fires and enqueues 4 tasks, then microtasks flush
+	time.next();
+	await time.runMicrotasks();
 
-	// Then: all tasks ran
-	assertEquals(dispatchTiming.length, 4);
+	// Then: turns dispatched at queueDepth 4 and 3 ran as microtasks, with no timer firing
+	assertEquals(ran, [1, 2]);
+
+	// When: the remaining shallow-queue turns (queueDepth 2 and 1) get their macrotasks
+	await settle(time);
+
+	// Then: every task ran in order
+	assertEquals(ran, [1, 2, 3, 4]);
 });
 
 Deno.test("adaptive() uses macrotask when queueDepth is below busyThreshold", async () => {
@@ -225,7 +242,8 @@ Deno.test("throttled() runs first turn synchronously then yields", () => {
 });
 
 Deno.test("throttled() completes all tasks", async () => {
-	// Given: a throttled scheduler with turnsPerTick=3
+	// Given: fake timers, and a throttled scheduler with turnsPerTick=3
+	using time = new FakeTime();
 	const results: number[] = [];
 	const scheduler = new Scheduler({
 		schedule: throttled({ turnsPerTick: 3 }),
@@ -241,15 +259,16 @@ Deno.test("throttled() completes all tasks", async () => {
 		}
 	});
 
-	// Wait for all turns to complete
-	await new Promise<void>((resolve) => setTimeout(resolve, 50));
+	// When: every pending timer and microtask has run
+	await settle(time);
 
 	// Then: all tasks ran in order
 	assertEquals(results, [1, 2, 3, 4, 5, 6]);
 });
 
 Deno.test("throttled() yields to macrotask on every Nth turn", async () => {
-	// Given: a throttled scheduler with turnsPerTick=3 and stepBudget=1
+	// Given: fake timers, and a throttled scheduler with turnsPerTick=3 and stepBudget=1
+	using time = new FakeTime();
 	// Turns at indices 0, 3, 6, ... → setTimeout (macrotask yield)
 	// Turns at indices 1, 2, 4, 5, ... → sync (no yield)
 	let macrotaskYields = 0;
@@ -276,8 +295,8 @@ Deno.test("throttled() yields to macrotask on every Nth turn", async () => {
 		}
 	});
 
-	// Wait for all turns to complete
-	await new Promise<void>((resolve) => setTimeout(resolve, 50));
+	// When: every pending timer and microtask has run
+	await settle(time);
 
 	// Then: all tasks ran in order
 	assertEquals(results, [1, 2, 3, 4, 5]);
@@ -308,7 +327,8 @@ Deno.test("batched() uses microtask on first call (stepsLastTurn === 0)", async 
 });
 
 Deno.test("batched() uses microtask when last turn hit the threshold", async () => {
-	// Given: a batched scheduler where fullTurnThreshold=2 and stepBudget=2
+	// Given: fake timers, and a batched scheduler where fullTurnThreshold=2 and stepBudget=2
+	using time = new FakeTime();
 	const results: number[] = [];
 	const scheduler = new Scheduler({
 		schedule: batched({ fullTurnThreshold: 2 }),
@@ -324,8 +344,8 @@ Deno.test("batched() uses microtask when last turn hit the threshold", async () 
 		}
 	});
 
-	// Wait for all microtask turns to flush
-	await new Promise<void>((resolve) => setTimeout(resolve, 10));
+	// When: the seed turn (1 step) backs off to a macrotask and later full turns flush
+	await settle(time);
 
 	// Then: all tasks ran
 	assertEquals(results, [1, 2, 3, 4]);
