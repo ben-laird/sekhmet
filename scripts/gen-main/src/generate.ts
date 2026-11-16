@@ -3,7 +3,8 @@
  * `deno doc` symbols.
  *
  * - Every exported function whose first parameter is `self: <Primary>`
- *   becomes a method of `class <Primary> extends mini.<Primary>`.
+ *   becomes a method of `class <Primary> extends mini.<Primary>`. A feature
+ *   without a primary class has no class and no methods.
  * - A return type naming the primary or a configured wrap target (at the top
  *   level, in a wrap target's type arguments, in tuple elements, or as a
  *   generator's yielded type) is spelled as the main class, and the result is
@@ -16,7 +17,7 @@
  */
 
 import { dirname, relative } from "@std/path/posix";
-import type { Feature } from "./config.ts";
+import { type ClassFeature, type Feature, isClassFeature } from "./config.ts";
 import {
 	type Conversion,
 	type ConvertContext,
@@ -776,14 +777,16 @@ function renderWrapper({
 
 function renderClass({
 	module,
+	feature,
 	declaration,
 	methods,
 }: {
 	module: Module;
+	feature: ClassFeature;
 	declaration: ClassDeclaration;
 	methods: readonly Member[];
 }): string {
-	const { primary, construct } = module.feature;
+	const { primary, construct } = feature;
 	const context = contextFor({
 		module,
 		fileUrl: declaration.location.filename,
@@ -850,11 +853,23 @@ function renderClass({
 	return `${classDoc}export class ${primary}${classTypeParams} extends mini.${primary}${applied} {\n${body}}\n`;
 }
 
+function describeFeature(feature: Feature): string {
+	if (isClassFeature(feature)) {
+		return `\`${feature.primary}\` here extends the mini \`${feature.primary}\` from \`${feature.entrypoint}/mini\`, so its instances work with every mini function too. Each \`self\`-first mini function is a method, and functions whose mini form returns \`${feature.primary}\` return this main class, so calls chain.`;
+	}
+
+	const targets = (feature.wraps ?? [])
+		.map((target) => `\`${target.type}\``)
+		.join(", ");
+
+	return `Functions whose mini form (\`${feature.entrypoint}/mini\`) returns ${targets} return the main class instead, so calls chain.`;
+}
+
 function renderModuleDoc(feature: Feature, miniSpecifier: string): string {
 	const lines = [
 		`Main entrypoint for \`${feature.entrypoint}\`: the method-chaining API.`,
 		"",
-		`\`${feature.primary}\` here extends the mini \`${feature.primary}\` from \`${feature.entrypoint}/mini\`, so its instances work with every mini function too. Each \`self\`-first mini function is a method, and functions whose mini form returns \`${feature.primary}\` return this main class, so calls chain.`,
+		describeFeature(feature),
 		"",
 		`Generated from \`${miniSpecifier}\` by \`deno task gen:main\`; edit the mini source, then regenerate.`,
 	];
@@ -877,10 +892,15 @@ function renderImports({
 	module: Module;
 	miniSpecifier: string;
 }): string {
+	const { construct } = module.feature;
 	const lines = [
-		module.feature.construct === "variant"
-			? 'import { getStructParams, struct } from "@sekhmet/primordials/struct";'
-			: 'import { getStructParams } from "@sekhmet/primordials/struct";',
+		...(construct === undefined
+			? []
+			: [
+					construct === "variant"
+						? 'import { getStructParams, struct } from "@sekhmet/primordials/struct";'
+						: 'import { getStructParams } from "@sekhmet/primordials/struct";',
+				]),
 		`import * as mini from "${miniSpecifier}";`,
 		...(module.feature.wraps ?? []).map(
 			(target) => `import { ${target.type} } from "${target.from}";`,
@@ -921,6 +941,41 @@ function renderReExports({
 	return lines.length === 0 ? "" : `${lines.join("\n")}\n`;
 }
 
+/** A class feature and its primary class's declaration. */
+interface Primary {
+	readonly feature: ClassFeature;
+	readonly declaration: ClassDeclaration;
+}
+
+/**
+ * Finds the primary class's declaration: `undefined` for a feature without
+ * one, a failure when a class feature's mini barrel doesn't export it.
+ */
+function primaryOf({
+	feature,
+	symbols,
+}: {
+	feature: Feature;
+	symbols: readonly DocSymbol[];
+}): Generated<Primary | undefined> {
+	if (!isClassFeature(feature)) return ok(undefined);
+
+	const declaration = symbols
+		.find((symbol) => symbol.name === feature.primary)
+		?.declarations.find(
+			(decl): decl is ClassDeclaration => decl.kind === "class",
+		);
+	if (declaration === undefined) {
+		return failure({
+			feature,
+			symbol: feature.primary,
+			message: "the mini barrel must export the primary class",
+		});
+	}
+
+	return ok({ feature, declaration });
+}
+
 /**
  * Generates a feature's main module from its mini barrel's symbols. The
  * output is valid TypeScript but not yet Biome-formatted.
@@ -932,27 +987,18 @@ export function generateMain(input: GenerateInput): Generated<string> {
 	const { feature, symbols, sources, miniUrl, outputUrl } = input;
 	const omitted = new Set(feature.omit ?? []);
 
-	const primarySymbol = symbols.find(
-		(symbol) => symbol.name === feature.primary,
-	);
-	const declaration = primarySymbol?.declarations.find(
-		(decl): decl is ClassDeclaration => decl.kind === "class",
-	);
-	if (declaration === undefined) {
-		return failure({
-			feature,
-			symbol: feature.primary,
-			message: "the mini barrel must export the primary class",
-		});
-	}
+	const primary = primaryOf({ feature, symbols });
+	if (!primary.ok) return primary;
 
 	const wrapNames = new Set([
-		feature.primary,
+		...(isClassFeature(feature) ? [feature.primary] : []),
 		...(feature.wraps ?? []).map((t) => t.type),
 	]);
 	const miniNames = new Set(symbols.map((symbol) => symbol.name));
 	const mappers = new Map<string, readonly (string | undefined)[]>([
-		[feature.primary, feature.mappers ?? []],
+		...(isClassFeature(feature)
+			? [[feature.primary, feature.mappers ?? []] as const]
+			: []),
 		...(feature.wraps ?? []).map(
 			(target) => [target.type, target.mappers ?? []] as const,
 		),
@@ -968,8 +1014,10 @@ export function generateMain(input: GenerateInput): Generated<string> {
 
 		const signatures = signaturesOf(symbol);
 		if (signatures.length > 0) {
-			const selfFirst = signatures.map((sig) =>
-				isSelfOfPrimary(feature.primary, sig.params[0]),
+			const selfFirst = signatures.map(
+				(sig) =>
+					isClassFeature(feature) &&
+					isSelfOfPrimary(feature.primary, sig.params[0]),
 			);
 			if (selfFirst.every(Boolean)) {
 				methodSymbols.push(symbol);
@@ -1021,7 +1069,7 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		const method = renderMethod({
 			module,
 			symbol,
-			classParams: declaration.typeParams,
+			classParams: primary.value?.declaration.typeParams ?? [],
 		});
 		if (!method.ok) return method;
 		methods.push(method.value);
@@ -1034,7 +1082,10 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		wrappers.push(wrapper.value);
 	}
 
-	const classSource = renderClass({ module, declaration, methods });
+	const classSource =
+		primary.value === undefined
+			? ""
+			: renderClass({ module, ...primary.value, methods });
 	const miniSpecifier = specifierFor({ from: outputUrl, to: miniUrl });
 
 	const parts = [

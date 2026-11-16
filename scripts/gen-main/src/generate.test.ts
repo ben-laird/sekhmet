@@ -158,6 +158,80 @@ Deno.test("generateMain rebuilds Struct-based classes from their params", () => 
 	assertStringIncludes(output, "return new Box(getStructParams(self));");
 });
 
+Deno.test("generateMain wraps a class-less feature's functions in the wrap target", () => {
+	// Given: a feature with no primary class whose constructor returns a Bag wrap target
+	const feature: Feature = {
+		entrypoint: "@pkg/bags",
+		mini: "pkg/src/bags/mini/mod.ts",
+		output: "pkg/src/bags/main/mod.ts",
+		wraps: [{ type: "Bag", from: "../../bag/main/mod.ts" }],
+	};
+	const bag = named("Bag", [keyword("string")]);
+	const words = fn(
+		"words",
+		signature({ params: [param("text", keyword("string"))], returnType: bag }),
+	);
+	const count = fn(
+		"count",
+		signature({ params: [], returnType: keyword("number") }),
+	);
+
+	// When: generating from a barrel that exports no class
+	const result = generateMain({
+		feature,
+		symbols: [words, count],
+		sources: SOURCES,
+		miniUrl: "file:///repo/pkg/src/bags/mini/mod.ts",
+		outputUrl: "file:///repo/pkg/src/bags/main/mod.ts",
+	});
+
+	// Then: there is no class; the constructor returns the main Bag and the rest is re-exported
+	assert(result.ok);
+	const output = result.value;
+	assert(!output.includes("export class"));
+	assert(!output.includes("@sekhmet/primordials/struct"));
+	assertStringIncludes(output, 'import { Bag } from "../../bag/main/mod.ts";');
+	assertStringIncludes(
+		output,
+		"export function words(text: string): Bag<string> {\n\treturn Bag.fromMini(mini.words(text));",
+	);
+	assertStringIncludes(output, 'export { count } from "../mini/mod.ts";');
+	assertStringIncludes(
+		output,
+		"Functions whose mini form (`@pkg/bags/mini`) returns `Bag` return the main class instead",
+	);
+});
+
+Deno.test("generateMain re-exports a class-less feature's self-first functions", () => {
+	// Given: a feature with no primary class and a function whose first parameter is self
+	const feature: Feature = {
+		entrypoint: "@pkg/bags",
+		mini: "pkg/src/bags/mini/mod.ts",
+		output: "pkg/src/bags/main/mod.ts",
+	};
+	const size = fn(
+		"size",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: keyword("number"),
+		}),
+	);
+
+	// When: generating
+	const result = generateMain({
+		feature,
+		symbols: [size],
+		sources: SOURCES,
+		miniUrl: "file:///repo/pkg/src/bags/mini/mod.ts",
+		outputUrl: "file:///repo/pkg/src/bags/main/mod.ts",
+	});
+
+	// Then: with no class to attach it to, it is re-exported unchanged
+	assert(result.ok);
+	assertStringIncludes(result.value, 'export { size } from "../mini/mod.ts";');
+});
+
 Deno.test("generateMain turns self-first functions into methods with this", () => {
 	// Given: map(self: Box<A>, f: (a: A) => B): Box<B>, where A is Box's T
 	const map = fn(
