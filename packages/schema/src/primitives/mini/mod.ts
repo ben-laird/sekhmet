@@ -1,14 +1,20 @@
 /**
  * Tree-shakable primitive schema builders.
  *
- * This module provides granular exports for primitive type schemas including
- * string, number, and boolean validators with optional coercion.
+ * Leaf schemas (`string`, `number`, `boolean`, `bigint`, `date`, `literal`,
+ * `null_`, `undefined_`, `symbol`, `unknown`, `never`, `stringbool`), their
+ * coercion modes, and the checks and transforms that refine them.
  *
  * @module
  */
 
+export { bigint } from "./bigint.ts";
 export { type BooleanSchemaOptions, boolean } from "./boolean.ts";
 export type { CoerceMode } from "./coerce.ts";
+export { date } from "./date.ts";
+export { type Literal, literal } from "./literal.ts";
+export { never } from "./never.ts";
+export { null_ } from "./null.ts";
 export {
 	type Bound,
 	type NumberSchemaOptions,
@@ -30,3 +36,6 @@ export {
 	type StringboolOptions,
 	stringbool,
 } from "./stringbool.ts";
+export { symbol } from "./symbol.ts";
+export { undefined_ } from "./undefined.ts";
+export { unknown } from "./unknown.ts";

@@ -18,7 +18,15 @@
 		"./primitives/mini/number-checks": "./src/primitives/mini/number-checks.ts",
 		"./primitives/mini/boolean": "./src/primitives/mini/boolean.ts",
 		"./primitives/mini/coerce": "./src/primitives/mini/coerce.ts",
-		"./primitives/mini/stringbool": "./src/primitives/mini/stringbool.ts"
+		"./primitives/mini/stringbool": "./src/primitives/mini/stringbool.ts",
+		"./primitives/mini/bigint": "./src/primitives/mini/bigint.ts",
+		"./primitives/mini/date": "./src/primitives/mini/date.ts",
+		"./primitives/mini/literal": "./src/primitives/mini/literal.ts",
+		"./primitives/mini/null": "./src/primitives/mini/null.ts",
+		"./primitives/mini/undefined": "./src/primitives/mini/undefined.ts",
+		"./primitives/mini/symbol": "./src/primitives/mini/symbol.ts",
+		"./primitives/mini/unknown": "./src/primitives/mini/unknown.ts",
+		"./primitives/mini/never": "./src/primitives/mini/never.ts"
 	},
 
 	"imports": {

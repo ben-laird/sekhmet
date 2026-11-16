@@ -31,12 +31,33 @@ export type {
 	Bound,
 	CoerceMode,
 	LimitOptions,
+	Literal,
 	NumberSchemaOptions,
 	Range,
 	StringboolOptions,
 	StringSchemaOptions,
 } from "../mini/mod.ts";
 export { STRINGBOOL_FALSY, STRINGBOOL_TRUTHY } from "../mini/mod.ts";
+
+/**
+ * Creates a schema that accepts only bigints, failing with an `InvalidType`
+ * issue otherwise. It does not coerce: a number is rejected.
+ *
+ * @returns A schema accepting only bigints
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { bigint } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isOk(parseSync(bigint(), 10n)), true);
+ * assertEquals(isErr(parseSync(bigint(), 10)), true);
+ * ```
+ */
+export function bigint(): Schema<unknown, bigint, SchemaIssue> {
+	return Schema.fromMini(mini.bigint());
+}
 
 /**
  * Creates a schema that validates and optionally coerces boolean values.
@@ -82,6 +103,102 @@ export function boolean(
 	options?: mini.BooleanSchemaOptions,
 ): Schema<unknown, boolean, SchemaIssue> {
 	return Schema.fromMini(mini.boolean(options));
+}
+
+/**
+ * Creates a schema that accepts only valid `Date` objects. Anything else,
+ * including an `Invalid Date` (one whose time is `NaN`), fails with an
+ * `InvalidType` issue; the issue's `received` tells the two apart
+ * (`"invalid date"`). It does not coerce: a date string or a timestamp is
+ * rejected. The accepted `Date` is returned as is, not copied.
+ *
+ * @returns A schema accepting only valid dates
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { date } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isOk(parseSync(date(), new Date(0))), true);
+ * assertEquals(isErr(parseSync(date(), new Date("nope"))), true);
+ * assertEquals(isErr(parseSync(date(), "1970-01-01")), true);
+ * ```
+ */
+export function date(): Schema<unknown, Date, SchemaIssue> {
+	return Schema.fromMini(mini.date());
+}
+
+/**
+ * Creates a schema that accepts exactly one primitive value, failing with an
+ * `InvalidValue` issue otherwise. Values compare with SameValueZero (as
+ * `Array.prototype.includes` does), so `literal(Number.NaN)` accepts `NaN`
+ * and `literal(0)` accepts `-0`. The output type is the literal's own type.
+ *
+ * @template T - The literal's type, inferred as narrowly as possible
+ * @param value - The only accepted value
+ * @returns A schema accepting only `value`
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { literal } from "@sekhmet/schema/primitives";
+ *
+ * const admin = literal("admin");
+ * const role: "admin" = unwrap(parseSync(admin, "admin"));
+ *
+ * assertEquals(role, "admin");
+ * assertEquals(isErr(parseSync(admin, "user")), true);
+ * ```
+ */
+export function literal<const T extends mini.Literal>(
+	value: T,
+): Schema<unknown, T, SchemaIssue> {
+	return Schema.fromMini(mini.literal(value));
+}
+
+/**
+ * Creates a schema that rejects every value with an `InvalidType` issue
+ * expecting `"never"`, so its output type is `never`. Use it to forbid a
+ * field, or as the schema of a case that cannot occur.
+ *
+ * @returns A schema accepting nothing
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { never } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isErr(parseSync(never(), undefined)), true);
+ * ```
+ */
+export function never(): Schema<unknown, never, SchemaIssue> {
+	return Schema.fromMini(mini.never());
+}
+
+/**
+ * Creates a schema that accepts only `null`, failing with an `InvalidType`
+ * issue otherwise (`undefined` included).
+ *
+ * Named `null_` because `null` is a reserved word; the trailing underscore
+ * is the usual escape for a keyword.
+ *
+ * @returns A schema accepting only `null`
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { null_ } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isOk(parseSync(null_(), null)), true);
+ * assertEquals(isErr(parseSync(null_(), undefined)), true);
+ * ```
+ */
+export function null_(): Schema<unknown, null, SchemaIssue> {
+	return Schema.fromMini(mini.null_());
 }
 
 /**
@@ -384,4 +501,69 @@ export function stringbool(
 	options?: mini.StringboolOptions,
 ): Schema<unknown, boolean, SchemaIssue> {
 	return Schema.fromMini(mini.stringbool(options));
+}
+
+/**
+ * Creates a schema that accepts only symbols, failing with an `InvalidType`
+ * issue otherwise.
+ *
+ * @returns A schema accepting only symbols
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { symbol } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isOk(parseSync(symbol(), Symbol("id"))), true);
+ * assertEquals(isErr(parseSync(symbol(), "id")), true);
+ * ```
+ */
+export function symbol(): Schema<unknown, symbol, SchemaIssue> {
+	return Schema.fromMini(mini.symbol());
+}
+
+/**
+ * Creates a schema that accepts only `undefined`, failing with an
+ * `InvalidType` issue otherwise (`null` included).
+ *
+ * Named `undefined_` to match {@linkcode null_} and to avoid shadowing the
+ * global `undefined`.
+ *
+ * @returns A schema accepting only `undefined`
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { undefined_ } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isOk(parseSync(undefined_(), undefined)), true);
+ * assertEquals(isErr(parseSync(undefined_(), null)), true);
+ * ```
+ */
+export function undefined_(): Schema<unknown, undefined, SchemaIssue> {
+	return Schema.fromMini(mini.undefined_());
+}
+
+/**
+ * Creates a schema that accepts every value unchanged and never fails, so
+ * its error type is `never`. Use it for a field whose value is passed
+ * through without validation.
+ *
+ * @returns A schema accepting anything
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { unknown } from "@sekhmet/schema/primitives";
+ *
+ * const payload = { any: "thing" };
+ *
+ * assertEquals(unwrap(parseSync(unknown(), payload)), payload);
+ * ```
+ */
+export function unknown(): Schema<unknown, unknown, never> {
+	return Schema.fromMini(mini.unknown());
 }
