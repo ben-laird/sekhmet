@@ -1,3 +1,10 @@
+/**
+ * Creating and combining vows: `vowWithResolver`, `resolved`, `fromPromise`,
+ * `map`, `zip`, `zipWith` and `wait`.
+ *
+ * @module
+ */
+
 import { match, union } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini/core";
@@ -60,12 +67,16 @@ export function vowWithResolver<T>(): VowWithResolver<T> {
  * @returns A Vow that is already in the Resolved state
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { map, resolved } from "@sekhmet/vow";
+ * import { assertEquals } from "@std/assert";
+ *
  * const vow = resolved(42);
  *
- * // The vow is already resolved, so this runs immediately
- * map(vow, (n) => console.log("Value:", n));
- * // Logs: "Value: 42"
+ * // The vow is already resolved, so the mapping runs immediately
+ * const seen: number[] = [];
+ * map(vow, (n) => seen.push(n));
+ * assertEquals(seen, [42]);
  * ```
  */
 export function resolved<T>(value: T): Vow<T> {
@@ -85,16 +96,16 @@ export function resolved<T>(value: T): Vow<T> {
  * @returns A Vow that resolves with the Promise's outcome as a Result
  *
  * @example
- * ```ts ignore
- * const promise = fetch("/api/data").then((r) => r.json());
- * const vow = fromPromise(promise);
+ * ```ts
+ * import { fromPromise, wait } from "@sekhmet/vow";
+ * import { Err, Ok } from "@sekhmet/enum/result/mini";
+ * import { assertEquals } from "@std/assert";
  *
- * map(vow, (result) => {
- *   match(result)({
- *     Ok: (data) => console.log("Received:", data),
- *     Err: (reason) => console.error("Failed:", reason),
- *   });
- * });
+ * const fulfilled = fromPromise(Promise.resolve({ id: 1 }));
+ * assertEquals(await wait(fulfilled), Ok({ id: 1 }));
+ *
+ * const rejected = fromPromise(Promise.reject("offline"));
+ * assertEquals(await wait(rejected), Err("offline"));
  * ```
  */
 export function fromPromise<T>(promise: Promise<T>): Vow<Result<T, unknown>> {
@@ -120,11 +131,14 @@ export function fromPromise<T>(promise: Promise<T>): Vow<Result<T, unknown>> {
  * @returns A new Vow containing the transformed value
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { map, resolved, wait } from "@sekhmet/vow";
+ * import { assertEquals } from "@std/assert";
+ *
  * const numberVow = resolved(5);
  * const stringVow = map(numberVow, (n) => `Value is ${n}`);
  *
- * // stringVow resolves to "Value is 5"
+ * assertEquals(await wait(stringVow), "Value is 5");
  * ```
  */
 export function map<T, U>(self: Vow<T>, mapping: (value: T) => U): Vow<U> {
@@ -155,16 +169,18 @@ export function map<T, U>(self: Vow<T>, mapping: (value: T) => U): Vow<U> {
  * @returns A Vow that resolves with a tuple of both values
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { resolved, vowWithResolver, wait, zip } from "@sekhmet/vow";
+ * import { assertEquals } from "@std/assert";
+ *
  * const nameVow = resolved("Alice");
- * const ageVow = resolved(30);
+ * const { vow: ageVow, resolve: resolveAge } = vowWithResolver<number>();
  *
+ * // Resolves only once both inputs have resolved
  * const combined = zip(nameVow, ageVow);
- * // combined resolves to ["Alice", 30]
+ * resolveAge(30);
  *
- * map(combined, ([name, age]) => {
- *   console.log(`${name} is ${age} years old`);
- * });
+ * assertEquals(await wait(combined), ["Alice", 30]);
  * ```
  */
 export function zip<T, U>(
@@ -209,12 +225,15 @@ export function zip<T, U>(
  * @returns A Vow containing the combined and transformed value
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { resolved, wait, zipWith } from "@sekhmet/vow";
+ * import { assertEquals } from "@std/assert";
+ *
  * const priceVow = resolved(100);
  * const quantityVow = resolved(3);
  *
  * const totalVow = zipWith(priceVow, quantityVow, (price, qty) => price * qty);
- * // totalVow resolves to 300
+ * assertEquals(await wait(totalVow), 300);
  * ```
  */
 export function zipWith<T, U, V>(
@@ -236,15 +255,17 @@ export function zipWith<T, U, V>(
  * @returns A Promise that resolves with the Vow's value
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { resolved, wait } from "@sekhmet/vow";
+ * import { assertEquals } from "@std/assert";
+ *
  * const vow = resolved(42);
  *
  * // Use await to get the value
- * const value = await wait(vow);
- * console.log(value); // 42
+ * assertEquals(await wait(vow), 42);
  *
  * // Or use Promise methods
- * wait(vow).then((v) => console.log(v));
+ * await wait(vow).then((v) => assertEquals(v, 42));
  * ```
  */
 export function wait<T>(self: Vow<T>): Promise<T> {

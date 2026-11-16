@@ -1,3 +1,9 @@
+/**
+ * The {@linkcode Vow} class and its {@linkcode Resolver} type.
+ *
+ * @module
+ */
+
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { getStructParams } from "@sekhmet/primordials/struct";
