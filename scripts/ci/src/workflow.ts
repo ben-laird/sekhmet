@@ -17,10 +17,13 @@ export async function runWorkflow(
 ): Promise<WorkflowResult> {
 	const adapter = createAdapter();
 
-	// Use grouping in GitHub Actions, plain output locally
-	await adapter.group("Running workflow", () => {
-		console.log(cyan(bold("Running workflow...\n")));
-	});
+	// Use grouping in GitHub Actions, plain output locally; AI mode keeps
+	// stdout pure JSON
+	if (!adapter.isAI) {
+		await adapter.group("Running workflow", () => {
+			console.log(cyan(bold("Running workflow...\n")));
+		});
+	}
 
 	// Create artifacts directory
 	const artifactsDir = await Deno.makeTempDir({ prefix: "ci-artifacts-" });
