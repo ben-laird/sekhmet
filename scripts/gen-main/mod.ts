@@ -7,11 +7,14 @@
 export type { Feature, WrapTarget } from "./src/config.ts";
 export { FEATURES } from "./src/config.ts";
 export type {
+	ClassDeclaration,
 	Declaration,
 	Decoded,
 	DecodeError,
 	DocModules,
 	DocSymbol,
+	FunctionDeclaration,
+	OtherDeclaration,
 	Param,
 	Property,
 	Resolution,
