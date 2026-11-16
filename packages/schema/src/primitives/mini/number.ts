@@ -1,39 +1,20 @@
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
-import {
-	InvalidType,
-	type SchemaIssue,
-	TooBig,
-	TooSmall,
-} from "@/src/core/mini/issue.ts";
-import { Schema } from "@/src/core/mini/schema.ts";
+import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
+import type { Schema } from "@/src/core/mini/schema.ts";
+import type { Bound } from "./bound.ts";
+import { type Inspect, leaf, when } from "./check.ts";
 import type { CoerceMode } from "./coerce.ts";
 import { coerceNumber } from "./convert.ts";
+import {
+	isInteger,
+	isSafeInteger,
+	maximum,
+	minimum,
+	multipleOf,
+} from "./number-checks.ts";
 
 /**
- * Represents a numeric bound with inclusivity.
- *
- * The first element is the numeric value, the second indicates whether
- * the bound is inclusive or non-inclusive (exclusive).
- */
-export type Bound = [number, "inclusive" | "non-inclusive"];
-
-/**
- * Represents a numeric range with minimum and maximum bounds.
- */
-export interface Range {
-	/**
-	 * The minimum bound of the range.
-	 */
-	min: Bound;
-
-	/**
-	 * The maximum bound of the range.
-	 */
-	max: Bound;
-}
-
-/**
- * Options for configuring the number schema.
+ * Options for configuring the number schema. Every check is off unless set.
  */
 export interface NumberSchemaOptions {
 	/**
@@ -45,7 +26,7 @@ export interface NumberSchemaOptions {
 	 *
 	 * @default false
 	 */
-	coerce?: CoerceMode;
+	readonly coerce?: CoerceMode;
 
 	/**
 	 * Whether `NaN` is accepted. By default it fails with an `InvalidType`
@@ -53,7 +34,7 @@ export interface NumberSchemaOptions {
 	 *
 	 * @default false
 	 */
-	nan?: boolean;
+	readonly nan?: boolean;
 
 	/**
 	 * Whether `Infinity` and `-Infinity` are accepted. By default they fail
@@ -61,54 +42,62 @@ export interface NumberSchemaOptions {
 	 *
 	 * @default false
 	 */
-	infinite?: boolean;
+	readonly infinite?: boolean;
 
 	/**
-	 * A range the number must fall in: a value below `min` fails with
-	 * `TooSmall`, one above `max` with `TooBig`.
+	 * Whether the number must be an integer; anything else fails with an
+	 * `InvalidType` issue expecting `"integer"`.
+	 *
+	 * @default false
 	 */
-	range?: Range;
+	readonly int?: boolean;
+
+	/**
+	 * Whether the number must be a safe integer, one a `number` represents
+	 * exactly (`Number.MIN_SAFE_INTEGER` to `Number.MAX_SAFE_INTEGER`). A
+	 * non-integer fails with `InvalidType`; an integer out of range with
+	 * `TooSmall` or `TooBig`.
+	 *
+	 * @default false
+	 */
+	readonly safe?: boolean;
+
+	/**
+	 * The lowest value allowed (see {@linkcode Bound}); a value below it
+	 * fails with `TooSmall`.
+	 */
+	readonly min?: Bound<number>;
+
+	/**
+	 * The highest value allowed (see {@linkcode Bound}); a value above it
+	 * fails with `TooBig`.
+	 */
+	readonly max?: Bound<number>;
+
+	/**
+	 * A positive number the value must be a multiple of, failing with
+	 * `NotMultipleOf`. Decimal divisors compare at the precision of their
+	 * written form, so `0.3` is a multiple of `0.1` despite floating point.
+	 * The schema panics with a `RangeError` when it is not a positive finite
+	 * number.
+	 */
+	readonly multipleOf?: number;
 }
 
-/** The issue a number violates, if any, under the schema's options. */
-function violation(
-	value: number,
-	options: NumberSchemaOptions | undefined,
-): SchemaIssue | undefined {
-	if (Number.isNaN(value)) {
-		return options?.nan === true
-			? undefined
-			: InvalidType({ input: value, expected: "number" });
-	}
-	if (!Number.isFinite(value) && options?.infinite !== true) {
-		return InvalidType({ input: value, expected: "number" });
-	}
+/** Fails `NaN` and `±Infinity` unless the options allow them. */
+function finite(options: NumberSchemaOptions): Inspect<number> {
+	return (value) => {
+		if (Number.isNaN(value)) {
+			return options.nan === true
+				? undefined
+				: InvalidType({ input: value, expected: "number" });
+		}
+		if (!Number.isFinite(value) && options.infinite !== true) {
+			return InvalidType({ input: value, expected: "number" });
+		}
 
-	const range = options?.range;
-	if (range === undefined) return undefined;
-
-	const [minimum, lower] = range.min;
-	const [maximum, upper] = range.max;
-	const minInclusive = lower === "inclusive";
-	const maxInclusive = upper === "inclusive";
-	if (minInclusive ? value < minimum : value <= minimum) {
-		return TooSmall({
-			input: value,
-			origin: "number",
-			minimum,
-			inclusive: minInclusive,
-		});
-	}
-	if (maxInclusive ? value > maximum : value >= maximum) {
-		return TooBig({
-			input: value,
-			origin: "number",
-			maximum,
-			inclusive: maxInclusive,
-		});
-	}
-
-	return undefined;
+		return undefined;
+	};
 }
 
 /**
@@ -116,9 +105,7 @@ function violation(
  *
  * It is strict by default: it accepts only finite numbers (`-0` included),
  * failing with an `InvalidType` issue otherwise. `nan: true` and
- * `infinite: true` allow `NaN` and `±Infinity`, and `range` bounds the
- * value. Chain {@linkcode int}, {@linkcode safe}, {@linkcode multipleOf},
- * {@linkcode min} and {@linkcode max} for further checks.
+ * `infinite: true` allow `NaN` and `±Infinity`.
  *
  * `coerce: true` also accepts trimmed decimal or exponent strings
  * (`" 12 "`, `"1e3"`), booleans as 1/0 and bigints in the safe-integer
@@ -126,7 +113,11 @@ function violation(
  * `coerce: "native"` uses `Number()` instead, whose result is still
  * checked.
  *
- * @param options Configuration options
+ * The checks run on the (coerced) number in this order, and the first that
+ * fails is reported: `NaN`/`±Infinity`, `int`, `safe`, `min`, `max`,
+ * `multipleOf`.
+ *
+ * @param options Coercion and checks
  * @returns A schema that validates numeric inputs
  *
  * @example
@@ -150,12 +141,14 @@ function violation(
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number } from "@sekhmet/schema/primitives/mini";
  *
- * const ratio = number({
- * 	range: { min: [0, "inclusive"], max: [1, "non-inclusive"] },
- * });
+ * const percent = number({ int: true, min: 0, max: 100 });
+ * const positive = number({ min: { value: 0, inclusive: false } });
+ * const price = number({ multipleOf: 0.01 });
  *
- * assertEquals(isOk(parseSync(ratio, 0)), true);
- * assertEquals(isErr(parseSync(ratio, 1)), true);
+ * assertEquals(isOk(parseSync(percent, 100)), true);
+ * assertEquals(isErr(parseSync(percent, 2.5)), true);
+ * assertEquals(isErr(parseSync(positive, 0)), true);
+ * assertEquals(isErr(parseSync(price, 19.999)), true);
  * ```
  *
  * @example
@@ -177,16 +170,29 @@ function violation(
 export function number(
 	options?: NumberSchemaOptions,
 ): Schema<unknown, number, SchemaIssue> {
-	const mode = options?.coerce ?? false;
+	return numberSchema(options ?? {});
+}
 
-	return new Schema((input): Result<number, SchemaIssue> => {
-		const value = coerceNumber(input, mode);
-		if (value === undefined) {
-			return Err(InvalidType({ input, expected: "number" }));
-		}
+function numberSchema(
+	options: NumberSchemaOptions,
+): Schema<unknown, number, SchemaIssue> {
+	const mode = options.coerce ?? false;
 
-		const issue = violation(value, options);
+	return leaf({
+		read: (input) => {
+			const value = coerceNumber(input, mode);
 
-		return issue === undefined ? Ok(value) : Err(issue);
+			return value === undefined
+				? Err(InvalidType({ input, expected: "number" }))
+				: Ok(value);
+		},
+		inspections: [
+			finite(options),
+			...(options.int === true ? [isInteger] : []),
+			...(options.safe === true ? [isSafeInteger] : []),
+			...when({ option: options.min, inspect: minimum }),
+			...when({ option: options.max, inspect: maximum }),
+			...when({ option: options.multipleOf, inspect: multipleOf }),
+		],
 	});
 }

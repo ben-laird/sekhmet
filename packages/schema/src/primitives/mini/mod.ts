@@ -2,51 +2,28 @@
  * Tree-shakable primitive schema builders.
  *
  * Leaf schemas (`string`, `number`, `boolean`, `bigint`, `date`, `literal`,
- * `null_`, `undefined_`, `symbol`, `unknown`, `never`, `stringbool`), their
- * coercion modes, and the checks and transforms that refine them.
+ * `null_`, `undefined_`, `symbol`, `unknown`, `never`, `stringbool`). Their
+ * coercion, transforms and checks are options: `number({ int: true, min: 0 })`,
+ * `string({ trim: true, format: "email" })`.
  *
  * @module
  */
 
-export { bigint } from "./bigint.ts";
+export { type BigintSchemaOptions, bigint } from "./bigint.ts";
 export { type BooleanSchemaOptions, boolean } from "./boolean.ts";
+export type { Bound } from "./bound.ts";
 export type { CoerceMode } from "./coerce.ts";
-export { date } from "./date.ts";
+export { type DateSchemaOptions, date } from "./date.ts";
 export { type Literal, literal } from "./literal.ts";
 export { never } from "./never.ts";
 export { null_ } from "./null.ts";
-export {
-	type Bound,
-	type NumberSchemaOptions,
-	number,
-	type Range,
-} from "./number.ts";
-export {
-	int,
-	type LimitOptions,
-	max,
-	min,
-	multipleOf,
-	safe,
-} from "./number-checks.ts";
+export { type NumberSchemaOptions, number } from "./number.ts";
 export { type StringSchemaOptions, string } from "./string.ts";
-export {
-	maxLength,
-	minLength,
-	type NormalizationForm,
-	normalize,
-	regex,
-	trim,
-} from "./string-checks.ts";
+export type { NormalizationForm } from "./string-checks.ts";
 export {
 	EMAIL_PATTERN,
-	email,
-	isoDate,
-	isoDateTime,
-	isoTime,
+	type StringFormat,
 	UUID_PATTERN,
-	url,
-	uuid,
 } from "./string-formats.ts";
 export {
 	STRINGBOOL_FALSY,

@@ -5,53 +5,64 @@
  * @module
  */
 
-import { match, union } from "@sekhmet/enum/core/mini/exit";
+import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
-import { map as mapPotential } from "@/src/core/mini/potential.ts";
-import { parse, Schema } from "@/src/core/mini/schema.ts";
+import { Schema } from "@/src/core/mini/schema.ts";
 
 /**
- * Inspects a valid output: the issue it fails with, or `undefined` when it
+ * Inspects a valid value: the issue it fails with, or `undefined` when it
  * passes.
  */
 export type Inspect<O> = (output: O) => SchemaIssue | undefined;
 
+/** The first issue `inspections` find in `value`, in order. */
+function firstIssue<O>({
+	value,
+	inspections,
+}: {
+	value: O;
+	inspections: readonly Inspect<O>[];
+}): SchemaIssue | undefined {
+	for (const inspect of inspections) {
+		const issue = inspect(value);
+		if (issue !== undefined) return issue;
+	}
+
+	return undefined;
+}
+
 /**
- * A schema that runs `self`, then fails a valid output with the issue
- * `inspect` finds. A failure of `self` is passed through unchanged.
+ * A leaf schema: `read` turns the input into a value (or rejects it), then
+ * each of `inspections` checks the value in order, and the first issue found
+ * fails the parse.
  */
-export function check<I, O, E>(
-	self: Schema<I, O, E>,
-	inspect: Inspect<O>,
-): Schema<I, O, E | SchemaIssue> {
+export function leaf<O>({
+	read,
+	inspections,
+}: {
+	read: (input: unknown) => Result<O, SchemaIssue>;
+	inspections: readonly Inspect<O>[];
+}): Schema<unknown, O, SchemaIssue> {
 	return new Schema((input) =>
-		union(
-			mapPotential(parse(self, input), (result) => verdict(result, inspect)),
-		),
+		match(read(input))<Result<O, SchemaIssue>>({
+			Ok: (value) => {
+				const issue = firstIssue({ value, inspections });
+
+				return issue === undefined ? Ok(value) : Err(issue);
+			},
+			Err: (issue) => Err(issue),
+		}),
 	);
 }
 
-function verdict<O, E>(
-	result: Result<O, E>,
-	inspect: Inspect<O>,
-): Result<O, E | SchemaIssue> {
-	return match(result)<Result<O, E | SchemaIssue>>({
-		Ok: (output) => {
-			const issue = inspect(output);
-
-			return issue === undefined ? Ok(output) : Err(issue);
-		},
-		Err: (error) => Err(error),
-	});
-}
-
-/**
- * A schema from a leaf parser over `unknown`: the output, or the issue that
- * rejects the input.
- */
-export function leaf<O>(
-	parseInput: (input: unknown) => Result<O, SchemaIssue>,
-): Schema<unknown, O, SchemaIssue> {
-	return new Schema(parseInput);
+/** The inspection `inspect` builds from `option` when it is set; none otherwise. */
+export function when<T, O>({
+	option,
+	inspect,
+}: {
+	option: T | undefined;
+	inspect: (option: T) => Inspect<O>;
+}): Inspect<O>[] {
+	return option === undefined ? [] : [inspect(option)];
 }
