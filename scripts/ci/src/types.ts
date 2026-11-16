@@ -1,18 +1,22 @@
 /**
  * Possible status values for a workflow step execution.
+ *
+ * - `passed` / `failed`: the step's command ran and exited zero / non-zero.
+ * - `skipped`: the step's condition chose not to run it.
+ * - `blocked`: the step did not run because a dependency failed or was blocked.
  */
-export type StepStatus = "passed" | "failed" | "skipped";
+export type StepStatus = "passed" | "failed" | "skipped" | "blocked";
 
 /**
- * Condition that determines when a workflow step should execute.
- * Can be a predefined string or a custom function that receives the step context.
+ * Condition that determines when a workflow step should execute, judged
+ * against the outcomes of its `dependsOn` steps. A dependency is healthy when
+ * it passed or was skipped, and unhealthy when it failed or was blocked.
  */
 export type StepCondition =
-	| "success" // Run if all dependencies succeeded (default)
-	| "failure" // Run if any dependency failed
+	| "success" // Run if every dependency is healthy, else blocked (default)
+	| "failure" // Run if any dependency is unhealthy, else skipped
 	| "always" // Always run regardless of dependency status
-	| ((context: StepContext) => boolean); // Custom function
-// {}
+	| ((context: StepContext) => boolean); // Like "success", then skipped when it returns false
 
 /**
  * Context object passed to workflow steps, providing access to step history,
@@ -111,24 +115,52 @@ export interface WorkflowStep {
 }
 
 /**
- * Result of executing a single workflow step.
+ * Result of a workflow step whose command ran.
  */
-export interface StepResult {
+export interface RanStepResult {
 	/** Name of the executed step */
 	name: string;
-	/** Final execution status of the step */
-	status: StepStatus;
-	/** Command output if the step was executed (undefined if skipped) */
+	/** Whether the command exited successfully */
+	status: "passed" | "failed";
+	/** Command output */
 	output?: Deno.CommandOutput | undefined;
 	/** Outputs captured from this step's execution */
 	outputs?: StepOutputs | undefined;
 }
 
 /**
+ * Result of a workflow step whose condition chose not to run it.
+ */
+export interface SkippedStepResult {
+	/** Name of the step */
+	name: string;
+	/** The step was skipped */
+	status: "skipped";
+}
+
+/**
+ * Result of a workflow step that did not run because a dependency failed or
+ * was itself blocked.
+ */
+export interface BlockedStepResult {
+	/** Name of the step */
+	name: string;
+	/** The step was blocked */
+	status: "blocked";
+	/** The unhealthy dependencies that blocked this step, in `dependsOn` order */
+	blockedBy: string[];
+}
+
+/**
+ * Result of executing a single workflow step, discriminated by `status`.
+ */
+export type StepResult = RanStepResult | SkippedStepResult | BlockedStepResult;
+
+/**
  * Overall result of executing a complete workflow.
  */
 export interface WorkflowResult {
-	/** true if all steps passed or were skipped, false if any step failed */
+	/** true if no step failed, false if any step failed */
 	success: boolean;
 	/** Results from each step in execution order */
 	steps: StepResult[];

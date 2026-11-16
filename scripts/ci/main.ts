@@ -1,5 +1,5 @@
 // deno-coverage-ignore-file
-import { runWorkflow } from "@/mod.ts";
+import { runWorkflow, type WorkflowStep } from "@/mod.ts";
 
 /**
  * Exit codes for CI workflow failures.
@@ -21,21 +21,25 @@ export const EXIT_CODES = {
 } as const;
 
 /**
- * Main entry point for the CI workflow.
- * Runs a comprehensive continuous integration workflow including:
+ * The environment the CI workflow adapts to.
+ */
+export interface CIEnvironment {
+	/** Running in a CI service (`CI=true`) */
+	isCI: boolean;
+	/** Running for an AI agent (`CI_AI=true`) */
+	isAI: boolean;
+}
+
+/**
+ * The CI workflow's steps for an environment:
  * - Parallel linting (Deno lint, Biome check, documentation lint, JSR dry run)
  * - Type checking
  * - Testing with coverage
  * - Coverage reporting
- * - Cleanup
- *
- * The workflow adapts behavior based on the CI environment variable.
+ * - Local cleanup of coverage data
  */
-export async function main(): Promise<void> {
-	const isCI = Deno.env.get("CI") === "true";
-	const isAI = Deno.env.get("CI_AI") === "true";
-
-	await runWorkflow([
+export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
+	return [
 		// Parallel linting (no dependencies, will run concurrently)
 		{
 			name: "Deno Lint",
@@ -82,7 +86,7 @@ export async function main(): Promise<void> {
 			}),
 		},
 
-		// Run tests (waits for lint to pass first)
+		// Run tests (blocked if lint fails)
 		{
 			name: "Deno Test",
 			dependsOn: ["Deno Lint"],
@@ -104,7 +108,7 @@ export async function main(): Promise<void> {
 			}),
 		},
 
-		// Show coverage report (only if tests passed)
+		// Show coverage report (blocked if tests failed)
 		{
 			name: "Show coverage report",
 			dependsOn: ["Deno Test"],
@@ -115,16 +119,33 @@ export async function main(): Promise<void> {
 			command: new Deno.Command("deno", { args: ["coverage", "--detailed"] }),
 		},
 
-		// Cleanup (always runs, even if tests failed)
-		{
-			name: "Cleanup coverage data",
-			dependsOn: ["Show coverage report"],
-			continueOnError: true,
-			condition: () => !isCI,
+		// Local cleanup (runs even if tests failed); CI keeps the coverage data
+		...(isCI ? [] : [cleanupStep()]),
+	];
+}
 
-			command: new Deno.Command("rm", { args: ["-r", "coverage"] }),
-		},
-	]);
+function cleanupStep(): WorkflowStep {
+	return {
+		name: "Cleanup coverage data",
+		dependsOn: ["Show coverage report"],
+		continueOnError: true,
+		condition: "always",
+
+		command: new Deno.Command("rm", { args: ["-r", "coverage"] }),
+	};
+}
+
+/**
+ * Main entry point for the CI workflow. Reads the environment and runs
+ * {@linkcode ciSteps}.
+ */
+export async function main(): Promise<void> {
+	await runWorkflow(
+		ciSteps({
+			isCI: Deno.env.get("CI") === "true",
+			isAI: Deno.env.get("CI_AI") === "true",
+		}),
+	);
 }
 
 if (import.meta.main) {

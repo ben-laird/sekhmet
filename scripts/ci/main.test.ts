@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { EXIT_CODES, main } from "./main.ts";
+import { ciSteps, EXIT_CODES, main } from "./main.ts";
 
 Deno.test("EXIT_CODES are defined with unique values", () => {
 	// Given: EXIT_CODES constant
@@ -14,6 +14,23 @@ Deno.test("EXIT_CODES are defined with unique values", () => {
 	const values = Object.values(EXIT_CODES);
 	const uniqueValues = new Set(values);
 	assertEquals(values.length, uniqueValues.size, "Exit codes should be unique");
+});
+
+Deno.test("ciSteps cleans up coverage data locally even after a failure, and keeps it in CI", () => {
+	// Given: the local and CI step lists
+	const local = ciSteps({ isCI: false, isAI: true });
+	const ci = ciSteps({ isCI: true, isAI: false });
+
+	// When: finding the cleanup step
+	const localCleanup = local.find(
+		(step) => step.name === "Cleanup coverage data",
+	);
+	const ciCleanup = ci.find((step) => step.name === "Cleanup coverage data");
+
+	// Then: locally it always runs after the report; CI omits it
+	assertEquals(localCleanup?.condition, "always");
+	assertEquals(localCleanup?.dependsOn, ["Show coverage report"]);
+	assertEquals(ciCleanup, undefined);
 });
 
 Deno.test("main function exists and is callable", () => {

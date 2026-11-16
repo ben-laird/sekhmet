@@ -1,5 +1,5 @@
 // deno-coverage-ignore-file
-import { cyan, gray, green, red } from "@std/fmt/colors";
+import { cyan, gray, green, red, yellow } from "@std/fmt/colors";
 import type { CIAdapter } from "./adapter.ts";
 import { shouldShowOutput } from "./step.ts";
 import type { StepResult, StepStatus, WorkflowStep } from "./types.ts";
@@ -12,8 +12,10 @@ export interface AIStepResult {
 	name: string;
 	/** Execution status */
 	status: StepStatus;
-	/** Exit code if the step failed */
+	/** The step's workflow exit code, present when the step failed */
 	exitCode?: number | undefined;
+	/** The unhealthy dependencies that blocked the step, present when blocked */
+	blockedBy?: string[] | undefined;
 	/** Standard output from the step */
 	stdout?: string | undefined;
 	/** Standard error from the step */
@@ -24,10 +26,69 @@ export interface AIStepResult {
  * JSON output for the entire workflow in AI mode.
  */
 export interface AIWorkflowResult {
-	/** true if all steps passed, false if any failed */
+	/** true if no step failed, false if any failed */
 	success: boolean;
 	/** Results for each step in execution order */
 	steps: AIStepResult[];
+}
+
+/**
+ * Looks up a step's result, panicking if the graph never recorded one.
+ */
+function resultFor(
+	step: WorkflowStep,
+	results: Map<string, StepResult>,
+): StepResult {
+	const result = results.get(step.name);
+	if (!result) {
+		throw new Error(`Step "${step.name}" did not complete`);
+	}
+	return result;
+}
+
+/**
+ * The exit code a workflow ends with: `0` when no step failed, otherwise the
+ * `exitCode` of the first failed step in declaration order (default `1`).
+ * Blocked and skipped steps never set the code; the failure that blocked them
+ * already has.
+ */
+export function workflowExitCode({
+	steps,
+	results,
+}: {
+	steps: WorkflowStep[];
+	results: Map<string, StepResult>;
+}): number {
+	for (const step of steps) {
+		if (resultFor(step, results).status === "failed") {
+			return step.exitCode ?? 1;
+		}
+	}
+	return 0;
+}
+
+/**
+ * Renders the one-line status of a step for console and GitHub Actions logs,
+ * e.g. `[-] Show coverage report (blocked: "Deno Test" failed or was blocked)`.
+ */
+export function formatStepStatusLine(result: StepResult): string {
+	switch (result.status) {
+		case "passed": {
+			return `${green("[x]")} ${result.name}`;
+		}
+		case "failed": {
+			return `${red("[!]")} ${result.name}`;
+		}
+		case "skipped": {
+			return `${cyan("[ ]")} ${result.name} ${gray("(skipped: condition not met)")}`;
+		}
+		case "blocked": {
+			const dependencies = result.blockedBy
+				.map((name) => `"${name}"`)
+				.join(", ");
+			return `${yellow("[-]")} ${result.name} ${yellow(`(blocked: ${dependencies} failed or was blocked)`)}`;
+		}
+	}
 }
 
 /**
@@ -40,34 +101,16 @@ export async function formatWorkflowOutput(
 	decoder: TextDecoder,
 	adapter: CIAdapter,
 ): Promise<number> {
-	let exitCode = 0;
-
 	for (const step of steps) {
-		const result = results.get(step.name);
-		if (!result) {
-			throw new Error(`Step "${step.name}" did not complete`);
-		}
+		const result = resultFor(step, results);
 
-		// Display status
-		const statusSymbol = (() => {
-			switch (result.status) {
-				case "passed": {
-					return green("[x]");
-				}
-				case "failed": {
-					return red("[!]");
-				}
-				case "skipped": {
-					return cyan("[ ]");
-				}
-			}
-		})();
+		console.log(formatStepStatusLine(result));
 
-		console.log(`${statusSymbol} ${result.name}`);
+		if (result.status !== "passed" && result.status !== "failed") continue;
 
 		// Show output if configured
-		if (result.output && shouldShowOutput(step, result.status)) {
-			const output = result.output;
+		const output = result.output;
+		if (output && shouldShowOutput(step, result.status)) {
 			await adapter.group(result.name, () => {
 				const stderr = decoder.decode(output.stderr);
 				if (stderr) console.error(stderr);
@@ -78,19 +121,13 @@ export async function formatWorkflowOutput(
 		}
 
 		// Show captured outputs
-		if (result.outputs?.env && Object.keys(result.outputs.env).length > 0) {
-			console.log(
-				`  ${gray("Exported:")} ${Object.keys(result.outputs.env).join(", ")}`,
-			);
-		}
-
-		// Track first failure's exit code
-		if (result.status === "failed" && exitCode === 0) {
-			exitCode = step.exitCode ?? 1;
+		const exported = Object.keys(result.outputs?.env ?? {});
+		if (exported.length > 0) {
+			console.log(`  ${gray("Exported:")} ${exported.join(", ")}`);
 		}
 	}
 
-	return exitCode;
+	return workflowExitCode({ steps, results });
 }
 
 /**
@@ -107,23 +144,25 @@ export function formatAIOutput(
 	results: Map<string, StepResult>,
 	decoder: TextDecoder,
 ): AIWorkflowResult {
-	let success = true;
-	const stepResults: AIStepResult[] = [];
+	const stepResults: AIStepResult[] = steps.map((step) => {
+		const result = resultFor(step, results);
+		const aiStep: AIStepResult = { name: result.name, status: result.status };
 
-	for (const step of steps) {
-		const result = results.get(step.name);
-		if (!result) {
-			throw new Error(`Step "${step.name}" did not complete`);
-		}
-
-		const aiStep: AIStepResult = {
-			name: result.name,
-			status: result.status,
-		};
-
-		if (result.status === "failed") {
-			success = false;
-			aiStep.exitCode = step.exitCode ?? 1;
+		switch (result.status) {
+			case "skipped": {
+				return aiStep;
+			}
+			case "blocked": {
+				aiStep.blockedBy = result.blockedBy;
+				return aiStep;
+			}
+			case "failed": {
+				aiStep.exitCode = step.exitCode ?? 1;
+				break;
+			}
+			case "passed": {
+				break;
+			}
 		}
 
 		// Include output if configured to show
@@ -139,11 +178,9 @@ export function formatAIOutput(
 			}
 		}
 
-		stepResults.push(aiStep);
-	}
+		return aiStep;
+	});
 
-	return {
-		success,
-		steps: stepResults,
-	};
+	const exitCode = workflowExitCode({ steps, results });
+	return { success: exitCode === 0, steps: stepResults };
 }

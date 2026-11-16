@@ -24,12 +24,17 @@ export async function executeStep({
 		artifactsDir,
 	});
 
-	// Evaluate condition
-	if (!shouldRunStep(step, context)) {
-		return {
-			name: step.name,
-			status: "skipped",
-		};
+	const gate = gateStep({ step, context });
+	switch (gate.kind) {
+		case "skipped": {
+			return { name: step.name, status: "skipped" };
+		}
+		case "blocked": {
+			return { name: step.name, status: "blocked", blockedBy: gate.blockedBy };
+		}
+		case "run": {
+			break;
+		}
 	}
 
 	// Set environment variables for this step
@@ -77,29 +82,41 @@ export async function executeStep({
 }
 
 /**
- * Evaluates whether a step should run based on its condition.
+ * Decision on whether a step runs, made before its command executes.
  */
-export function shouldRunStep(
-	step: WorkflowStep,
-	context: StepContext,
-): boolean {
+export type StepGate =
+	| { kind: "run" }
+	| { kind: "skipped" }
+	| { kind: "blocked"; blockedBy: string[] };
+
+/**
+ * Decides whether a step runs, from its condition and the outcomes of its
+ * `dependsOn` steps (see `StepCondition`).
+ *
+ * A failed or blocked dependency blocks a `"success"` or function-condition
+ * step, so blocking propagates down the graph. Only `"failure"` and
+ * `"always"` steps run after an unhealthy dependency.
+ */
+export function gateStep({
+	step,
+	context,
+}: {
+	step: WorkflowStep;
+	context: StepContext;
+}): StepGate {
+	const blockedBy = (step.dependsOn ?? []).filter((dependency) => {
+		const status = context.steps.get(dependency);
+		return status === "failed" || status === "blocked";
+	});
 	const condition = step.condition ?? "success";
 
-	if (typeof condition === "function") {
-		return condition(context);
+	if (condition === "always") return { kind: "run" };
+	if (condition === "failure") {
+		return blockedBy.length > 0 ? { kind: "run" } : { kind: "skipped" };
 	}
-
-	switch (condition) {
-		case "success": {
-			return context.allSucceeded();
-		}
-		case "failure": {
-			return context.hasFailure();
-		}
-		case "always": {
-			return true;
-		}
-	}
+	if (blockedBy.length > 0) return { kind: "blocked", blockedBy };
+	if (condition === "success") return { kind: "run" };
+	return condition(context) ? { kind: "run" } : { kind: "skipped" };
 }
 
 /**
@@ -109,7 +126,7 @@ export function shouldShowOutput(
 	step: WorkflowStep,
 	status: StepStatus,
 ): boolean {
-	if (status === "skipped") return false;
+	if (status === "skipped" || status === "blocked") return false;
 
 	if (typeof step.showOutput === "function") {
 		return step.showOutput(status);

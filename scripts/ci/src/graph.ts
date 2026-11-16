@@ -61,15 +61,12 @@ export async function executeStepGraph(
 		completedSteps.set(step.name, result);
 
 		// Accumulate outputs for next steps
-		if (result.outputs?.env) {
-			for (const [key, value] of Object.entries(result.outputs.env)) {
-				accumulatedOutputs.env.set(key, value);
-			}
+		if (result.status !== "passed" && result.status !== "failed") return;
+		for (const [key, value] of Object.entries(result.outputs?.env ?? {})) {
+			accumulatedOutputs.env.set(key, value);
 		}
-		if (result.outputs?.context) {
-			for (const [key, value] of Object.entries(result.outputs.context)) {
-				accumulatedOutputs.context.set(key, value);
-			}
+		for (const [key, value] of Object.entries(result.outputs?.context ?? {})) {
+			accumulatedOutputs.context.set(key, value);
 		}
 	}
 }

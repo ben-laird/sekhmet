@@ -1,5 +1,7 @@
 import { assertEquals, assertRejects } from "@std/assert";
+import { exists } from "@std/fs/exists";
 import { executeStepGraph } from "./graph.ts";
+import { ranResult } from "./testing.ts";
 import type { WorkflowStep } from "./types.ts";
 
 Deno.test("executeStepGraph executes single step successfully", async () => {
@@ -227,8 +229,8 @@ Deno.test("executeStepGraph accumulates context outputs", async () => {
 		// Then: context should be accumulated
 		assertEquals(results.size, 2);
 		const setupResult = results.get("SetupContext");
-		assertEquals(setupResult?.outputs?.context?.version, "1.2.3");
-		assertEquals(setupResult?.outputs?.context?.buildNumber, 42);
+		assertEquals(ranResult(setupResult).outputs?.context?.version, "1.2.3");
+		assertEquals(ranResult(setupResult).outputs?.context?.buildNumber, 42);
 	} finally {
 		await Deno.remove(artifactsDir, { recursive: true });
 	}
@@ -300,10 +302,125 @@ Deno.test("executeStepGraph handles failed steps", async () => {
 		// When: executing the step graph
 		const results = await executeStepGraph(steps, artifactsDir);
 
-		// Then: Build should fail and Test should be skipped
+		// Then: Build should fail and Test should be blocked by it
 		assertEquals(results.size, 2);
 		assertEquals(results.get("Build")?.status, "failed");
-		assertEquals(results.get("Test")?.status, "skipped");
+		assertEquals(results.get("Test"), {
+			name: "Test",
+			status: "blocked",
+			blockedBy: ["Build"],
+		});
+	} finally {
+		await Deno.remove(artifactsDir, { recursive: true });
+	}
+});
+
+Deno.test("executeStepGraph blocks a function-condition dependent of a failed step without running it", async () => {
+	// Given: the CI shape — a failing test step, a coverage report gated by an
+	// environment condition, and an always-run cleanup after the report
+	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
+	const reportMarker = `${artifactsDir}/report-ran`;
+	const cleanupMarker = `${artifactsDir}/cleanup-ran`;
+	const steps: WorkflowStep[] = [
+		{
+			name: "Deno Test",
+			command: new Deno.Command("sh", { args: ["-c", "exit 1"] }),
+		},
+		{
+			name: "Show coverage report",
+			dependsOn: ["Deno Test"],
+			condition: () => true,
+			command: new Deno.Command("touch", { args: [reportMarker] }),
+		},
+		{
+			name: "Cleanup coverage data",
+			dependsOn: ["Show coverage report"],
+			condition: "always",
+			command: new Deno.Command("touch", { args: [cleanupMarker] }),
+		},
+	];
+
+	try {
+		// When: executing the step graph
+		const results = await executeStepGraph(steps, artifactsDir);
+
+		// Then: the report is blocked by the failed tests and never ran
+		assertEquals(results.get("Deno Test")?.status, "failed");
+		assertEquals(results.get("Show coverage report"), {
+			name: "Show coverage report",
+			status: "blocked",
+			blockedBy: ["Deno Test"],
+		});
+		assertEquals(await exists(reportMarker), false);
+
+		// Then: the always-run cleanup still ran
+		assertEquals(results.get("Cleanup coverage data")?.status, "passed");
+		assertEquals(await exists(cleanupMarker), true);
+	} finally {
+		await Deno.remove(artifactsDir, { recursive: true });
+	}
+});
+
+Deno.test("executeStepGraph propagates blocking through a chain of dependents", async () => {
+	// Given: A fails, B depends on A, C depends on B
+	const steps: WorkflowStep[] = [
+		{ name: "A", command: new Deno.Command("sh", { args: ["-c", "exit 1"] }) },
+		{
+			name: "B",
+			dependsOn: ["A"],
+			command: new Deno.Command("echo", { args: ["b"] }),
+		},
+		{
+			name: "C",
+			dependsOn: ["B"],
+			command: new Deno.Command("echo", { args: ["c"] }),
+		},
+	];
+	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
+
+	try {
+		// When: executing the step graph
+		const results = await executeStepGraph(steps, artifactsDir);
+
+		// Then: B is blocked by A, and C by B
+		assertEquals(results.get("B"), {
+			name: "B",
+			status: "blocked",
+			blockedBy: ["A"],
+		});
+		assertEquals(results.get("C"), {
+			name: "C",
+			status: "blocked",
+			blockedBy: ["B"],
+		});
+	} finally {
+		await Deno.remove(artifactsDir, { recursive: true });
+	}
+});
+
+Deno.test("executeStepGraph runs a dependent of a skipped step", async () => {
+	// Given: a step skipped by its condition, and a dependent of it
+	const steps: WorkflowStep[] = [
+		{
+			name: "Optional",
+			condition: () => false,
+			command: new Deno.Command("echo", { args: ["optional"] }),
+		},
+		{
+			name: "After",
+			dependsOn: ["Optional"],
+			command: new Deno.Command("echo", { args: ["after"] }),
+		},
+	];
+	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
+
+	try {
+		// When: executing the step graph
+		const results = await executeStepGraph(steps, artifactsDir);
+
+		// Then: a skipped dependency is healthy, so the dependent runs
+		assertEquals(results.get("Optional")?.status, "skipped");
+		assertEquals(results.get("After")?.status, "passed");
 	} finally {
 		await Deno.remove(artifactsDir, { recursive: true });
 	}
