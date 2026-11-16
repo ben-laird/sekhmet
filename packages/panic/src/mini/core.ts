@@ -5,6 +5,8 @@
  * @module
  */
 
+import { randomUuid } from "./uuid.ts";
+
 /**
  * Base interface for panic sources without a typed cause.
  */
@@ -127,7 +129,7 @@ export class Panic<T> extends Error {
 
 		this.#params = {
 			name: source.name,
-			id: crypto.randomUUID(),
+			id: randomUuid(),
 			timestamp: new Date(),
 			cause: source.cause,
 		};

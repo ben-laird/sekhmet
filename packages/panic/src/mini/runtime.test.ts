@@ -6,7 +6,6 @@ import {
 	assert,
 	assertEquals,
 	assertInstanceOf,
-	assertMatch,
 	assertRejects,
 	assertStrictEquals,
 	assertThrows,
@@ -656,19 +655,85 @@ Deno.test("mapErr() converts a caught payload into an app error", () => {
 });
 
 Deno.test("defaultPanicHook writes a 'panicked:' report to console.error", async (t) => {
-	await t.step("Error payload prints its stack", () => {
-		// Given: a stubbed console.error and a Panic
+	await t.step("Error payload prints its own header once, then frames", () => {
+		// Given: a stubbed console.error and a Panic with this engine's stack
 		using error = stub(console, "error");
 		const payload = boom();
 
 		// When: the default hook reports it
 		defaultPanicHook({ payload, stack: payload.stack });
 
-		// Then: it prints 'panicked: ' followed by the stack
+		// Then: the first line is the header, whatever the engine's stack format,
+		// and the engine's own header (if any) is not repeated below it
 		assertEquals(error.calls.length, 1);
-		assertEquals(error.calls[0]?.args, [`panicked: ${payload.stack}`]);
-		assertMatch(String(error.calls[0]?.args[0]), /^panicked: Panic: boom/);
+		const [header, next] = String(error.calls[0]?.args[0]).split("\n");
+		assertEquals(header, "panicked: Panic: boom");
+		assert(next === undefined || !next.endsWith(": boom"));
 	});
+
+	const stacks: [
+		engine: string,
+		payload: Error,
+		stack: string,
+		report: string,
+	][] = [
+		[
+			"V8",
+			boom(),
+			"Panic: boom\n    at f (a.js:1:1)",
+			"panicked: Panic: boom\n    at f (a.js:1:1)",
+		],
+		[
+			"Bun, whose header names the base class",
+			boom(),
+			"Error: boom\n    at f (a.js:1:1)",
+			"panicked: Panic: boom\n    at f (a.js:1:1)",
+		],
+		[
+			"Firefox and WebKit, frames only",
+			boom(),
+			"f@a.js:1:1\n@a.js:2:1\n",
+			"panicked: Panic: boom\nf@a.js:1:1\n@a.js:2:1",
+		],
+		[
+			"a multi-line message",
+			new Panic({ message: "one\ntwo", cause: null }),
+			"Panic: one\ntwo\n    at f (a.js:1:1)",
+			"panicked: Panic: one\ntwo\n    at f (a.js:1:1)",
+		],
+		[
+			"a multi-line message, frames only",
+			new Panic({ message: "one\ntwo", cause: null }),
+			"f@a.js:1:1",
+			"panicked: Panic: one\ntwo\nf@a.js:1:1",
+		],
+		["no frames", boom(), "Panic: boom", "panicked: Panic: boom"],
+		[
+			"an empty message (V8)",
+			new Error(""),
+			"Error\n    at f (a.js:1:1)",
+			"panicked: Error\n    at f (a.js:1:1)",
+		],
+		[
+			"an empty message, frames only",
+			new Error(""),
+			"f@a.js:1:1",
+			"panicked: Error\nf@a.js:1:1",
+		],
+	];
+
+	for (const [engine, payload, stack, report] of stacks) {
+		await t.step(`stack format: ${engine}`, () => {
+			// Given: a stubbed console.error and an Error with that stack format
+			using error = stub(console, "error");
+
+			// When: the default hook reports it
+			defaultPanicHook({ payload, stack });
+
+			// Then: the payload's header comes first, then the frames alone
+			assertEquals(error.calls[0]?.args, [report]);
+		});
+	}
 
 	await t.step("primitive payload prints as a string", () => {
 		// Given: a stubbed console.error

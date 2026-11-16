@@ -8,6 +8,7 @@ import {
 	findWorktree,
 	formatConfig,
 	type LinkedPackage,
+	OWNERSHIP_KEY,
 	type PlaygroundLink,
 	parseCommand,
 	parseConfig,
@@ -50,8 +51,17 @@ const PACKAGES: LinkedPackage[] = [
 
 const LINK: PlaygroundLink = {
 	imports: { "@sekhmet/enum": "jsr:@sekhmet/enum@^0.2.0" },
+	rootImports: {},
 	links: ["../packages/enum"],
 	compilerOptions: { strict: true },
+};
+
+const STD_LINK: PlaygroundLink = {
+	...LINK,
+	rootImports: {
+		"@std/assert": "jsr:@std/assert@1.0.16",
+		"@std/testing": "jsr:@std/testing@1.0.16",
+	},
 };
 
 Deno.test("parseCommand", async (t) => {
@@ -242,6 +252,7 @@ Deno.test("buildLink", async (t) => {
 			root: WORKTREE,
 			playground: PLAYGROUND,
 			compilerOptions: { strict: true },
+			imports: undefined,
 		});
 
 		// Then: each gets a jsr import (a caret range when versioned) and a
@@ -252,6 +263,7 @@ Deno.test("buildLink", async (t) => {
 				"@sekhmet/enum": "jsr:@sekhmet/enum@^0.2.0",
 				"@sekhmet/schema": "jsr:@sekhmet/schema@^0.1.0",
 			},
+			rootImports: {},
 			links: [
 				"../.claude/worktrees/agent-1/packages/draft",
 				"../.claude/worktrees/agent-1/packages/enum",
@@ -269,13 +281,61 @@ Deno.test("buildLink", async (t) => {
 			root: CHECKOUT,
 			playground: PLAYGROUND,
 			compilerOptions: undefined,
+			imports: undefined,
 		});
 
 		// Then: links climb one level and compilerOptions is left out
 		assertEquals(link, {
 			imports: { "@sekhmet/enum": "jsr:@sekhmet/enum@^0.2.0" },
+			rootImports: {},
 			links: ["../packages/enum"],
 		});
+	});
+
+	await t.step("carries the root's other imports, rebasing paths", () => {
+		// Given: a worktree whose root deno.json imports @std/*, an npm
+		// package, a root path alias, a @sekhmet/* package and a non-string
+		const imports = {
+			"@std/assert": "jsr:@std/assert@1.0.16",
+			"@biomejs/biome": "npm:@biomejs/biome@^2.6.8",
+			"@~/": "./",
+			"@scratch/": "../shared/",
+			"@sekhmet/enum": "jsr:@sekhmet/enum@^0.2.0",
+			broken: 1,
+		};
+
+		// When: building the link from the checkout's playground
+		const link = buildLink({
+			packages: [ENUM],
+			root: WORKTREE,
+			playground: PLAYGROUND,
+			compilerOptions: undefined,
+			imports,
+		});
+
+		// Then: specifiers stay as they are, relative paths point at the same
+		// place from playground/, and @sekhmet/* and non-strings are left out
+		assertEquals(link.rootImports, {
+			"@std/assert": "jsr:@std/assert@1.0.16",
+			"@biomejs/biome": "npm:@biomejs/biome@^2.6.8",
+			"@~/": "../.claude/worktrees/agent-1/",
+			"@scratch/": "../.claude/worktrees/shared/",
+		});
+	});
+
+	await t.step("root imports that are not an object are none", () => {
+		// Given: a root deno.json whose imports is a string
+		// When: building the link
+		const link = buildLink({
+			packages: [ENUM],
+			root: CHECKOUT,
+			playground: PLAYGROUND,
+			compilerOptions: undefined,
+			imports: "nope",
+		});
+
+		// Then: no root imports are carried
+		assertEquals(link.rootImports, {});
 	});
 });
 
@@ -335,12 +395,83 @@ Deno.test("applyLink", async (t) => {
 		// Then: it is refused rather than overwritten
 		assertEquals(merged.ok, false);
 	});
+
+	await t.step("writes the root imports and records them as ours", () => {
+		// Given: no existing config
+		// When: applying a link that carries root imports
+		const merged = applyLink({ config: {}, link: STD_LINK });
+
+		// Then: they join the imports, and the ownership record names them
+		assertEquals(merged, {
+			ok: true,
+			value: {
+				imports: { ...STD_LINK.rootImports, ...STD_LINK.imports },
+				links: STD_LINK.links,
+				compilerOptions: STD_LINK.compilerOptions,
+				[OWNERSHIP_KEY]: { imports: ["@std/assert", "@std/testing"] },
+			},
+		});
+	});
+
+	await t.step("an import the owner set keeps the owner's value", () => {
+		// Given: the owner pinned @std/assert before any link
+		const config = { imports: { "@std/assert": "jsr:@std/assert@1" } };
+
+		// When: applying a link whose root also imports it
+		const merged = applyLink({ config, link: STD_LINK });
+
+		// Then: the owner's value stays and only @std/testing is ours
+		assertEquals(merged, {
+			ok: true,
+			value: {
+				imports: {
+					"@std/assert": "jsr:@std/assert@1",
+					"@std/testing": "jsr:@std/testing@1.0.16",
+					"@sekhmet/enum": "jsr:@sekhmet/enum@^0.2.0",
+				},
+				links: STD_LINK.links,
+				compilerOptions: STD_LINK.compilerOptions,
+				[OWNERSHIP_KEY]: { imports: ["@std/testing"] },
+			},
+		});
+	});
+
+	await t.step("a relink replaces the root imports we wrote before", () => {
+		// Given: a config linked to a root that imported @std/fmt, plus an
+		// owner import
+		const linked = applyLink({
+			config: { imports: { "@my/lib": "jsr:@my/lib@1" } },
+			link: { ...LINK, rootImports: { "@std/fmt": "jsr:@std/fmt@1" } },
+		});
+		const config = linked.ok ? linked.value : {};
+
+		// When: relinking to a root that imports @std/assert instead
+		const merged = applyLink({
+			config,
+			link: { ...LINK, rootImports: { "@std/assert": "jsr:@std/assert@2" } },
+		});
+
+		// Then: the old root import goes, the new one is ours, the owner's stays
+		assertEquals(merged, {
+			ok: true,
+			value: {
+				imports: {
+					"@my/lib": "jsr:@my/lib@1",
+					"@std/assert": "jsr:@std/assert@2",
+					"@sekhmet/enum": "jsr:@sekhmet/enum@^0.2.0",
+				},
+				links: LINK.links,
+				compilerOptions: LINK.compilerOptions,
+				[OWNERSHIP_KEY]: { imports: ["@std/assert"] },
+			},
+		});
+	});
 });
 
 Deno.test("removeLink", async (t) => {
 	await t.step("a config with only our keys is deleted", () => {
 		// Given: a config play:link wrote
-		const config = { ...LINK };
+		const { rootImports: _, ...config } = LINK;
 
 		// When: removing the link
 		const remaining = removeLink(config);
@@ -370,6 +501,46 @@ Deno.test("removeLink", async (t) => {
 			},
 		});
 	});
+
+	await t.step("removes exactly the root imports it recorded", () => {
+		// Given: a linked config with root imports we wrote and one the owner
+		// set, which the link left alone
+		const linked = applyLink({
+			config: {
+				imports: { "@std/assert": "jsr:@std/assert@1" },
+				tasks: { try: "deno run try.ts" },
+			},
+			link: STD_LINK,
+		});
+		const config = linked.ok ? linked.value : {};
+
+		// When: removing the link
+		const remaining = removeLink(config);
+
+		// Then: our @std/testing and the record go; the owner's @std/assert stays
+		assertEquals(remaining, {
+			ok: true,
+			value: {
+				tasks: { try: "deno run try.ts" },
+				imports: { "@std/assert": "jsr:@std/assert@1" },
+			},
+		});
+	});
+
+	await t.step(
+		"a config with only what we wrote, root imports included, is deleted",
+		() => {
+			// Given: a config play:link wrote with root imports
+			const linked = applyLink({ config: {}, link: STD_LINK });
+			const config = linked.ok ? linked.value : { owner: true };
+
+			// When: removing the link
+			const remaining = removeLink(config);
+
+			// Then: nothing is left
+			assertEquals(remaining, { ok: true, value: undefined });
+		},
+	);
 
 	await t.step("an imports value that is not an object is an error", () => {
 		// Given: a config whose imports is an array

@@ -1,0 +1,17 @@
+{
+	"name": "@sekhmet/compat-smoke",
+	"version": "0.1.0",
+	"publish": false,
+
+	"exclude": ["runners/"],
+
+	"exports": {
+		".": "./main.ts"
+	},
+
+	"imports": {
+		"@/": "./",
+
+		"zod": "npm:zod@^4.1.0"
+	}
+}

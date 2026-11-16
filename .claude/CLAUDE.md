@@ -46,11 +46,19 @@ deno task fmt
 `CI_AI=true deno task ci` to verify your work passes all checks before
 considering the task complete.
 
-**AI Mode (`CI_AI=true`)**: Always use the `CI_AI=true` environment variable
-when running CI as an AI agent. This mode:
+**Commit gate**: with the hooks on (`deno task hooks`, which installs shims in
+the shared `.git/hooks/` and unsets `core.hooksPath`), each worktree's
+`.githooks/pre-commit` refuses a commit whose staged tree has no green
+`deno task ci` run (markdown-only commits are exempt unless they touch a code
+block `deno test --doc` runs). Stage first, run the gate, then commit; never
+bypass it with `--no-verify`, and never set `core.hooksPath` (it disables the
+shims). See CONTRIBUTING.md, "Commit gate".
 
-- Allows dirty worktree (JSR publish dry-run won't fail on uncommitted changes)
-- Outputs structured JSON for programmatic parsing
+**AI Mode (`CI_AI=true`)**: Always use the `CI_AI=true` environment variable
+when running CI as an AI agent. This mode outputs structured JSON for
+programmatic parsing. Every local run (AI or not) allows a dirty worktree: the
+JSR publish dry run passes `--allow-dirty`, so staged changes can be gated
+before they are committed; only CI (`CI=true`) requires a clean tree.
 
 **Handling CI Failures**: If CI fails:
 
@@ -98,14 +106,31 @@ Scripts (`scripts/`, unpublished):
 - `@sekhmet/add`: scaffolds a new workspace from `scripts/add/templates/`
   (`deno task add`)
 - `@sekhmet/ci`: runs lint, type check, doc lint, publish readiness, JSR dry run and tests (`deno task ci`)
+- `@sekhmet/compat`: runs every package's unit tests on a non-Deno runtime
+  (`deno task compat:test <node|bun|chromium|firefox|webkit|workerd>`) through
+  a bundled `Deno.test` shim; not part of `deno task ci` (see
+  `scripts/compat/README.md`)
+- `@sekhmet/compat-smoke`: installs the published packages from JSR on Node,
+  Bun, Chromium, Firefox, WebKit or workerd and imports and exercises every
+  export path (`deno task compat:smoke <runtime>`; run by
+  `.github/workflows/compat-smoke.yml`, never by `deno task ci`)
 - `@sekhmet/docs-site`: the VitePress docs site; assembles the root README and
   every package's `README.md` and `docs/*.md` into a sidebar per package
   (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
   `.github/workflows/docs.yml`)
+- `@sekhmet/dv`: the pinned dv release CLI, run frozen (`deno task dv <args>`,
+  e.g. `deno task dv add`, `deno task dv status`)
+- `@sekhmet/dv-plugin`: the dv plugin that versions and publishes `packages/*`
+  to JSR
+- `@sekhmet/gen-main`: generates each feature's main (method-chaining)
+  `main/mod.ts` from its mini barrel (`deno task gen:main`; `--check` in CI)
 - `@sekhmet/playground`: `deno task play:notebook` starts a Jupyter notebook
   in the gitignored `playground/`, and `deno task play:link <target>` links
   `playground/` to a worktree's (or any checkout's) packages for the editor
   (see CONTRIBUTING.md, "Playground")
+- `@sekhmet/release`: the release driver `.github/workflows/release.yml` runs
+  on every push to main: versions pending Records, tags, publishes, and opens
+  GitHub Releases
 
 ### Core Design Principles
 
@@ -234,7 +259,9 @@ fix(@sekhmet/primordials): correct Struct type inference
 
 **Scopes**: Use package names: `@sekhmet/effect`, `@sekhmet/enum`,
 `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/vow`,
-and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/playground` for scripts
+and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`,
+`@sekhmet/dv`, `@sekhmet/dv-plugin`, `@sekhmet/gen-main`, `@sekhmet/playground`,
+`@sekhmet/release` for scripts
 
 ## Infrastructure Code Conventions
 

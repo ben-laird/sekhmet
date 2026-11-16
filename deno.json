@@ -19,6 +19,10 @@
 			"description": "Run CI checks",
 			"command": "deno run --no-prompt --allow-env --allow-run --allow-write --allow-read @sekhmet/ci"
 		},
+		"hooks": {
+			"description": "Turn on the commit gate for this clone and all its worktrees: shims in .git/hooks run each worktree's .githooks/",
+			"command": "deno run --no-prompt --allow-run=git --allow-read --allow-write @sekhmet/ci/hooks"
+		},
 		"fmt": {
 			"description": "Format and lint-fix with the pinned Biome; pass paths to limit it (default: the project)",
 			"command": "deno run --no-prompt --allow-env --allow-run @biomejs/biome check --write"
@@ -42,6 +46,14 @@
 		"docs:build": {
 			"description": "Build the static docs site into scripts/docs-site/.vitepress/dist",
 			"command": "deno task docs:assemble && cd scripts/docs-site && deno run --no-prompt -A npm:vitepress@1.6.4 build"
+		},
+		"compat:test": {
+			"description": "Run every package's unit tests on a non-Deno runtime: node, bun, chromium, firefox, webkit or workerd",
+			"command": "deno run --no-prompt --allow-all @sekhmet/compat"
+		},
+		"compat:smoke": {
+			"description": "Install the published packages from JSR on a runtime (node, bun, chromium, firefox, webkit, workerd) and smoke-test every export path",
+			"command": "deno run --no-prompt --allow-env --allow-read --allow-write --allow-run --allow-net @sekhmet/compat-smoke"
 		},
 		"play:link": {
 			"description": "Link playground/ to a checkout's packages: main, a branch's worktree, a path, or off; no argument prints the current link",
@@ -78,14 +90,6 @@
 
 	"fmt": {
 		"useTabs": true
-	},
-
-	"lint": {
-		"exclude": ["playground/"]
-	},
-
-	"test": {
-		"exclude": ["playground/"]
 	},
 
 	"compilerOptions": {

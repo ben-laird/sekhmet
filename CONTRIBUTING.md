@@ -92,7 +92,13 @@ Before contributing:
 2. The project uses Deno workspaces. All dependencies are managed through
    [deno.json](deno.json).
 
-3. Run CI checks to ensure everything works:
+3. Turn on the [commit gate](#commit-gate) for your clone:
+
+   ```bash
+   deno task hooks
+   ```
+
+4. Run CI checks to ensure everything works:
 
    ```bash
    deno task ci
@@ -101,23 +107,32 @@ Before contributing:
 ### Playground
 
 `playground/` at the repository root is gitignored and never checked by
-`deno task ci`, so keep scratch scripts and notebooks there. Your editor still
-covers it: the Deno language server (hovers, completions, type errors) and
-Biome (formatting, lint, organize imports) both see the folder. Imports of
-`@sekhmet/*` resolve to the checked-out source, so you are always playing with
-the current branch (or, after `deno task play:link`, with a worktree's):
+`deno task ci`, so keep scratch scripts, tests and notebooks there. Your editor
+still covers it: the Deno language server (hovers, completions, type errors,
+Deno's lint) and Biome (formatting, lint, organize imports) both see the
+folder. Imports of `@sekhmet/*` resolve to the checked-out source, so you are
+always playing with the current branch (or, after `deno task play:link`, with a
+worktree's):
 
 ```bash
 deno run playground/try.ts         # any script that imports @sekhmet/*
 deno check playground/try.ts       # type-check it
+deno test playground/              # run the Deno.test files in it
+deno lint playground/              # Deno's lint rules
 deno task fmt playground/          # format and lint-fix it with Biome
 ```
 
-The gate stays off it in three ways: Biome and `deno check` run over the files
-git does not ignore (`scripts/ci/gate-files.ts`), `deno lint` and `deno test`
-exclude it in `deno.json` (`lint.exclude`, `test.exclude`), and the
-publish-readiness scans skip it. `deno.json`'s `lint.exclude` also turns off
-Deno's lint diagnostics for it in the editor; Biome's lint still runs there.
+Playground tests are ordinary `Deno.test` files (`playground/try.test.ts`)
+that import `@std/assert`, `@std/testing` and `@sekhmet/*` as the packages'
+own tests do; `deno test playground/try.test.ts` runs one. They are scratch, so
+the Given/When/Then comments the gate requires elsewhere are up to you.
+
+The gate stays off it in two ways: Biome, `deno check`, `deno lint` and
+`deno test` run over the paths git does not ignore
+(`scripts/ci/gate-files.ts`; `deno test` gets the top-level directories they
+live in, so its own discovery and the `deno.json` excludes still apply inside
+them), and the publish-readiness scans skip it. `deno.json` excludes nothing
+for it, so the commands above, and the editor, treat it like any other folder.
 
 - **`deno task play:notebook`** copies a starter notebook to
   `playground/start.ipynb` (it never overwrites yours). Open it in VS Code with
@@ -132,8 +147,8 @@ Deno's lint diagnostics for it in the editor; Biome's lint still runs there.
 Your editor's `playground/` lives in the main checkout, but the branch you want
 to try often lives in a worktree (`.claude/worktrees/…`). `play:link` writes a
 `playground/deno.json` that links every `@sekhmet/*` package to that tree, so
-hovers, completions, `deno run` and `deno check` in `playground/` all use its
-source:
+hovers, completions and the `deno` commands in `playground/` use its source
+(see "Which commands follow the link" below):
 
 ```bash
 deno task play:link refactor/schema-declarative  # the worktree on that branch
@@ -151,15 +166,27 @@ deno task play:link off                          # back to the root workspace
 - **The file is not a workspace member**, so Deno treats `playground/` as a
   standalone project and prints
   `Warning: config file …/playground/deno.json is not a member of the workspace … Ignoring the parent workspace config.`
-  That warning is expected while linked. The root workspace's `imports` (such
-  as `@std/*`) no longer apply there; add any you need to
-  `playground/deno.json` yourself.
-- **It owns three keys**: the `@sekhmet/*` entries of `imports` (one `jsr:`
-  specifier per package, which `links` overrides, so unpublished packages work
-  too), `links` (every package of the target, relative to `playground/`), and
-  `compilerOptions` (copied from the target's root `deno.json`, so strictness
-  matches). Every other key and import you add is kept on relink and on `off`;
-  `off` deletes the file only when nothing of yours is left in it.
+  That warning is expected while linked. The root workspace no longer applies
+  there, so `play:link` copies the target root `deno.json`'s other `imports`
+  (`@std/assert`, `@std/testing`, `@~/`, …) into the file, rebasing relative
+  paths onto `playground/`.
+- **It owns what it writes**: the `@sekhmet/*` entries of `imports` (one
+  `jsr:` specifier per package, which `links` overrides, so unpublished
+  packages work too), the root imports it copied, `links` (every package of the
+  target, relative to `playground/`), and `compilerOptions` (copied from the
+  target's root `deno.json`, so strictness matches). It records the root
+  imports it copied under a `playLink` key, so a relink or `off` removes
+  exactly those. An import you set yourself keeps your value and is never
+  recorded, and every other key you add is kept on relink and on `off`; `off`
+  deletes the file only when nothing of yours is left in it.
+- **Which commands follow the link** depends on where Deno looks for a
+  config. `deno test`, `deno check` and `deno info` start from the current
+  directory; `deno run` and `deno lint` start from the file. So run from inside
+  the playground (`cd playground && deno test`), where every command uses the
+  link. From the repository root, `deno run playground/try.ts` and
+  `deno lint playground/` use the link, but `deno test playground/` and
+  `deno check playground/try.ts` use the root workspace (this checkout's
+  packages) unless you pass `--config playground/deno.json`.
 - **Restart the Deno language server after switching** (VS Code:
   `Deno: Restart Language Server`) so it resolves through the new `links`.
 - **Worktrees go away after their branch merges.** `deno task play:link` with no
@@ -535,6 +562,58 @@ test(@sekhmet/enum): add exit tests
 chore(@sekhmet/enum): add eliminate mini exports
 ```
 
+### Commit gate
+
+A git hook refuses a commit unless `deno task ci` passed on exactly the tree
+being committed. Turn it on once per clone:
+
+```bash
+deno task hooks
+```
+
+- **How it is wired:** each branch carries its hooks in `.githooks/`.
+  `deno task hooks` installs a small shim for `pre-commit` and
+  `pre-merge-commit` into the clone's shared hooks directory
+  (`$(git rev-parse --git-common-dir)/hooks`, i.e. `.git/hooks/`), which every
+  worktree runs. The shim runs the committing worktree's own
+  `.githooks/<hook>`, so each worktree is gated by its own branch's hooks; a
+  branch without `.githooks/<hook>` is not gated. Rerunning it is harmless.
+- **`core.hooksPath` must stay unset:** while it is set, git ignores
+  `.git/hooks/`. `deno task hooks` unsets the old `.githooks` setting
+  (relative or absolute) and refuses any other value, as it refuses to
+  replace a hook in `.git/hooks/` that it did not install. The old setting
+  was one value for every worktree, and Claude Code's worktree setup rewrites
+  a relative one to the main checkout's absolute path, so every worktree ran
+  whatever hooks the main checkout's branch had.
+- `deno task ci` prints a one-line warning while a shim is missing or
+  outdated, or `core.hooksPath` is set.
+
+- **Recording:** when every step passes, `deno task ci` records the staged
+  tree's id (`git write-tree`) in `$(git rev-parse --git-path ci-green)`, one
+  marker per worktree. The gate checks the working tree, not the index, so it
+  records only when the two hold the same files: no unstaged change to a
+  tracked file and no untracked, unignored file, both before the first step
+  and after the last. A failed, blocked or interrupted run records nothing.
+- **Checking:** `.githooks/pre-commit` refuses a commit whose staged tree is
+  not the recorded one.
+- **Markdown exemption:** a commit that changes only `*.md` files (a rename
+  counts both its paths) is exempt, unless its staged diff adds, removes or
+  changes a line inside a code block that `deno test --doc` runs, in either
+  `HEAD`'s or the staged version. The refusal then names those files. As in
+  Deno, such a block is a backtick fence (three or more, `~~~` does not count)
+  whose first info word is exactly `ts`, `tsx`, `typescript`, `mts`, `cts`,
+  `js`, `jsx`, `javascript`, `mjs` or `cjs`, without an `ignore` word
+  (`no-eval` is still type-checked). Its fence lines count, so dropping an
+  `ignore` is a code change.
+- **The workflow:** stage everything (`git add`), run `deno task ci`, then
+  commit. Any edit or `git add` after the run needs a new run.
+- **Merges:** `.githooks/pre-merge-commit` holds a merge commit to the same
+  rule. When `git merge --no-ff` is refused, the merge stays staged: run
+  `deno task ci`, then `git commit`. Or start with `git merge --no-commit`.
+  A fast-forward makes no commit, so nothing is checked.
+- **Escape hatch:** `git commit --no-verify` skips the hook. It is for human
+  emergencies only; agents must never use it.
+
 ## Pull Request Process
 
 1. **Create a feature branch**:
@@ -548,13 +627,15 @@ chore(@sekhmet/enum): add eliminate mini exports
    - Add tests for new functionality
    - Update documentation if needed
 
-3. **Run checks**:
+3. **Stage your changes, then run checks** on exactly what is staged:
 
    ```bash
+   git add <paths>
    deno task ci
    ```
 
-4. **Commit your changes** using conventional commits
+4. **Commit your changes** using conventional commits; the
+   [commit gate](#commit-gate) refuses a commit without a green run
 
 5. **Push and create a PR**:
    - Provide a clear description of changes

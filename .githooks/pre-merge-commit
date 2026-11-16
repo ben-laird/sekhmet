@@ -1,0 +1,5 @@
+#!/bin/sh
+# Commit gate for merge commits (`git merge` without conflicts): the same rule
+# as pre-commit. A conflicted merge is committed with `git commit`, which runs
+# pre-commit instead.
+exec "$(dirname "$0")/pre-commit" --merge

@@ -198,8 +198,10 @@ export type StepResult = RanStepResult | SkippedStepResult | BlockedStepResult;
  * Overall result of executing a complete workflow.
  */
 export interface WorkflowResult {
-	/** true if no step failed, false if any step failed */
+	/** true if no step without `continueOnError` failed, else false */
 	success: boolean;
+	/** The process exit code: 0, or the first failed step's exit code */
+	exitCode: number;
 	/** Results from each step in execution order */
 	steps: StepResult[];
 }

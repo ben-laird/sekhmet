@@ -8,6 +8,16 @@ import {
 	type WorkflowStep,
 } from "@/mod.ts";
 import type { GateTool } from "@/src/gate-files.ts";
+import {
+	greenMarkerPath,
+	hooksPath,
+	readGateHooks,
+	sharedHooksDir,
+	stagedSnapshot,
+	writeGreenMarker,
+} from "@/src/git.ts";
+import { type GreenRunDecision, greenRunDecision } from "@/src/green-run.ts";
+import { hooksWarning } from "@/src/hooks.ts";
 
 export type { GateTool };
 
@@ -148,20 +158,24 @@ export function biomeCiCommand({
 }
 
 /**
- * A gate tool run over the files git does not ignore (see `gate-files.ts`),
+ * A gate tool run over the paths git does not ignore (see `gate-files.ts`),
  * so gitignored scratch in `playground/` never fails the gate while the
- * editor's Biome and language server still cover it.
+ * editor and a hand-run `deno lint` or `deno test` still cover it.
  *
- * @param options.tool - `biome` for `biome ci`, `check` for `deno check`
+ * @param options.tool - `biome` for `biome ci`, or `check`, `lint` or `test`
+ *   for that `deno` subcommand
  * @param options.root - The git checkout to list (default: the working directory)
+ * @param options.args - Arguments for the tool, passed before the paths
  * @returns The command to run
  */
 export function gateFilesCommand({
 	tool,
 	root,
+	args = [],
 }: {
 	tool: GateTool;
 	root?: string;
+	args?: string[];
 }): StepCommand {
 	return {
 		program: "deno",
@@ -173,8 +187,37 @@ export function gateFilesCommand({
 			fromFileUrl(new URL("./gate-files.ts", import.meta.url)),
 			tool,
 			...(root === undefined ? [] : ["--root", root]),
+			...(args.length === 0 ? [] : ["--", ...args]),
 		],
 	};
+}
+
+/**
+ * The arguments Deno Test hands `deno test`, before the paths that
+ * {@linkcode gateFilesCommand} adds.
+ *
+ * @param options.coverageDir - Where to write coverage profiles and reports
+ * @returns The arguments
+ */
+export function denoTestArgs({
+	coverageDir,
+}: {
+	coverageDir: string;
+}): string[] {
+	return [
+		// Also type-checks and runs the code blocks in JSDoc and in every
+		// markdown file (READMEs, docs/), unless fenced as `ignore`
+		"--doc",
+		"--parallel",
+		"--no-prompt",
+		"--allow-env",
+		"--allow-read",
+		"--allow-write",
+		"--allow-run",
+		`--coverage=${coverageDir}`,
+		// Drop profiles left by an earlier run whose cleanup did not run
+		"--clean",
+	];
 }
 
 /**
@@ -216,6 +259,21 @@ export function dvValidateCommand(): StepCommand {
 }
 
 /**
+ * The JSR publish dry run. A local run allows a dirty tree: the commit gate
+ * runs it on staged, uncommitted changes, which a clean-tree dry run always
+ * refuses. CI checks out a clean commit, so it keeps the clean-tree check.
+ *
+ * @param options.isCI - Running in a CI service
+ * @returns The command to run
+ */
+export function jsrDryRunCommand({ isCI }: { isCI: boolean }): StepCommand {
+	return {
+		program: "deno",
+		args: ["publish", "--dry-run", ...(isCI ? [] : ["--allow-dirty"])],
+	};
+}
+
+/**
  * The CI workflow's steps for a run:
  * - Parallel linting (Deno lint, Biome check, per-package documentation lint,
  *   publish readiness, generated-main freshness, `dv validate`, JSR dry run)
@@ -235,7 +293,7 @@ export function ciSteps({ isCI, isAI, coverageDir }: CIRun): WorkflowStep[] {
 			name: "Deno Lint",
 			exitCode: EXIT_CODES.DENO_LINT_FAILED,
 
-			command: { program: "deno", args: ["lint"] },
+			command: gateFilesCommand({ tool: "lint" }),
 		},
 		{
 			name: "Deno Check",
@@ -281,10 +339,7 @@ export function ciSteps({ isCI, isAI, coverageDir }: CIRun): WorkflowStep[] {
 			name: "JSR Publish Dry Run",
 			exitCode: EXIT_CODES.JSR_DRY_RUN_FAILED,
 
-			command: {
-				program: "deno",
-				args: ["publish", "--dry-run", ...(isAI ? ["--allow-dirty"] : [])],
-			},
+			command: jsrDryRunCommand({ isCI }),
 		},
 
 		// Run tests (blocked if lint fails)
@@ -295,24 +350,10 @@ export function ciSteps({ isCI, isAI, coverageDir }: CIRun): WorkflowStep[] {
 			exitCode: EXIT_CODES.TESTS_FAILED,
 			timeout: { ms: TEST_TIMEOUT_MS, exitCode: EXIT_CODES.TESTS_TIMED_OUT },
 
-			command: {
-				program: "deno",
-				args: [
-					"test",
-					// Also type-checks and runs the code blocks in JSDoc and in every
-					// markdown file (READMEs, docs/), unless fenced as `ignore`
-					"--doc",
-					"--parallel",
-					"--no-prompt",
-					"--allow-env",
-					"--allow-read",
-					"--allow-write",
-					"--allow-run",
-					`--coverage=${coverageDir}`,
-					// Drop profiles left by an earlier run whose cleanup did not run
-					"--clean",
-				],
-			},
+			command: gateFilesCommand({
+				tool: "test",
+				args: denoTestArgs({ coverageDir }),
+			}),
 		},
 
 		// Show coverage report (blocked if tests failed)
@@ -426,17 +467,61 @@ export function coverageCleanupCommand({ dir }: { dir: string }): StepCommand {
 
 /**
  * Main entry point for the CI workflow. Reads the environment, picks this
- * run's coverage directory and runs {@linkcode ciSteps}.
+ * run's coverage directory, runs {@linkcode ciSteps}, records a green run
+ * for the staged tree when the run earns one (see `src/green-run.ts`) and
+ * exits with the workflow's exit code.
  */
 export async function main(): Promise<void> {
 	const isCI = Deno.env.get("CI") === "true";
-	await runWorkflow(
+	const warning = isCI ? undefined : await gateWarning();
+	if (warning !== undefined) console.error(warning);
+	const before = await stagedSnapshot();
+	const result = await runWorkflow(
 		ciSteps({
 			isCI,
 			isAI: Deno.env.get("CI_AI") === "true",
 			coverageDir: await coverageDirFor({ isCI }),
 		}),
 	);
+	const after = await stagedSnapshot();
+	console.error(
+		await recordGreenRun(
+			greenRunDecision({ steps: result.steps, before, after }),
+		),
+	);
+	Deno.exit(result.exitCode);
+}
+
+/** The "commits are not gated" warning for this clone, if it applies. */
+async function gateWarning(): Promise<string | undefined> {
+	const dir = await sharedHooksDir();
+	if (!dir.ok)
+		return `warning: cannot tell whether commits are gated: ${dir.error}`;
+	const hooks = await readGateHooks(dir.value);
+	if (!hooks.ok) {
+		return `warning: cannot tell whether commits are gated: ${hooks.error}`;
+	}
+	return hooksWarning({ hooksPath: await hooksPath(), hooks: hooks.value });
+}
+
+/**
+ * Carries out a {@linkcode GreenRunDecision}: writes the green marker that
+ * the commit gate's `pre-commit` hook reads, or leaves it alone.
+ *
+ * @param decision - Whether to record the run
+ * @returns The one line to print about it
+ */
+async function recordGreenRun(decision: GreenRunDecision): Promise<string> {
+	if (decision.kind === "skip") {
+		return `No green run recorded: ${decision.reason}.`;
+	}
+	const path = await greenMarkerPath();
+	const written = path.ok
+		? await writeGreenMarker({ path: path.value, tree: decision.tree })
+		: path;
+	return written.ok
+		? `Recorded a green run for staged tree ${decision.tree}.`
+		: `No green run recorded: ${written.error}.`;
 }
 
 if (import.meta.main) {

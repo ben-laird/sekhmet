@@ -1,0 +1,93 @@
+# Runtime compatibility, layer 2 (#20): installs every @sekhmet package from
+# JSR the way a user of each runtime would, then imports every export path
+# and exercises each package (`deno task compat:smoke <runtime>`,
+# scripts/compat-smoke). Layer 1, the unit suite per runtime, is compat.yml.
+#
+# It tests what is already published, not the pull request's code, so it
+# skips pull requests and runs:
+#   - after every successful `release` run, to check what was just published;
+#     `release` runs on every push to main, so a push trigger here would only
+#     run the smoke twice
+#   - weekly, to catch drift in runtimes, JSR's npm layer and the tools
+#   - by hand (workflow_dispatch), optionally pinned with `--version`
+# It lives apart from compat.yml so its triggers, concurrency and failure
+# signal ("a published version is broken") stay separate from the suite's.
+
+name: compat-smoke
+
+on:
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+    branches: [main]
+  schedule:
+    # Mondays 06:17 UTC
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version(s) to test, passed as --version (e.g. 0.1.0 or @sekhmet/enum@0.1.0); empty for latest
+        type: string
+        default: ""
+
+concurrency:
+  group: compat-smoke-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.runtime }}${{ matrix.node && format(', Node {0}', matrix.node) || '' }})
+    # After a release, only a successful one has something new to check.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # One runtime's failure must not cancel, and so hide, the others'.
+      fail-fast: false
+      matrix:
+        include:
+          # Node: the maintenance LTS line and the active LTS line, which is
+          # also the latest release until Node 27 ships (2027-04).
+          - runtime: node
+            node: "24"
+          - runtime: node
+            node: "26"
+          - runtime: bun
+          - runtime: chromium
+          - runtime: firefox
+          - runtime: webkit
+          - runtime: workerd
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.9.8
+          cache: true
+
+      # Node runs the node job, and npm, esbuild, Playwright and Miniflare for
+      # the browser and workerd jobs.
+      - if: ${{ matrix.runtime != 'bun' }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node || '26' }}
+
+      - if: ${{ matrix.runtime == 'bun' }}
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
+
+      # The smoke run installs its pinned Playwright and that version's browser
+      # itself; the runner only needs the browser's system libraries. Keep the
+      # version equal to TOOLS.playwright in scripts/compat-smoke/src/plan.ts.
+      - name: Install the browser's system libraries
+        if: ${{ contains(fromJSON('["chromium", "firefox", "webkit"]'), matrix.runtime) }}
+        run: npx --yes playwright@1.65.1 install-deps ${{ matrix.runtime }}
+
+      - name: deno task compat:smoke ${{ matrix.runtime }}
+        env:
+          VERSION: ${{ inputs.version }}
+        run: deno task compat:smoke ${{ matrix.runtime }} ${VERSION:+--version "$VERSION"}
