@@ -1,3 +1,4 @@
+import { Err, isOk, unwrap } from "@sekhmet/enum/result/mini";
 import { assert, assertEquals } from "@std/assert";
 import { parseOptions } from "@/src/args.ts";
 
@@ -9,11 +10,12 @@ Deno.test("parseOptions reads a runtime and defaults to the latest versions", ()
 	const options = parseOptions(args);
 
 	// Then: no version is requested and nothing is kept
-	assert(options.ok);
-	assertEquals(options.value.runtime, "webkit");
-	assertEquals(options.value.requests.all, undefined);
-	assertEquals(options.value.requests.byPackage.size, 0);
-	assertEquals(options.value.keep, false);
+	assert(isOk(options));
+	const parsed = unwrap(options);
+	assertEquals(parsed.runtime, "webkit");
+	assertEquals(parsed.requests.all, undefined);
+	assertEquals(parsed.requests.byPackage.size, 0);
+	assertEquals(parsed.keep, false);
 });
 
 Deno.test("parseOptions reads global and per-package versions", () => {
@@ -30,13 +32,11 @@ Deno.test("parseOptions reads global and per-package versions", () => {
 	const options = parseOptions(args);
 
 	// Then: both requests are kept apart
-	assert(options.ok);
-	assertEquals(options.value.requests.all, "0.1.0");
-	assertEquals(
-		[...options.value.requests.byPackage],
-		[["@sekhmet/enum", "0.2.0"]],
-	);
-	assertEquals(options.value.keep, true);
+	assert(isOk(options));
+	const parsed = unwrap(options);
+	assertEquals(parsed.requests.all, "0.1.0");
+	assertEquals([...parsed.requests.byPackage], [["@sekhmet/enum", "0.2.0"]]);
+	assertEquals(parsed.keep, true);
 });
 
 Deno.test("parseOptions rejects bad command lines", async (t) => {
@@ -65,7 +65,7 @@ Deno.test("parseOptions rejects bad command lines", async (t) => {
 			const options = parseOptions(args);
 
 			// Then: it fails with a message saying what is wrong
-			assertEquals(options, { ok: false, error: message });
+			assertEquals(options, Err(message));
 		});
 	}
 });

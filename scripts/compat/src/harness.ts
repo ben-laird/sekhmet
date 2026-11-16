@@ -5,7 +5,9 @@
  *
  * It honours what the suite uses: every `Deno.test` call form, `ignore`,
  * `only`, and `t.step` (nested, async, `ignore`), and it fails a test whose
- * step failed or was not awaited, as Deno does. Deno's sanitizers
+ * step failed or was not awaited, as Deno does. A test is judged once, when
+ * its body ends: a step still running then is reported failed as not awaited,
+ * and whatever it does afterwards is dropped. Deno's sanitizers
  * (`sanitizeOps`, `sanitizeResources`, `sanitizeExit`) and `permissions` are
  * accepted and ignored: no runtime here can check them the way Deno does.
  *
@@ -54,8 +56,13 @@ export interface HarnessRun {
 export interface Harness {
 	/** Registers a test, accepting every `Deno.test` call form */
 	test: (...args: unknown[]) => void;
-	/** Runs every registered test in order */
-	run: () => Promise<HarnessRun>;
+	/**
+	 * Runs every registered test in order. `onTest`, when given, hears the
+	 * name of each test as it starts and `undefined` once it ends.
+	 */
+	run: (options?: {
+		onTest?: (test: string | undefined) => void;
+	}) => Promise<HarnessRun>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -133,27 +140,49 @@ export function describeError(caught: unknown): string {
 	return stack.startsWith(headline) ? stack : `${headline}\n${stack}`;
 }
 
+/** The error of a step that was still running when its parent ended. */
+export const NOT_AWAITED_ERROR =
+	"not awaited: the step was still running when its parent ended";
+
+/** A step in call order; its report is set when it ends before its parent. */
+interface StepSlot {
+	name: string;
+	report: TestReport | undefined;
+}
+
 async function runDefinition(definition: TestDefinition): Promise<TestReport> {
-	const steps: TestReport[] = [];
 	if (definition.ignore) {
-		return { name: definition.name, outcome: { kind: "ignored" }, steps };
+		return { name: definition.name, outcome: { kind: "ignored" }, steps: [] };
 	}
-	let running = 0;
+	const slots: StepSlot[] = [];
+	let ended = false;
 	const context: TestContext = {
 		name: definition.name,
 		step: async (...args) => {
 			const step = normalizeDefinition(args);
-			running += 1;
+			if (ended) return false;
+			const slot: StepSlot = { name: step.name, report: undefined };
+			slots.push(slot);
 			const report = await runDefinition(step);
-			running -= 1;
-			steps.push(report);
+			if (ended) return false;
+			slot.report = report;
 			return report.outcome.kind === "passed";
 		},
 	};
 	const outcome = await settle(definition.fn, context);
+	ended = true;
+	const steps = slots.map(
+		(slot): TestReport =>
+			slot.report ?? {
+				name: slot.name,
+				outcome: { kind: "failed", error: NOT_AWAITED_ERROR },
+				steps: [],
+			},
+	);
+	const pending = slots.filter((slot) => slot.report === undefined).length;
 	return {
 		name: definition.name,
-		outcome: judge({ outcome, running, steps }),
+		outcome: judge({ outcome, pending, steps }),
 		steps,
 	};
 }
@@ -167,20 +196,25 @@ async function settle(fn: TestFn, context: TestContext): Promise<TestOutcome> {
 	}
 }
 
+/**
+ * Judges a test from the state at the moment its body ended, so nothing a
+ * step does later can change it: its own error first, then any step still
+ * running, then any failed step.
+ */
 function judge({
 	outcome,
-	running,
+	pending,
 	steps,
 }: {
 	outcome: TestOutcome;
-	running: number;
+	pending: number;
 	steps: readonly TestReport[];
 }): TestOutcome {
 	if (outcome.kind === "failed") return outcome;
-	if (running > 0) {
+	if (pending > 0) {
 		return {
 			kind: "failed",
-			error: `${running} step(s) were not awaited before the test ended`,
+			error: `${pending} step(s) were not awaited before the test ended`,
 		};
 	}
 	const failed = steps.filter((step) => step.outcome.kind === "failed").length;
@@ -201,15 +235,21 @@ export function createHarness(): Harness {
 		test: (...args) => {
 			definitions.push(normalizeDefinition(args));
 		},
-		run: async () => {
+		run: async ({ onTest } = {}) => {
 			const usedOnly = definitions.some((definition) => definition.only);
 			const tests: TestReport[] = [];
 			for (const definition of definitions) {
-				tests.push(
-					usedOnly && !definition.only
-						? { name: definition.name, outcome: { kind: "ignored" }, steps: [] }
-						: await runDefinition(definition),
-				);
+				if (usedOnly && !definition.only) {
+					tests.push({
+						name: definition.name,
+						outcome: { kind: "ignored" },
+						steps: [],
+					});
+					continue;
+				}
+				onTest?.(definition.name);
+				tests.push(await runDefinition(definition));
+				onTest?.(undefined);
 			}
 			return { tests, usedOnly };
 		},

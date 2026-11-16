@@ -39,8 +39,28 @@ export type FileReport =
 	  })
 	| (TestFileLocation & { kind: "load-failed"; error: string });
 
-/** Every test file's result, in run order. */
+/**
+ * What was running when an uncaught error surfaced: a test, a file (while it
+ * loaded or between its tests), or nothing (outside every file, or seen by
+ * the host rather than the suite).
+ */
+export type UncaughtScope =
+	| { kind: "test"; path: string; test: string }
+	| { kind: "file"; path: string }
+	| { kind: "run" };
+
+/** An error no test awaited: an unhandled rejection or a throw from a callback. */
+export interface UncaughtReport {
+	/** What was running when it surfaced */
+	scope: UncaughtScope;
+	/** The error, described */
+	error: string;
+}
+
+/** Every test file's result, in run order, and every uncaught error. */
 export interface SuiteReport {
 	/** One entry per test file */
 	files: FileReport[];
+	/** Uncaught errors, in the order they surfaced; each one fails the run */
+	uncaught: UncaughtReport[];
 }

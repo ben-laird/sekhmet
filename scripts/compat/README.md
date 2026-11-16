@@ -15,8 +15,8 @@ and a verdict. Exit codes:
 
 | Code | Meaning                                                                                                                                            |
 | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Every file loaded and every test and step passed                                                                                                   |
-| 1    | A test or step failed, a file failed to load, a file used `only`, or no tests ran                                                                  |
+| 0    | Every file loaded, every test and step passed, and no error went uncaught                                                                          |
+| 1    | A test or step failed, a file failed to load, a file used `only`, an error went uncaught, or no tests ran                                          |
 | 2    | Usage error (no or unknown runtime), the bundle failed, or the runtime could not run the suite (not installed, crashed, timed out after 5 minutes) |
 
 ## How it works
@@ -29,8 +29,23 @@ and a verdict. Exit codes:
    installed as `globalThis.Deno = { test, noColor: true }`. Loading the file
    registers its tests; the harness then runs them in order. It supports every
    `Deno.test` call form, `ignore`, `only` (which fails the run, as in Deno), and
-   nested async `t.step` (a failed or un-awaited step fails its parent).
-3. **Run.** Each runtime runs `suite.js` and hands back a JSON report, which is
+   nested async `t.step` (a failed or un-awaited step fails its parent). A
+   test is judged once, when its body ends: a step still running then is
+   reported failed as not awaited, and nothing it does later changes the
+   report.
+3. **Watch.** While the suite runs, an error no test awaited (an unhandled
+   rejection, or a throw from a timer or other callback) fails the run, as it
+   does in Deno. The suite listens on `globalThis` (`unhandledrejection` and
+   `error`; `process`'s `unhandledRejection` and `uncaughtException` on Node
+   and Bun) and guards `setTimeout`/`setInterval` callbacks, since workerd
+   drops a throw from one without firing `error`. It records each error with
+   the test or file running when it surfaced, or the run when none was. It
+   waits two tasks after each file so errors a file left pending surface while
+   it is still current; the file is reliable, the test less so, since an
+   unhandled rejection can surface after the next test has started. In
+   browsers, a Playwright `pageerror` the suite did not see also fails the
+   run.
+4. **Run.** Each runtime runs `suite.js` and hands back a JSON report, which is
    validated (Zod) and summarized:
    - **node, bun:** `node run.mjs <report.json>` / `bun run.mjs <report.json>`.
    - **chromium, firefox, webkit:** Playwright opens a headless page on

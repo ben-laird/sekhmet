@@ -1,6 +1,6 @@
 /**
  * Runs a built {@linkcode Bundle} on each runtime and returns the raw report
- * it sends back: Node and Bun run a launcher script that writes the report to
+ * it sends back, with any uncaught errors the host saw outside the suite: Node and Bun run a launcher script that writes the report to
  * a file; browsers load the suite into a Playwright page; workerd runs it in a
  * Miniflare worker's `fetch` handler.
  *
@@ -16,7 +16,12 @@ import { Miniflare } from "miniflare";
 import { type Browser, chromium, firefox, webkit } from "playwright";
 import type { Bundle } from "./bundle.ts";
 import { PROCESS_LAUNCHER, SUITE_MODULE, WORKER_LAUNCHER } from "./entry.ts";
-import type { BrowserRuntime, ProcessRuntime, Runtime } from "./runtime.ts";
+import {
+	type BrowserRuntime,
+	type ProcessRuntime,
+	type Runtime,
+	WORKERD_COMPATIBILITY_DATE,
+} from "./runtime.ts";
 
 /**
  * How long one runtime may take to run the whole suite: 5 minutes. Deno runs
@@ -24,16 +29,21 @@ import type { BrowserRuntime, ProcessRuntime, Runtime } from "./runtime.ts";
  */
 export const SUITE_TIMEOUT_MS: number = 5 * 60 * 1000;
 
-/**
- * The compatibility date of the workerd run: the release date of the pinned
- * `miniflare`'s workerd, so the newest Workers behaviour is what gets tested.
- */
-export const WORKERD_COMPATIBILITY_DATE = "2026-07-30";
-
 /** Plain HTTP on purpose: the packages must not need a secure context. */
 const PAGE_ORIGIN = "http://compat.test";
 
 const BROWSERS = { chromium, firefox, webkit } as const;
+
+/** What a runtime handed back from one suite run. */
+export interface RuntimeOutput {
+	/** The suite report, still to be validated */
+	data: unknown;
+	/**
+	 * Uncaught errors the host saw outside the suite's own watch (a browser's
+	 * page errors), described; each one fails the run
+	 */
+	hostErrors: string[];
+}
 
 function reason(caught: unknown): string {
 	return caught instanceof Error ? caught.message : String(caught);
@@ -77,7 +87,7 @@ async function runProcess({
 }: {
 	runtime: ProcessRuntime;
 	bundle: Bundle;
-}): Promise<Result<unknown, string>> {
+}): Promise<Result<RuntimeOutput, string>> {
 	const reportPath = join(bundle.dir, "report.json");
 	let status: Deno.CommandStatus;
 	try {
@@ -97,7 +107,10 @@ async function runProcess({
 		);
 	}
 	try {
-		return Ok(JSON.parse(await Deno.readTextFile(reportPath)));
+		return Ok({
+			data: JSON.parse(await Deno.readTextFile(reportPath)),
+			hostErrors: [],
+		});
 	} catch (caught: unknown) {
 		return Err(
 			`${runtime} exited with code ${status.code} without a readable report: ${reason(
@@ -115,13 +128,14 @@ async function runInPage({
 	runtime: BrowserRuntime;
 	browser: Browser;
 	bundle: Bundle;
-}): Promise<unknown> {
+}): Promise<RuntimeOutput> {
 	const page = await browser.newPage();
+	const hostErrors: string[] = [];
 	page.on("console", (message) => {
 		console.log(`[${runtime}] ${message.text()}`);
 	});
 	page.on("pageerror", (error) => {
-		console.error(`[${runtime}] uncaught: ${error.stack ?? error.message}`);
+		hostErrors.push(`page error: ${error.stack ?? error.message}`);
 	});
 	await page.route(`${PAGE_ORIGIN}/**`, (route) => {
 		const { pathname } = new URL(route.request().url());
@@ -130,10 +144,11 @@ async function runInPage({
 			: route.fulfill({ path: join(bundle.dir, pathname) });
 	});
 	await page.goto(`${PAGE_ORIGIN}/`);
-	return await page.evaluate(
+	const data = await page.evaluate(
 		async (module: string) => (await import(module)).run(),
 		`/${SUITE_MODULE}`,
 	);
+	return { data, hostErrors };
 }
 
 async function runBrowser({
@@ -142,7 +157,7 @@ async function runBrowser({
 }: {
 	runtime: BrowserRuntime;
 	bundle: Bundle;
-}): Promise<Result<unknown, string>> {
+}): Promise<Result<RuntimeOutput, string>> {
 	let browser: Browser;
 	try {
 		browser = await BROWSERS[runtime].launch();
@@ -175,7 +190,9 @@ async function workerModules(
 	);
 }
 
-async function runWorkerd(bundle: Bundle): Promise<Result<unknown, string>> {
+async function runWorkerd(
+	bundle: Bundle,
+): Promise<Result<RuntimeOutput, string>> {
 	let miniflare: Miniflare;
 	try {
 		miniflare = new Miniflare({
@@ -191,7 +208,10 @@ async function runWorkerd(bundle: Bundle): Promise<Result<unknown, string>> {
 		return await settleWithin({
 			work: miniflare
 				.dispatchFetch("http://compat.test/")
-				.then((response) => response.json()),
+				.then(async (response) => ({
+					data: await response.json(),
+					hostErrors: [],
+				})),
 			label: "workerd",
 		});
 	} finally {
@@ -204,8 +224,8 @@ async function runWorkerd(bundle: Bundle): Promise<Result<unknown, string>> {
  *
  * @param options.runtime - The runtime to run on
  * @param options.bundle - The built bundle
- * @returns The report data the runtime sent back (still to be validated), or
- * why the runtime could not run the suite
+ * @returns What the runtime sent back (the report still to be validated, and
+ * any uncaught errors its host saw), or why it could not run the suite
  */
 export function runOn({
 	runtime,
@@ -213,7 +233,7 @@ export function runOn({
 }: {
 	runtime: Runtime;
 	bundle: Bundle;
-}): Promise<Result<unknown, string>> {
+}): Promise<Result<RuntimeOutput, string>> {
 	switch (runtime) {
 		case "node":
 		case "bun":

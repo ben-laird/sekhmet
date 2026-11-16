@@ -10,7 +10,12 @@
 import { isErr, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { fromFileUrl } from "@std/path";
 import { buildBundle } from "./src/bundle.ts";
-import { formatReport, parseSuiteReport, problemsOf } from "./src/report.ts";
+import {
+	formatReport,
+	parseSuiteReport,
+	problemsOf,
+	withHostErrors,
+} from "./src/report.ts";
 import { runOn } from "./src/runners.ts";
 import { parseRuntime, USAGE } from "./src/runtime.ts";
 
@@ -34,23 +39,23 @@ async function main(args: readonly string[]): Promise<number> {
 				runtime,
 			)}`,
 		);
-		const data = await runOn({
+		const output = await runOn({
 			runtime: unwrap(runtime),
 			bundle: unwrap(bundle),
 		});
-		if (isErr(data)) {
-			console.error(`compat:test: ${unwrapErr(data)}`);
+		if (isErr(output)) {
+			console.error(`compat:test: ${unwrapErr(output)}`);
 			return 2;
 		}
-		const report = parseSuiteReport(unwrap(data));
-		if (isErr(report)) {
-			console.error(`compat:test: ${unwrapErr(report)}`);
+		const { data, hostErrors } = unwrap(output);
+		const parsed = parseSuiteReport(data);
+		if (isErr(parsed)) {
+			console.error(`compat:test: ${unwrapErr(parsed)}`);
 			return 2;
 		}
-		console.log(
-			formatReport({ runtime: unwrap(runtime), report: unwrap(report) }),
-		);
-		return problemsOf(unwrap(report)).length === 0 ? 0 : 1;
+		const report = withHostErrors({ report: unwrap(parsed), hostErrors });
+		console.log(formatReport({ runtime: unwrap(runtime), report }));
+		return problemsOf(report).length === 0 ? 0 : 1;
 	} finally {
 		await Deno.remove(work, { recursive: true });
 	}

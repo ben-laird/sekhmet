@@ -5,9 +5,16 @@
  * @module
  */
 
+import {
+	Err,
+	isErr,
+	Ok,
+	type Result,
+	unwrap,
+	unwrapErr,
+} from "@sekhmet/enum/result/mini";
 import { z } from "zod";
 import type { PackageName, PublishedPackage } from "@/src/package.ts";
-import { err, ok, type Result } from "@/src/result.ts";
 
 /** The JSR registry's public API root. */
 export const JSR_ORIGIN = "https://jsr.io";
@@ -64,11 +71,11 @@ export function resolveVersion({
 }): Result<string, RegistryError> {
 	const requested = requests.byPackage.get(name) ?? requests.all;
 	if (requested === undefined) {
-		return latest === null ? err({ kind: "unpublished", name }) : ok(latest);
+		return latest === null ? Err({ kind: "unpublished", name }) : Ok(latest);
 	}
 	return versions.includes(requested)
-		? ok(requested)
-		: err({
+		? Ok(requested)
+		: Err({
 				kind: "unknown-version",
 				name,
 				version: requested,
@@ -89,23 +96,23 @@ async function fetchJson<T>({
 	try {
 		response = await fetch(url, { headers: { accept: "application/json" } });
 	} catch (error: unknown) {
-		return err({ kind: "network", url, message: String(error) });
+		return Err({ kind: "network", url, message: String(error) });
 	}
 	if (!response.ok) {
 		await response.body?.cancel();
-		return err({ kind: "http", url, status: response.status });
+		return Err({ kind: "http", url, status: response.status });
 	}
 
 	let body: unknown;
 	try {
 		body = await response.json();
 	} catch (error: unknown) {
-		return err({ kind: "schema", url, message: String(error) });
+		return Err({ kind: "schema", url, message: String(error) });
 	}
 	const parsed = schema.safeParse(body);
 	return parsed.success
-		? ok(parsed.data)
-		: err({ kind: "schema", url, message: z.prettifyError(parsed.error) });
+		? Ok(parsed.data)
+		: Err({ kind: "schema", url, message: z.prettifyError(parsed.error) });
 }
 
 /**
@@ -129,28 +136,34 @@ export async function fetchPublished({
 		schema: PackageMeta,
 		fetch,
 	});
-	if (!meta.ok) {
-		return meta.error.kind === "http" && meta.error.status === 404
-			? err({ kind: "unpublished", name })
+	if (isErr(meta)) {
+		const error = unwrapErr(meta);
+		return error.kind === "http" && error.status === 404
+			? Err({ kind: "unpublished", name })
 			: meta;
 	}
+	const { latest, versions } = unwrap(meta);
 
 	const version = resolveVersion({
 		name,
-		latest: meta.value.latest,
-		versions: Object.keys(meta.value.versions),
+		latest,
+		versions: Object.keys(versions),
 		requests,
 	});
-	if (!version.ok) return version;
+	if (isErr(version)) return version;
 
 	const published = await fetchJson({
-		url: `${JSR_ORIGIN}/${name}/${version.value}_meta.json`,
+		url: `${JSR_ORIGIN}/${name}/${unwrap(version)}_meta.json`,
 		schema: VersionMeta,
 		fetch,
 	});
-	if (!published.ok) return published;
+	if (isErr(published)) return published;
 
-	return ok({ name, version: version.value, exports: published.value.exports });
+	return Ok({
+		name,
+		version: unwrap(version),
+		exports: unwrap(published).exports,
+	});
 }
 
 /**

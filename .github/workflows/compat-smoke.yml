@@ -5,9 +5,9 @@
 #
 # It tests what is already published, not the pull request's code, so it
 # skips pull requests and runs:
-#   - after every successful `release` run, to check what was just published
-#   - on push to main, as a fast signal; it may race the release run and see
-#     the previous version, which the post-release run then covers
+#   - after every successful `release` run, to check what was just published;
+#     `release` runs on every push to main, so a push trigger here would only
+#     run the smoke twice
 #   - weekly, to catch drift in runtimes, JSR's npm layer and the tools
 #   - by hand (workflow_dispatch), optionally pinned with `--version`
 # It lives apart from compat.yml so its triggers, concurrency and failure
@@ -16,8 +16,6 @@
 name: compat-smoke
 
 on:
-  push:
-    branches: [main]
   workflow_run:
     workflows: [release]
     types: [completed]

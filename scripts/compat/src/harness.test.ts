@@ -2,6 +2,7 @@ import { assertEquals, assertMatch, assertThrows } from "@std/assert";
 import {
 	createHarness,
 	describeError,
+	NOT_AWAITED_ERROR,
 	normalizeDefinition,
 	type TestContext,
 } from "./harness.ts";
@@ -222,22 +223,117 @@ Deno.test("t.step nests steps and fails the parent of a failing step", async (t)
 		},
 	);
 
-	await t.step("an un-awaited step fails its parent", async () => {
-		// Given: a test that starts a slow step without awaiting it
+	await t.step(
+		"an un-awaited step fails its parent, and its late end changes nothing",
+		async () => {
+			// Given: a test that starts a slow step without awaiting it
+			const harness = createHarness();
+			const { promise, resolve } = Promise.withResolvers<void>();
+			let late: Promise<boolean> | undefined;
+			harness.test("outer", (ctx: TestContext) => {
+				late = ctx.step("slow", () => promise);
+			});
+
+			// When: it runs, and the step ends after the verdict
+			const { tests } = await harness.run();
+			const verdict = structuredClone(tests);
+			resolve();
+			const resolved = await late;
+
+			// Then: the parent fails for the dangling step, which is reported
+			// failed as not awaited, and the step's late end leaves the report as is
+			assertEquals(verdict, [
+				{
+					name: "outer",
+					outcome: {
+						kind: "failed",
+						error: "1 step(s) were not awaited before the test ended",
+					},
+					steps: [
+						{
+							name: "slow",
+							outcome: { kind: "failed", error: NOT_AWAITED_ERROR },
+							steps: [],
+						},
+					],
+				},
+			]);
+			assertEquals(tests, verdict);
+			assertEquals(resolved, false);
+		},
+	);
+
+	await t.step(
+		"an un-awaited step that later fails still reads as not awaited",
+		async () => {
+			// Given: a test whose un-awaited step throws after the parent ends
+			const harness = createHarness();
+			const { promise, reject } = Promise.withResolvers<void>();
+			let late: Promise<boolean> | undefined;
+			harness.test("outer", (ctx: TestContext) => {
+				late = ctx.step("doomed", () => promise);
+			});
+
+			// When: it runs, and the step fails afterwards
+			const { tests } = await harness.run();
+			reject(new Error("too late"));
+			await late;
+
+			// Then: the reason is the dangling step, not its failure
+			assertEquals(tests[0]?.outcome, {
+				kind: "failed",
+				error: "1 step(s) were not awaited before the test ended",
+			});
+			assertEquals(tests[0]?.steps[0]?.outcome, {
+				kind: "failed",
+				error: NOT_AWAITED_ERROR,
+			});
+		},
+	);
+
+	await t.step("concurrent steps are reported in call order", async () => {
+		// Given: two awaited steps where the first one ends last
 		const harness = createHarness();
 		const { promise, resolve } = Promise.withResolvers<void>();
-		harness.test("outer", (ctx: TestContext) => {
-			void ctx.step("slow", () => promise);
+		harness.test("outer", async (ctx: TestContext) => {
+			await Promise.all([
+				ctx.step("first", () => promise),
+				ctx.step("second", () => resolve()),
+			]);
 		});
 
 		// When: it runs
 		const { tests } = await harness.run();
-		resolve();
 
-		// Then: the parent fails for the dangling step
-		assertEquals(tests[0]?.outcome, {
-			kind: "failed",
-			error: "1 step(s) were not awaited before the test ended",
-		});
+		// Then: the steps keep the order they were started in
+		assertEquals(
+			tests[0]?.steps.map((step) => step.name),
+			["first", "second"],
+		);
+		assertEquals(tests[0]?.outcome, { kind: "passed" });
 	});
+
+	await t.step(
+		"a step started after its parent ended does not run",
+		async () => {
+			// Given: a test that keeps its context and starts a step once it has ended
+			const harness = createHarness();
+			let saved: TestContext | undefined;
+			let ran = false;
+			harness.test("outer", (ctx: TestContext) => {
+				saved = ctx;
+			});
+			const { tests } = await harness.run();
+
+			// When: a step is started on the ended test
+			const resolved = await saved?.step("orphan", () => {
+				ran = true;
+			});
+
+			// Then: it is refused, and the report is unchanged
+			assertEquals(resolved, false);
+			assertEquals(ran, false);
+			assertEquals(tests[0]?.steps, []);
+		},
+	);
 });

@@ -20,6 +20,7 @@ import {
 import type { TestFileLocation } from "./protocol.ts";
 
 const SUITE_SOURCE = fromFileUrl(new URL("./suite.ts", import.meta.url));
+const UNCAUGHT_SOURCE = fromFileUrl(new URL("./uncaught.ts", import.meta.url));
 
 /**
  * Lists every `*.test.ts` file under `packages/`, sorted by path.
@@ -69,7 +70,12 @@ export async function buildBundle({
 	const dir = join(work, "out");
 	await Deno.writeTextFile(
 		entry,
-		renderSuiteEntry({ suite: SUITE_SOURCE, root, files }),
+		renderSuiteEntry({
+			suite: SUITE_SOURCE,
+			uncaught: UNCAUGHT_SOURCE,
+			root,
+			files,
+		}),
 	);
 	const output = await new Deno.Command(Deno.execPath(), {
 		args: [

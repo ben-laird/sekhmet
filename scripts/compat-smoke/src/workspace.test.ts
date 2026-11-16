@@ -1,3 +1,4 @@
+import { isErr, isOk, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assert, assertEquals } from "@std/assert";
 import { EXERCISES } from "@/probe/exercises/mod.ts";
 import { publishedNames } from "@/src/workspace.ts";
@@ -14,8 +15,8 @@ Deno.test("publishedNames keeps the packages that publish", () => {
 	const names = publishedNames(manifests);
 
 	// Then: only the published ones, sorted
-	assert(names.ok);
-	assertEquals<string[]>(names.value, ["@sekhmet/enum", "@sekhmet/vow"]);
+	assert(isOk(names));
+	assertEquals<string[]>(unwrap(names), ["@sekhmet/enum", "@sekhmet/vow"]);
 });
 
 Deno.test("publishedNames rejects a manifest without a package name", () => {
@@ -28,8 +29,8 @@ Deno.test("publishedNames rejects a manifest without a package name", () => {
 	const names = publishedNames(manifests);
 
 	// Then: it fails naming the manifest
-	assert(!names.ok);
-	assert(names.error.startsWith("packages/x/deno.json"));
+	assert(isErr(names));
+	assert(unwrapErr(names).startsWith("packages/x/deno.json"));
 });
 
 Deno.test("every package the repository publishes has an exercise", async () => {
@@ -48,6 +49,6 @@ Deno.test("every package the repository publishes has an exercise", async () => 
 	const names = publishedNames(manifests);
 
 	// Then: the exercises cover exactly those packages
-	assert(names.ok);
-	assertEquals(Object.keys(EXERCISES).sort(), names.value);
+	assert(isOk(names));
+	assertEquals(Object.keys(EXERCISES).sort(), unwrap(names));
 });

@@ -5,9 +5,9 @@
  * @module
  */
 
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { z } from "zod";
 import { isPackageName, type PackageName } from "@/src/package.ts";
-import { err, ok, type Result } from "@/src/result.ts";
 
 const Manifest = z.object({
 	name: z.string().refine(isPackageName, "not a JSR package name"),
@@ -27,10 +27,10 @@ export function publishedNames(
 	for (const [path, json] of manifests) {
 		const parsed = Manifest.safeParse(json);
 		if (!parsed.success) {
-			return err(`${path}: ${z.prettifyError(parsed.error)}`);
+			return Err(`${path}: ${z.prettifyError(parsed.error)}`);
 		}
 		const { name, publish } = parsed.data;
 		if (publish !== false && isPackageName(name)) names.push(name);
 	}
-	return ok(names.sort());
+	return Ok(names.sort());
 }

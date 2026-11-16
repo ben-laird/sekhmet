@@ -1,3 +1,4 @@
+import { Err, isErr, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assert, assertEquals } from "@std/assert";
 import { REPORT_MARKER, type Report } from "@/probe/probe.ts";
 import {
@@ -49,7 +50,7 @@ Deno.test("findReport reads the last marked line of the probe's output", async (
 		const report = findReport(output);
 
 		// Then: it is the parsed report
-		assertEquals(report, { ok: true, value: PASSING });
+		assertEquals(report, Ok(PASSING));
 	});
 
 	await t.step("no marked line", () => {
@@ -59,7 +60,7 @@ Deno.test("findReport reads the last marked line of the probe's output", async (
 		const report = findReport("Segmentation fault\n");
 
 		// Then: it is missing
-		assertEquals(report, { ok: false, error: "the probe printed no report" });
+		assertEquals(report, Err("the probe printed no report"));
 	});
 
 	await t.step("a malformed report", () => {
@@ -70,8 +71,8 @@ Deno.test("findReport reads the last marked line of the probe's output", async (
 		const report = findReport(output);
 
 		// Then: it is rejected
-		assert(!report.ok);
-		assert(report.error.startsWith("the report is malformed"));
+		assert(isErr(report));
+		assert(unwrapErr(report).startsWith("the report is malformed"));
 	});
 });
 
