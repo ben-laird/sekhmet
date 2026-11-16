@@ -21,6 +21,7 @@
  * @module
  */
 
+import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import { Schema } from "../../core/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
@@ -35,7 +36,7 @@ export type {
 /**
  * Creates a schema that validates and optionally coerces boolean values.
  *
- * By default, this schema only accepts boolean inputs and returns a TypeError
+ * By default, this schema only accepts boolean inputs and fails with an `InvalidType` issue
  * for non-boolean values. With `coerce: true`, it will convert any input to
  * a boolean using the Boolean() function.
  *
@@ -48,7 +49,7 @@ export type {
  *
  * const schema = boolean();
  * parseSync(schema, true); // Ok(true)
- * parseSync(schema, "true"); // Err(TypeError)
+ * parseSync(schema, "true"); // Err(InvalidType)
  * ```
  * @example
  * ```ts
@@ -63,14 +64,14 @@ export type {
  */
 export function boolean(
 	options?: mini.BooleanSchemaOptions,
-): Schema<unknown, boolean, TypeError> {
+): Schema<unknown, boolean, SchemaIssue> {
 	return Schema.fromMini(mini.boolean(options));
 }
 
 /**
  * Creates a schema that validates and optionally coerces numeric values.
  *
- * By default, this schema only accepts number inputs and returns a TypeError
+ * By default, this schema only accepts number inputs and fails with an `InvalidType` issue
  * for non-number values. With `coerce: true`, it will convert any input to
  * a number using the Number() function.
  *
@@ -83,7 +84,7 @@ export function boolean(
  *
  * const schema = number();
  * parseSync(schema, 42); // Ok(42)
- * parseSync(schema, "123"); // Err(TypeError)
+ * parseSync(schema, "123"); // Err(InvalidType)
  * ```
  * @example
  * ```ts
@@ -97,14 +98,14 @@ export function boolean(
  */
 export function number(
 	options?: mini.NumberSchemaOptions,
-): Schema<unknown, number, TypeError> {
+): Schema<unknown, number, SchemaIssue> {
 	return Schema.fromMini(mini.number(options));
 }
 
 /**
  * Creates a schema that validates and optionally coerces string values.
  *
- * By default, this schema only accepts string inputs and returns a TypeError
+ * By default, this schema only accepts string inputs and fails with an `InvalidType` issue
  * for non-string values. With `coerce: true`, it will convert any input to
  * a string using the String() function.
  *
@@ -117,7 +118,7 @@ export function number(
  *
  * const schema = string();
  * parseSync(schema, "hello"); // Ok("hello")
- * parseSync(schema, 123); // Err(TypeError)
+ * parseSync(schema, 123); // Err(InvalidType)
  * ```
  * @example
  * ```ts
@@ -131,6 +132,6 @@ export function number(
  */
 export function string(
 	options?: mini.StringSchemaOptions,
-): Schema<unknown, string, TypeError> {
+): Schema<unknown, string, SchemaIssue> {
 	return Schema.fromMini(mini.string(options));
 }

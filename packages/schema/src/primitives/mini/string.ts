@@ -1,4 +1,5 @@
 import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 
 /**
@@ -7,7 +8,7 @@ import { Schema } from "@/src/core/mini/schema.ts";
 export interface StringSchemaOptions {
 	/**
 	 * If true, coerce non-string values to strings using String().
-	 * If false, non-string values will result in a TypeError.
+	 * If false, non-string values will fail with an `InvalidType` issue.
 	 *
 	 * @default false
 	 */
@@ -17,7 +18,7 @@ export interface StringSchemaOptions {
 /**
  * Creates a schema that validates and optionally coerces string values.
  *
- * By default, this schema only accepts string inputs and returns a TypeError
+ * By default, this schema only accepts string inputs and fails with an `InvalidType` issue
  * for non-string values. With `coerce: true`, it will convert any input to
  * a string using the String() function.
  *
@@ -31,7 +32,7 @@ export interface StringSchemaOptions {
  *
  * const schema = string();
  * parseSync(schema, "hello"); // Ok("hello")
- * parseSync(schema, 123); // Err(TypeError)
+ * parseSync(schema, 123); // Err(InvalidType)
  * ```
  *
  * @example
@@ -46,7 +47,7 @@ export interface StringSchemaOptions {
  */
 export function string(
 	options?: StringSchemaOptions,
-): Schema<unknown, string, TypeError> {
+): Schema<unknown, string, SchemaIssue> {
 	const coerce = options?.coerce ?? false;
 
 	return new Schema((input) => {
@@ -55,7 +56,7 @@ export function string(
 				return Ok(String(input));
 			}
 
-			return Err(new TypeError());
+			return Err(InvalidType({ input, expected: "string" }));
 		}
 
 		return Ok(input);

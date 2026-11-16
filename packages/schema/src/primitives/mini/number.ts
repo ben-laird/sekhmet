@@ -1,4 +1,5 @@
 import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 
 /**
@@ -30,7 +31,7 @@ export interface Range {
 export interface NumberSchemaOptions {
 	/**
 	 * If true, coerce non-number values to numbers using Number().
-	 * If false, non-number values will result in a TypeError.
+	 * If false, non-number values will fail with an `InvalidType` issue.
 	 *
 	 * @default false
 	 */
@@ -38,7 +39,7 @@ export interface NumberSchemaOptions {
 
 	/**
 	 * Optional range constraint for the number.
-	 * If provided, numbers outside this range will result in a TypeError.
+	 * If provided, numbers outside this range will fail with an `InvalidType` issue.
 	 */
 	range?: Range;
 }
@@ -46,7 +47,7 @@ export interface NumberSchemaOptions {
 /**
  * Creates a schema that validates and optionally coerces numeric values.
  *
- * By default, this schema only accepts number inputs and returns a TypeError
+ * By default, this schema only accepts number inputs and fails with an `InvalidType` issue
  * for non-number values. With `coerce: true`, it will convert any input to
  * a number using the Number() function.
  *
@@ -60,7 +61,7 @@ export interface NumberSchemaOptions {
  *
  * const schema = number();
  * parseSync(schema, 42); // Ok(42)
- * parseSync(schema, "123"); // Err(TypeError)
+ * parseSync(schema, "123"); // Err(InvalidType)
  * ```
  *
  * @example
@@ -75,7 +76,7 @@ export interface NumberSchemaOptions {
  */
 export function number(
 	options?: NumberSchemaOptions,
-): Schema<unknown, number, TypeError> {
+): Schema<unknown, number, SchemaIssue> {
 	const coerce = options?.coerce ?? false;
 
 	return new Schema((input) => {
@@ -84,7 +85,7 @@ export function number(
 				return Ok(Number(input));
 			}
 
-			return Err(new TypeError());
+			return Err(InvalidType({ input, expected: "number" }));
 		}
 
 		return Ok(input);
