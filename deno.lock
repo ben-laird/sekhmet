@@ -1703,6 +1703,11 @@
           "npm:zod@^4.1.0"
         ]
       },
+      "scripts/compat-smoke": {
+        "dependencies": [
+          "npm:zod@^4.1.0"
+        ]
+      },
       "scripts/docs-site": {
         "dependencies": [
           "npm:vitepress@1.6.4",
