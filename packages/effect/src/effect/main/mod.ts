@@ -7,13 +7,13 @@
  * convert results back into main `Effect` instances for chaining.
  *
  * @example
- * ```ts ignore
- * import { Success } from "@sekhmet/effect/effect/main";
+ * ```ts
+ * import { Success } from "@sekhmet/effect/effect";
  *
- * const result = Success(5)
- *   .map(x => x * 2)
- *   .inspect(x => console.log("value:", x))
- *   .mapError(e => `error: ${e}`);
+ * const effect = Success(5)
+ *   .map((x) => x * 2)
+ *   .inspect((x) => console.log("value:", x))
+ *   .mapError((e) => `error: ${e}`);
  * ```
  *
  * @module

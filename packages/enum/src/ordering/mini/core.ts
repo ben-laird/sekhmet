@@ -64,14 +64,20 @@ export type { Variants as OrderingVariants };
  * and for interoperability with sort functions via `toNumber`.
  *
  * @example
- * ```ts ignore
- * import { Less, Equal, Greater, type Ordering } from "@sekhmet/ordering/core/mini/core";
- * import { andThen } from "@sekhmet/ordering/core/mini/combinators";
- * import { compareNumbers } from "@sekhmet/ordering/core/mini/compare";
+ * ```ts
+ * import { andThen, compareNumbers, type Ordering, toNumber } from "@sekhmet/enum/ordering/mini";
+ * import { assertEquals } from "@std/assert";
+ *
+ * interface Point {
+ *   x: number;
+ *   y: number;
+ * }
  *
  * // Compare by x, then by y if x is equal
  * const comparePoints = (a: Point, b: Point): Ordering =>
  *   andThen(compareNumbers(a.x, b.x), compareNumbers(a.y, b.y));
+ *
+ * assertEquals(toNumber(comparePoints({ x: 1, y: 2 }, { x: 1, y: 3 })), -1);
  * ```
  */
 export class Ordering extends Enum<Variants> {}
