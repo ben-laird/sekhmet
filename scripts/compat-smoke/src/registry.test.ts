@@ -1,3 +1,4 @@
+import { Err, isErr, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assertEquals } from "@std/assert";
 import { isPackageName, type PackageName } from "@/src/package.ts";
 import {
@@ -45,7 +46,7 @@ Deno.test("resolveVersion prefers a package's request, then the global one, then
 		});
 
 		// Then: it is the latest
-		assertEquals(version, { ok: true, value: "0.3.0" });
+		assertEquals(version, Ok("0.3.0"));
 	});
 
 	await t.step("a per-package request beats the global one", () => {
@@ -61,7 +62,7 @@ Deno.test("resolveVersion prefers a package's request, then the global one, then
 		});
 
 		// Then: the per-package one wins
-		assertEquals(version, { ok: true, value: "0.2.0" });
+		assertEquals(version, Ok("0.2.0"));
 	});
 
 	await t.step("a request for an unpublished version fails", () => {
@@ -77,15 +78,15 @@ Deno.test("resolveVersion prefers a package's request, then the global one, then
 		});
 
 		// Then: it fails and lists what is available
-		assertEquals(version, {
-			ok: false,
-			error: {
+		assertEquals(
+			version,
+			Err({
 				kind: "unknown-version",
 				name: ENUM,
 				version: "9.9.9",
 				available: versions,
-			},
-		});
+			}),
+		);
 	});
 
 	await t.step("no latest means nothing is published", () => {
@@ -100,10 +101,7 @@ Deno.test("resolveVersion prefers a package's request, then the global one, then
 		});
 
 		// Then: the package counts as unpublished
-		assertEquals(version, {
-			ok: false,
-			error: { kind: "unpublished", name: ENUM },
-		});
+		assertEquals(version, Err({ kind: "unpublished", name: ENUM }));
 	});
 });
 
@@ -127,14 +125,14 @@ Deno.test("fetchPublished reads the export map of the resolved version", async (
 	});
 
 	// Then: the latest version and its exports come back
-	assertEquals(published, {
-		ok: true,
-		value: {
+	assertEquals(
+		published,
+		Ok({
 			name: ENUM,
 			version: "0.2.0",
 			exports: { "./option": "./src/option/main/mod.ts" },
-		},
-	});
+		}),
+	);
 });
 
 Deno.test("fetchPublished turns registry failures into values", async (t) => {
@@ -150,10 +148,7 @@ Deno.test("fetchPublished turns registry failures into values", async (t) => {
 		});
 
 		// Then: it is reported as unpublished
-		assertEquals(published, {
-			ok: false,
-			error: { kind: "unpublished", name: ENUM },
-		});
+		assertEquals(published, Err({ kind: "unpublished", name: ENUM }));
 	});
 
 	await t.step("an unexpected body is a schema error", async () => {
@@ -170,7 +165,10 @@ Deno.test("fetchPublished turns registry failures into values", async (t) => {
 		});
 
 		// Then: it fails as a schema error naming the URL
-		assertEquals(published.ok ? undefined : published.error.kind, "schema");
+		assertEquals(
+			isErr(published) ? unwrapErr(published).kind : undefined,
+			"schema",
+		);
 	});
 
 	await t.step("a thrown fetch is a network error", async () => {
@@ -186,14 +184,14 @@ Deno.test("fetchPublished turns registry failures into values", async (t) => {
 		});
 
 		// Then: it fails as a network error
-		assertEquals(published, {
-			ok: false,
-			error: {
+		assertEquals(
+			published,
+			Err({
 				kind: "network",
 				url: `${JSR_ORIGIN}/@sekhmet/enum/meta.json`,
 				message: "TypeError: offline",
-			},
-		});
+			}),
+		);
 	});
 
 	await t.step("a server error is an HTTP error", async () => {
@@ -209,14 +207,14 @@ Deno.test("fetchPublished turns registry failures into values", async (t) => {
 		});
 
 		// Then: it fails with the status
-		assertEquals(published, {
-			ok: false,
-			error: {
+		assertEquals(
+			published,
+			Err({
 				kind: "http",
 				url: `${JSR_ORIGIN}/@sekhmet/enum/meta.json`,
 				status: 503,
-			},
-		});
+			}),
+		);
 	});
 });
 

@@ -11,6 +11,12 @@
  * @module
  */
 
+import {
+	isErr,
+	type Result,
+	unwrap,
+	unwrapErr,
+} from "@sekhmet/enum/result/mini";
 import { copy } from "@std/fs";
 import { join } from "@std/path";
 import { type Options, parseOptions, USAGE } from "@/src/args.ts";
@@ -23,7 +29,6 @@ import {
 import { type Command, planFor } from "@/src/plan.ts";
 import { describeRegistryError, fetchPublished } from "@/src/registry.ts";
 import { findReport, judge } from "@/src/report.ts";
-import type { Result } from "@/src/result.ts";
 import { targetOf } from "@/src/runtime.ts";
 import { publishedNames } from "@/src/workspace.ts";
 
@@ -153,13 +158,13 @@ async function smoke({
 
 	const run = await execute({ command: plan.run, cwd: project, capture: true });
 	const report = findReport(run.stdout);
-	if (!report.ok) {
+	if (isErr(report)) {
 		console.error(run.stdout);
-		console.error(`${options.runtime}: ${report.error}`);
+		console.error(`${options.runtime}: ${unwrapErr(report)}`);
 		return EXIT_CODES.FAILED;
 	}
 
-	const verdict = judge({ packages, installed, report: report.value });
+	const verdict = judge({ packages, installed, report: unwrap(report) });
 	console.log(`\ncompat smoke: ${options.runtime}`);
 	for (const line of verdict.lines) console.log(line);
 	if (!run.success) {
@@ -176,19 +181,21 @@ async function smoke({
  * @returns The exit code, one of {@linkcode EXIT_CODES}
  */
 export async function main(args: readonly string[]): Promise<number> {
-	const options = parseOptions(args);
-	if (!options.ok) {
-		console.error(`${options.error}\n\n${USAGE}`);
+	const parsed = parseOptions(args);
+	if (isErr(parsed)) {
+		console.error(`${unwrapErr(parsed)}\n\n${USAGE}`);
 		return EXIT_CODES.USAGE;
 	}
+	const options = unwrap(parsed);
 
-	const names = await readPublishedNames();
-	if (!names.ok) {
-		console.error(names.error);
+	const published = await readPublishedNames();
+	if (isErr(published)) {
+		console.error(unwrapErr(published));
 		return EXIT_CODES.SETUP_FAILED;
 	}
-	const unknown = [...options.value.requests.byPackage.keys()].filter(
-		(name) => !names.value.includes(name),
+	const names = unwrap(published);
+	const unknown = [...options.requests.byPackage.keys()].filter(
+		(name) => !names.includes(name),
 	);
 	if (unknown.length > 0) {
 		console.error(
@@ -198,24 +205,24 @@ export async function main(args: readonly string[]): Promise<number> {
 	}
 
 	const lookups = await Promise.all(
-		names.value.map((name) =>
-			fetchPublished({ name, requests: options.value.requests, fetch }),
+		names.map((name) =>
+			fetchPublished({ name, requests: options.requests, fetch }),
 		),
 	);
 	const packages: PublishedPackage[] = [];
 	for (const lookup of lookups) {
-		if (!lookup.ok) {
-			console.error(describeRegistryError(lookup.error));
+		if (isErr(lookup)) {
+			console.error(describeRegistryError(unwrapErr(lookup)));
 			return EXIT_CODES.SETUP_FAILED;
 		}
-		packages.push(lookup.value);
+		packages.push(unwrap(lookup));
 	}
 
 	const project = await Deno.makeTempDir({ prefix: "sekhmet-compat-smoke-" });
 	try {
-		return await smoke({ options: options.value, packages, project });
+		return await smoke({ options, packages, project });
 	} finally {
-		if (options.value.keep) console.error(`kept the project at ${project}`);
+		if (options.keep) console.error(`kept the project at ${project}`);
 		else await Deno.remove(project, { recursive: true });
 	}
 }

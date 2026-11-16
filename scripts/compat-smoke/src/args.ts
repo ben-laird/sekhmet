@@ -5,10 +5,10 @@
  * @module
  */
 
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { parseArgs } from "@std/cli";
 import { isPackageName, type PackageName } from "@/src/package.ts";
 import type { VersionRequests } from "@/src/registry.ts";
-import { err, ok, type Result } from "@/src/result.ts";
 import { isRuntime, RUNTIMES, type Runtime } from "@/src/runtime.ts";
 
 /** How to invoke the command, printed on a usage error. */
@@ -47,12 +47,12 @@ export function parseOptions(args: readonly string[]): Result<Options, string> {
 	const unknown = args.filter(
 		(arg) => arg.startsWith("-") && !/^--(version|keep)(=|$)/.test(arg),
 	);
-	if (unknown.length > 0) return err(`unknown option: ${unknown.join(" ")}`);
+	if (unknown.length > 0) return Err(`unknown option: ${unknown.join(" ")}`);
 
 	const [runtime, ...extra] = parsed._.map(String);
-	if (runtime === undefined) return err("missing <runtime>");
-	if (!isRuntime(runtime)) return err(`unknown runtime: ${runtime}`);
-	if (extra.length > 0) return err(`unexpected arguments: ${extra.join(" ")}`);
+	if (runtime === undefined) return Err("missing <runtime>");
+	if (!isRuntime(runtime)) return Err(`unknown runtime: ${runtime}`);
+	if (extra.length > 0) return Err(`unexpected arguments: ${extra.join(" ")}`);
 
 	let all: string | undefined;
 	const byPackage = new Map<PackageName, string>();
@@ -60,15 +60,15 @@ export function parseOptions(args: readonly string[]): Result<Options, string> {
 		const match = PACKAGE_VERSION.exec(request);
 		if (match === null) {
 			if (all !== undefined && all !== request) {
-				return err(`conflicting --version values: ${all} and ${request}`);
+				return Err(`conflicting --version values: ${all} and ${request}`);
 			}
 			all = request;
 			continue;
 		}
 		const [, name = "", version = ""] = match;
-		if (!isPackageName(name)) return err(`not a JSR package name: ${name}`);
+		if (!isPackageName(name)) return Err(`not a JSR package name: ${name}`);
 		byPackage.set(name, version);
 	}
 
-	return ok({ runtime, requests: { all, byPackage }, keep: parsed.keep });
+	return Ok({ runtime, requests: { all, byPackage }, keep: parsed.keep });
 }

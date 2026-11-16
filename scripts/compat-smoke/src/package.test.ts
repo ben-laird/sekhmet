@@ -1,3 +1,4 @@
+import { isOk } from "@sekhmet/enum/result/mini";
 import { assertEquals } from "@std/assert";
 import {
 	exportPaths,
@@ -23,7 +24,9 @@ Deno.test("parsePackageName accepts @scope/name and rejects anything else", () =
 	];
 
 	// When: each is parsed
-	const parsed = candidates.map((candidate) => parsePackageName(candidate).ok);
+	const parsed = candidates.map((candidate) =>
+		isOk(parsePackageName(candidate)),
+	);
 
 	// Then: only the scoped name is accepted
 	assertEquals(parsed, [true, false, false, false, false]);

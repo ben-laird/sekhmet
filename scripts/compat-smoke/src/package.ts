@@ -5,7 +5,7 @@
  * @module
  */
 
-import { err, ok, type Result } from "@/src/result.ts";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 
 declare const PACKAGE_NAME: unique symbol;
 
@@ -32,8 +32,8 @@ export function isPackageName(text: string): text is PackageName {
  */
 export function parsePackageName(text: string): Result<PackageName, string> {
 	return isPackageName(text)
-		? ok(text)
-		: err(`not a JSR package name (@scope/name): ${text}`);
+		? Ok(text)
+		: Err(`not a JSR package name (@scope/name): ${text}`);
 }
 
 /**

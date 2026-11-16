@@ -6,6 +6,7 @@
  * @module
  */
 
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { z } from "zod";
 import { REPORT_MARKER, type Report } from "@/probe/probe.ts";
 import {
@@ -13,7 +14,6 @@ import {
 	type PackageName,
 	type PublishedPackage,
 } from "@/src/package.ts";
-import { err, ok, type Result } from "@/src/result.ts";
 
 const Failure = z.object({ ok: z.literal(false), error: z.string() });
 
@@ -47,18 +47,18 @@ export function findReport(output: string): Result<Report, string> {
 	const line = output
 		.split(/\r?\n/)
 		.findLast((candidate) => candidate.startsWith(REPORT_MARKER));
-	if (line === undefined) return err("the probe printed no report");
+	if (line === undefined) return Err("the probe printed no report");
 
 	let json: unknown;
 	try {
 		json = JSON.parse(line.slice(REPORT_MARKER.length));
 	} catch (error: unknown) {
-		return err(`the report is not JSON: ${String(error)}`);
+		return Err(`the report is not JSON: ${String(error)}`);
 	}
 	const parsed = ReportSchema.safeParse(json);
 	return parsed.success
-		? ok(parsed.data)
-		: err(`the report is malformed: ${z.prettifyError(parsed.error)}`);
+		? Ok(parsed.data)
+		: Err(`the report is malformed: ${z.prettifyError(parsed.error)}`);
 }
 
 /** The judgement of one run. */
