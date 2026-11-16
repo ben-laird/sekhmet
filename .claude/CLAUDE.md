@@ -98,6 +98,10 @@ Scripts (`scripts/`, unpublished):
 - `@sekhmet/add`: scaffolds a new workspace from `scripts/add/templates/`
   (`deno task add`)
 - `@sekhmet/ci`: runs lint, type check, doc lint, publish readiness, JSR dry run and tests (`deno task ci`)
+- `@sekhmet/compat`: runs every package's unit tests on a non-Deno runtime
+  (`deno task compat:test <node|bun|chromium|firefox|webkit|workerd>`) through
+  a bundled `Deno.test` shim; not part of `deno task ci` (see
+  `scripts/compat/README.md`)
 - `@sekhmet/docs-site`: the VitePress docs site; assembles the root README and
   every package's `README.md` and `docs/*.md` into a sidebar per package
   (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
@@ -230,7 +234,7 @@ fix(@sekhmet/primordials): correct Struct type inference
 
 **Scopes**: Use package names: `@sekhmet/effect`, `@sekhmet/enum`,
 `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/vow`,
-and `@sekhmet/add`, `@sekhmet/ci` for scripts
+and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat` for scripts
 
 ## Infrastructure Code Conventions
 

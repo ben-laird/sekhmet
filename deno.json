@@ -43,6 +43,10 @@
 			"description": "Build the static docs site into scripts/docs-site/.vitepress/dist",
 			"command": "deno task docs:assemble && cd scripts/docs-site && deno run --no-prompt -A npm:vitepress@1.6.4 build"
 		},
+		"compat:test": {
+			"description": "Run every package's unit tests on a non-Deno runtime: node, bun, chromium, firefox, webkit or workerd",
+			"command": "deno run --no-prompt --allow-all @sekhmet/compat"
+		},
 		"add": {
 			"description": "Add a workspace to the repository",
 			"command": "deno run --no-prompt --allow-read --allow-write @sekhmet/add"
