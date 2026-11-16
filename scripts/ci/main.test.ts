@@ -17,6 +17,9 @@ const ENVIRONMENTS = [
 
 Deno.test("EXIT_CODES are defined with unique values", () => {
 	// Given: EXIT_CODES constant
+	// When: reading every code
+	const values = Object.values(EXIT_CODES);
+
 	// Then: all exit codes should be defined and unique
 	assertEquals(EXIT_CODES.DENO_LINT_FAILED, 1);
 	assertEquals(EXIT_CODES.BIOME_CHECK_FAILED, 2);
@@ -26,8 +29,6 @@ Deno.test("EXIT_CODES are defined with unique values", () => {
 	assertEquals(EXIT_CODES.COVERAGE_FAILED, 6);
 	assertEquals(EXIT_CODES.DENO_CHECK_FAILED, 7);
 	assertEquals(EXIT_CODES.CLEANUP_FAILED, 8);
-
-	const values = Object.values(EXIT_CODES);
 	const uniqueValues = new Set(values);
 	assertEquals(values.length, uniqueValues.size, "Exit codes should be unique");
 });
@@ -133,7 +134,8 @@ Deno.test("coverageCleanupCommand succeeds when there is no coverage directory",
 });
 
 Deno.test("main function exists and is callable", () => {
-	// Given: main function from the module
+	// Given: the module's exports
+	// When: reading main from them
 	// Then: it should be defined
 	assertExists(main);
 	assertEquals(typeof main, "function");
