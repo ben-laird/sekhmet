@@ -1,20 +1,32 @@
-import { match } from "@sekhmet/enum/core/mini/exit";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
-import { assertEquals, assertExists } from "@std/assert";
+import { match, union, unionKinds } from "@sekhmet/enum/core/mini/exit";
+import { Ok as MainOk } from "@sekhmet/enum/result";
+import {
+	Err,
+	Ok,
+	type Result,
+	unwrap,
+	unwrapErr,
+} from "@sekhmet/enum/result/mini";
+import { assertEquals, assertExists, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
 	type AnySchema,
+	andThen,
 	type ErrorOf,
 	filter,
 	type Infer,
 	type Input,
+	inspect,
+	inspectErr,
 	map,
 	mapErr,
 	type Output,
+	orElse,
 	parse,
 	parseAsync,
 	parseSync,
 	pipe,
+	preprocess,
 	Schema,
 } from "./schema.ts";
 
@@ -338,4 +350,264 @@ Deno.test("AnySchema accepts every schema", () => {
 
 	// Then: all of them are accepted
 	assertEquals(any.length, 3);
+});
+
+/** Digit strings as numbers: the parser of {@linkcode digits}. */
+function parseDigits(input: string): Result<number, "not digits"> {
+	if (/^\d+$/.test(input)) {
+		return Ok(Number(input));
+	}
+
+	return Err("not digits");
+}
+
+const digits = new Schema(parseDigits);
+const laterDigits = new Schema((input: string) => {
+	return Promise.resolve(parseDigits(input));
+});
+
+/** The error a `parseSync` failure wraps, or `undefined` on success. */
+function syncError<I, O, E>(schema: Schema<I, O, E>, input: I): unknown {
+	return match(parseSync(schema, input))({
+		Ok: () => undefined,
+		Err: (error) => union(error),
+	});
+}
+
+Deno.test("andThen transforms a successful output into its Result", () => {
+	// Given: digits, then a fallible halving of even numbers
+	const halved = andThen(digits, (n) => {
+		if (n % 2 === 0) {
+			return Ok(n / 2);
+		}
+
+		return Err("odd");
+	});
+
+	// When: parsing an even, an odd and a non-digit input
+	// Then: next's Ok and Err become the parse's, and self's error passes
+	// through
+	assertEquals(unwrap(parseSync(halved, "42")), 21);
+	assertEquals(syncError(halved, "7"), "odd");
+	assertEquals(syncError(halved, "x"), "not digits");
+	assertEquals(unionKinds(parse(halved, "42")), "Sync");
+});
+
+Deno.test("andThen does not call next when self fails", () => {
+	// Given: a next that records each call
+	const calls: number[] = [];
+	const chained = andThen(digits, (n) => {
+		calls.push(n);
+		return Ok(n);
+	});
+
+	// When: parsing an input self rejects
+	parseSync(chained, "x");
+
+	// Then: next never ran
+	assertEquals(calls, []);
+});
+
+Deno.test("andThen with a promise is async, and parseSync reports it", async () => {
+	// Given: a next that resolves later, and a sync next on an async schema
+	const fetched = andThen(digits, (n) => Promise.resolve(Ok(n + 1)));
+	const afterAsync = andThen(laterDigits, (n) => Ok(n + 1));
+
+	// When: parsing each
+	// Then: both parses are Async, parseSync reports UnexpectedAsyncParse, and
+	// parseAsync resolves the chained result
+	assertEquals(unionKinds(parse(fetched, "1")), "Async");
+	assertEquals(unionKinds(parse(afterAsync, "1")), "Async");
+	assertEquals(
+		unionKinds(unwrapErr(parseSync(fetched, "1"))),
+		"UnexpectedAsyncParse",
+	);
+	assertEquals(unwrap(await parseAsync(fetched, "1")), 2);
+	assertEquals(unwrap(await parseAsync(afterAsync, "1")), 2);
+	assertEquals(unwrapErr(await parseAsync(afterAsync, "x")), "not digits");
+});
+
+Deno.test("andThen accepts enum's main Result from next", () => {
+	// Given: a next returning a main Result
+	const chained = andThen(digits, (n) => MainOk(n * 2));
+
+	// When: parsing
+	// Then: the main Result's value is the output
+	assertEquals(unwrap(parseSync(chained, "21")), 42);
+});
+
+Deno.test("law: andThen with an Ok-wrapping next equals map", () => {
+	// Given: a mapping, applied through map and through andThen
+	const double = (n: number): number => n * 2;
+	const mapped = map(digits, double);
+	const chained = andThen(digits, (n) => Ok(double(n)));
+
+	// When: parsing valid and invalid inputs with both
+	// Then: the results are equal
+	for (const input of ["0", "21", "x", ""]) {
+		assertEquals(parseSync(chained, input), parseSync(mapped, input));
+	}
+});
+
+Deno.test("andThen panics when next throws", () => {
+	// Given: a next that throws
+	const broken = andThen(digits, (): Result<number, never> => {
+		throw new Error("bug");
+	});
+
+	// When: parsing an input self accepts
+	// Then: the throw is not caught
+	assertThrows(() => parseSync(broken, "1"), Error, "bug");
+});
+
+Deno.test("orElse replaces a failure with recover's Result", () => {
+	// Given: digits that fall back to 0, and digits that reword their error
+	const lenient = orElse(digits, () => Ok(0));
+	const reworded = orElse(digits, (error) => Err(`${error}!`));
+
+	// When: parsing a valid and an invalid input
+	// Then: a success passes through, and recover's Result replaces a failure
+	assertEquals(unwrap(parseSync(lenient, "7")), 7);
+	assertEquals(unwrap(parseSync(lenient, "x")), 0);
+	assertEquals(syncError(reworded, "x"), "not digits!");
+	assertEquals(unionKinds(parse(lenient, "x")), "Sync");
+});
+
+Deno.test("orElse does not call recover when self succeeds", () => {
+	// Given: a recover that records each call
+	const calls: string[] = [];
+	const recovered = orElse(digits, (error) => {
+		calls.push(error);
+		return Ok(0);
+	});
+
+	// When: parsing an input self accepts
+	parseSync(recovered, "1");
+
+	// Then: recover never ran
+	assertEquals(calls, []);
+});
+
+Deno.test("orElse with a promise is async", async () => {
+	// Given: a recover that resolves later
+	const retried = orElse(digits, () => Promise.resolve(Ok(-1)));
+
+	// When: parsing an input self rejects, and one it accepts
+	// Then: the failing parse is Async and resolves recover's result, and the
+	// successful one stays Sync
+	assertEquals(unionKinds(parse(retried, "x")), "Async");
+	assertEquals(unwrap(await parseAsync(retried, "x")), -1);
+	assertEquals(unionKinds(parse(retried, "1")), "Sync");
+});
+
+Deno.test("inspect taps each successful output once, without changing it", async () => {
+	// Given: sync and async schemas tapped by inspect
+	const seen: number[] = [];
+	const record = (n: number): void => {
+		seen.push(n);
+	};
+	const syncTapped = inspect(digits, record);
+	const asyncTapped = inspect(laterDigits, record);
+
+	// When: parsing valid and invalid inputs
+	const results = [parseSync(syncTapped, "1"), parseSync(syncTapped, "x")];
+	const pending = parseAsync(asyncTapped, "2");
+	const seenBeforeResolving = [...seen];
+	const resolved = await pending;
+	await parseAsync(asyncTapped, "y");
+
+	// Then: the tap ran once per success, after the async value was known, and
+	// the results are those of the untapped schemas
+	assertEquals(results, [parseSync(digits, "1"), parseSync(digits, "x")]);
+	assertEquals(resolved, await parseAsync(laterDigits, "2"));
+	assertEquals(seenBeforeResolving, [1]);
+	assertEquals(seen, [1, 2]);
+});
+
+Deno.test("inspectErr taps each error once, without changing it", async () => {
+	// Given: sync and async schemas tapped by inspectErr
+	const seen: string[] = [];
+	const record = (error: string): void => {
+		seen.push(error);
+	};
+	const syncTapped = inspectErr(digits, record);
+	const asyncTapped = inspectErr(laterDigits, record);
+
+	// When: parsing valid and invalid inputs
+	const results = [parseSync(syncTapped, "1"), parseSync(syncTapped, "x")];
+	const pending = parseAsync(asyncTapped, "y");
+	const seenBeforeResolving = [...seen];
+	const resolved = await pending;
+	await parseAsync(asyncTapped, "2");
+
+	// Then: the tap ran once per failure, after the async error was known, and
+	// the results are those of the untapped schemas
+	assertEquals(results, [parseSync(digits, "1"), parseSync(digits, "x")]);
+	assertEquals(resolved, await parseAsync(laterDigits, "y"));
+	assertEquals(seenBeforeResolving, ["not digits"]);
+	assertEquals(seen, ["not digits", "not digits"]);
+});
+
+Deno.test("preprocess transforms the input before parsing", () => {
+	// Given: digits that trim their input first
+	const trimmed = preprocess(digits, (input: string) => input.trim());
+
+	// When: parsing padded valid and invalid inputs
+	// Then: digits parsed the trimmed input, synchronously
+	assertEquals(unwrap(parseSync(trimmed, " 42 ")), 42);
+	assertEquals(syncError(trimmed, " x "), "not digits");
+	assertEquals(unionKinds(parse(trimmed, "1")), "Sync");
+});
+
+Deno.test("preprocess with a promise is async", async () => {
+	// Given: a prepare that resolves later
+	const fetched = preprocess(digits, (input: number) => {
+		return Promise.resolve(String(input));
+	});
+
+	// When: parsing
+	// Then: the parse is Async and resolves the prepared input's result
+	assertEquals(unionKinds(parse(fetched, 7)), "Async");
+	assertEquals(unwrap(await parseAsync(fetched, 7)), 7);
+});
+
+Deno.test("law: preprocess with the identity equals the schema", () => {
+	// Given: digits preprocessed with the identity
+	const same = preprocess(digits, (input: string) => input);
+
+	// When: parsing valid and invalid inputs with both
+	// Then: the results are equal
+	for (const input of ["0", "21", "x", ""]) {
+		assertEquals(parseSync(same, input), parseSync(digits, input));
+	}
+});
+
+Deno.test("the Result-style transforms' types", () => {
+	// Given: schemas built with each transform
+	const chained = andThen(digits, (n) => {
+		if (n > 0) {
+			return Ok<string, "not positive">(String(n));
+		}
+
+		return Err<string, "not positive">("not positive");
+	});
+	const recovered = orElse(digits, () => Ok<number, "unrecoverable">(0));
+	const tapped = inspect(digits, () => {});
+	const tappedErr = inspectErr(digits, () => {});
+	const prepared = preprocess(digits, (input: number) => String(input));
+
+	// When: reading their types
+	// Then: andThen adds next's error, orElse replaces the error, the taps
+	// keep every type, and preprocess changes only the input
+	assertType<IsExact<Output<typeof chained>, string>>(true);
+	assertType<IsExact<ErrorOf<typeof chained>, "not digits" | "not positive">>(
+		true,
+	);
+	assertType<IsExact<Output<typeof recovered>, number>>(true);
+	assertType<IsExact<ErrorOf<typeof recovered>, "unrecoverable">>(true);
+	assertType<IsExact<typeof tapped, typeof digits>>(true);
+	assertType<IsExact<typeof tappedErr, typeof digits>>(true);
+	assertType<IsExact<Input<typeof prepared>, number>>(true);
+	assertType<IsExact<Output<typeof prepared>, number>>(true);
+	assertType<IsExact<ErrorOf<typeof prepared>, "not digits">>(true);
 });

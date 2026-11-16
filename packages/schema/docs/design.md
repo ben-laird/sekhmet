@@ -310,8 +310,14 @@ gone; their logic is internal.
 
 Every main `Schema` has exactly these methods: the shape modifiers
 `.array()`, `.optional()`, `.nullable()`; the transforms `.map`, `.mapErr`,
-`.pipe`, `.filter`; and `.parse`, `.parseSync`, `.parseAsync` (`parseSync`
-returns enum's main `Result`).
+`.pipe`, `.filter`, and since #30 the
+[Result-style transforms](#result-style-transforms-30) `.andThen`,
+`.orElse`, `.inspect`, `.inspectErr`, `.preprocess`; and `.parse`,
+`.parseSync`, `.parseAsync` (`parseSync` returns enum's main `Result`).
+
+- _Superseded by #30 (2026-11-16):_ #28 fixed the transforms at `.map`,
+  `.mapErr`, `.pipe` and `.filter`. The rule is unchanged otherwise: checks
+  stay options, and only the modifiers, transforms and parsing are methods.
 
 The modifiers belong to composites. gen-main lets a class feature _borrow_
 methods from another feature's mini barrel, declared in the core feature's
@@ -384,3 +390,41 @@ argument (`map(self, mapping)` is `.map(mapping)`):
   (`sameAs(value)(input)`, `oneOf(values)(input)`).
 - Left receiver-first: `mapPotential(potential, mapping)`, `Potential`'s map,
   as the enum package's own `map(self, f)` is.
+
+## Result-style transforms (#30)
+
+Owner decision (2026-11-16): a schema chains like enum's `Result`. Each
+transform is a `self`-first mini function in `src/core/mini/schema.ts` and a
+one-argument main method (the receiver exception), beside `map`, `mapErr`,
+`pipe` and `filter`:
+
+| Mini                          | Callback                                    | Result                 |
+| ----------------------------- | ------------------------------------------- | ---------------------- |
+| `andThen(self, next)`         | `(output: O) => MaybePromise<Result<P, F>>` | `Schema<I, P, E \| F>` |
+| `orElse(self, recover)`       | `(error: E) => MaybePromise<Result<O, F>>`  | `Schema<I, O, F>`      |
+| `inspect(self, inspector)`    | `(output: O) => void`                       | `Schema<I, O, E>`      |
+| `inspectErr(self, inspector)` | `(error: E) => void`                        | `Schema<I, O, E>`      |
+| `preprocess(self, prepare)`   | `(input: J) => MaybePromise<I>`             | `Schema<J, O, E>`      |
+
+- **`andThen`** converts or validates in code: `next` runs only on success,
+  and its `Result` becomes the parse's. **`orElse`** recovers or retries:
+  `recover` runs only on failure. Callbacks may return enum's main or mini
+  `Result` (main extends mini). Both callbacks are typed as a `Parser`
+  (`Parser<O, P, F>`, `Parser<E, O, F>`), the same function type a
+  `Schema` wraps: `andThen` chains a parser function as `pipe` chains a
+  schema, and the signatures name no type the package doesn't export.
+- **`inspect` / `inspectErr`** tap one side for a side effect, once per
+  parse, after the value is known (when an `Async` parse resolves); the
+  result passes through unchanged.
+- **`preprocess`** is the dual of `map`, like Zod's `z.preprocess`: it
+  transforms the input before `self` parses it, and cannot fail (fail in
+  `self`, or `andThen` after it).
+- **Async falls out of `Potential`:** the parse stays `Sync` when the schema
+  and the callback are; a promise from either makes it `Async`, and
+  `parseSync` then reports `UnexpectedAsyncParse`.
+- **A callback that throws panics**, as `map`'s does: the throw is not
+  caught (a sync parse throws; an async one rejects). Errors are values, so a
+  fallible step returns `Err` through `andThen`.
+- **Laws** (tested): `andThen(s, (o) => Ok(f(o)))` equals `map(s, f)`;
+  `preprocess(s, (i) => i)` equals `s`; `inspect` and `inspectErr` leave
+  every result unchanged.

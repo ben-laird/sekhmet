@@ -20,9 +20,10 @@ Each feature has two forms:
   `@sekhmet/schema/composites`, `@sekhmet/schema/standard`): the
   method-chaining API, `string().optional().map((s) => s?.length)`. Every
   main `Schema` has the shape modifiers `.array()`, `.optional()` and
-  `.nullable()`, the transforms `.map`, `.mapErr`, `.pipe` and `.filter`, and
-  `.parse`, `.parseSync` and `.parseAsync`. It is generated from mini by
-  `deno task gen:main`.
+  `.nullable()`, the transforms `.map`, `.mapErr`, `.pipe` and `.filter`, the
+  Result-style transforms `.andThen`, `.orElse`, `.inspect`, `.inspectErr`
+  and `.preprocess`, and `.parse`, `.parseSync` and `.parseAsync`. It is
+  generated from mini by `deno task gen:main`.
 - **Mini** (`@sekhmet/schema/core/mini`, `@sekhmet/schema/primitives/mini`,
   `@sekhmet/schema/composites/mini`, `@sekhmet/schema/standard/mini`):
   tree-shakable functions, `map(string(), (s) => s.length)`, with a subpath per
@@ -53,6 +54,36 @@ import { string } from "@sekhmet/schema/primitives/mini";
 const length = map(string(), (text) => text.length);
 
 assertEquals(unwrap(parseSync(length, "four")), 4);
+```
+
+## Result-style transforms
+
+Beyond `map` and `mapErr`, a schema chains like enum's `Result`: `andThen`
+runs a fallible transform on the output, `orElse` recovers from a failure,
+`inspect` and `inspectErr` tap a result without changing it, and `preprocess`
+transforms the input before parsing. A callback may return a promise, which
+makes the parse `Async`; a callback that throws panics.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+import { string } from "@sekhmet/schema/primitives";
+
+const port = string()
+	.preprocess((input: string) => input.trim())
+	.andThen((text) => {
+		const parsed = Number(text);
+		if (Number.isInteger(parsed) && parsed > 0) {
+			return Ok<number, string>(parsed);
+		}
+
+		return Err<number, string>("not a port");
+	})
+	.orElse(() => Ok(8080));
+// {}
+
+assertEquals(unwrap(port.parseSync(" 3000 ")), 3000);
+assertEquals(unwrap(port.parseSync("http")), 8080);
 ```
 
 ## Checks are options
