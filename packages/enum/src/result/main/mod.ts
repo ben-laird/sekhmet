@@ -32,20 +32,24 @@ export type { ResultVariants } from "../mini/mod.ts";
  * @template T - The type of the success value
  * @template E - The type of the error value
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { match } from "@sekhmet/enum/core/mini";
  * import { Err, Ok, type Result } from "@sekhmet/enum/result";
- * import { match } from "@sekhmet/enum/core/mini/exit";
  *
  * function divide(a: number, b: number): Result<number, string> {
  *   if (b === 0) return Err("Division by zero");
  *   return Ok(a / b);
  * }
  *
- * const result = divide(10, 2);
- * match(result)({
- *   Ok: (value) => console.log("Success:", value),
- *   Err: (error) => console.error("Error:", error),
- * });
+ * const describe = (result: Result<number, string>): string =>
+ *   match(result)({
+ *     Ok: (value) => `Success: ${value}`,
+ *     Err: (error) => `Error: ${error}`,
+ *   });
+ *
+ * assertEquals(describe(divide(10, 2)), "Success: 5");
+ * assertEquals(describe(divide(1, 0)), "Error: Division by zero");
  * ```
  */
 export class Result<out T, out E> extends mini.Result<T, E> {
@@ -73,7 +77,9 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 *
 	 * @returns Some containing the value if Ok, None if Err
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { Err, Ok } from "@sekhmet/enum/result";
+	 *
 	 * const success = Ok(42);
 	 * const option1 = success.ok(); // Some(42)
 	 *
@@ -94,7 +100,9 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 *
 	 * @returns Some containing the error if Err, None if Ok
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { Err, Ok } from "@sekhmet/enum/result";
+	 *
 	 * const failure = Err("error");
 	 * const option1 = failure.err(); // Some("error")
 	 *
@@ -116,16 +124,12 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 *
 	 * @returns A generator that yields the success value if Ok, or nothing if Err
 	 * @example
-	 * ```ts ignore
-	 * const success = Ok(42);
-	 * for (const value of success.iter()) {
-	 *   console.log(value); // Logs 42
-	 * }
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok } from "@sekhmet/enum/result";
 	 *
-	 * const error = Err("failed");
-	 * for (const value of error.iter()) {
-	 *   console.log(value); // Never executes
-	 * }
+	 * assertEquals(Array.from(Ok(42).iter()), [42]);
+	 * assertEquals(Array.from(Err("failed").iter()), []);
 	 * ```
 	 * @see {@link mini.iter}
 	 */
@@ -143,15 +147,18 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param res - The Result to return if `self` is Ok
 	 * @returns `res` if `self` is Ok, otherwise the error from `self`
 	 * @example
-	 * ```ts ignore
-	 * const first = Ok(1);
-	 * const second = Ok(2);
-	 * const result = first.and(second); // Ok(2)
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
-	 * const error = Err("failed");
-	 * const result2 = error.and(second); // Err("failed")
+	 * const first: Result<number, string> = Ok(1);
+	 * const second: Result<number, string> = Ok(2);
+	 * assertEquals(first.and(second), Ok(2));
 	 *
-	 * const result3 = first.and(Err("second failed")); // Err("second failed")
+	 * const error: Result<number, string> = Err("failed");
+	 * assertEquals(error.and(second), Err("failed"));
+	 *
+	 * assertEquals(first.and(Err("second failed")), Err("second failed"));
 	 * ```
 	 * @see {@link mini.and}
 	 */
@@ -170,7 +177,10 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param res - A function that takes the success value and returns a new Result
 	 * @returns The Result from the function if Ok, otherwise the original error
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
+	 *
 	 * const parseNumber = (s: string): Result<number, string> => {
 	 *   const n = parseInt(s, 10);
 	 *   return isNaN(n) ? Err("not a number") : Ok(n);
@@ -179,9 +189,9 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * const double = (n: number): Result<number, string> =>
 	 *   n > 100 ? Err("too large") : Ok(n * 2);
 	 *
-	 * const result = parseNumber("42").andThen(double); // Ok(84)
-	 * const result2 = parseNumber("abc").andThen(double); // Err("not a number")
-	 * const result3 = parseNumber("200").andThen(double); // Err("too large")
+	 * assertEquals(parseNumber("42").andThen(double), Ok(84));
+	 * assertEquals(parseNumber("abc").andThen(double), Err("not a number"));
+	 * assertEquals(parseNumber("200").andThen(double), Err("too large"));
 	 * ```
 	 * @see {@link mini.andThen}
 	 */
@@ -199,15 +209,18 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param res - The fallback Result to return if `self` is Err
 	 * @returns `self` if Ok, otherwise `res`
 	 * @example
-	 * ```ts ignore
-	 * const primary = Ok(1);
-	 * const fallback = Ok(2);
-	 * const result = primary.or(fallback); // Ok(1)
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
-	 * const error = Err("primary failed");
-	 * const result2 = error.or(fallback); // Ok(2)
+	 * const primary: Result<number, string> = Ok(1);
+	 * const fallback: Result<number, string> = Ok(2);
+	 * assertEquals(primary.or(fallback), Ok(1));
 	 *
-	 * const result3 = error.or(Err("fallback also failed")); // Err("fallback also failed")
+	 * const error: Result<number, string> = Err("primary failed");
+	 * assertEquals(error.or(fallback), Ok(2));
+	 *
+	 * assertEquals(error.or(Err("fallback also failed")), Err("fallback also failed"));
 	 * ```
 	 * @see {@link mini.or}
 	 */
@@ -226,15 +239,18 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param res - A function that takes the error value and returns a new Result
 	 * @returns `self` if Ok, otherwise the Result from the recovery function
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
+	 *
 	 * const fetchFromPrimary = (): Result<string, "network"> => Err("network");
 	 * const fetchFromBackup = (err: "network"): Result<string, "backup-failed"> =>
 	 *   err === "network" ? Ok("data from backup") : Err("backup-failed");
 	 *
-	 * const result = fetchFromPrimary().orElse(fetchFromBackup); // Ok("data from backup")
+	 * assertEquals(fetchFromPrimary().orElse(fetchFromBackup), Ok("data from backup"));
 	 *
-	 * const success = Ok("primary data");
-	 * const result2 = success.orElse(fetchFromBackup); // Ok("primary data")
+	 * const success: Result<string, "network"> = Ok("primary data");
+	 * assertEquals(success.orElse(fetchFromBackup), Ok("primary data"));
 	 * ```
 	 * @see {@link mini.orElse}
 	 */
@@ -250,18 +266,12 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 *
 	 * @returns true if the Result is Ok, false otherwise
 	 * @example
-	 * ```ts ignore
-	 * import { Ok, type Result } from "@sekhmet/enum/result";
-	 * import { match } from "@sekhmet/enum/core/mini/exit";
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok } from "@sekhmet/enum/result";
 	 *
-	 * const result = Ok(42);
-	 * if (result.isOk()) {
-	 *   // Use match to access the value
-	 *   match(result)({
-	 *     Ok: (value) => console.log(value), // TypeScript knows value is number
-	 *     Err: () => {}, // This branch is never reached
-	 *   });
-	 * }
+	 * assertEquals(Ok(42).isOk(), true);
+	 * assertEquals(Err("failed").isOk(), false);
 	 * ```
 	 * @see {@link mini.isOk}
 	 */
@@ -279,26 +289,23 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param predicate - A function that tests the Ok value (may be a type guard)
 	 * @returns true if the Result is Ok and the predicate returns true, false otherwise
 	 * @example
-	 * ```ts ignore
-	 * import { Ok, type Result } from "@sekhmet/enum/result";
-	 * import { match } from "@sekhmet/enum/core/mini/exit";
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { match } from "@sekhmet/enum/core/mini";
+	 * import { Ok } from "@sekhmet/enum/result";
 	 *
-	 * const result = Ok(42);
-	 * if (result.isOkAnd((n) => n > 40)) {
-	 *   match(result)({
-	 *     Ok: (value) => console.log("Large number:", value),
-	 *     Err: () => {},
-	 *   });
-	 * }
+	 * assertEquals(Ok(42).isOkAnd((n) => n > 40), true);
+	 * assertEquals(Ok(7).isOkAnd((n) => n > 40), false);
 	 *
 	 * // With type guard
 	 * const value: unknown = "hello";
-	 * const result2 = Ok(value);
-	 * if (result2.isOkAnd((v): v is string => typeof v === "string")) {
-	 *   match(result2)({
-	 *     Ok: (v) => console.log(v.toUpperCase()), // TypeScript knows v is string
-	 *     Err: () => {},
+	 * const result = Ok(value);
+	 * if (result.isOkAnd((v): v is string => typeof v === "string")) {
+	 *   const shout = match(result)({
+	 *     Ok: (v) => v.toUpperCase(), // TypeScript knows v is string
+	 *     Err: () => "",
 	 *   });
+	 *   assertEquals(shout, "HELLO");
 	 * }
 	 * ```
 	 * @see {@link mini.isOkAnd}
@@ -317,17 +324,12 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 *
 	 * @returns true if the Result is Err, false otherwise
 	 * @example
-	 * ```ts ignore
-	 * import { Err, type Result } from "@sekhmet/enum/result";
-	 * import { match } from "@sekhmet/enum/core/mini/exit";
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok } from "@sekhmet/enum/result";
 	 *
-	 * const result = Err(new Error("Failed"));
-	 * if (result.isErr()) {
-	 *   match(result)({
-	 *     Ok: () => {},
-	 *     Err: (error) => console.error(error), // TypeScript knows this is safe
-	 *   });
-	 * }
+	 * assertEquals(Err(new Error("Failed")).isErr(), true);
+	 * assertEquals(Ok(42).isErr(), false);
 	 * ```
 	 * @see {@link mini.isErr}
 	 */
@@ -345,24 +347,17 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param predicate - A function that tests the Err value (may be a type guard)
 	 * @returns true if the Result is Err and the predicate returns true, false otherwise
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
 	 * import { Err, type Result } from "@sekhmet/enum/result";
-	 * import { match } from "@sekhmet/enum/core/mini/exit";
 	 *
 	 * const result = Err(new Error("Not found"));
-	 * if (result.isErrAnd((e) => e.message.includes("Not found"))) {
-	 *   console.error("Resource not found");
-	 * }
+	 * assertEquals(result.isErrAnd((e) => e.message.includes("Not found")), true);
 	 *
 	 * // With type guard
 	 * type NetworkError = { code: number };
 	 * const result2: Result<string, Error | NetworkError> = Err({ code: 404 });
-	 * if (result2.isErrAnd((e): e is NetworkError => 'code' in e)) {
-	 *   match(result2)({
-	 *     Ok: () => {},
-	 *     Err: (error) => console.log("Network error code:", error.code),
-	 *   });
-	 * }
+	 * assertEquals(result2.isErrAnd((e): e is NetworkError => "code" in e), true);
 	 * ```
 	 * @see {@link mini.isErrAnd}
 	 */
@@ -382,12 +377,14 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param mapping - A function that transforms the success value
 	 * @returns A new Result with the mapped value if Ok, or the original error if Err
 	 * @example
-	 * ```ts ignore
-	 * const result = Ok(5);
-	 * const doubled = result.map((n) => n * 2); // Ok(10)
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
-	 * const error = Err("failed");
-	 * const mapped = error.map((n) => n * 2); // Err("failed")
+	 * assertEquals(Ok(5).map((n) => n * 2), Ok(10));
+	 *
+	 * const error: Result<number, string> = Err("failed");
+	 * assertEquals(error.map((n) => n * 2), Err("failed"));
 	 * ```
 	 * @see {@link mini.map}
 	 */
@@ -406,12 +403,14 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param mapping - A function that transforms the success value
 	 * @returns The mapped success value if Ok, or the default value if Err
 	 * @example
-	 * ```ts ignore
-	 * const result = Ok(5);
-	 * const doubled = result.mapOr(0, (n) => n * 2); // 10
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
-	 * const error = Err("failed");
-	 * const fallback = error.mapOr(0, (n) => n * 2); // 0
+	 * assertEquals(Ok(5).mapOr(0, (n) => n * 2), 10);
+	 *
+	 * const error: Result<number, string> = Err("failed");
+	 * assertEquals(error.mapOr(0, (n) => n * 2), 0);
 	 * ```
 	 * @see {@link mini.mapOr}
 	 */
@@ -430,18 +429,15 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param errMapping - A function that transforms the error value
 	 * @returns The result of applying the appropriate mapping function
 	 * @example
-	 * ```ts ignore
-	 * const result = Ok(5);
-	 * const message = result.mapOrElse(
-	 *   (n) => `Success: ${n}`,
-	 *   (e) => `Error: ${e}`
-	 * ); // "Success: 5"
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
-	 * const error = Err("failed");
-	 * const errorMsg = error.mapOrElse(
-	 *   (n) => `Success: ${n}`,
-	 *   (e) => `Error: ${e}`
-	 * ); // "Error: failed"
+	 * const describe = (result: Result<number, string>): string =>
+	 *   result.mapOrElse((n) => `Success: ${n}`, (e) => `Error: ${e}`);
+	 *
+	 * assertEquals(describe(Ok(5)), "Success: 5");
+	 * assertEquals(describe(Err("failed")), "Error: failed");
 	 * ```
 	 * @see {@link mini.mapOrElse}
 	 */
@@ -459,12 +455,15 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param mapping - A function that transforms the error value
 	 * @returns A new Result with the original value if Ok, or the mapped error if Err
 	 * @example
-	 * ```ts ignore
-	 * const error = Err("failed");
-	 * const wrapped = error.mapErr((e) => new Error(e)); // Err(Error("failed"))
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
-	 * const success = Ok(42);
-	 * const unchanged = success.mapErr((e) => new Error(e)); // Ok(42)
+	 * const error: Result<number, string> = Err("failed");
+	 * assertEquals(error.mapErr((e) => e.toUpperCase()), Err("FAILED"));
+	 *
+	 * const success: Result<number, string> = Ok(42);
+	 * assertEquals(success.mapErr((e) => e.toUpperCase()), Ok(42));
 	 * ```
 	 * @see {@link mini.mapErr}
 	 */
@@ -482,12 +481,18 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param inspector - A function that receives the success value and performs side effects
 	 * @returns void
 	 * @example
-	 * ```ts ignore
-	 * const result = Ok(42);
-	 * result.inspect((value) => console.log("Debug:", value)); // Logs "Debug: 42"
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
-	 * const error = Err("failed");
-	 * error.inspect((value) => console.log("Debug:", value)); // Does nothing
+	 * const seen: number[] = [];
+	 *
+	 * Ok(42).inspect((value) => seen.push(value)); // records 42
+	 *
+	 * const error: Result<number, string> = Err("failed");
+	 * error.inspect((value) => seen.push(value)); // does nothing
+	 *
+	 * assertEquals(seen, [42]);
 	 * ```
 	 * @see {@link mini.inspect}
 	 */
@@ -505,12 +510,18 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param inspector - A function that receives the error value and performs side effects
 	 * @returns void
 	 * @example
-	 * ```ts ignore
-	 * const error = Err("failed");
-	 * error.inspectErr((err) => console.error("Error:", err)); // Logs "Error: failed"
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
-	 * const success = Ok(42);
-	 * success.inspectErr((err) => console.error("Error:", err)); // Does nothing
+	 * const seen: string[] = [];
+	 *
+	 * Err("failed").inspectErr((err) => seen.push(err)); // records "failed"
+	 *
+	 * const success: Result<number, string> = Ok(42);
+	 * success.inspectErr((err) => seen.push(err)); // does nothing
+	 *
+	 * assertEquals(seen, ["failed"]);
 	 * ```
 	 * @see {@link mini.inspectErr}
 	 */
@@ -529,12 +540,15 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @returns The success value
 	 * @throws Error with the provided message if the Result is Err
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals, assertThrows } from "@std/assert";
+	 * import { Err, Ok } from "@sekhmet/enum/result";
+	 *
 	 * const config = Ok({ port: 8080 });
-	 * const port = config.expect("Config must be loaded").port; // 8080
+	 * assertEquals(config.expect("Config must be loaded").port, 8080);
 	 *
 	 * const missing = Err("file not found");
-	 * missing.expect("Config file is required"); // Throws: "Config file is required"
+	 * assertThrows(() => missing.expect("Config file is required"), Error, "Config file is required");
 	 * ```
 	 * @see {@link mini.expect}
 	 */
@@ -552,12 +566,12 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @returns The success value
 	 * @throws Error if the Result is Err
 	 * @example
-	 * ```ts ignore
-	 * const success = Ok(42);
-	 * const value = success.unwrap(); // 42
+	 * ```ts
+	 * import { assertEquals, assertThrows } from "@std/assert";
+	 * import { Err, Ok } from "@sekhmet/enum/result";
 	 *
-	 * const error = Err("failed");
-	 * error.unwrap(); // Throws: "Result unwrap failed!"
+	 * assertEquals(Ok(42).unwrap(), 42);
+	 * assertThrows(() => Err("failed").unwrap(), Error, "Result unwrap failed!");
 	 * ```
 	 * @see {@link mini.unwrap}
 	 */
@@ -576,12 +590,15 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @returns The error value
 	 * @throws Error with the provided message if the Result is Ok
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals, assertThrows } from "@std/assert";
+	 * import { Err, Ok } from "@sekhmet/enum/result";
+	 *
 	 * const error = Err({ code: 404, message: "Not found" });
-	 * const errValue = error.expectErr("Should have failed"); // { code: 404, ... }
+	 * assertEquals(error.expectErr("Should have failed"), { code: 404, message: "Not found" });
 	 *
 	 * const success = Ok(42);
-	 * success.expectErr("Expected an error"); // Throws: "Expected an error"
+	 * assertThrows(() => success.expectErr("Expected an error"), Error, "Expected an error");
 	 * ```
 	 * @see {@link mini.expectErr}
 	 */
@@ -599,12 +616,12 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @returns The error value
 	 * @throws Error if the Result is Ok
 	 * @example
-	 * ```ts ignore
-	 * const error = Err("something went wrong");
-	 * const errValue = error.unwrapErr(); // "something went wrong"
+	 * ```ts
+	 * import { assertEquals, assertThrows } from "@std/assert";
+	 * import { Err, Ok } from "@sekhmet/enum/result";
 	 *
-	 * const success = Ok(42);
-	 * success.unwrapErr(); // Throws: "Result unwrap failed!"
+	 * assertEquals(Err("something went wrong").unwrapErr(), "something went wrong");
+	 * assertThrows(() => Ok(42).unwrapErr(), Error, "Result unwrap failed!");
 	 * ```
 	 * @see {@link mini.unwrapErr}
 	 */
@@ -621,12 +638,14 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param defaultValue - The value to return if the Result is Err
 	 * @returns The success value if Ok, otherwise the default value
 	 * @example
-	 * ```ts ignore
-	 * const success = Ok(42);
-	 * const value = success.unwrapOr(0); // 42
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
-	 * const error = Err("failed");
-	 * const fallback = error.unwrapOr(0); // 0
+	 * assertEquals(Ok(42).unwrapOr(0), 42);
+	 *
+	 * const error: Result<number, string> = Err("failed");
+	 * assertEquals(error.unwrapOr(0), 0);
 	 * ```
 	 * @see {@link mini.unwrapOr}
 	 */
@@ -643,12 +662,15 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @param fallback - A function that takes the error value and returns a fallback
 	 * @returns The success value if Ok, otherwise the result of the fallback function
 	 * @example
-	 * ```ts ignore
-	 * const success = Ok(42);
-	 * const value = success.unwrapOrElse(() => expensiveComputation()); // 42
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
-	 * const error = Err({ code: 404 });
-	 * const fallback = error.unwrapOrElse((e) => e.code === 404 ? 0 : -1); // 0
+	 * const success: Result<number, { code: number }> = Ok(42);
+	 * assertEquals(success.unwrapOrElse(() => -1), 42); // fallback not called
+	 *
+	 * const error: Result<number, { code: number }> = Err({ code: 404 });
+	 * assertEquals(error.unwrapOrElse((e) => (e.code === 404 ? 0 : -1)), 0);
 	 * ```
 	 * @see {@link mini.unwrapOrElse}
 	 */
@@ -668,9 +690,11 @@ export class Result<out T, out E> extends mini.Result<T, E> {
  * @param value - The success value to wrap
  * @returns A Result in the Ok variant containing the value
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Ok, type Result } from "@sekhmet/enum/result";
+ *
  * const success = Ok(42);
- * const withError = Ok<number, Error>(42);
+ * const withError: Result<number, Error> = Ok<number, Error>(42);
  * ```
  */
 export function Ok<T = unknown, E = never>(value: T): Result<T, E> {
@@ -688,9 +712,11 @@ export function Ok<T = unknown, E = never>(value: T): Result<T, E> {
  * @param err - The error value to wrap
  * @returns A Result in the Err variant containing the error
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Err, type Result } from "@sekhmet/enum/result";
+ *
  * const failure = Err(new Error("Something went wrong"));
- * const withOk = Err<string, Error>(new Error("Failed"));
+ * const withOk: Result<string, Error> = Err<string, Error>(new Error("Failed"));
  * ```
  */
 export function Err<T = never, E = unknown>(err: E): Result<T, E> {

@@ -13,19 +13,12 @@ import type { Result } from "./core.ts";
  * @returns true if the Result is Ok, false otherwise
  *
  * @example
- * ```ts ignore
- * import { Ok, type Result } from "@sekhmet/enum/result/mini/core";
- * import { isOk } from "@sekhmet/enum/result/mini/predicates";
- * import { match } from "@sekhmet/enum/core/mini/exit";
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, isOk } from "@sekhmet/enum/result/mini";
  *
- * const result = Ok(42);
- * if (isOk(result)) {
- *   // Use match to access the value
- *   match(result)({
- *     Ok: (value) => console.log(value), // TypeScript knows value is number
- *     Err: () => {}, // This branch is never reached
- *   });
- * }
+ * assertEquals(isOk(Ok(42)), true);
+ * assertEquals(isOk(Err("failed")), false);
  * ```
  */
 export function isOk<T, E>(self: Result<T, E>): self is Result<T, never> {
@@ -46,27 +39,23 @@ export function isOk<T, E>(self: Result<T, E>): self is Result<T, never> {
  * @returns true if the Result is Ok and the predicate returns true, false otherwise
  *
  * @example
- * ```ts ignore
- * import { Ok, type Result } from "@sekhmet/enum/result/mini/core";
- * import { isOkAnd } from "@sekhmet/enum/result/mini/predicates";
- * import { match } from "@sekhmet/enum/core/mini/exit";
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { match } from "@sekhmet/enum/core/mini";
+ * import { Ok, isOkAnd } from "@sekhmet/enum/result/mini";
  *
- * const result = Ok(42);
- * if (isOkAnd(result, (n) => n > 40)) {
- *   match(result)({
- *     Ok: (value) => console.log("Large number:", value),
- *     Err: () => {},
- *   });
- * }
+ * assertEquals(isOkAnd(Ok(42), (n) => n > 40), true);
+ * assertEquals(isOkAnd(Ok(7), (n) => n > 40), false);
  *
  * // With type guard
  * const value: unknown = "hello";
- * const result2 = Ok(value);
- * if (isOkAnd(result2, (v): v is string => typeof v === "string")) {
- *   match(result2)({
- *     Ok: (v) => console.log(v.toUpperCase()), // TypeScript knows v is string
- *     Err: () => {},
+ * const result = Ok(value);
+ * if (isOkAnd(result, (v): v is string => typeof v === "string")) {
+ *   const shout = match(result)({
+ *     Ok: (v) => v.toUpperCase(), // TypeScript knows v is string
+ *     Err: () => "",
  *   });
+ *   assertEquals(shout, "HELLO");
  * }
  * ```
  */
@@ -89,18 +78,12 @@ export function isOkAnd<T, E, U extends T>(
  * @returns true if the Result is Err, false otherwise
  *
  * @example
- * ```ts ignore
- * import { Err, type Result } from "@sekhmet/enum/result/mini/core";
- * import { isErr } from "@sekhmet/enum/result/mini/predicates";
- * import { match } from "@sekhmet/enum/core/mini/exit";
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, isErr } from "@sekhmet/enum/result/mini";
  *
- * const result = Err(new Error("Failed"));
- * if (isErr(result)) {
- *   match(result)({
- *     Ok: () => {},
- *     Err: (error) => console.error(error), // TypeScript knows this is safe
- *   });
- * }
+ * assertEquals(isErr(Err(new Error("Failed"))), true);
+ * assertEquals(isErr(Ok(42)), false);
  * ```
  */
 export function isErr<T, E>(self: Result<T, E>): self is Result<never, E> {
@@ -121,25 +104,17 @@ export function isErr<T, E>(self: Result<T, E>): self is Result<never, E> {
  * @returns true if the Result is Err and the predicate returns true, false otherwise
  *
  * @example
- * ```ts ignore
- * import { Err, type Result } from "@sekhmet/enum/result/mini/core";
- * import { isErrAnd } from "@sekhmet/enum/result/mini/predicates";
- * import { match } from "@sekhmet/enum/core/mini/exit";
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, type Result, isErrAnd } from "@sekhmet/enum/result/mini";
  *
  * const result = Err(new Error("Not found"));
- * if (isErrAnd(result, (e) => e.message.includes("Not found"))) {
- *   console.error("Resource not found");
- * }
+ * assertEquals(isErrAnd(result, (e) => e.message.includes("Not found")), true);
  *
  * // With type guard
  * type NetworkError = { code: number };
  * const result2: Result<string, Error | NetworkError> = Err({ code: 404 });
- * if (isErrAnd(result2, (e): e is NetworkError => 'code' in e)) {
- *   match(result2)({
- *     Ok: () => {},
- *     Err: (error) => console.log("Network error code:", error.code),
- *   });
- * }
+ * assertEquals(isErrAnd(result2, (e): e is NetworkError => "code" in e), true);
  * ```
  */
 export function isErrAnd<T, E, F extends E>(

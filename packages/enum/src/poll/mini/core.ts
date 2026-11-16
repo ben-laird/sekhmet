@@ -7,8 +7,10 @@ import { Enum, type Split } from "@/src/core/mini/core.ts";
  * @returns A Poll in the Ready state containing the provided value
  *
  * @example
- * ```ts ignore
- * const poll = Ready(42); // Poll<number>
+ * ```ts
+ * import { type Poll, Ready } from "@sekhmet/enum/poll/mini";
+ *
+ * const poll: Poll<number> = Ready(42);
  * ```
  */
 export function Ready<T>(value: T): Poll<T> {
@@ -21,8 +23,10 @@ export function Ready<T>(value: T): Poll<T> {
  * @returns A Poll in the Pending state, representing that a value is not yet ready
  *
  * @example
- * ```ts ignore
- * const poll = Pending<number>(); // Poll<number>
+ * ```ts
+ * import { Pending, type Poll } from "@sekhmet/enum/poll/mini";
+ *
+ * const poll: Poll<number> = Pending<number>();
  * ```
  */
 export function Pending<T = never>(): Poll<T> {
@@ -49,7 +53,9 @@ export type { Variants as PollVariants };
  * @template T - The type of the value that may become ready
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Pending, type Poll, Ready } from "@sekhmet/enum/poll/mini";
+ *
  * const ready: Poll<number> = Ready(42);
  * const pending: Poll<number> = Pending();
  * ```

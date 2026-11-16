@@ -17,12 +17,15 @@ import type { Result } from "./core.ts";
  * @throws Error with the provided message if the Result is Err
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals, assertThrows } from "@std/assert";
+ * import { Err, Ok, expect } from "@sekhmet/enum/result/mini";
+ *
  * const config = Ok({ port: 8080 });
- * const port = expect(config, "Config must be loaded").port; // 8080
+ * assertEquals(expect(config, "Config must be loaded").port, 8080);
  *
  * const missing = Err("file not found");
- * expect(missing, "Config file is required"); // Throws: "Config file is required"
+ * assertThrows(() => expect(missing, "Config file is required"), Error, "Config file is required");
  * ```
  */
 export function expect<T, E>(self: Result<T, E>, message: string): T {
@@ -45,12 +48,12 @@ export function expect<T, E>(self: Result<T, E>, message: string): T {
  * @throws Error if the Result is Err
  *
  * @example
- * ```ts ignore
- * const success = Ok(42);
- * const value = unwrap(success); // 42
+ * ```ts
+ * import { assertEquals, assertThrows } from "@std/assert";
+ * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  *
- * const error = Err("failed");
- * unwrap(error); // Throws: "Result unwrap failed!"
+ * assertEquals(unwrap(Ok(42)), 42);
+ * assertThrows(() => unwrap(Err("failed")), Error, "Result unwrap failed!");
  * ```
  */
 export function unwrap<T, E>(self: Result<T, E>): T {
@@ -72,12 +75,15 @@ export function unwrap<T, E>(self: Result<T, E>): T {
  * @throws Error with the provided message if the Result is Ok
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals, assertThrows } from "@std/assert";
+ * import { Err, Ok, expectErr } from "@sekhmet/enum/result/mini";
+ *
  * const error = Err({ code: 404, message: "Not found" });
- * const errValue = expectErr(error, "Should have failed"); // { code: 404, ... }
+ * assertEquals(expectErr(error, "Should have failed"), { code: 404, message: "Not found" });
  *
  * const success = Ok(42);
- * expectErr(success, "Expected an error"); // Throws: "Expected an error"
+ * assertThrows(() => expectErr(success, "Expected an error"), Error, "Expected an error");
  * ```
  */
 export function expectErr<T, E>(self: Result<T, E>, message: string): E {
@@ -100,12 +106,12 @@ export function expectErr<T, E>(self: Result<T, E>, message: string): E {
  * @throws Error if the Result is Ok
  *
  * @example
- * ```ts ignore
- * const error = Err("something went wrong");
- * const errValue = unwrapErr(error); // "something went wrong"
+ * ```ts
+ * import { assertEquals, assertThrows } from "@std/assert";
+ * import { Err, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
  *
- * const success = Ok(42);
- * unwrapErr(success); // Throws: "Result unwrap failed!"
+ * assertEquals(unwrapErr(Err("something went wrong")), "something went wrong");
+ * assertThrows(() => unwrapErr(Ok(42)), Error, "Result unwrap failed!");
  * ```
  */
 export function unwrapErr<T, E>(self: Result<T, E>): E {
@@ -125,12 +131,14 @@ export function unwrapErr<T, E>(self: Result<T, E>): E {
  * @returns The success value if Ok, otherwise the default value
  *
  * @example
- * ```ts ignore
- * const success = Ok(42);
- * const value = unwrapOr(success, 0); // 42
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, unwrapOr } from "@sekhmet/enum/result/mini";
  *
- * const error = Err("failed");
- * const fallback = unwrapOr(error, 0); // 0
+ * assertEquals(unwrapOr(Ok(42), 0), 42);
+ *
+ * const error: Result<number, string> = Err("failed");
+ * assertEquals(unwrapOr(error, 0), 0);
  * ```
  */
 export function unwrapOr<T, E>(self: Result<T, E>, defaultValue: T): T {
@@ -153,12 +161,15 @@ export function unwrapOr<T, E>(self: Result<T, E>, defaultValue: T): T {
  * @returns The success value if Ok, otherwise the result of the fallback function
  *
  * @example
- * ```ts ignore
- * const success = Ok(42);
- * const value = unwrapOrElse(success, () => expensiveComputation()); // 42
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, unwrapOrElse } from "@sekhmet/enum/result/mini";
  *
- * const error = Err({ code: 404 });
- * const fallback = unwrapOrElse(error, (e) => e.code === 404 ? 0 : -1); // 0
+ * const success: Result<number, { code: number }> = Ok(42);
+ * assertEquals(unwrapOrElse(success, () => -1), 42); // fallback not called
+ *
+ * const error: Result<number, { code: number }> = Err({ code: 404 });
+ * assertEquals(unwrapOrElse(error, (e) => (e.code === 404 ? 0 : -1)), 0);
  * ```
  */
 export function unwrapOrElse<T, E>(

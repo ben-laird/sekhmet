@@ -11,9 +11,12 @@ import type { Option } from "./core.ts";
  * @throws Error with the provided message if the Option is None
  *
  * @example
- * ```ts ignore
- * expect(Some(42), "value should exist"); // 42
- * expect(None(), "value should exist");   // throws Error: "value should exist"
+ * ```ts
+ * import { assertEquals, assertThrows } from "@std/assert";
+ * import { None, Some, expect } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(expect(Some(42), "value should exist"), 42);
+ * assertThrows(() => expect(None(), "value should exist"), Error, "value should exist");
  * ```
  */
 export function expect<T>(self: Option<T>, message: string): T {
@@ -33,9 +36,12 @@ export function expect<T>(self: Option<T>, message: string): T {
  * @throws Error with message "Option unwrap failed!" if the Option is None
  *
  * @example
- * ```ts ignore
- * unwrap(Some(42)); // 42
- * unwrap(None());   // throws Error: "Option unwrap failed!"
+ * ```ts
+ * import { assertEquals, assertThrows } from "@std/assert";
+ * import { None, Some, unwrap } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(unwrap(Some(42)), 42);
+ * assertThrows(() => unwrap(None()), Error, "Option unwrap failed!");
  * ```
  */
 export function unwrap<T>(self: Option<T>): T {
@@ -52,9 +58,12 @@ export function unwrap<T>(self: Option<T>): T {
  * @returns The contained value if self is Some, otherwise defaultValue
  *
  * @example
- * ```ts ignore
- * unwrapOr(Some(42), 0); // 42
- * unwrapOr(None(), 0);   // 0
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, unwrapOr } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(unwrapOr(Some(42), 0), 42);
+ * assertEquals(unwrapOr(None<number>(), 0), 0);
  * ```
  */
 export function unwrapOr<T>(self: Option<T>, defaultValue: T): T {

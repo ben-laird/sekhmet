@@ -9,8 +9,10 @@ import { Enum, type Split } from "@/src/core/mini/core.ts";
  * @returns A Latch in the Active state containing the provided value
  *
  * @example
- * ```ts ignore
- * const latch = Active<number, string>(42);
+ * ```ts
+ * import { Active, type Latch } from "@sekhmet/enum/latch/mini";
+ *
+ * const latch: Latch<number, string> = Active<number, string>(42);
  * ```
  */
 export function Active<A = unknown, I = never>(active: A): Latch<A, I> {
@@ -26,8 +28,10 @@ export function Active<A = unknown, I = never>(active: A): Latch<A, I> {
  * @returns A Latch in the Inactive state containing the provided value
  *
  * @example
- * ```ts ignore
- * const latch = Inactive<number, string>("paused");
+ * ```ts
+ * import { Inactive, type Latch } from "@sekhmet/enum/latch/mini";
+ *
+ * const latch: Latch<number, string> = Inactive<number, string>("paused");
  * ```
  */
 export function Inactive<A = never, I = unknown>(inactive: I): Latch<A, I> {
@@ -71,16 +75,19 @@ export type { Variants as LatchVariants };
  * @template I The type of the inactive value
  *
  * @example
- * ```ts ignore
- * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch/mini/core";
- * import { match } from "@sekhmet/enum/core/mini/exit";
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { match } from "@sekhmet/enum/core/mini";
+ * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch/mini";
  *
- * const connection: Latch<Socket, Error> = Active(socket);
+ * const describe = (connection: Latch<number, Error>): string =>
+ *   match(connection)({
+ *     Active: (port) => "connected on port " + port,
+ *     Inactive: (error) => "connection failed: " + error.message,
+ *   });
  *
- * match(connection)({
- *   Active: (socket) => socket.send(data),
- *   Inactive: (error) => console.error("Connection failed:", error),
- * });
+ * assertEquals(describe(Active(8080)), "connected on port 8080");
+ * assertEquals(describe(Inactive(new Error("refused"))), "connection failed: refused");
  * ```
  */
 export class Latch<out A, out I> extends Enum<Variants<A, I>> {}

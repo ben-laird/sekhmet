@@ -38,7 +38,9 @@ export type { OptionVariants } from "../mini/mod.ts";
  *
  * @template T - The type of the value that may be present
  * @example
- * ```ts ignore
+ * ```ts
+ * import { None, type Option, Some } from "@sekhmet/enum/option";
+ *
  * const some: Option<number> = Some(42);
  * const none: Option<number> = None();
  * ```
@@ -67,14 +69,12 @@ export class Option<out T> extends mini.Option<T> {
 	 *
 	 * @yields The contained value if the Option is Some
 	 * @example
-	 * ```ts ignore
-	 * for (const value of Some(42).iter()) {
-	 *   console.log(value); // 42
-	 * }
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
 	 *
-	 * for (const value of None().iter()) {
-	 *   console.log(value); // never executed
-	 * }
+	 * assertEquals(Array.from(Some(42).iter()), [42]);
+	 * assertEquals(Array.from(None().iter()), []);
 	 * ```
 	 * @see {@link mini.iter}
 	 */
@@ -91,11 +91,14 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param optionB - The Option to return if self is Some
 	 * @returns optionB if self is Some, otherwise None
 	 * @example
-	 * ```ts ignore
-	 * Some(2).and(Some("foo")); // Some("foo")
-	 * None().and(Some("foo"));  // None
-	 * Some(2).and(None());      // None
-	 * None().and(None());       // None
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(Some(2).and(Some("foo")), Some("foo"));
+	 * assertEquals(None().and(Some("foo")), None());
+	 * assertEquals(Some(2).and(None()), None());
+	 * assertEquals(None().and(None()), None());
 	 * ```
 	 * @see {@link mini.and}
 	 */
@@ -112,13 +115,16 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param optionB - Function that takes the value from self and returns a new Option
 	 * @returns The result of calling optionB if self is Some, otherwise None
 	 * @example
-	 * ```ts ignore
-	 * const divide = (x: number) => (y: number): Option<number> =>
-	 *   y === 0 ? None() : Some(x / y);
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, type Option, Some } from "@sekhmet/enum/option";
 	 *
-	 * Some(4).andThen(divide(2)); // Some(2)
-	 * Some(0).andThen(divide(2)); // None (division by zero)
-	 * None().andThen(divide(2));  // None
+	 * const divideBy = (divisor: number) => (x: number): Option<number> =>
+	 *   divisor === 0 ? None() : Some(x / divisor);
+	 *
+	 * assertEquals(Some(4).andThen(divideBy(2)), Some(2));
+	 * assertEquals(Some(4).andThen(divideBy(0)), None()); // division by zero
+	 * assertEquals(None<number>().andThen(divideBy(2)), None());
 	 * ```
 	 * @see {@link mini.andThen}
 	 */
@@ -135,12 +141,15 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param predicate - Function that tests the value, can be a type guard or boolean predicate
 	 * @returns Some(value) if the predicate passes, otherwise None
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
 	 * const isEven = (n: number) => n % 2 === 0;
 	 *
-	 * Some(4).filter(isEven);  // Some(4)
-	 * Some(3).filter(isEven);  // None
-	 * None().filter(isEven);   // None
+	 * assertEquals(Some(4).filter(isEven), Some(4));
+	 * assertEquals(Some(3).filter(isEven), None());
+	 * assertEquals(None<number>().filter(isEven), None());
 	 * ```
 	 * @see {@link mini.filter}
 	 */
@@ -159,11 +168,14 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param optionB - The Option to return if self is None
 	 * @returns self if it is Some, otherwise optionB
 	 * @example
-	 * ```ts ignore
-	 * Some(2).or(Some(100)); // Some(2)
-	 * None().or(Some(100));  // Some(100)
-	 * Some(2).or(None());    // Some(2)
-	 * None().or(None());     // None
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(Some(2).or(Some(100)), Some(2));
+	 * assertEquals(None<number>().or(Some(100)), Some(100));
+	 * assertEquals(Some(2).or(None()), Some(2));
+	 * assertEquals(None().or(None()), None());
 	 * ```
 	 * @see {@link mini.or}
 	 */
@@ -179,11 +191,19 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param optionB - Function that returns an Option if self is None
 	 * @returns self if it is Some, otherwise the result of calling optionB
 	 * @example
-	 * ```ts ignore
-	 * const expensive = () => Some(expensiveComputation());
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
 	 *
-	 * Some(2).orElse(expensive); // Some(2) - expensive() not called
-	 * None().orElse(expensive);  // Some(result) - expensive() called
+	 * let calls = 0;
+	 * const fallback = () => {
+	 *   calls++;
+	 *   return Some(100);
+	 * };
+	 *
+	 * assertEquals(Some(2).orElse(fallback), Some(2)); // fallback not called
+	 * assertEquals(None<number>().orElse(fallback), Some(100)); // fallback called
+	 * assertEquals(calls, 1);
 	 * ```
 	 * @see {@link mini.orElse}
 	 */
@@ -199,11 +219,14 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param other - The second Option
 	 * @returns Some containing a tuple of both values if both are Some, otherwise None
 	 * @example
-	 * ```ts ignore
-	 * Some(1).zip(Some("hi")); // Some([1, "hi"])
-	 * Some(1).zip(None());     // None
-	 * None().zip(Some("hi"));  // None
-	 * None().zip(None());      // None
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(Some(1).zip(Some("hi")), Some([1, "hi"]));
+	 * assertEquals(Some(1).zip(None()), None());
+	 * assertEquals(None().zip(Some("hi")), None());
+	 * assertEquals(None().zip(None()), None());
 	 * ```
 	 * @see {@link mini.zip}
 	 */
@@ -221,12 +244,15 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param mapping - Function to apply to both values
 	 * @returns Some containing the result of mapping if both Options are Some, otherwise None
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
 	 * const add = (a: number, b: number) => a + b;
 	 *
-	 * Some(1).zipWith(Some(2), add); // Some(3)
-	 * Some(1).zipWith(None(), add);  // None
-	 * None().zipWith(Some(2), add);  // None
+	 * assertEquals(Some(1).zipWith(Some(2), add), Some(3));
+	 * assertEquals(Some(1).zipWith(None<number>(), add), None());
+	 * assertEquals(None<number>().zipWith(Some(2), add), None());
 	 * ```
 	 * @see {@link mini.zipWith}
 	 */
@@ -246,9 +272,12 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param sentinel - The value to return if self is None
 	 * @returns The contained value if Some, otherwise the sentinel value
 	 * @example
-	 * ```ts ignore
-	 * Some(42).coalesce("default"); // 42
-	 * None().coalesce("default");   // "default"
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(Some(42).coalesce("default"), 42);
+	 * assertEquals(None().coalesce("default"), "default");
 	 * ```
 	 * @see {@link mini.coalesce}
 	 */
@@ -265,10 +294,13 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param value - The value to insert
 	 * @returns The inserted value
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
 	 * const opt = None<number>();
-	 * opt.insert(42); // returns 42
-	 * // opt is now Some(42)
+	 * assertEquals(opt.insert(42), 42);
+	 * assertEquals(opt, Some(42));
 	 * ```
 	 * @see {@link mini.insert}
 	 */
@@ -285,12 +317,17 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param value - The value to insert if self is None
 	 * @returns The value that was already present, or the newly inserted value
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
 	 * const opt = None<number>();
-	 * opt.getOrInsert(5); // returns 5, opt is now Some(5)
+	 * assertEquals(opt.getOrInsert(5), 5);
+	 * assertEquals(opt, Some(5));
 	 *
 	 * const opt2 = Some(10);
-	 * opt2.getOrInsert(5); // returns 10, opt2 unchanged
+	 * assertEquals(opt2.getOrInsert(5), 10);
+	 * assertEquals(opt2, Some(10)); // unchanged
 	 * ```
 	 * @see {@link mini.getOrInsert}
 	 */
@@ -308,12 +345,23 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param creator - Function to create the value if self is None
 	 * @returns The value that was already present, or the newly created and inserted value
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * let calls = 0;
+	 * const create = () => {
+	 *   calls++;
+	 *   return 5;
+	 * };
+	 *
 	 * const opt = None<number>();
-	 * opt.getOrInsertWith(() => expensiveComputation()); // calls expensiveComputation()
+	 * assertEquals(opt.getOrInsertWith(create), 5); // calls create
+	 * assertEquals(opt, Some(5));
 	 *
 	 * const opt2 = Some(10);
-	 * opt2.getOrInsertWith(() => expensiveComputation()); // doesn't call expensiveComputation()
+	 * assertEquals(opt2.getOrInsertWith(create), 10); // doesn't call create
+	 * assertEquals(calls, 1);
 	 * ```
 	 * @see {@link mini.getOrInsertWith}
 	 */
@@ -329,14 +377,17 @@ export class Option<out T> extends mini.Option<T> {
 	 *
 	 * @returns Some(value) if self was Some, otherwise None
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
 	 * const opt = Some(42);
-	 * const taken = opt.take(); // Some(42)
-	 * // opt is now None
+	 * assertEquals(opt.take(), Some(42));
+	 * assertEquals(opt, None()); // opt is now None
 	 *
 	 * const opt2 = None<number>();
-	 * const taken2 = opt2.take(); // None
-	 * // opt2 is still None
+	 * assertEquals(opt2.take(), None());
+	 * assertEquals(opt2, None()); // opt2 is still None
 	 * ```
 	 * @see {@link mini.take}
 	 */
@@ -356,14 +407,17 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param predicate - Function that tests the value, can be a type guard or boolean predicate
 	 * @returns Some(value) if self was Some and the predicate passed, otherwise None
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
 	 * const opt = Some(42);
-	 * const taken = opt.takeIf((x) => x > 10); // Some(42)
-	 * // opt is now None
+	 * assertEquals(opt.takeIf((x) => x > 10), Some(42));
+	 * assertEquals(opt, None()); // opt is now None
 	 *
 	 * const opt2 = Some(5);
-	 * const taken2 = opt2.takeIf((x) => x > 10); // None
-	 * // opt2 is still Some(5)
+	 * assertEquals(opt2.takeIf((x) => x > 10), None());
+	 * assertEquals(opt2, Some(5)); // opt2 is still Some(5)
 	 * ```
 	 * @see {@link mini.takeIf}
 	 */
@@ -383,14 +437,17 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param value - The new value to insert
 	 * @returns An Option containing the old value (Some if there was one, None otherwise)
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
 	 * const opt = Some(5);
-	 * const old = opt.replace(10); // Some(5)
-	 * // opt is now Some(10)
+	 * assertEquals(opt.replace(10), Some(5));
+	 * assertEquals(opt, Some(10));
 	 *
 	 * const opt2 = None<number>();
-	 * const old2 = opt2.replace(10); // None
-	 * // opt2 is now Some(10)
+	 * assertEquals(opt2.replace(10), None());
+	 * assertEquals(opt2, Some(10));
 	 * ```
 	 * @see {@link mini.replace}
 	 */
@@ -403,9 +460,12 @@ export class Option<out T> extends mini.Option<T> {
 	 *
 	 * @returns true if the Option is Some, false if it is None
 	 * @example
-	 * ```ts ignore
-	 * Some(42).isSome(); // true
-	 * None().isSome();   // false
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(Some(42).isSome(), true);
+	 * assertEquals(None().isSome(), false);
 	 * ```
 	 * @see {@link mini.isSome}
 	 */
@@ -422,12 +482,15 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param predicate - Function that tests the value, can be a type guard or boolean predicate
 	 * @returns true if the Option is Some and the predicate passes, false otherwise
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
 	 * const isEven = (n: number) => n % 2 === 0;
 	 *
-	 * Some(4).isSomeAnd(isEven);  // true
-	 * Some(3).isSomeAnd(isEven);  // false
-	 * None().isSomeAnd(isEven);   // false
+	 * assertEquals(Some(4).isSomeAnd(isEven), true);
+	 * assertEquals(Some(3).isSomeAnd(isEven), false);
+	 * assertEquals(None<number>().isSomeAnd(isEven), false);
 	 * ```
 	 * @see {@link mini.isSomeAnd}
 	 */
@@ -442,9 +505,12 @@ export class Option<out T> extends mini.Option<T> {
 	 *
 	 * @returns true if the Option is None, false if it is Some
 	 * @example
-	 * ```ts ignore
-	 * None().isNone();   // true
-	 * Some(42).isNone(); // false
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(None().isNone(), true);
+	 * assertEquals(Some(42).isNone(), false);
 	 * ```
 	 * @see {@link mini.isNone}
 	 */
@@ -461,7 +527,9 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param err - The error value to use if self is None
 	 * @returns Ok containing the value if self is Some, otherwise Err containing err
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
 	 * Some(42).okOr("not found"); // Ok(42)
 	 * None().okOr("not found");   // Err("not found")
 	 * ```
@@ -480,11 +548,19 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param err - Function that produces the error value if self is None
 	 * @returns Ok containing the value if self is Some, otherwise Err containing the result of err()
 	 * @example
-	 * ```ts ignore
-	 * const expensive = () => expensiveErrorComputation();
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
 	 *
-	 * Some(42).okOrElse(expensive); // Ok(42) - expensive() not called
-	 * None().okOrElse(expensive);   // Err(result) - expensive() called
+	 * let calls = 0;
+	 * const notFound = () => {
+	 *   calls++;
+	 *   return "not found";
+	 * };
+	 *
+	 * Some(42).okOrElse(notFound); // Ok(42), notFound not called
+	 * None().okOrElse(notFound);   // Err("not found"), notFound called
+	 * assertEquals(calls, 1);
 	 * ```
 	 * @see {@link mini.okOrElse}
 	 */
@@ -501,9 +577,12 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param mapping - Function to apply to the value
 	 * @returns Some containing the transformed value if self is Some, otherwise None
 	 * @example
-	 * ```ts ignore
-	 * Some(10).map((x) => x * 2); // Some(20)
-	 * None().map((x) => x * 2);   // None
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(Some(10).map((x) => x * 2), Some(20));
+	 * assertEquals(None<number>().map((x) => x * 2), None());
 	 * ```
 	 * @see {@link mini.map}
 	 */
@@ -520,9 +599,15 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param inspector - Function to call with the value if the Option is Some
 	 * @returns The original Option unchanged
 	 * @example
-	 * ```ts ignore
-	 * Some(42).inspect((x) => console.log(x)); // logs 42, returns Some(42)
-	 * None().inspect((x) => console.log(x));   // logs nothing, returns None
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * const seen: number[] = [];
+	 *
+	 * assertEquals(Some(42).inspect((x) => seen.push(x)), Some(42));
+	 * assertEquals(None<number>().inspect((x) => seen.push(x)), None());
+	 * assertEquals(seen, [42]);
 	 * ```
 	 * @see {@link mini.inspect}
 	 */
@@ -539,9 +624,15 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param inspector - Function to call if the Option is None
 	 * @returns The original Option unchanged
 	 * @example
-	 * ```ts ignore
-	 * None().inspectNone(() => console.log("empty")); // logs "empty", returns None
-	 * Some(42).inspectNone(() => console.log("empty")); // logs nothing, returns Some(42)
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * let calls = 0;
+	 *
+	 * assertEquals(None().inspectNone(() => calls++), None());
+	 * assertEquals(Some(42).inspectNone(() => calls++), Some(42));
+	 * assertEquals(calls, 1);
 	 * ```
 	 * @see {@link mini.inspectNone}
 	 */
@@ -557,14 +648,17 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param handlers - Either an object with `defaultValue` and `mapping`, or positional parameters
 	 * @returns The result of mapping if self is Some, otherwise the default value
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
 	 * // Object style
-	 * Some(10).mapOr({ defaultValue: 0, mapping: (x) => x * 2 }); // 20
-	 * None().mapOr({ defaultValue: 0, mapping: (x) => x * 2 });   // 0
+	 * assertEquals(Some(10).mapOr({ defaultValue: 0, mapping: (x) => x * 2 }), 20);
+	 * assertEquals(None<number>().mapOr({ defaultValue: 0, mapping: (x) => x * 2 }), 0);
 	 *
 	 * // Positional style
-	 * Some(10).mapOr(0, (x) => x * 2); // 20
-	 * None().mapOr(0, (x) => x * 2);   // 0
+	 * assertEquals(Some(10).mapOr(0, (x) => x * 2), 20);
+	 * assertEquals(None<number>().mapOr(0, (x) => x * 2), 0);
 	 * ```
 	 * @see {@link mini.mapOr}
 	 */
@@ -591,16 +685,16 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param handlers - Either an object with `Some` and `None` functions, or positional parameters
 	 * @returns The result of calling the appropriate handler function
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
 	 * // Object style
-	 * Some(10).mapOrElse({
-	 *   Some: (x) => x * 2,
-	 *   None: () => 0
-	 * }); // 20
+	 * assertEquals(Some(10).mapOrElse({ Some: (x) => x * 2, None: () => 0 }), 20);
 	 *
 	 * // Positional style
-	 * Some(10).mapOrElse(() => 0, (x) => x * 2); // 20
-	 * None().mapOrElse(() => 0, (x) => x * 2);   // 0
+	 * assertEquals(Some(10).mapOrElse(() => 0, (x) => x * 2), 20);
+	 * assertEquals(None<number>().mapOrElse(() => 0, (x) => x * 2), 0);
 	 * ```
 	 * @see {@link mini.mapOrElse}
 	 */
@@ -624,9 +718,12 @@ export class Option<out T> extends mini.Option<T> {
 	 * @returns The contained value
 	 * @throws Error with the provided message if the Option is None
 	 * @example
-	 * ```ts ignore
-	 * Some(42).expect("value should exist"); // 42
-	 * None().expect("value should exist");   // throws Error: "value should exist"
+	 * ```ts
+	 * import { assertEquals, assertThrows } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(Some(42).expect("value should exist"), 42);
+	 * assertThrows(() => None().expect("value should exist"), Error, "value should exist");
 	 * ```
 	 * @see {@link mini.expect}
 	 */
@@ -643,9 +740,12 @@ export class Option<out T> extends mini.Option<T> {
 	 * @returns The contained value
 	 * @throws Error with message "Option unwrap failed!" if the Option is None
 	 * @example
-	 * ```ts ignore
-	 * Some(42).unwrap(); // 42
-	 * None().unwrap();   // throws Error: "Option unwrap failed!"
+	 * ```ts
+	 * import { assertEquals, assertThrows } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(Some(42).unwrap(), 42);
+	 * assertThrows(() => None().unwrap(), Error, "Option unwrap failed!");
 	 * ```
 	 * @see {@link mini.unwrap}
 	 */
@@ -661,9 +761,12 @@ export class Option<out T> extends mini.Option<T> {
 	 * @param defaultValue - The value to return if self is None
 	 * @returns The contained value if self is Some, otherwise defaultValue
 	 * @example
-	 * ```ts ignore
-	 * Some(42).unwrapOr(0); // 42
-	 * None().unwrapOr(0);   // 0
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(Some(42).unwrapOr(0), 42);
+	 * assertEquals(None<number>().unwrapOr(0), 0);
 	 * ```
 	 * @see {@link mini.unwrapOr}
 	 */
@@ -681,9 +784,12 @@ export class Option<out T> extends mini.Option<T> {
  * @param opt - An Option containing a tuple of two values
  * @returns A tuple of two Options, one for each value
  * @example
- * ```ts ignore
- * unzip(Some([1, "hi"])); // [Some(1), Some("hi")]
- * unzip(None());          // [None(), None()]
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, unzip } from "@sekhmet/enum/option";
+ *
+ * assertEquals(unzip(Some<[number, string]>([1, "hi"])), [Some(1), Some("hi")]);
+ * assertEquals(unzip(None()), [None(), None()]);
  * ```
  */
 export function unzip<T, U>(
@@ -703,10 +809,13 @@ export function unzip<T, U>(
  * @param opt - An Option containing a Result
  * @returns A Result containing an Option
  * @example
- * ```ts ignore
- * transpose(Some(Ok(5)));      // Ok(Some(5))
+ * ```ts
+ * import { None, Some, transpose } from "@sekhmet/enum/option";
+ * import { Err, Ok } from "@sekhmet/enum/result/mini";
+ *
+ * transpose(Some(Ok(5)));       // Ok(Some(5))
  * transpose(Some(Err("fail"))); // Err("fail")
- * transpose(None());           // Ok(None())
+ * transpose(None());            // Ok(None())
  * ```
  */
 export function transpose<T, E>(
@@ -726,10 +835,13 @@ export function transpose<T, E>(
  * @param opt - An Option containing another Option
  * @returns The flattened Option
  * @example
- * ```ts ignore
- * flatten(Some(Some(6))); // Some(6)
- * flatten(Some(None()));  // None
- * flatten(None());        // None
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, flatten } from "@sekhmet/enum/option";
+ *
+ * assertEquals(flatten(Some(Some(6))), Some(6));
+ * assertEquals(flatten(Some(None())), None());
+ * assertEquals(flatten(None()), None());
  * ```
  */
 export function flatten<T>(opt: mini.Option<mini.Option<T>>): Option<T> {
@@ -742,8 +854,10 @@ export function flatten<T>(opt: mini.Option<mini.Option<T>>): Option<T> {
  * @param value - The value to wrap in the Option
  * @returns An Option in the Some state containing the provided value
  * @example
- * ```ts ignore
- * const opt = Some(42); // Option<number>
+ * ```ts
+ * import { type Option, Some } from "@sekhmet/enum/option";
+ *
+ * const opt: Option<number> = Some(42);
  * ```
  */
 export function Some<T>(value: T): Option<T> {
@@ -755,8 +869,10 @@ export function Some<T>(value: T): Option<T> {
  *
  * @returns An Option in the None state, representing the absence of a value
  * @example
- * ```ts ignore
- * const opt = None<number>(); // Option<number>
+ * ```ts
+ * import { None, type Option } from "@sekhmet/enum/option";
+ *
+ * const opt: Option<number> = None<number>();
  * ```
  */
 export function None<T = never>(): Option<T> {

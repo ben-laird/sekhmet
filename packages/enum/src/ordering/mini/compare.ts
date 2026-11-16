@@ -8,10 +8,13 @@ import { Equal, Greater, Less, type Ordering } from "./core.ts";
  * @returns Less if lhs < rhs, Greater if lhs > rhs, Equal if lhs === rhs
  *
  * @example
- * ```ts ignore
- * compareNumbers(1, 2); // Less
- * compareNumbers(2, 1); // Greater
- * compareNumbers(1, 1); // Equal
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Equal, Greater, Less, compareNumbers } from "@sekhmet/enum/ordering/mini";
+ *
+ * assertEquals(compareNumbers(1, 2), Less());
+ * assertEquals(compareNumbers(2, 1), Greater());
+ * assertEquals(compareNumbers(1, 1), Equal());
  * ```
  */
 export function compareNumbers(lhs: number, rhs: number): Ordering {
@@ -31,10 +34,13 @@ export function compareNumbers(lhs: number, rhs: number): Ordering {
  * @returns Less if lhs < rhs, Greater if lhs > rhs, Equal if lhs === rhs
  *
  * @example
- * ```ts ignore
- * compareStrings("apple", "banana"); // Less
- * compareStrings("zebra", "apple");  // Greater
- * compareStrings("hello", "hello");  // Equal
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Equal, Greater, Less, compareStrings } from "@sekhmet/enum/ordering/mini";
+ *
+ * assertEquals(compareStrings("apple", "banana"), Less());
+ * assertEquals(compareStrings("zebra", "apple"), Greater());
+ * assertEquals(compareStrings("hello", "hello"), Equal());
  * ```
  */
 export function compareStrings(lhs: string, rhs: string): Ordering {
@@ -56,13 +62,15 @@ export function compareStrings(lhs: string, rhs: string): Ordering {
  * @returns The ordering of the extracted keys
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Greater, compareBy } from "@sekhmet/enum/ordering/mini";
+ *
  * interface Person { name: string; age: number }
  * const alice: Person = { name: "Alice", age: 30 };
  * const bob: Person = { name: "Bob", age: 25 };
  *
- * compareBy(alice, bob, (p) => p.age); // Greater (30 > 25)
- * compareBy(alice, bob, (p) => p.name); // Less ("Alice" < "Bob")
+ * assertEquals(compareBy(alice, bob, (p) => p.age), Greater()); // 30 > 25
  * ```
  */
 export function compareBy<T>(
@@ -82,12 +90,15 @@ export function compareBy<T>(
  * @returns The ordering of the extracted keys
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Less, compareByString } from "@sekhmet/enum/ordering/mini";
+ *
  * interface Person { name: string; age: number }
  * const alice: Person = { name: "Alice", age: 30 };
  * const bob: Person = { name: "Bob", age: 25 };
  *
- * compareByString(alice, bob, (p) => p.name); // Less ("Alice" < "Bob")
+ * assertEquals(compareByString(alice, bob, (p) => p.name), Less()); // "Alice" < "Bob"
  * ```
  */
 export function compareByString<T>(

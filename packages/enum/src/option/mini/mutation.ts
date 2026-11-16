@@ -14,10 +14,13 @@ import { None, Option, Some } from "./core.ts";
  * @returns The inserted value
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, insert } from "@sekhmet/enum/option/mini";
+ *
  * const opt = None<number>();
- * insert(opt, 42); // returns 42
- * // opt is now Some(42)
+ * assertEquals(insert(opt, 42), 42);
+ * assertEquals(opt, Some(42));
  * ```
  */
 export function insert<T>(self: Option<T>, value: T): T {
@@ -39,12 +42,17 @@ export function insert<T>(self: Option<T>, value: T): T {
  * @returns The value that was already present, or the newly inserted value
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, getOrInsert } from "@sekhmet/enum/option/mini";
+ *
  * const opt = None<number>();
- * getOrInsert(opt, 5); // returns 5, opt is now Some(5)
+ * assertEquals(getOrInsert(opt, 5), 5);
+ * assertEquals(opt, Some(5));
  *
  * const opt2 = Some(10);
- * getOrInsert(opt2, 5); // returns 10, opt2 unchanged
+ * assertEquals(getOrInsert(opt2, 5), 10);
+ * assertEquals(opt2, Some(10)); // unchanged
  * ```
  */
 export function getOrInsert<T>(self: Option<T>, value: T): T {
@@ -66,12 +74,23 @@ export function getOrInsert<T>(self: Option<T>, value: T): T {
  * @returns The value that was already present, or the newly created and inserted value
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, getOrInsertWith } from "@sekhmet/enum/option/mini";
+ *
+ * let calls = 0;
+ * const create = () => {
+ *   calls++;
+ *   return 5;
+ * };
+ *
  * const opt = None<number>();
- * getOrInsertWith(opt, () => expensiveComputation()); // calls expensiveComputation()
+ * assertEquals(getOrInsertWith(opt, create), 5); // calls create
+ * assertEquals(opt, Some(5));
  *
  * const opt2 = Some(10);
- * getOrInsertWith(opt2, () => expensiveComputation()); // doesn't call expensiveComputation()
+ * assertEquals(getOrInsertWith(opt2, create), 10); // doesn't call create
+ * assertEquals(calls, 1);
  * ```
  */
 export function getOrInsertWith<T>(self: Option<T>, creator: () => T): T {
@@ -91,14 +110,17 @@ export function getOrInsertWith<T>(self: Option<T>, creator: () => T): T {
  * @returns Some(value) if self was Some, otherwise None
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, take } from "@sekhmet/enum/option/mini";
+ *
  * const opt = Some(42);
- * const taken = take(opt); // Some(42)
- * // opt is now None
+ * assertEquals(take(opt), Some(42));
+ * assertEquals(opt, None()); // opt is now None
  *
  * const opt2 = None<number>();
- * const taken2 = take(opt2); // None
- * // opt2 is still None
+ * assertEquals(take(opt2), None());
+ * assertEquals(opt2, None()); // opt2 is still None
  * ```
  */
 export function take<T>(self: Option<T>): Option<T> {
@@ -128,14 +150,17 @@ export function take<T>(self: Option<T>): Option<T> {
  * @returns Some(value) if self was Some and the predicate passed, otherwise None
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, takeIf } from "@sekhmet/enum/option/mini";
+ *
  * const opt = Some(42);
- * const taken = takeIf(opt, (x) => x > 10); // Some(42)
- * // opt is now None
+ * assertEquals(takeIf(opt, (x) => x > 10), Some(42));
+ * assertEquals(opt, None()); // opt is now None
  *
  * const opt2 = Some(5);
- * const taken2 = takeIf(opt2, (x) => x > 10); // None
- * // opt2 is still Some(5)
+ * assertEquals(takeIf(opt2, (x) => x > 10), None());
+ * assertEquals(opt2, Some(5)); // opt2 is still Some(5)
  * ```
  */
 export function takeIf<T, U extends T>(
@@ -170,14 +195,17 @@ export function takeIf<T, U extends T>(
  * @returns An Option containing the old value (Some if there was one, None otherwise)
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, replace } from "@sekhmet/enum/option/mini";
+ *
  * const opt = Some(5);
- * const old = replace(opt, 10); // Some(5)
- * // opt is now Some(10)
+ * assertEquals(replace(opt, 10), Some(5));
+ * assertEquals(opt, Some(10));
  *
  * const opt2 = None<number>();
- * const old2 = replace(opt2, 10); // None
- * // opt2 is now Some(10)
+ * assertEquals(replace(opt2, 10), None());
+ * assertEquals(opt2, Some(10));
  * ```
  */
 export function replace<T>(self: Option<T>, value: T): Option<T> {

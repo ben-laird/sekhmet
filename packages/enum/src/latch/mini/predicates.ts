@@ -10,11 +10,17 @@ import type { Latch } from "./core.ts";
  * @returns True if the Latch is Active, narrowing the type accordingly
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, isActive } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
  * if (isActive(latch)) {
- *   // latch is now Latch<number, never>
+ *   const narrowed: Latch<number, never> = latch;
  * }
+ *
+ * assertEquals(isActive(latch), true);
+ * assertEquals(isActive(Inactive("paused")), false);
  * ```
  */
 export function isActive<A, I>(self: Latch<A, I>): self is Latch<A, never> {
@@ -32,11 +38,14 @@ export function isActive<A, I>(self: Latch<A, I>): self is Latch<A, never> {
  * @returns True if Active and the predicate returns true
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, type Latch, isActiveAnd } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
- * if (isActiveAnd(latch, (n) => n > 0)) {
- *   // latch is Active and value is positive
- * }
+ *
+ * assertEquals(isActiveAnd(latch, (n) => n > 0), true);
+ * assertEquals(isActiveAnd(latch, (n) => n < 0), false);
  * ```
  */
 export function isActiveAnd<A, I, B extends A>(
@@ -55,11 +64,17 @@ export function isActiveAnd<A, I, B extends A>(
  * @returns True if the Latch is Inactive, narrowing the type accordingly
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, isInactive } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Inactive("paused");
  * if (isInactive(latch)) {
- *   // latch is now Latch<never, string>
+ *   const narrowed: Latch<never, string> = latch;
  * }
+ *
+ * assertEquals(isInactive(latch), true);
+ * assertEquals(isInactive(Active(42)), false);
  * ```
  */
 export function isInactive<A, I>(self: Latch<A, I>): self is Latch<never, I> {
@@ -77,11 +92,14 @@ export function isInactive<A, I>(self: Latch<A, I>): self is Latch<never, I> {
  * @returns True if Inactive and the predicate returns true
  *
  * @example
- * ```ts ignore
- * const latch: Latch<number, string> = Inactive("error");
- * if (isInactiveAnd(latch, (s) => s.startsWith("error"))) {
- *   // latch is Inactive and value starts with "error"
- * }
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Inactive, type Latch, isInactiveAnd } from "@sekhmet/enum/latch/mini";
+ *
+ * const latch: Latch<number, string> = Inactive("error: timeout");
+ *
+ * assertEquals(isInactiveAnd(latch, (s) => s.startsWith("error")), true);
+ * assertEquals(isInactiveAnd(latch, (s) => s.startsWith("paused")), false);
  * ```
  */
 export function isInactiveAnd<A, I, J extends I>(

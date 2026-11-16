@@ -13,7 +13,9 @@ import type { Option } from "./core.ts";
  * @returns Ok containing the value if self is Some, otherwise Err containing err
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { None, Some, okOr } from "@sekhmet/enum/option/mini";
+ *
  * okOr(Some(42), "not found"); // Ok(42)
  * okOr(None(), "not found");   // Err("not found")
  * ```
@@ -36,11 +38,19 @@ export function okOr<T, E>(self: Option<T>, err: E): Result<T, E> {
  * @returns Ok containing the value if self is Some, otherwise Err containing the result of err()
  *
  * @example
- * ```ts ignore
- * const expensive = () => expensiveErrorComputation();
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, okOrElse } from "@sekhmet/enum/option/mini";
  *
- * okOrElse(Some(42), expensive); // Ok(42) - expensive() not called
- * okOrElse(None(), expensive);   // Err(result) - expensive() called
+ * let calls = 0;
+ * const notFound = () => {
+ *   calls++;
+ *   return "not found";
+ * };
+ *
+ * okOrElse(Some(42), notFound); // Ok(42), notFound not called
+ * okOrElse(None(), notFound);   // Err("not found"), notFound called
+ * assertEquals(calls, 1);
  * ```
  */
 export function okOrElse<T, E>(self: Option<T>, err: () => E): Result<T, E> {

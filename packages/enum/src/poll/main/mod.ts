@@ -26,7 +26,9 @@ export type { PollVariants } from "../mini/mod.ts";
  *
  * @template T - The type of the value that may become ready
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Pending, type Poll, Ready } from "@sekhmet/enum/poll";
+ *
  * const ready: Poll<number> = Ready(42);
  * const pending: Poll<number> = Pending();
  * ```
@@ -59,12 +61,12 @@ export class Poll<out T> extends mini.Poll<T> {
 	 * @param mapping - The function to apply to the Ready value
 	 * @returns A new Poll with the mapped value (if Ready) or Pending (if Pending)
 	 * @example
-	 * ```ts ignore
-	 * const ready = Ready(5);
-	 * const doubled = ready.map((x) => x * 2); // Ready(10)
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Pending, Ready } from "@sekhmet/enum/poll";
 	 *
-	 * const pending = Pending<number>();
-	 * const result = pending.map((x) => x * 2); // Pending<number>
+	 * assertEquals(Ready(5).map((x) => x * 2), Ready(10));
+	 * assertEquals(Pending<number>().map((x) => x * 2), Pending());
 	 * ```
 	 * @see {@link mini.map}
 	 */
@@ -79,13 +81,12 @@ export class Poll<out T> extends mini.Poll<T> {
 	 *
 	 * @returns `true` if the Poll is Ready, `false` if Pending
 	 * @example
-	 * ```ts ignore
-	 * const poll: Poll<number> = Ready(42);
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Pending, Ready } from "@sekhmet/enum/poll";
 	 *
-	 * if (poll.isReady()) {
-	 *   // poll is known to be Ready here
-	 *   console.log("Value is ready");
-	 * }
+	 * assertEquals(Ready(42).isReady(), true);
+	 * assertEquals(Pending().isReady(), false);
 	 * ```
 	 * @see {@link mini.isReady}
 	 */
@@ -100,13 +101,12 @@ export class Poll<out T> extends mini.Poll<T> {
 	 *
 	 * @returns `true` if the Poll is Pending, `false` if Ready
 	 * @example
-	 * ```ts ignore
-	 * const poll: Poll<number> = Pending();
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Pending, Ready } from "@sekhmet/enum/poll";
 	 *
-	 * if (poll.isPending()) {
-	 *   // poll is known to be Pending here
-	 *   console.log("Value is not ready yet");
-	 * }
+	 * assertEquals(Pending().isPending(), true);
+	 * assertEquals(Ready(42).isPending(), false);
 	 * ```
 	 * @see {@link mini.isPending}
 	 */
@@ -121,8 +121,10 @@ export class Poll<out T> extends mini.Poll<T> {
  * @param value - The value to wrap in the Poll
  * @returns A Poll in the Ready state containing the provided value
  * @example
- * ```ts ignore
- * const poll = Ready(42); // Poll<number>
+ * ```ts
+ * import { type Poll, Ready } from "@sekhmet/enum/poll";
+ *
+ * const poll: Poll<number> = Ready(42);
  * ```
  */
 export function Ready<T>(value: T): Poll<T> {
@@ -134,8 +136,10 @@ export function Ready<T>(value: T): Poll<T> {
  *
  * @returns A Poll in the Pending state, representing that a value is not yet ready
  * @example
- * ```ts ignore
- * const poll = Pending<number>(); // Poll<number>
+ * ```ts
+ * import { Pending, type Poll } from "@sekhmet/enum/poll";
+ *
+ * const poll: Poll<number> = Pending<number>();
  * ```
  */
 export function Pending<T = never>(): Poll<T> {

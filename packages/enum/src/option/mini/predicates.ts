@@ -8,9 +8,12 @@ import type { Option } from "./core.ts";
  * @returns true if the Option is Some, false if it is None
  *
  * @example
- * ```ts ignore
- * isSome(Some(42)); // true
- * isSome(None());   // false
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, isSome } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(isSome(Some(42)), true);
+ * assertEquals(isSome(None()), false);
  * ```
  */
 export function isSome<T>(self: Option<T>): boolean {
@@ -28,12 +31,15 @@ export function isSome<T>(self: Option<T>): boolean {
  * @returns true if the Option is Some and the predicate passes, false otherwise
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, isSomeAnd } from "@sekhmet/enum/option/mini";
+ *
  * const isEven = (n: number) => n % 2 === 0;
  *
- * isSomeAnd(Some(4), isEven);  // true
- * isSomeAnd(Some(3), isEven);  // false
- * isSomeAnd(None(), isEven);   // false
+ * assertEquals(isSomeAnd(Some(4), isEven), true);
+ * assertEquals(isSomeAnd(Some(3), isEven), false);
+ * assertEquals(isSomeAnd(None<number>(), isEven), false);
  * ```
  */
 export function isSomeAnd<T, U extends T>(
@@ -50,9 +56,12 @@ export function isSomeAnd<T, U extends T>(
  * @returns true if the Option is None, false if it is Some
  *
  * @example
- * ```ts ignore
- * isNone(None());   // true
- * isNone(Some(42)); // false
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, isNone } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(isNone(None()), true);
+ * assertEquals(isNone(Some(42)), false);
  * ```
  */
 export function isNone<T>(self: Option<T>): self is Option<never> {

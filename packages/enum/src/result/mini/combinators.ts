@@ -15,7 +15,9 @@ import { Err, Ok, type Result } from "./core.ts";
  * @returns Some containing the value if Ok, None if Err
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Err, Ok, ok } from "@sekhmet/enum/result/mini";
+ *
  * const success = Ok(42);
  * const option1 = ok(success); // Some(42)
  *
@@ -42,7 +44,9 @@ export function ok<T, E>(self: Result<T, E>): Option<T> {
  * @returns Some containing the error if Err, None if Ok
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Err, Ok, err } from "@sekhmet/enum/result/mini";
+ *
  * const failure = Err("error");
  * const option1 = err(failure); // Some("error")
  *
@@ -70,16 +74,12 @@ export function err<T, E>(self: Result<T, E>): Option<E> {
  * @returns A generator that yields the success value if Ok, or nothing if Err
  *
  * @example
- * ```ts ignore
- * const success = Ok(42);
- * for (const value of iter(success)) {
- *   console.log(value); // Logs 42
- * }
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, iter } from "@sekhmet/enum/result/mini";
  *
- * const error = Err("failed");
- * for (const value of iter(error)) {
- *   console.log(value); // Never executes
- * }
+ * assertEquals(Array.from(iter(Ok(42))), [42]);
+ * assertEquals(Array.from(iter(Err("failed"))), []);
  * ```
  */
 export function* iter<T, E>(self: Result<T, E>): Generator<T, void, undefined> {
@@ -100,15 +100,18 @@ export function* iter<T, E>(self: Result<T, E>): Generator<T, void, undefined> {
  * @returns `res` if `self` is Ok, otherwise the error from `self`
  *
  * @example
- * ```ts ignore
- * const first = Ok(1);
- * const second = Ok(2);
- * const result = and(first, second); // Ok(2)
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, and } from "@sekhmet/enum/result/mini";
  *
- * const error = Err("failed");
- * const result2 = and(error, second); // Err("failed")
+ * const first: Result<number, string> = Ok(1);
+ * const second: Result<number, string> = Ok(2);
+ * assertEquals(and(first, second), Ok(2));
  *
- * const result3 = and(first, Err("second failed")); // Err("second failed")
+ * const error: Result<number, string> = Err("failed");
+ * assertEquals(and(error, second), Err("failed"));
+ *
+ * assertEquals(and(first, Err("second failed")), Err("second failed"));
  * ```
  */
 export function and<T, E, U>(
@@ -136,7 +139,10 @@ export function and<T, E, U>(
  * @returns The Result from the function if Ok, otherwise the original error
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, andThen } from "@sekhmet/enum/result/mini";
+ *
  * const parseNumber = (s: string): Result<number, string> => {
  *   const n = parseInt(s, 10);
  *   return isNaN(n) ? Err("not a number") : Ok(n);
@@ -145,9 +151,9 @@ export function and<T, E, U>(
  * const double = (n: number): Result<number, string> =>
  *   n > 100 ? Err("too large") : Ok(n * 2);
  *
- * const result = andThen(parseNumber("42"), double); // Ok(84)
- * const result2 = andThen(parseNumber("abc"), double); // Err("not a number")
- * const result3 = andThen(parseNumber("200"), double); // Err("too large")
+ * assertEquals(andThen(parseNumber("42"), double), Ok(84));
+ * assertEquals(andThen(parseNumber("abc"), double), Err("not a number"));
+ * assertEquals(andThen(parseNumber("200"), double), Err("too large"));
  * ```
  */
 export function andThen<T, E, U>(
@@ -174,15 +180,18 @@ export function andThen<T, E, U>(
  * @returns `self` if Ok, otherwise `res`
  *
  * @example
- * ```ts ignore
- * const primary = Ok(1);
- * const fallback = Ok(2);
- * const result = or(primary, fallback); // Ok(1)
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, or } from "@sekhmet/enum/result/mini";
  *
- * const error = Err("primary failed");
- * const result2 = or(error, fallback); // Ok(2)
+ * const primary: Result<number, string> = Ok(1);
+ * const fallback: Result<number, string> = Ok(2);
+ * assertEquals(or(primary, fallback), Ok(1));
  *
- * const result3 = or(error, Err("fallback also failed")); // Err("fallback also failed")
+ * const error: Result<number, string> = Err("primary failed");
+ * assertEquals(or(error, fallback), Ok(2));
+ *
+ * assertEquals(or(error, Err("fallback also failed")), Err("fallback also failed"));
  * ```
  */
 export function or<T, E, F>(
@@ -210,15 +219,18 @@ export function or<T, E, F>(
  * @returns `self` if Ok, otherwise the Result from the recovery function
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, orElse } from "@sekhmet/enum/result/mini";
+ *
  * const fetchFromPrimary = (): Result<string, "network"> => Err("network");
  * const fetchFromBackup = (err: "network"): Result<string, "backup-failed"> =>
  *   err === "network" ? Ok("data from backup") : Err("backup-failed");
  *
- * const result = orElse(fetchFromPrimary(), fetchFromBackup); // Ok("data from backup")
+ * assertEquals(orElse(fetchFromPrimary(), fetchFromBackup), Ok("data from backup"));
  *
- * const success = Ok("primary data");
- * const result2 = orElse(success, fetchFromBackup); // Ok("primary data")
+ * const success: Result<string, "network"> = Ok("primary data");
+ * assertEquals(orElse(success, fetchFromBackup), Ok("primary data"));
  * ```
  */
 export function orElse<T, E, F>(

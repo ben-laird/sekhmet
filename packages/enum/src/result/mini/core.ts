@@ -12,9 +12,11 @@ import { Enum, type Split } from "@/src/core/mini/core.ts";
  * @returns A Result in the Ok variant containing the value
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Ok, type Result } from "@sekhmet/enum/result/mini";
+ *
  * const success = Ok(42);
- * const withError = Ok<number, Error>(42);
+ * const withError: Result<number, Error> = Ok<number, Error>(42);
  * ```
  */
 export function Ok<T = unknown, E = never>(value: T): Result<T, E> {
@@ -33,9 +35,11 @@ export function Ok<T = unknown, E = never>(value: T): Result<T, E> {
  * @returns A Result in the Err variant containing the error
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Err, type Result } from "@sekhmet/enum/result/mini";
+ *
  * const failure = Err(new Error("Something went wrong"));
- * const withOk = Err<string, Error>(new Error("Failed"));
+ * const withOk: Result<string, Error> = Err<string, Error>(new Error("Failed"));
  * ```
  */
 export function Err<T = never, E = unknown>(err: E): Result<T, E> {
@@ -81,20 +85,24 @@ export type { Variants as ResultVariants };
  * @template E The type of the error value
  *
  * @example
- * ```ts ignore
- * import { Err, Ok, type Result } from "@sekhmet/enum/result/mini/core";
- * import { match } from "@sekhmet/enum/core/mini/exit";
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { match } from "@sekhmet/enum/core/mini";
+ * import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
  *
  * function divide(a: number, b: number): Result<number, string> {
  *   if (b === 0) return Err("Division by zero");
  *   return Ok(a / b);
  * }
  *
- * const result = divide(10, 2);
- * match(result)({
- *   Ok: (value) => console.log("Success:", value),
- *   Err: (error) => console.error("Error:", error),
- * });
+ * const describe = (result: Result<number, string>): string =>
+ *   match(result)({
+ *     Ok: (value) => `Success: ${value}`,
+ *     Err: (error) => `Error: ${error}`,
+ *   });
+ *
+ * assertEquals(describe(divide(10, 2)), "Success: 5");
+ * assertEquals(describe(divide(1, 0)), "Error: Division by zero");
  * ```
  */
 export class Result<out T, out E> extends Enum<Variants<T, E>> {}

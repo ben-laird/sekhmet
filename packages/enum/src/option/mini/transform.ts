@@ -13,9 +13,12 @@ import { None, type Option, Some } from "./core.ts";
  * @returns Some containing the transformed value if self is Some, otherwise None
  *
  * @example
- * ```ts ignore
- * map(Some(10), (x) => x * 2); // Some(20)
- * map(None(), (x) => x * 2);   // None
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, map } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(map(Some(10), (x) => x * 2), Some(20));
+ * assertEquals(map(None<number>(), (x) => x * 2), None());
  * ```
  */
 export function map<T, U>(
@@ -39,9 +42,15 @@ export function map<T, U>(
  * @returns The original Option unchanged
  *
  * @example
- * ```ts ignore
- * inspect(Some(42), (x) => console.log(x)); // logs 42, returns Some(42)
- * inspect(None(), (x) => console.log(x));   // logs nothing, returns None
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, inspect } from "@sekhmet/enum/option/mini";
+ *
+ * const seen: number[] = [];
+ *
+ * assertEquals(inspect(Some(42), (x) => seen.push(x)), Some(42));
+ * assertEquals(inspect(None<number>(), (x) => seen.push(x)), None());
+ * assertEquals(seen, [42]);
  * ```
  */
 export function inspect<T>(
@@ -68,9 +77,15 @@ export function inspect<T>(
  * @returns The original Option unchanged
  *
  * @example
- * ```ts ignore
- * inspectNone(None(), () => console.log("empty")); // logs "empty", returns None
- * inspectNone(Some(42), () => console.log("empty")); // logs nothing, returns Some(42)
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, inspectNone } from "@sekhmet/enum/option/mini";
+ *
+ * let calls = 0;
+ *
+ * assertEquals(inspectNone(None(), () => calls++), None());
+ * assertEquals(inspectNone(Some(42), () => calls++), Some(42));
+ * assertEquals(calls, 1);
  * ```
  */
 export function inspectNone<T>(
@@ -94,14 +109,17 @@ export function inspectNone<T>(
  * @returns The result of mapping if self is Some, otherwise the default value
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, mapOr } from "@sekhmet/enum/option/mini";
+ *
  * // Object style
- * mapOr(Some(10), { defaultValue: 0, mapping: (x) => x * 2 }); // 20
- * mapOr(None(), { defaultValue: 0, mapping: (x) => x * 2 });   // 0
+ * assertEquals(mapOr(Some(10), { defaultValue: 0, mapping: (x) => x * 2 }), 20);
+ * assertEquals(mapOr(None<number>(), { defaultValue: 0, mapping: (x) => x * 2 }), 0);
  *
  * // Positional style
- * mapOr(Some(10), 0, (x) => x * 2); // 20
- * mapOr(None(), 0, (x) => x * 2);   // 0
+ * assertEquals(mapOr(Some(10), 0, (x) => x * 2), 20);
+ * assertEquals(mapOr(None<number>(), 0, (x) => x * 2), 0);
  * ```
  */
 export function mapOr<T, U>(
@@ -162,16 +180,16 @@ export function mapOr<T, U>(
  * @returns The result of calling the appropriate handler function
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, mapOrElse } from "@sekhmet/enum/option/mini";
+ *
  * // Object style
- * mapOrElse(Some(10), {
- *   Some: (x) => x * 2,
- *   None: () => 0
- * }); // 20
+ * assertEquals(mapOrElse(Some(10), { Some: (x) => x * 2, None: () => 0 }), 20);
  *
  * // Positional style
- * mapOrElse(Some(10), () => 0, (x) => x * 2); // 20
- * mapOrElse(None(), () => 0, (x) => x * 2);   // 0
+ * assertEquals(mapOrElse(Some(10), () => 0, (x) => x * 2), 20);
+ * assertEquals(mapOrElse(None<number>(), () => 0, (x) => x * 2), 0);
  * ```
  */
 export function mapOrElse<T, U>(
