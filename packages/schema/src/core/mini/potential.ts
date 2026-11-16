@@ -44,25 +44,54 @@ export function Async<T>(promise: Promise<T>): Potential<T> {
 }
 
 /**
- * A type that represents either a synchronous value or a promise of that value.
+ * A value, or a promise-like (any thenable) of that value.
  *
  * @template T The type of the value
  */
-export type MaybePromise<T> = T | Promise<T>;
+export type MaybePromise<T> = T | PromiseLike<T>;
+
+/**
+ * Whether a value is promise-like: an object or function with a callable
+ * `then`, as `await` and `Promise.resolve` treat it.
+ */
+function isPromiseLike<T>(value: MaybePromise<T>): value is PromiseLike<T> {
+	return (
+		(typeof value === "object" || typeof value === "function") &&
+		value !== null &&
+		"then" in value &&
+		typeof value.then === "function"
+	);
+}
 
 /**
  * Converts a MaybePromise into a Potential.
  *
- * This function detects whether the input is a promise and wraps it
- * in the appropriate Potential variant.
+ * Any promise-like value (a `Promise` or another thenable) becomes `Async`,
+ * normalised to a `Promise` with `Promise.resolve`; anything else is `Sync`.
  *
  * @template T The type of the value
- * @param value The value or promise to convert
+ * @param value The value or promise-like to convert
  * @returns A Potential wrapping the input
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unionKinds } from "@sekhmet/enum/core/mini/exit";
+ * import { from } from "@sekhmet/schema/core/mini/potential";
+ *
+ * assertEquals(unionKinds(from(42)), "Sync");
+ * assertEquals(unionKinds(from(Promise.resolve(42))), "Async");
+ *
+ * const thenable: PromiseLike<number> = {
+ * 	then: (onFulfilled, onRejected) =>
+ * 		Promise.resolve(42).then(onFulfilled, onRejected),
+ * };
+ * assertEquals(unionKinds(from(thenable)), "Async");
+ * ```
  */
 export function from<T>(value: MaybePromise<T>): Potential<T> {
-	if (value instanceof Promise) {
-		return Async(value);
+	if (isPromiseLike(value)) {
+		return Async(Promise.resolve(value));
 	}
 
 	return Sync(value);
@@ -83,7 +112,7 @@ export function from<T>(value: MaybePromise<T>): Potential<T> {
  */
 export function map<T, U>(
 	self: Potential<T>,
-	mapping: (value: T) => U | Promise<U>,
+	mapping: (value: T) => MaybePromise<U>,
 ): Potential<U> {
 	return match(self)({
 		Sync: (value) => from(mapping(value)),

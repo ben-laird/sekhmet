@@ -1,5 +1,5 @@
-import { match } from "@sekhmet/enum/core/mini/exit";
-import { assertEquals } from "@std/assert";
+import { match, unionKinds } from "@sekhmet/enum/core/mini/exit";
+import { assertEquals, assertInstanceOf } from "@std/assert";
 import { Async, from, map, Sync } from "./potential.ts";
 
 Deno.test("Sync creates a synchronous Potential", () => {
@@ -126,4 +126,47 @@ Deno.test("map transforms asynchronous values", async () => {
 	});
 
 	assertEquals(result, 20);
+});
+
+Deno.test("from treats a non-Promise thenable as Async", async () => {
+	// Given: a thenable that is not a Promise
+	const thenable: PromiseLike<string> = {
+		// biome-ignore lint/suspicious/noThenProperty: the test needs a thenable
+		then: (onFulfilled, onRejected) =>
+			Promise.resolve("thenable").then(onFulfilled, onRejected),
+	};
+
+	// When: converting with from
+	const potential = from(thenable);
+
+	// Then: it is Async, normalised to a real Promise that settles to the value
+	const promise = match(potential)({
+		Sync: () => {
+			throw new Error("Should not be sync");
+		},
+		Async: (p) => p,
+	});
+	assertInstanceOf(promise, Promise);
+	assertEquals(await promise, "thenable");
+});
+
+Deno.test("from treats values without a callable then as Sync", () => {
+	// Given: values that are not promise-like
+	const values: unknown[] = [
+		null,
+		undefined,
+		0,
+		"then",
+		// biome-ignore lint/suspicious/noThenProperty: a non-callable then
+		{ then: 42 },
+		[],
+	];
+
+	for (const value of values) {
+		// When: converting each with from
+		const kind = unionKinds(from(value));
+
+		// Then: each is Sync
+		assertEquals(kind, "Sync");
+	}
 });
