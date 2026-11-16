@@ -1,6 +1,6 @@
 import { createStepContext } from "./context.ts";
+import { runCommand } from "./process.ts";
 import type {
-	StepCommand,
 	StepContext,
 	StepExecution,
 	StepResult,
@@ -11,7 +11,8 @@ import type {
 /**
  * Executes a single workflow step. Its process gets `ARTIFACTS_DIR` and the
  * accumulated `env` outputs (see {@linkcode stepEnv}); the runner's env is
- * never mutated, so parallel steps cannot race on it.
+ * never mutated, so parallel steps cannot race on it. A step with a `timeout`
+ * that its command outlives fails with `timedOutAfterMs` set.
  */
 export async function executeStep({
 	step,
@@ -39,16 +40,19 @@ export async function executeStep({
 		}
 	}
 
-	const output = await spawnCommand({
+	const run = await runCommand({
 		command: step.command,
 		env: stepEnv({ artifactsDir, accumulatedEnv: accumulatedOutputs.env }),
-	}).output();
+		timeoutMs: step.timeout?.ms,
+	});
+	const { output } = run;
 
 	return {
 		name: step.name,
-		status: output.success ? "passed" : "failed",
+		status: run.kind === "exited" && output.success ? "passed" : "failed",
 		output,
 		outputs: step.captureOutputs?.(output, context),
+		...(run.kind === "timed-out" ? { timedOutAfterMs: run.afterMs } : {}),
 	};
 }
 
@@ -64,28 +68,6 @@ export function stepEnv({
 	accumulatedEnv: ReadonlyMap<string, string>;
 }): Record<string, string> {
 	return { ...Object.fromEntries(accumulatedEnv), ARTIFACTS_DIR: artifactsDir };
-}
-
-/**
- * Builds the `Deno.Command` for a {@linkcode StepCommand}. `env` is added to
- * the spawned process only; the runner's own env is never touched.
- *
- * @param options.command - The command to build
- * @param options.env - Extra env vars for the process (default: none)
- * @returns The command, ready to spawn
- */
-export function spawnCommand({
-	command,
-	env = {},
-}: {
-	command: StepCommand;
-	env?: Record<string, string>;
-}): Deno.Command {
-	return new Deno.Command(command.program, {
-		args: [...(command.args ?? [])],
-		env,
-		...(command.cwd === undefined ? {} : { cwd: command.cwd }),
-	});
 }
 
 /**

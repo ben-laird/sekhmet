@@ -117,6 +117,11 @@ export interface WorkflowStep {
 	showOutput?: boolean | ((status: StepStatus) => boolean);
 	/** Exit code to use if this step fails (defaults to 1) */
 	exitCode?: number;
+	/**
+	 * How long the step's command may run before its process tree is killed
+	 * and the step fails with the timeout's exit code (defaults to no limit).
+	 */
+	timeout?: StepTimeout;
 
 	/**
 	 * Function to extract outputs from this step's execution for use in later steps.
@@ -132,6 +137,17 @@ export interface WorkflowStep {
 }
 
 /**
+ * A step's time limit, and the exit code the workflow ends with when the step
+ * exceeds it, so a hang is told apart from an ordinary failure.
+ */
+export interface StepTimeout {
+	/** Milliseconds the command may run */
+	ms: number;
+	/** Exit code to use when the step times out */
+	exitCode: number;
+}
+
+/**
  * Result of a workflow step whose command ran.
  */
 export interface RanStepResult {
@@ -143,6 +159,11 @@ export interface RanStepResult {
 	output?: Deno.CommandOutput | undefined;
 	/** Outputs captured from this step's execution */
 	outputs?: StepOutputs | undefined;
+	/**
+	 * Set when the command outlived its {@linkcode StepTimeout} and was killed:
+	 * the limit it hit, in milliseconds. The status is then `failed`.
+	 */
+	timedOutAfterMs?: number | undefined;
 }
 
 /**
