@@ -28,7 +28,7 @@ import type { Schema as MiniSchema } from "@/src/core/mini/schema.ts";
 import { Schema } from "../../core/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
-export type { Branded, OrOptions } from "../mini/mod.ts";
+export type { Branded, OrOptions, ReadonlyOutput } from "../mini/mod.ts";
 export { BRAND } from "../mini/mod.ts";
 
 /**
@@ -106,4 +106,44 @@ export function or<I, O, E, J, P, F>(
 	options: mini.OrOptions<I, O, E, J, P, F>,
 ): Schema<I & J, O | P, Issues<SchemaIssue>> {
 	return Schema.fromMini(mini.or(options));
+}
+
+/**
+ * Makes a schema's output read-only: an array or plain object output is
+ * replaced by a frozen shallow copy, and its type by
+ * {@linkcode ReadonlyOutput}. The copy is frozen, never the value the
+ * schema produced, which may be the caller's input (`unknown()` passes it
+ * through). Freezing is shallow: nested objects stay as they were.
+ *
+ * Other values pass through unchanged, neither copied nor frozen:
+ * primitives can't change, `Object.freeze` doesn't reach the internal
+ * state of a `Map`, `Set` or `Date` (a frozen `Map` still `set`s), and a
+ * class instance can't be copied without bypassing its constructor. A
+ * `Map` or `Set` output is still typed as a `ReadonlyMap` or `ReadonlySet`.
+ *
+ * @template I - The input type
+ * @template O - The output type
+ * @template E - The error type
+ * @param self - The schema
+ * @returns A schema whose array and plain object outputs are frozen copies
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { readonly } from "@sekhmet/schema/algebra";
+ * import { object } from "@sekhmet/schema/composites/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const user = readonly(object({ shape: { name: string() } }));
+ * const parsed = unwrap(parseSync(user, { name: "Ada" }));
+ *
+ * assertEquals(parsed, { name: "Ada" });
+ * assertEquals(Object.isFrozen(parsed), true);
+ * ```
+ */
+export function readonly<I, O, E>(
+	self: MiniSchema<I, O, E>,
+): Schema<I, mini.ReadonlyOutput<O>, E> {
+	return Schema.fromMini(mini.readonly(self));
 }

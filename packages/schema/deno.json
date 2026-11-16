@@ -44,7 +44,8 @@
 		"./algebra": "./src/algebra/main/mod.ts",
 		"./algebra/mini": "./src/algebra/mini/mod.ts",
 		"./algebra/mini/brand": "./src/algebra/mini/brand.ts",
-		"./algebra/mini/or": "./src/algebra/mini/or.ts"
+		"./algebra/mini/or": "./src/algebra/mini/or.ts",
+		"./algebra/mini/readonly": "./src/algebra/mini/readonly.ts"
 	},
 
 	"imports": {
