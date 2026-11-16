@@ -38,8 +38,8 @@ CI_AI=true deno task ci
 # - All tests, with coverage (CI: a per-package table on the GitHub job
 #   summary; AI mode: totals in the "Coverage Summary" step outputs)
 
-# For manual formatting only:
-deno run npm:@biomejs/biome check --write .
+# For manual formatting only (the pinned Biome from deno.json):
+deno task fmt
 ```
 
 **IMPORTANT**: After implementing any feature, fix, or refactor, you MUST run

@@ -202,10 +202,10 @@ All code must compile with these settings.
 
 ### Format and Lint
 
-Run Biome to format and lint your code:
+Run Biome (the version pinned in `deno.json`) to format and lint your code:
 
 ```bash
-deno run npm:@biomejs/biome check --write .
+deno task fmt
 ```
 
 Or use your editor's Biome integration.
@@ -259,7 +259,7 @@ export class Fiber<I, T, E> extends mini.Fiber<I, T, E> {
 }
 ```
 
-Functions whose first parameter is typed as a *different* class (e.g. `fork`
+Functions whose first parameter is typed as a _different_ class (e.g. `fork`
 takes `self: Runtime`, not `self: Fiber`) are not methods. When such a
 function, or a method, returns the primary type, main returns the main class
 (converted with its static `fromMini`), so calls keep chaining. See
