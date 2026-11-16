@@ -15,7 +15,17 @@
 		"./primitives/mini": "./src/primitives/mini/mod.ts",
 		"./primitives/mini/string": "./src/primitives/mini/string.ts",
 		"./primitives/mini/number": "./src/primitives/mini/number.ts",
-		"./primitives/mini/boolean": "./src/primitives/mini/boolean.ts"
+		"./primitives/mini/boolean": "./src/primitives/mini/boolean.ts",
+		"./composites": "./src/composites/main/mod.ts",
+		"./composites/mini": "./src/composites/mini/mod.ts",
+		"./composites/mini/array": "./src/composites/mini/array.ts",
+		"./composites/mini/discriminated-union": "./src/composites/mini/discriminated-union.ts",
+		"./composites/mini/enum-of": "./src/composites/mini/enum-of.ts",
+		"./composites/mini/modifiers": "./src/composites/mini/modifiers.ts",
+		"./composites/mini/object": "./src/composites/mini/object.ts",
+		"./composites/mini/record": "./src/composites/mini/record.ts",
+		"./composites/mini/tuple": "./src/composites/mini/tuple.ts",
+		"./composites/mini/union": "./src/composites/mini/union.ts"
 	},
 
 	"imports": {

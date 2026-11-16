@@ -5,9 +5,11 @@
  * For tree-shakable imports, use the specific module paths:
  * - `@sekhmet/schema/core/mini` - Core schema utilities
  * - `@sekhmet/schema/primitives/mini` - Primitive type schemas
+ * - `@sekhmet/schema/composites/mini` - Composite schemas (objects, arrays, unions…)
  *
  * @module
  */
 
+export * from "./src/composites/main/mod.ts";
 export * from "./src/core/main/mod.ts";
 export * from "./src/primitives/main/mod.ts";
