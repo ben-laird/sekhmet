@@ -25,6 +25,14 @@ export type BrowserRuntime = Extract<
 	"chromium" | "firefox" | "webkit"
 >;
 
+/**
+ * The compatibility date of the workerd run: the release date of the pinned
+ * `miniflare`'s workerd, so the newest Workers behaviour is what gets tested.
+ * The smoke layer (`scripts/compat-smoke/src/plan.ts`) uses the same date;
+ * `pins.test.ts` fails when they drift.
+ */
+export const WORKERD_COMPATIBILITY_DATE = "2026-07-30";
+
 /** A runtime that runs the suite as a script in a child process. */
 export type ProcessRuntime = Extract<Runtime, "node" | "bun">;
 

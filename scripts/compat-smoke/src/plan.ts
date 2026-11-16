@@ -26,8 +26,13 @@ export const TOOLS: {
 	miniflare: "4.20260730.0",
 };
 
-/** The Workers compatibility date the probe runs under; Miniflare must know it. */
-export const WORKERD_COMPATIBILITY_DATE = "2026-07-01";
+/**
+ * The Workers compatibility date the probe runs under: the pinned Miniflare's
+ * release date, which Miniflare must know. It equals the unit suite's
+ * (`scripts/compat/src/runtime.ts`); `scripts/compat/src/pins.test.ts`
+ * fails when they drift.
+ */
+export const WORKERD_COMPATIBILITY_DATE = "2026-07-30";
 
 /** JSR's npm-compatible registry, which serves `@jsr/<scope>__<name>`. */
 export const JSR_NPM_REGISTRY = "https://npm.jsr.io";

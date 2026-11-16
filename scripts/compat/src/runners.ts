@@ -16,19 +16,18 @@ import { Miniflare } from "miniflare";
 import { type Browser, chromium, firefox, webkit } from "playwright";
 import type { Bundle } from "./bundle.ts";
 import { PROCESS_LAUNCHER, SUITE_MODULE, WORKER_LAUNCHER } from "./entry.ts";
-import type { BrowserRuntime, ProcessRuntime, Runtime } from "./runtime.ts";
+import {
+	type BrowserRuntime,
+	type ProcessRuntime,
+	type Runtime,
+	WORKERD_COMPATIBILITY_DATE,
+} from "./runtime.ts";
 
 /**
  * How long one runtime may take to run the whole suite: 5 minutes. Deno runs
  * it in seconds, so this only trips on a hang.
  */
 export const SUITE_TIMEOUT_MS: number = 5 * 60 * 1000;
-
-/**
- * The compatibility date of the workerd run: the release date of the pinned
- * `miniflare`'s workerd, so the newest Workers behaviour is what gets tested.
- */
-export const WORKERD_COMPATIBILITY_DATE = "2026-07-30";
 
 /** Plain HTTP on purpose: the packages must not need a secure context. */
 const PAGE_ORIGIN = "http://compat.test";
