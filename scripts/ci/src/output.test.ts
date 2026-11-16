@@ -7,7 +7,7 @@ import {
 } from "./output.ts";
 import type { StepResult, WorkflowStep } from "./types.ts";
 
-const command = new Deno.Command("true");
+const command = { program: "true" };
 
 // The CI shape after "Deno Test" fails: the report is blocked, cleanup runs
 const steps: WorkflowStep[] = [

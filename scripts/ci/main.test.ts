@@ -7,6 +7,7 @@ import {
 	EXIT_CODES,
 	main,
 } from "./main.ts";
+import { spawnCommand } from "./mod.ts";
 
 const ENVIRONMENTS = [
 	{ isCI: false, isAI: false },
@@ -59,8 +60,12 @@ Deno.test("biomeCiCommand fails on a badly formatted file and passes on a clean 
 
 	try {
 		// When: running the CI step's Biome command on each
-		const badOutput = await biomeCiCommand({ paths: [bad] }).output();
-		const goodOutput = await biomeCiCommand({ paths: [good] }).output();
+		const badOutput = await spawnCommand({
+			command: biomeCiCommand({ paths: [bad] }),
+		}).output();
+		const goodOutput = await spawnCommand({
+			command: biomeCiCommand({ paths: [good] }),
+		}).output();
 
 		// Then: the bad file fails the check (no silent exit 0); the clean one passes
 		assertEquals(badOutput.success, false);
@@ -98,7 +103,9 @@ Deno.test("coverageCleanupCommand removes a populated coverage directory", async
 
 	try {
 		// When: running the cleanup step's command on it
-		const output = await coverageCleanupCommand({ dir }).output();
+		const output = await spawnCommand({
+			command: coverageCleanupCommand({ dir }),
+		}).output();
 
 		// Then: it succeeds and the directory is gone
 		assertEquals(output.success, true);
@@ -114,8 +121,8 @@ Deno.test("coverageCleanupCommand succeeds when there is no coverage directory",
 
 	try {
 		// When: running the cleanup step's command
-		const output = await coverageCleanupCommand({
-			dir: `${root}/coverage`,
+		const output = await spawnCommand({
+			command: coverageCleanupCommand({ dir: `${root}/coverage` }),
 		}).output();
 
 		// Then: there is nothing to clean, which is not a failure
