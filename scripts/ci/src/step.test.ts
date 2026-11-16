@@ -513,3 +513,49 @@ Deno.test("executeStep gives parallel steps their own env without touching the p
 	);
 	assertEquals(Deno.env.get("ONLY_FIRST"), before);
 });
+
+Deno.test("executeStep fails a step whose command outlives its timeout, and records the limit", async () => {
+	// Given: a step whose command sleeps far past a tiny timeout
+	const step: WorkflowStep = {
+		name: "Test",
+		command: { program: "sh", args: ["-c", "echo started; sleep 30"] },
+		timeout: { ms: 200, exitCode: 13 },
+	};
+
+	// When: executing the step
+	const result = await executeStep({
+		step,
+		completedSteps: new Map(),
+		accumulatedOutputs: { env: new Map(), context: new Map() },
+		artifactsDir: "/tmp",
+	});
+
+	// Then: it failed as timed out, keeping the output printed before the kill
+	assertEquals(result.status, "failed");
+	assertEquals(ranResult(result).timedOutAfterMs, 200);
+	assertEquals(
+		new TextDecoder().decode(ranResult(result).output?.stdout),
+		"started\n",
+	);
+});
+
+Deno.test("executeStep passes a step that finishes within its timeout", async () => {
+	// Given: a quick step with a generous timeout
+	const step: WorkflowStep = {
+		name: "Test",
+		command: { program: "echo", args: ["fast"] },
+		timeout: { ms: 10_000, exitCode: 13 },
+	};
+
+	// When: executing the step
+	const result = await executeStep({
+		step,
+		completedSteps: new Map(),
+		accumulatedOutputs: { env: new Map(), context: new Map() },
+		artifactsDir: "/tmp",
+	});
+
+	// Then: it passed with no timeout recorded
+	assertEquals(result.status, "passed");
+	assertEquals(ranResult(result).timedOutAfterMs, undefined);
+});

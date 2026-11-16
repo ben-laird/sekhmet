@@ -10,6 +10,7 @@ import {
 	EXIT_CODES,
 	main,
 	readinessCommand,
+	TEST_TIMEOUT_MS,
 } from "./main.ts";
 import { spawnCommand } from "./mod.ts";
 
@@ -37,6 +38,7 @@ Deno.test("EXIT_CODES are defined with unique values", () => {
 	assertEquals(EXIT_CODES.COVERAGE_SUMMARY_FAILED, 10);
 	assertEquals(EXIT_CODES.GENERATED_MAIN_STALE, 11);
 	assertEquals(EXIT_CODES.DV_VALIDATE_FAILED, 12);
+	assertEquals(EXIT_CODES.TESTS_TIMED_OUT, 13);
 	const uniqueValues = new Set(values);
 	assertEquals(values.length, uniqueValues.size, "Exit codes should be unique");
 });
@@ -46,16 +48,37 @@ Deno.test("ciSteps gives every step its own exit code", () => {
 		// Given: the CI steps for an environment
 		const steps = ciSteps(environment);
 
-		// When: collecting each step's exit code
+		// When: collecting each step's exit code, and its timeout's if it has one
 		const codes = steps.map((step) => step.exitCode);
+		const timeoutCodes = steps.flatMap((step) =>
+			step.timeout ? [step.timeout.exitCode] : [],
+		);
 
-		// Then: every step declares one, and no two steps share one
+		// Then: every step declares one, and no two codes are shared
 		assertEquals(
 			codes.filter((code) => code === undefined).length,
 			0,
 			`steps without an exit code in ${JSON.stringify(environment)}`,
 		);
-		assertEquals(new Set(codes).size, steps.length);
+		const all = [...codes, ...timeoutCodes];
+		assertEquals(new Set(all).size, all.length);
+	}
+});
+
+Deno.test("ciSteps kills Deno Test after its timeout in every environment", () => {
+	for (const environment of ENVIRONMENTS) {
+		// Given: the CI steps for an environment
+		const steps = ciSteps(environment);
+
+		// When: finding the test step
+		const testStep = steps.find((step) => step.name === "Deno Test");
+
+		// Then: a hang fails with its own exit code after TEST_TIMEOUT_MS
+		assertEquals(testStep?.timeout, {
+			ms: TEST_TIMEOUT_MS,
+			exitCode: EXIT_CODES.TESTS_TIMED_OUT,
+		});
+		assertEquals(TEST_TIMEOUT_MS, 300_000);
 	}
 });
 

@@ -14,6 +14,8 @@ export interface AIStepResult {
 	status: StepStatus;
 	/** The step's workflow exit code, present when the step failed */
 	exitCode?: number | undefined;
+	/** The time limit the step hit, in milliseconds, present when it timed out */
+	timedOutAfterMs?: number | undefined;
 	/** true when the step failed but has `continueOnError`, so the workflow did not fail */
 	continuedOnError?: boolean | undefined;
 	/** The unhealthy dependencies that blocked the step, present when blocked */
@@ -53,8 +55,25 @@ function resultFor(
 }
 
 /**
+ * The exit code a failed step contributes: its timeout's `exitCode` when it
+ * timed out, else its `exitCode` (default `1`).
+ */
+export function stepExitCode({
+	step,
+	result,
+}: {
+	step: WorkflowStep;
+	result: StepResult;
+}): number {
+	const timedOut =
+		result.status === "failed" && result.timedOutAfterMs !== undefined;
+	if (timedOut && step.timeout) return step.timeout.exitCode;
+	return step.exitCode ?? 1;
+}
+
+/**
  * The exit code a workflow ends with: `0` when no step failed, otherwise the
- * `exitCode` of the first failed step in declaration order (default `1`).
+ * {@linkcode stepExitCode} of the first failed step in declaration order.
  * Blocked and skipped steps never set the code; the failure that blocked them
  * already has. A failed `continueOnError` step does not fail the workflow.
  */
@@ -66,9 +85,9 @@ export function workflowExitCode({
 	results: Map<string, StepResult>;
 }): number {
 	for (const step of steps) {
-		const failed = resultFor(step, results).status === "failed";
-		if (failed && !step.continueOnError) {
-			return step.exitCode ?? 1;
+		const result = resultFor(step, results);
+		if (result.status === "failed" && !step.continueOnError) {
+			return stepExitCode({ step, result });
 		}
 	}
 	return 0;
@@ -90,10 +109,14 @@ export function formatStepStatusLine({
 			return `${green("[x]")} ${result.name}`;
 		}
 		case "failed": {
+			const timedOut =
+				result.timedOutAfterMs === undefined
+					? ""
+					: ` ${red(`(timed out after ${result.timedOutAfterMs / 1000} s; its process tree was killed)`)}`;
 			const continued = step.continueOnError
 				? ` ${yellow("(continueOnError: workflow not failed)")}`
 				: "";
-			return `${red("[!]")} ${result.name}${continued}`;
+			return `${red("[!]")} ${result.name}${timedOut}${continued}`;
 		}
 		case "skipped": {
 			return `${cyan("[ ]")} ${result.name} ${gray("(skipped: condition not met)")}`;
@@ -173,7 +196,10 @@ export function formatAIOutput(
 				return aiStep;
 			}
 			case "failed": {
-				aiStep.exitCode = step.exitCode ?? 1;
+				aiStep.exitCode = stepExitCode({ step, result });
+				if (result.timedOutAfterMs !== undefined) {
+					aiStep.timedOutAfterMs = result.timedOutAfterMs;
+				}
 				if (step.continueOnError) aiStep.continuedOnError = true;
 				break;
 			}

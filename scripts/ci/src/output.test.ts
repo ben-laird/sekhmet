@@ -139,6 +139,59 @@ Deno.test("workflowExitCode is the first failed step's code and ignores blocked 
 	assertEquals(exitCode, 5);
 });
 
+Deno.test("a timed-out step ends the workflow with its timeout's exit code and says it timed out", () => {
+	// Given: a test step with a timeout whose command was killed at the limit
+	const testStep: WorkflowStep = {
+		name: "Deno Test",
+		exitCode: 5,
+		timeout: { ms: 300_000, exitCode: 13 },
+		command,
+	};
+	const result: StepResult = {
+		name: "Deno Test",
+		status: "failed",
+		timedOutAfterMs: 300_000,
+	};
+	const timedOut = new Map([["Deno Test", result]]);
+
+	// When: computing the exit code and formatting for AI agents and for logs
+	const exitCode = workflowExitCode({ steps: [testStep], results: timedOut });
+	const output = formatAIOutput([testStep], timedOut, new TextDecoder());
+	const line = stripAnsiCode(formatStepStatusLine({ step: testStep, result }));
+
+	// Then: the timeout's code, not the failure's, and the message names the limit
+	assertEquals(exitCode, 13);
+	assertEquals(output.steps[0], {
+		name: "Deno Test",
+		status: "failed",
+		exitCode: 13,
+		timedOutAfterMs: 300_000,
+	});
+	assertEquals(
+		line,
+		"[!] Deno Test (timed out after 300 s; its process tree was killed)",
+	);
+});
+
+Deno.test("a step with a timeout that fails without timing out keeps its failure exit code", () => {
+	// Given: a test step with a timeout that failed on its own
+	const testStep: WorkflowStep = {
+		name: "Deno Test",
+		exitCode: 5,
+		timeout: { ms: 300_000, exitCode: 13 },
+		command,
+	};
+	const failed = new Map<string, StepResult>([
+		["Deno Test", { name: "Deno Test", status: "failed" }],
+	]);
+
+	// When: computing the workflow exit code
+	const exitCode = workflowExitCode({ steps: [testStep], results: failed });
+
+	// Then: the ordinary failure code
+	assertEquals(exitCode, 5);
+});
+
 Deno.test("workflowExitCode is zero when nothing failed, even if steps were skipped", () => {
 	// Given: a passed step and a skipped step
 	const quiet = new Map<string, StepResult>([

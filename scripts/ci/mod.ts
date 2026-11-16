@@ -1,6 +1,6 @@
 // Re-export all public APIs
 
-export { spawnCommand } from "./src/step.ts";
+export { spawnCommand } from "./src/process.ts";
 export type {
 	BlockedStepResult,
 	RanStepResult,
@@ -11,6 +11,7 @@ export type {
 	StepOutputs,
 	StepResult,
 	StepStatus,
+	StepTimeout,
 	WorkflowResult,
 	WorkflowStep,
 } from "./src/types.ts";
