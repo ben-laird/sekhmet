@@ -294,3 +294,32 @@ export function gitHubReleases({
 		return { tag, notes: notes ?? `Release ${tag}.` };
 	});
 }
+
+/**
+ * Refuses to release unless HEAD is exactly the commit `main` points at on
+ * the remote. A release pushes HEAD to main and publishes it, so running on
+ * any other commit would ship unreviewed code; a main that moved since
+ * checkout is left for the run its push triggered.
+ *
+ * @param args.head `git rev-parse HEAD` output.
+ * @param args.lsRemote `git ls-remote origin refs/heads/main` output.
+ * @returns Ok when HEAD is main's tip, else why not.
+ */
+export function checkOnMainTip({
+	head,
+	lsRemote,
+}: {
+	head: string;
+	lsRemote: string;
+}): Result<void, string> {
+	const tip = lsRemote.trim().split(/\s+/)[0];
+	if (tip === undefined || tip.length === 0) {
+		return Err("origin has no main branch");
+	}
+	const commit = head.trim();
+	return commit === tip
+		? Ok(undefined)
+		: Err(
+				`HEAD ${commit} is not main's tip ${tip}; releases run only from main`,
+			);
+}

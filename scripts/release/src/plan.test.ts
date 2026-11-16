@@ -2,6 +2,7 @@ import { isErr, unwrap } from "@sekhmet/enum/result/mini";
 import { assert, assertEquals } from "@std/assert";
 import {
 	changelogSection,
+	checkOnMainTip,
 	gitHubReleases,
 	parseReleaseResult,
 	parseStatusPlan,
@@ -191,4 +192,20 @@ Deno.test("parseReleaseResult rejects another contract and non-JSON", () => {
 	// When / Then: both are errors, not throws
 	assert(isErr(parseReleaseResult(wrongSchema)));
 	assert(isErr(parseReleaseResult("not json")));
+});
+
+Deno.test("checkOnMainTip accepts only the commit main points at", () => {
+	// Given: main's remote tip as `git ls-remote` prints it
+	const tip = "1111111111111111111111111111111111111111";
+	const lsRemote = `${tip}\trefs/heads/main\n`;
+
+	// When: checking HEAD at the tip, at another commit, and with no main
+	const atTip = checkOnMainTip({ head: `${tip}\n`, lsRemote });
+	const elsewhere = checkOnMainTip({ head: "2".repeat(40), lsRemote });
+	const noMain = checkOnMainTip({ head: tip, lsRemote: "" });
+
+	// Then: only HEAD at main's tip may release
+	assert(!isErr(atTip));
+	assert(isErr(elsewhere));
+	assert(isErr(noMain));
 });

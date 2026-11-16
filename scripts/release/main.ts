@@ -18,6 +18,7 @@ import {
 	unwrapErr,
 } from "@sekhmet/enum/result/mini";
 import {
+	checkOnMainTip,
 	type GitHubRelease,
 	gitHubReleases,
 	parseReleaseResult,
@@ -115,6 +116,24 @@ async function createGitHubRelease({
 }
 
 async function release(force: boolean): Promise<Result<void, string>> {
+	const head = await succeed({
+		command: "git",
+		args: ["rev-parse", "HEAD"],
+		capture: true,
+	});
+	if (isErr(head)) return Err(unwrapErr(head));
+	const lsRemote = await succeed({
+		command: "git",
+		args: ["ls-remote", "origin", "refs/heads/main"],
+		capture: true,
+	});
+	if (isErr(lsRemote)) return Err(unwrapErr(lsRemote));
+	const onMain = checkOnMainTip({
+		head: unwrap(head),
+		lsRemote: unwrap(lsRemote),
+	});
+	if (isErr(onMain)) return Err(unwrapErr(onMain));
+
 	// Capture the plan before `dv version` consumes the Records.
 	const statusText = await succeed({
 		command: "dv",
