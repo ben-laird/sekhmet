@@ -13,8 +13,15 @@ import type { ScheduleFn } from "./scheduler.ts";
  * safe from stack overflow regardless of queue depth.
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ *
  * const scheduler = new Scheduler({ schedule: sync() });
+ *
+ * const ran: number[] = [];
+ * scheduler.run(() => ran.push(1));
+ * assertEquals(ran, [1]); // ran before run() returned
  * ```
  */
 export function sync(): ScheduleFn {
@@ -27,8 +34,17 @@ export function sync(): ScheduleFn {
  * Promise callbacks and other microtasks to interleave with scheduler work.
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Scheduler, microtask } from "@sekhmet/effect/scheduler";
+ *
  * const scheduler = new Scheduler({ schedule: microtask() });
+ *
+ * const ran: number[] = [];
+ * scheduler.run(() => ran.push(1));
+ * assertEquals(ran, []);
+ * await Promise.resolve();
+ * assertEquals(ran, [1]);
  * ```
  */
 export function microtask(): ScheduleFn {
@@ -54,12 +70,14 @@ export interface MacrotaskOptions {
  * @param options - Configuration for the macrotask schedule
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Scheduler, macrotask } from "@sekhmet/effect/scheduler";
+ *
  * // Yield to event loop with no artificial delay
  * const scheduler = new Scheduler({ schedule: macrotask() });
  *
  * // Add a minimum delay between turns
- * const throttled = new Scheduler({ schedule: macrotask({ delay: 16 }) });
+ * const delayed = new Scheduler({ schedule: macrotask({ delay: 16 }) });
  * ```
  */
 export function macrotask(options?: MacrotaskOptions): ScheduleFn {
@@ -89,7 +107,9 @@ export interface AdaptiveOptions {
  * @param options - Thresholds controlling when to switch strategies
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Scheduler, adaptive } from "@sekhmet/effect/scheduler";
+ *
  * const scheduler = new Scheduler({
  *   schedule: adaptive({ busyThreshold: 32 }),
  * });
@@ -128,7 +148,9 @@ export interface ThrottledOptions {
  * @param options - Configuration for the throttle behaviour
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Scheduler, throttled } from "@sekhmet/effect/scheduler";
+ *
  * // Run 4 turns back-to-back, then yield to the event loop
  * const scheduler = new Scheduler({ schedule: throttled({ turnsPerTick: 4 }) });
  * ```
@@ -174,7 +196,9 @@ export interface BatchedOptions {
  * @param options - Configuration for the batch threshold
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Scheduler, batched } from "@sekhmet/effect/scheduler";
+ *
  * const scheduler = new Scheduler({
  *   schedule: batched({ fullTurnThreshold: 128 }),
  *   stepBudget: 128,

@@ -1,3 +1,10 @@
+/**
+ * Combining latches: `and`/`or` and their lazy forms, plus `unwrapOr` and
+ * `unwrapOrElse`.
+ *
+ * @module
+ */
+
 import { match } from "@/src/core/mini/exit.ts";
 import { Active, Inactive, type Latch } from "./core.ts";
 
@@ -12,13 +19,16 @@ import { Active, Inactive, type Latch } from "./core.ts";
  * @returns The other Latch if Active, otherwise this Latch's Inactive state
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, and } from "@sekhmet/enum/latch/mini";
+ *
  * const a: Latch<number, string> = Active(1);
  * const b: Latch<number, string> = Active(2);
- * const result = and(a, b); // Active(2)
+ * assertEquals(and(a, b), Active(2));
  *
  * const c: Latch<number, string> = Inactive("error");
- * const result2 = and(c, b); // Inactive("error")
+ * assertEquals(and(c, b), Inactive("error"));
  * ```
  */
 export function and<A, I, B>(
@@ -42,10 +52,15 @@ export function and<A, I, B>(
  * @returns The computed Latch if Active, otherwise this Latch's Inactive state
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, andThen } from "@sekhmet/enum/latch/mini";
+ *
+ * const double = (n: number): Latch<number, string> =>
+ *   n > 0 ? Active(n * 2) : Inactive("negative");
+ *
  * const latch: Latch<number, string> = Active(42);
- * const result = andThen(latch, (n) => n > 0 ? Active(n * 2) : Inactive("negative"));
- * // Active(84)
+ * assertEquals(andThen(latch, double), Active(84));
  * ```
  */
 export function andThen<A, I, B>(
@@ -69,13 +84,16 @@ export function andThen<A, I, B>(
  * @returns This Latch if Active, otherwise the fallback
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, or } from "@sekhmet/enum/latch/mini";
+ *
  * const a: Latch<number, string> = Inactive("error");
  * const b: Latch<number, string> = Active(42);
- * const result = or(a, b); // Active(42)
+ * assertEquals(or(a, b), Active(42));
  *
  * const c: Latch<number, string> = Active(1);
- * const result2 = or(c, b); // Active(1)
+ * assertEquals(or(c, b), Active(1));
  * ```
  */
 export function or<A, I, J>(
@@ -99,10 +117,12 @@ export function or<A, I, J>(
  * @returns This Latch if Active, otherwise the computed fallback
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, orElse } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Inactive("error");
- * const result = orElse(latch, (s) => Active(s.length));
- * // Active(5)
+ * assertEquals(orElse(latch, (s) => Active(s.length)), Active(5));
  * ```
  */
 export function orElse<A, I, J>(
@@ -125,12 +145,15 @@ export function orElse<A, I, J>(
  * @returns The active value or the default
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, unwrapOr } from "@sekhmet/enum/latch/mini";
+ *
  * const active: Latch<number, string> = Active(42);
- * unwrapOr(active, 0); // 42
+ * assertEquals(unwrapOr(active, 0), 42);
  *
  * const inactive: Latch<number, string> = Inactive("error");
- * unwrapOr(inactive, 0); // 0
+ * assertEquals(unwrapOr(inactive, 0), 0);
  * ```
  */
 export function unwrapOr<A, I>(self: Latch<A, I>, defaultValue: A): A {
@@ -150,9 +173,12 @@ export function unwrapOr<A, I>(self: Latch<A, I>, defaultValue: A): A {
  * @returns The active value or the computed default
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Inactive, type Latch, unwrapOrElse } from "@sekhmet/enum/latch/mini";
+ *
  * const inactive: Latch<number, string> = Inactive("42");
- * unwrapOrElse(inactive, (s) => parseInt(s, 10)); // 42
+ * assertEquals(unwrapOrElse(inactive, (s) => parseInt(s, 10)), 42);
  * ```
  */
 export function unwrapOrElse<A, I>(

@@ -165,8 +165,35 @@ export function join<I, T, E>(
  * @param self - The fiber to cancel
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Async } from "@sekhmet/effect/continuation";
+ * import { Effect } from "@sekhmet/effect/effect/mini";
+ * import { Cancelled, cancel, fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Err } from "@sekhmet/enum/result/mini";
+ *
+ * let cleanedUp = false;
+ * // Suspends on async work that never resolves on its own
+ * const forever = new Effect<void, number, never>(() =>
+ *   Async(() => () => {
+ *     cleanedUp = true;
+ *   })
+ * );
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const fiber = fork(runtime, forever);
+ * const results: unknown[] = [];
+ * join(fiber, (result) => results.push(result));
+ *
  * cancel(fiber);
+ *
+ * assertEquals(cleanedUp, true);
+ * assertEquals(results, [Err(Cancelled())]);
  * ```
  */
 export function cancel<I, T, E>(self: Fiber<I, T, E>): void {

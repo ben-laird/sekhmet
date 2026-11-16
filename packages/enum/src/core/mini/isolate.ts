@@ -1,3 +1,10 @@
+/**
+ * Narrowing an enum to one variant (or several): type guards, assertions,
+ * inspectors and iterators that act only when the enum is of the given kind.
+ *
+ * @module
+ */
+
 import { getStructParams } from "@sekhmet/primordials/struct";
 import type { Enum, Isolate, SomeVariant, Values } from "./core.ts";
 import { union, unionKinds } from "./exit.ts";

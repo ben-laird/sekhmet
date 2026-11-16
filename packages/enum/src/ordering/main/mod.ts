@@ -7,6 +7,25 @@
  *
  * Generated from `../mini/mod.ts` by `deno task gen:main`; edit the mini source, then regenerate.
  *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { compareNumbers, compareStrings } from "@sekhmet/enum/ordering";
+ *
+ * const people = [
+ * 	{ name: "Bea", age: 30 },
+ * 	{ name: "Al", age: 30 },
+ * 	{ name: "Cy", age: 25 },
+ * ];
+ * people.sort((a, b) =>
+ * 	compareNumbers(a.age, b.age)
+ * 		.andThen(compareStrings(a.name, b.name))
+ * 		.toNumber(),
+ * );
+ *
+ * assertEquals(people.map((p) => p.name), ["Cy", "Al", "Bea"]);
+ * ```
+ *
  * @module
  */
 
@@ -29,7 +48,7 @@ export type { OrderingVariants } from "../mini/mod.ts";
  *
  * @example
  * ```ts
- * import { andThen, compareNumbers, type Ordering, toNumber } from "@sekhmet/enum/ordering/mini";
+ * import { compareNumbers, type Ordering } from "@sekhmet/enum/ordering";
  * import { assertEquals } from "@std/assert";
  *
  * interface Point {
@@ -39,9 +58,9 @@ export type { OrderingVariants } from "../mini/mod.ts";
  *
  * // Compare by x, then by y if x is equal
  * const comparePoints = (a: Point, b: Point): Ordering =>
- *   andThen(compareNumbers(a.x, b.x), compareNumbers(a.y, b.y));
+ *   (compareNumbers(a.x, b.x)).andThen(compareNumbers(a.y, b.y));
  *
- * assertEquals(toNumber(comparePoints({ x: 1, y: 2 }, { x: 1, y: 3 })), -1);
+ * assertEquals((comparePoints({ x: 1, y: 2 }, { x: 1, y: 3 })).toNumber(), -1);
  * ```
  */
 export class Ordering extends mini.Ordering {
@@ -70,10 +89,13 @@ export class Ordering extends mini.Ordering {
 	 *
 	 * @returns The reversed Ordering
 	 * @example
-	 * ```ts ignore
-	 * Less().reverse();    // Greater
-	 * Equal().reverse();   // Equal
-	 * Greater().reverse(); // Less
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 *
+	 * assertEquals(Less().reverse(), Greater());
+	 * assertEquals(Equal().reverse(), Equal());
+	 * assertEquals(Greater().reverse(), Less());
 	 * ```
 	 * @see {@link mini.reverse}
 	 */
@@ -91,11 +113,24 @@ export class Ordering extends mini.Ordering {
 	 * @param other - The secondary ordering to use if self is Equal
 	 * @returns self if it's not Equal, otherwise other
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Greater, type Ordering, compareStrings } from "@sekhmet/enum/ordering";
+	 *
+	 * interface Person {
+	 *   firstName: string;
+	 *   lastName: string;
+	 * }
+	 *
 	 * // Compare by last name, then first name
-	 * const cmpLastName = compareStrings(a.lastName, b.lastName);
-	 * const cmpFirstName = compareStrings(a.firstName, b.firstName);
-	 * const result = cmpLastName.andThen(cmpFirstName);
+	 * const comparePeople = (a: Person, b: Person): Ordering =>
+	 *   (compareStrings(a.lastName, b.lastName)).andThen(
+	 *     compareStrings(a.firstName, b.firstName),
+	 *   );
+	 *
+	 * const ada = { firstName: "Ada", lastName: "Lovelace" };
+	 * const byron = { firstName: "Byron", lastName: "Lovelace" };
+	 * assertEquals(comparePeople(byron, ada), Greater());
 	 * ```
 	 * @see {@link mini.andThen}
 	 */
@@ -112,11 +147,19 @@ export class Ordering extends mini.Ordering {
 	 * @param other - Function returning the secondary ordering, called only if self is Equal
 	 * @returns self if it's not Equal, otherwise the result of calling other
 	 * @example
-	 * ```ts ignore
-	 * // Only compute expensive comparison if primary keys are equal
-	 * const result = (compareStrings(a.name, b.name)).andThenWith(
-	 *   () => expensiveComparison(a, b)
-	 * );
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Less, compareNumbers, compareStrings } from "@sekhmet/enum/ordering";
+	 *
+	 * let calls = 0;
+	 * const byAge = () => {
+	 *   calls++;
+	 *   return compareNumbers(30, 25);
+	 * };
+	 *
+	 * // Only compute the secondary comparison if the primary keys are equal
+	 * assertEquals((compareStrings("Alice", "Bob")).andThenWith(byAge), Less());
+	 * assertEquals(calls, 0);
 	 * ```
 	 * @see {@link mini.andThenWith}
 	 */
@@ -136,9 +179,13 @@ export class Ordering extends mini.Ordering {
 	 *
 	 * @returns -1 for Less, 0 for Equal, 1 for Greater
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { compareStrings } from "@sekhmet/enum/ordering";
+	 *
 	 * const items = [{ name: "b" }, { name: "a" }, { name: "c" }];
 	 * items.sort((a, b) => (compareStrings(a.name, b.name)).toNumber());
+	 * assertEquals(items, [{ name: "a" }, { name: "b" }, { name: "c" }]);
 	 * ```
 	 * @see {@link mini.toNumber}
 	 */
@@ -151,10 +198,13 @@ export class Ordering extends mini.Ordering {
 	 *
 	 * @returns true if self is Less, false otherwise
 	 * @example
-	 * ```ts ignore
-	 * Less().isLt();    // true
-	 * Equal().isLt();   // false
-	 * Greater().isLt(); // false
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 *
+	 * assertEquals(Less().isLt(), true);
+	 * assertEquals(Equal().isLt(), false);
+	 * assertEquals(Greater().isLt(), false);
 	 * ```
 	 * @see {@link mini.isLt}
 	 */
@@ -167,10 +217,13 @@ export class Ordering extends mini.Ordering {
 	 *
 	 * @returns true if self is Greater, false otherwise
 	 * @example
-	 * ```ts ignore
-	 * Less().isGt();    // false
-	 * Equal().isGt();   // false
-	 * Greater().isGt(); // true
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 *
+	 * assertEquals(Less().isGt(), false);
+	 * assertEquals(Equal().isGt(), false);
+	 * assertEquals(Greater().isGt(), true);
 	 * ```
 	 * @see {@link mini.isGt}
 	 */
@@ -183,10 +236,13 @@ export class Ordering extends mini.Ordering {
 	 *
 	 * @returns true if self is Equal, false otherwise
 	 * @example
-	 * ```ts ignore
-	 * Less().isEq();    // false
-	 * Equal().isEq();   // true
-	 * Greater().isEq(); // false
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 *
+	 * assertEquals(Less().isEq(), false);
+	 * assertEquals(Equal().isEq(), true);
+	 * assertEquals(Greater().isEq(), false);
 	 * ```
 	 * @see {@link mini.isEq}
 	 */
@@ -199,10 +255,13 @@ export class Ordering extends mini.Ordering {
 	 *
 	 * @returns true if self is Less or Greater, false if Equal
 	 * @example
-	 * ```ts ignore
-	 * Less().isNe();    // true
-	 * Equal().isNe();   // false
-	 * Greater().isNe(); // true
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 *
+	 * assertEquals(Less().isNe(), true);
+	 * assertEquals(Equal().isNe(), false);
+	 * assertEquals(Greater().isNe(), true);
 	 * ```
 	 * @see {@link mini.isNe}
 	 */
@@ -215,10 +274,13 @@ export class Ordering extends mini.Ordering {
 	 *
 	 * @returns true if self is Less or Equal, false if Greater
 	 * @example
-	 * ```ts ignore
-	 * Less().isLe();    // true
-	 * Equal().isLe();   // true
-	 * Greater().isLe(); // false
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 *
+	 * assertEquals(Less().isLe(), true);
+	 * assertEquals(Equal().isLe(), true);
+	 * assertEquals(Greater().isLe(), false);
 	 * ```
 	 * @see {@link mini.isLe}
 	 */
@@ -231,10 +293,13 @@ export class Ordering extends mini.Ordering {
 	 *
 	 * @returns true if self is Greater or Equal, false if Less
 	 * @example
-	 * ```ts ignore
-	 * Less().isGe();    // false
-	 * Equal().isGe();   // true
-	 * Greater().isGe(); // true
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 *
+	 * assertEquals(Less().isGe(), false);
+	 * assertEquals(Equal().isGe(), true);
+	 * assertEquals(Greater().isGe(), true);
 	 * ```
 	 * @see {@link mini.isGe}
 	 */
@@ -250,10 +315,13 @@ export class Ordering extends mini.Ordering {
  * @param rhs - The right-hand side number
  * @returns Less if lhs < rhs, Greater if lhs > rhs, Equal if lhs === rhs
  * @example
- * ```ts ignore
- * compareNumbers(1, 2); // Less
- * compareNumbers(2, 1); // Greater
- * compareNumbers(1, 1); // Equal
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Equal, Greater, Less, compareNumbers } from "@sekhmet/enum/ordering";
+ *
+ * assertEquals(compareNumbers(1, 2), Less());
+ * assertEquals(compareNumbers(2, 1), Greater());
+ * assertEquals(compareNumbers(1, 1), Equal());
  * ```
  */
 export function compareNumbers(lhs: number, rhs: number): Ordering {
@@ -269,10 +337,13 @@ export function compareNumbers(lhs: number, rhs: number): Ordering {
  * @param rhs - The right-hand side string
  * @returns Less if lhs < rhs, Greater if lhs > rhs, Equal if lhs === rhs
  * @example
- * ```ts ignore
- * compareStrings("apple", "banana"); // Less
- * compareStrings("zebra", "apple");  // Greater
- * compareStrings("hello", "hello");  // Equal
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Equal, Greater, Less, compareStrings } from "@sekhmet/enum/ordering";
+ *
+ * assertEquals(compareStrings("apple", "banana"), Less());
+ * assertEquals(compareStrings("zebra", "apple"), Greater());
+ * assertEquals(compareStrings("hello", "hello"), Equal());
  * ```
  */
 export function compareStrings(lhs: string, rhs: string): Ordering {
@@ -290,13 +361,15 @@ export function compareStrings(lhs: string, rhs: string): Ordering {
  * @param key - Function to extract the comparable key from each value
  * @returns The ordering of the extracted keys
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Greater, compareBy } from "@sekhmet/enum/ordering";
+ *
  * interface Person { name: string; age: number }
  * const alice: Person = { name: "Alice", age: 30 };
  * const bob: Person = { name: "Bob", age: 25 };
  *
- * compareBy(alice, bob, (p) => p.age); // Greater (30 > 25)
- * compareBy(alice, bob, (p) => p.name); // Less ("Alice" < "Bob")
+ * assertEquals(compareBy(alice, bob, (p) => p.age), Greater()); // 30 > 25
  * ```
  */
 export function compareBy<T>(
@@ -315,12 +388,15 @@ export function compareBy<T>(
  * @param key - Function to extract the string key from each value
  * @returns The ordering of the extracted keys
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Less, compareByString } from "@sekhmet/enum/ordering";
+ *
  * interface Person { name: string; age: number }
  * const alice: Person = { name: "Alice", age: 30 };
  * const bob: Person = { name: "Bob", age: 25 };
  *
- * compareByString(alice, bob, (p) => p.name); // Less ("Alice" < "Bob")
+ * assertEquals(compareByString(alice, bob, (p) => p.name), Less()); // "Alice" < "Bob"
  * ```
  */
 export function compareByString<T>(
@@ -336,8 +412,10 @@ export function compareByString<T>(
  *
  * @returns An Ordering in the Less state
  * @example
- * ```ts ignore
- * const ord = Less(); // Ordering
+ * ```ts
+ * import { Less, type Ordering } from "@sekhmet/enum/ordering";
+ *
+ * const ord: Ordering = Less();
  * ```
  */
 export function Less(): Ordering {
@@ -349,8 +427,10 @@ export function Less(): Ordering {
  *
  * @returns An Ordering in the Equal state
  * @example
- * ```ts ignore
- * const ord = Equal(); // Ordering
+ * ```ts
+ * import { Equal, type Ordering } from "@sekhmet/enum/ordering";
+ *
+ * const ord: Ordering = Equal();
  * ```
  */
 export function Equal(): Ordering {
@@ -362,8 +442,10 @@ export function Equal(): Ordering {
  *
  * @returns An Ordering in the Greater state
  * @example
- * ```ts ignore
- * const ord = Greater(); // Ordering
+ * ```ts
+ * import { Greater, type Ordering } from "@sekhmet/enum/ordering";
+ *
+ * const ord: Ordering = Greater();
  * ```
  */
 export function Greater(): Ordering {

@@ -1,5 +1,12 @@
 {
-	"exclude": [".claude/worktrees/"],
+	"exclude": [
+		".claude/worktrees/",
+		"scripts/docs-site/content/",
+		"scripts/docs-site/.vitepress/cache/",
+		"scripts/docs-site/.vitepress/dist/"
+	],
+
+	"nodeModulesDir": "auto",
 
 	"workspace": ["./packages/*", "./scripts/*", "./scripts/add/templates/*"],
 
@@ -19,6 +26,18 @@
 		"dv": {
 			"description": "Run the pinned dv release CLI (scripts/dv), e.g. `deno task dv status`",
 			"command": "deno run --frozen --quiet --no-prompt --allow-all @sekhmet/dv"
+		},
+		"docs:assemble": {
+			"description": "Assemble the docs site's pages from every README and package docs/ folder",
+			"command": "deno run --no-prompt --allow-read --allow-write @sekhmet/docs-site"
+		},
+		"docs:dev": {
+			"description": "Serve the docs site locally with live reload",
+			"command": "deno task docs:assemble && cd scripts/docs-site && deno run --no-prompt -A npm:vitepress@1.6.4 dev"
+		},
+		"docs:build": {
+			"description": "Build the static docs site into scripts/docs-site/.vitepress/dist",
+			"command": "deno task docs:assemble && cd scripts/docs-site && deno run --no-prompt -A npm:vitepress@1.6.4 build"
 		},
 		"add": {
 			"description": "Add a workspace to the repository",

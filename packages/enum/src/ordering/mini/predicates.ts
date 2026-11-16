@@ -1,3 +1,9 @@
+/**
+ * Testing an ordering: `isLt`, `isGt`, `isEq`, `isNe`, `isLe` and `isGe`.
+ *
+ * @module
+ */
+
 import { isolate } from "@/src/core/mini/isolate.ts";
 import type { Ordering } from "./core.ts";
 
@@ -8,10 +14,13 @@ import type { Ordering } from "./core.ts";
  * @returns true if self is Less, false otherwise
  *
  * @example
- * ```ts ignore
- * isLt(Less());    // true
- * isLt(Equal());   // false
- * isLt(Greater()); // false
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Equal, Greater, Less, isLt } from "@sekhmet/enum/ordering/mini";
+ *
+ * assertEquals(isLt(Less()), true);
+ * assertEquals(isLt(Equal()), false);
+ * assertEquals(isLt(Greater()), false);
  * ```
  */
 export function isLt(self: Ordering): boolean {
@@ -25,10 +34,13 @@ export function isLt(self: Ordering): boolean {
  * @returns true if self is Greater, false otherwise
  *
  * @example
- * ```ts ignore
- * isGt(Less());    // false
- * isGt(Equal());   // false
- * isGt(Greater()); // true
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Equal, Greater, Less, isGt } from "@sekhmet/enum/ordering/mini";
+ *
+ * assertEquals(isGt(Less()), false);
+ * assertEquals(isGt(Equal()), false);
+ * assertEquals(isGt(Greater()), true);
  * ```
  */
 export function isGt(self: Ordering): boolean {
@@ -42,10 +54,13 @@ export function isGt(self: Ordering): boolean {
  * @returns true if self is Equal, false otherwise
  *
  * @example
- * ```ts ignore
- * isEq(Less());    // false
- * isEq(Equal());   // true
- * isEq(Greater()); // false
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Equal, Greater, Less, isEq } from "@sekhmet/enum/ordering/mini";
+ *
+ * assertEquals(isEq(Less()), false);
+ * assertEquals(isEq(Equal()), true);
+ * assertEquals(isEq(Greater()), false);
  * ```
  */
 export function isEq(self: Ordering): boolean {
@@ -59,10 +74,13 @@ export function isEq(self: Ordering): boolean {
  * @returns true if self is Less or Greater, false if Equal
  *
  * @example
- * ```ts ignore
- * isNe(Less());    // true
- * isNe(Equal());   // false
- * isNe(Greater()); // true
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Equal, Greater, Less, isNe } from "@sekhmet/enum/ordering/mini";
+ *
+ * assertEquals(isNe(Less()), true);
+ * assertEquals(isNe(Equal()), false);
+ * assertEquals(isNe(Greater()), true);
  * ```
  */
 export function isNe(self: Ordering): boolean {
@@ -76,10 +94,13 @@ export function isNe(self: Ordering): boolean {
  * @returns true if self is Less or Equal, false if Greater
  *
  * @example
- * ```ts ignore
- * isLe(Less());    // true
- * isLe(Equal());   // true
- * isLe(Greater()); // false
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Equal, Greater, Less, isLe } from "@sekhmet/enum/ordering/mini";
+ *
+ * assertEquals(isLe(Less()), true);
+ * assertEquals(isLe(Equal()), true);
+ * assertEquals(isLe(Greater()), false);
  * ```
  */
 export function isLe(self: Ordering): boolean {
@@ -93,10 +114,13 @@ export function isLe(self: Ordering): boolean {
  * @returns true if self is Greater or Equal, false if Less
  *
  * @example
- * ```ts ignore
- * isGe(Less());    // false
- * isGe(Equal());   // true
- * isGe(Greater()); // true
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Equal, Greater, Less, isGe } from "@sekhmet/enum/ordering/mini";
+ *
+ * assertEquals(isGe(Less()), false);
+ * assertEquals(isGe(Equal()), true);
+ * assertEquals(isGe(Greater()), true);
  * ```
  */
 export function isGe(self: Ordering): boolean {

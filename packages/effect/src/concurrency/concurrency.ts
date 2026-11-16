@@ -31,8 +31,23 @@ import type { FiberError } from "../fiber/mini/fiber-error.ts";
  * @returns A new effect that succeeds with a tuple of both results
  *
  * @example
- * ```ts ignore
- * const both = zip(fetchUser, fetchPosts);
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Success, zip } from "@sekhmet/effect/effect/mini";
+ * import { fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const both = zip(Success("Ada"), Success(["first post"]));
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const results: unknown[] = [];
+ * join(fork(runtime, both), (result) => results.push(result));
+ * assertEquals(results, [Ok(["Ada", ["first post"]])]);
  * ```
  */
 export function zip<I, T, E, U>(
@@ -120,8 +135,25 @@ export function zip<I, T, E, U>(
  * @returns An effect that resolves with the fiber's result
  *
  * @example
- * ```ts ignore
- * const awaited = joinEffect(fiber);
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Success, map } from "@sekhmet/effect/effect/mini";
+ * import { fork, join, joinEffect } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const fiber = fork(runtime, Success(4));
+ * // An effect that waits for the fiber and continues with its value
+ * const awaited = map(joinEffect(fiber), (n) => n * 10);
+ *
+ * const results: unknown[] = [];
+ * join(fork(runtime, awaited), (result) => results.push(result));
+ * assertEquals(results, [Ok(40)]);
  * ```
  */
 export function joinEffect<I, T, E>(

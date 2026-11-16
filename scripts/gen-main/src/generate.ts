@@ -35,7 +35,7 @@ import type {
 	TypeNode,
 	TypeParam,
 } from "./doc.ts";
-import { toMethodForm } from "./example.ts";
+import { toMainImports, toMethodForm } from "./example.ts";
 import {
 	forwardParam,
 	type NamedRef,
@@ -96,6 +96,10 @@ interface Member {
 interface Module {
 	readonly feature: Feature;
 	readonly miniNames: ReadonlySet<string>;
+	/** Mini functions that are methods of the main class. */
+	readonly methodNames: ReadonlySet<string>;
+	/** Mini exports left out of main. */
+	readonly omitted: ReadonlySet<string>;
 	readonly wrapNames: ReadonlySet<string>;
 	/** Each wrap target's mapper per type argument (for nested conversion). */
 	readonly mappers: ReadonlyMap<string, readonly (string | undefined)[]>;
@@ -304,26 +308,59 @@ function fallbackDoc(name: string): JsDoc {
 	return { doc: `Method form of {@linkcode mini.${name}}.`, tags: [] };
 }
 
+/**
+ * Rewrites a mini JSDoc's examples for main: calls of every function that
+ * became a method move to method form, and imports from mini move to the
+ * main entrypoint (which no longer exports those functions).
+ */
+function mainExamples({
+	jsDoc,
+	module,
+}: {
+	jsDoc: JsDoc;
+	module: Module;
+}): JsDoc {
+	const tags = jsDoc.tags.map((tag): JsDocTag => {
+		if (tag.kind !== "example") return tag;
+
+		let methodForm = tag.doc;
+		for (const name of module.methodNames) {
+			methodForm = toMethodForm({ code: methodForm, name }) ?? methodForm;
+		}
+		const doc = toMainImports({
+			code: methodForm,
+			entrypoint: module.feature.entrypoint,
+			methods: module.methodNames,
+			omitted: module.omitted,
+		});
+
+		return { ...tag, doc };
+	});
+
+	return { ...jsDoc, tags };
+}
+
 /** Rewrites a mini function's JSDoc for its method. */
 function methodDoc({
 	name,
 	jsDoc,
 	dropTemplates,
+	module,
 }: {
 	name: string;
 	jsDoc: JsDoc | undefined;
 	dropTemplates: ReadonlySet<string>;
+	module: Module;
 }): JsDoc {
-	const source = jsDoc ?? fallbackDoc(name);
-	const tags = source.tags.flatMap((tag): JsDocTag[] => {
-		if (tag.kind === "param" && tag.name === "self") return [];
-		if (tag.kind === "template" && dropTemplates.has(tag.name)) return [];
-		if (tag.kind === "example") {
-			const rewritten = toMethodForm({ code: tag.doc, name });
-			return [{ ...tag, doc: rewritten ?? tag.doc }];
-		}
-		return [tag];
+	const source = mainExamples({
+		jsDoc: jsDoc ?? fallbackDoc(name),
+		module,
 	});
+	const tags = source.tags.filter(
+		(tag) =>
+			!(tag.kind === "param" && tag.name === "self") &&
+			!(tag.kind === "template" && dropTemplates.has(tag.name)),
+	);
 
 	return {
 		doc: source.doc,
@@ -482,7 +519,7 @@ function methodHead({
 		return ok({
 			head: `${generatorStar(conversion)}${name}${typeParams}(${paramList}): ${text}`,
 			body: convertedBody({ call, conversion, isVoid, indent: "\t\t" }),
-			doc: renderMethodDoc({ name, signature, rename, context }),
+			doc: renderMethodDoc({ module, name, signature, rename, context }),
 			conversion,
 			isPredicate: false,
 		});
@@ -498,18 +535,20 @@ function methodHead({
 	return ok({
 		head: `${name}${typeParams}(${paramList}): ${asserts}${subject}${target}`,
 		body: finalReturn.asserts ? `${call};` : `return ${call};`,
-		doc: renderMethodDoc({ name, signature, rename, context }),
+		doc: renderMethodDoc({ module, name, signature, rename, context }),
 		conversion: { kind: "none" },
 		isPredicate: true,
 	});
 }
 
 function renderMethodDoc({
+	module,
 	name,
 	signature,
 	rename,
 	context,
 }: {
+	module: Module;
 	name: string;
 	signature: FunctionDeclaration;
 	rename: ReadonlyMap<string, string>;
@@ -520,6 +559,7 @@ function renderMethodDoc({
 			name,
 			jsDoc: signature.jsDoc,
 			dropTemplates: new Set(rename.keys()),
+			module,
 		}),
 		context,
 		indent: "\t",
@@ -661,10 +701,13 @@ function renderWrapper({
 			.map((param) => renderParam({ param, context }))
 			.join(", ");
 		const doc = renderJsDoc({
-			jsDoc: signature.jsDoc ?? {
-				doc: `Main form of {@linkcode mini.${symbol.name}}.`,
-				tags: [],
-			},
+			jsDoc: mainExamples({
+				jsDoc: signature.jsDoc ?? {
+					doc: `Main form of {@linkcode mini.${symbol.name}}.`,
+					tags: [],
+				},
+				module,
+			}),
 			context,
 		});
 
@@ -764,7 +807,10 @@ function renderClass({
 			]
 				.filter((part) => part !== "")
 				.join("\n\n"),
-			tags: declaration.jsDoc?.tags ?? [],
+			tags: mainExamples({
+				jsDoc: declaration.jsDoc ?? { doc: "", tags: [] },
+				module,
+			}).tags,
 		},
 		context,
 	});
@@ -945,6 +991,8 @@ export function generateMain(input: GenerateInput): Generated<string> {
 	const module: Module = {
 		feature,
 		miniNames,
+		methodNames: new Set(methodSymbols.map((symbol) => symbol.name)),
+		omitted,
 		wrapNames,
 		mappers,
 		sources,

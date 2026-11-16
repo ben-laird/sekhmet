@@ -1,3 +1,11 @@
+/**
+ * The {@linkcode Enum} class and the type-level vocabulary of variants:
+ * {@linkcode SomeVariant}, {@linkcode Split}, {@linkcode Isolate} and
+ * {@linkcode Eliminate}.
+ *
+ * @module
+ */
+
 import { Struct } from "@sekhmet/primordials/struct";
 
 /**

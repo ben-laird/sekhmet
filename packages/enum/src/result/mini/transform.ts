@@ -1,3 +1,10 @@
+/**
+ * Transforming a result: `map`, `mapErr`, `mapOr`, `mapOrElse` and the
+ * `inspect` functions.
+ *
+ * @module
+ */
+
 import { match } from "@/src/core/mini/exit.ts";
 import { inspectIsolated } from "@/src/core/mini/isolate.ts";
 import { Err, Ok, type Result } from "./core.ts";
@@ -16,12 +23,14 @@ import { Err, Ok, type Result } from "./core.ts";
  * @returns A new Result with the mapped value if Ok, or the original error if Err
  *
  * @example
- * ```ts ignore
- * const result = Ok(5);
- * const doubled = map(result, (n) => n * 2); // Ok(10)
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, map } from "@sekhmet/enum/result/mini";
  *
- * const error = Err("failed");
- * const mapped = map(error, (n) => n * 2); // Err("failed")
+ * assertEquals(map(Ok(5), (n) => n * 2), Ok(10));
+ *
+ * const error: Result<number, string> = Err("failed");
+ * assertEquals(map(error, (n) => n * 2), Err("failed"));
  * ```
  */
 export function map<T, E, U>(
@@ -49,12 +58,14 @@ export function map<T, E, U>(
  * @returns The mapped success value if Ok, or the default value if Err
  *
  * @example
- * ```ts ignore
- * const result = Ok(5);
- * const doubled = mapOr(result, 0, (n) => n * 2); // 10
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, mapOr } from "@sekhmet/enum/result/mini";
  *
- * const error = Err("failed");
- * const fallback = mapOr(error, 0, (n) => n * 2); // 0
+ * assertEquals(mapOr(Ok(5), 0, (n) => n * 2), 10);
+ *
+ * const error: Result<number, string> = Err("failed");
+ * assertEquals(mapOr(error, 0, (n) => n * 2), 0);
  * ```
  */
 export function mapOr<T, E, U>(
@@ -83,20 +94,15 @@ export function mapOr<T, E, U>(
  * @returns The result of applying the appropriate mapping function
  *
  * @example
- * ```ts ignore
- * const result = Ok(5);
- * const message = mapOrElse(
- *   result,
- *   (n) => `Success: ${n}`,
- *   (e) => `Error: ${e}`
- * ); // "Success: 5"
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, mapOrElse } from "@sekhmet/enum/result/mini";
  *
- * const error = Err("failed");
- * const errorMsg = mapOrElse(
- *   error,
- *   (n) => `Success: ${n}`,
- *   (e) => `Error: ${e}`
- * ); // "Error: failed"
+ * const describe = (result: Result<number, string>): string =>
+ *   mapOrElse(result, (n) => `Success: ${n}`, (e) => `Error: ${e}`);
+ *
+ * assertEquals(describe(Ok(5)), "Success: 5");
+ * assertEquals(describe(Err("failed")), "Error: failed");
  * ```
  */
 export function mapOrElse<T, E, U>(
@@ -124,12 +130,15 @@ export function mapOrElse<T, E, U>(
  * @returns A new Result with the original value if Ok, or the mapped error if Err
  *
  * @example
- * ```ts ignore
- * const error = Err("failed");
- * const wrapped = mapErr(error, (e) => new Error(e)); // Err(Error("failed"))
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, mapErr } from "@sekhmet/enum/result/mini";
  *
- * const success = Ok(42);
- * const unchanged = mapErr(success, (e) => new Error(e)); // Ok(42)
+ * const error: Result<number, string> = Err("failed");
+ * assertEquals(mapErr(error, (e) => e.toUpperCase()), Err("FAILED"));
+ *
+ * const success: Result<number, string> = Ok(42);
+ * assertEquals(mapErr(success, (e) => e.toUpperCase()), Ok(42));
  * ```
  */
 export function mapErr<T, E, F>(
@@ -156,12 +165,18 @@ export function mapErr<T, E, F>(
  * @returns void
  *
  * @example
- * ```ts ignore
- * const result = Ok(42);
- * inspect(result, (value) => console.log("Debug:", value)); // Logs "Debug: 42"
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, inspect } from "@sekhmet/enum/result/mini";
  *
- * const error = Err("failed");
- * inspect(error, (value) => console.log("Debug:", value)); // Does nothing
+ * const seen: number[] = [];
+ *
+ * inspect(Ok(42), (value) => seen.push(value)); // records 42
+ *
+ * const error: Result<number, string> = Err("failed");
+ * inspect(error, (value) => seen.push(value)); // does nothing
+ *
+ * assertEquals(seen, [42]);
  * ```
  */
 export function inspect<T, E>(
@@ -185,12 +200,18 @@ export function inspect<T, E>(
  * @returns void
  *
  * @example
- * ```ts ignore
- * const error = Err("failed");
- * inspectErr(error, (err) => console.error("Error:", err)); // Logs "Error: failed"
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result, inspectErr } from "@sekhmet/enum/result/mini";
  *
- * const success = Ok(42);
- * inspectErr(success, (err) => console.error("Error:", err)); // Does nothing
+ * const seen: string[] = [];
+ *
+ * inspectErr(Err("failed"), (err) => seen.push(err)); // records "failed"
+ *
+ * const success: Result<number, string> = Ok(42);
+ * inspectErr(success, (err) => seen.push(err)); // does nothing
+ *
+ * assertEquals(seen, ["failed"]);
  * ```
  */
 export function inspectErr<T, E>(

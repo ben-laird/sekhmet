@@ -1,4 +1,11 @@
 /**
+ * Expression helpers: {@linkcode block} runs a function and returns its
+ * result, and {@linkcode define} returns its argument, typed.
+ *
+ * @module
+ */
+
+/**
  * Executes a function and returns its result.
  *
  * This utility provides a way to create expression-oriented blocks in TypeScript,

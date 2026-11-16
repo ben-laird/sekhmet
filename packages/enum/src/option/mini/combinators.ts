@@ -1,3 +1,10 @@
+/**
+ * Combining options: `and`/`or` and their lazy forms, `filter`, `zip`,
+ * `flatten`, `transpose` and iteration.
+ *
+ * @module
+ */
+
 import { match, union } from "@/src/core/mini/exit.ts";
 import { isolate } from "@/src/core/mini/isolate.ts";
 import { Err, Ok, type Result } from "@/src/result/mini/core.ts";
@@ -14,14 +21,12 @@ import { unwrapOr } from "./unwrap.ts";
  * @yields The contained value if the Option is Some
  *
  * @example
- * ```ts ignore
- * for (const value of iter(Some(42))) {
- *   console.log(value); // 42
- * }
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, iter } from "@sekhmet/enum/option/mini";
  *
- * for (const value of iter(None())) {
- *   console.log(value); // never executed
- * }
+ * assertEquals(Array.from(iter(Some(42))), [42]);
+ * assertEquals(Array.from(iter(None())), []);
  * ```
  */
 export function* iter<T>(self: Option<T>): Generator<T, void, undefined> {
@@ -43,11 +48,14 @@ export function* iter<T>(self: Option<T>): Generator<T, void, undefined> {
  * @returns optionB if self is Some, otherwise None
  *
  * @example
- * ```ts ignore
- * and(Some(2), Some("foo")); // Some("foo")
- * and(None(), Some("foo"));  // None
- * and(Some(2), None());      // None
- * and(None(), None());       // None
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, and } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(and(Some(2), Some("foo")), Some("foo"));
+ * assertEquals(and(None(), Some("foo")), None());
+ * assertEquals(and(Some(2), None()), None());
+ * assertEquals(and(None(), None()), None());
  * ```
  */
 export function and<T, U>(self: Option<T>, optionB: Option<U>): Option<U> {
@@ -68,13 +76,16 @@ export function and<T, U>(self: Option<T>, optionB: Option<U>): Option<U> {
  * @returns The result of calling optionB if self is Some, otherwise None
  *
  * @example
- * ```ts ignore
- * const divide = (x: number) => (y: number): Option<number> =>
- *   y === 0 ? None() : Some(x / y);
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, type Option, Some, andThen } from "@sekhmet/enum/option/mini";
  *
- * andThen(Some(4), divide(2)); // Some(2)
- * andThen(Some(0), divide(2)); // None (division by zero)
- * andThen(None(), divide(2));  // None
+ * const divideBy = (divisor: number) => (x: number): Option<number> =>
+ *   divisor === 0 ? None() : Some(x / divisor);
+ *
+ * assertEquals(andThen(Some(4), divideBy(2)), Some(2));
+ * assertEquals(andThen(Some(4), divideBy(0)), None()); // division by zero
+ * assertEquals(andThen(None<number>(), divideBy(2)), None());
  * ```
  */
 export function andThen<T, U>(
@@ -98,12 +109,15 @@ export function andThen<T, U>(
  * @returns Some(value) if the predicate passes, otherwise None
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, filter } from "@sekhmet/enum/option/mini";
+ *
  * const isEven = (n: number) => n % 2 === 0;
  *
- * filter(Some(4), isEven);  // Some(4)
- * filter(Some(3), isEven);  // None
- * filter(None(), isEven);   // None
+ * assertEquals(filter(Some(4), isEven), Some(4));
+ * assertEquals(filter(Some(3), isEven), None());
+ * assertEquals(filter(None<number>(), isEven), None());
  * ```
  */
 export function filter<T, U extends T>(
@@ -133,11 +147,14 @@ export function filter<T, U extends T>(
  * @returns self if it is Some, otherwise optionB
  *
  * @example
- * ```ts ignore
- * or(Some(2), Some(100)); // Some(2)
- * or(None(), Some(100));  // Some(100)
- * or(Some(2), None());    // Some(2)
- * or(None(), None());     // None
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, or } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(or(Some(2), Some(100)), Some(2));
+ * assertEquals(or(None<number>(), Some(100)), Some(100));
+ * assertEquals(or(Some(2), None()), Some(2));
+ * assertEquals(or(None(), None()), None());
  * ```
  */
 export function or<T>(self: Option<T>, optionB: Option<T>): Option<T> {
@@ -157,11 +174,19 @@ export function or<T>(self: Option<T>, optionB: Option<T>): Option<T> {
  * @returns self if it is Some, otherwise the result of calling optionB
  *
  * @example
- * ```ts ignore
- * const expensive = () => Some(expensiveComputation());
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, orElse } from "@sekhmet/enum/option/mini";
  *
- * orElse(Some(2), expensive); // Some(2) - expensive() not called
- * orElse(None(), expensive);  // Some(result) - expensive() called
+ * let calls = 0;
+ * const fallback = () => {
+ *   calls++;
+ *   return Some(100);
+ * };
+ *
+ * assertEquals(orElse(Some(2), fallback), Some(2)); // fallback not called
+ * assertEquals(orElse(None<number>(), fallback), Some(100)); // fallback called
+ * assertEquals(calls, 1);
  * ```
  */
 export function orElse<T>(
@@ -184,11 +209,14 @@ export function orElse<T>(
  * @returns Some containing a tuple of both values if both are Some, otherwise None
  *
  * @example
- * ```ts ignore
- * zip(Some(1), Some("hi")); // Some([1, "hi"])
- * zip(Some(1), None());     // None
- * zip(None(), Some("hi"));  // None
- * zip(None(), None());      // None
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, zip } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(zip(Some(1), Some("hi")), Some([1, "hi"]));
+ * assertEquals(zip(Some(1), None()), None());
+ * assertEquals(zip(None(), Some("hi")), None());
+ * assertEquals(zip(None(), None()), None());
  * ```
  */
 export function zip<T, U>(
@@ -218,12 +246,15 @@ export function zip<T, U>(
  * @returns Some containing the result of mapping if both Options are Some, otherwise None
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, zipWith } from "@sekhmet/enum/option/mini";
+ *
  * const add = (a: number, b: number) => a + b;
  *
- * zipWith(Some(1), Some(2), add); // Some(3)
- * zipWith(Some(1), None(), add);  // None
- * zipWith(None(), Some(2), add);  // None
+ * assertEquals(zipWith(Some(1), Some(2), add), Some(3));
+ * assertEquals(zipWith(Some(1), None<number>(), add), None());
+ * assertEquals(zipWith(None<number>(), Some(2), add), None());
  * ```
  */
 export function zipWith<T, U, V>(
@@ -245,9 +276,12 @@ export function zipWith<T, U, V>(
  * @returns The contained value if Some, otherwise the sentinel value
  *
  * @example
- * ```ts ignore
- * coalesce(Some(42), "default"); // 42
- * coalesce(None(), "default");   // "default"
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, coalesce } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(coalesce(Some(42), "default"), 42);
+ * assertEquals(coalesce(None(), "default"), "default");
  * ```
  */
 export function coalesce<T, U>(self: Option<T>, sentinel: U): T | U {
@@ -267,9 +301,12 @@ export function coalesce<T, U>(self: Option<T>, sentinel: U): T | U {
  * @returns A tuple of two Options, one for each value
  *
  * @example
- * ```ts ignore
- * unzip(Some([1, "hi"])); // [Some(1), Some("hi")]
- * unzip(None());          // [None(), None()]
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, unzip } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(unzip(Some<[number, string]>([1, "hi"])), [Some(1), Some("hi")]);
+ * assertEquals(unzip(None()), [None(), None()]);
  * ```
  */
 export function unzip<T, U>(
@@ -291,10 +328,13 @@ export function unzip<T, U>(
  * @returns A Result containing an Option
  *
  * @example
- * ```ts ignore
- * transpose(Some(Ok(5)));      // Ok(Some(5))
+ * ```ts
+ * import { None, Some, transpose } from "@sekhmet/enum/option/mini";
+ * import { Err, Ok } from "@sekhmet/enum/result/mini";
+ *
+ * transpose(Some(Ok(5)));       // Ok(Some(5))
  * transpose(Some(Err("fail"))); // Err("fail")
- * transpose(None());           // Ok(None())
+ * transpose(None());            // Ok(None())
  * ```
  */
 export function transpose<T, E>(
@@ -318,10 +358,13 @@ export function transpose<T, E>(
  * @returns The flattened Option
  *
  * @example
- * ```ts ignore
- * flatten(Some(Some(6))); // Some(6)
- * flatten(Some(None()));  // None
- * flatten(None());        // None
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, flatten } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(flatten(Some(Some(6))), Some(6));
+ * assertEquals(flatten(Some(None())), None());
+ * assertEquals(flatten(None()), None());
  * ```
  */
 export function flatten<T>(opt: Option<Option<T>>): Option<T> {

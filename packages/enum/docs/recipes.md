@@ -1,0 +1,223 @@
+# Recipes
+
+Short, runnable patterns. Each one uses the main API; every method has a mini
+function of the same name in the feature's `/mini` entrypoint.
+
+## Wrap a nullable value
+
+```ts
+import { assertEquals } from "@std/assert";
+import { None, type Option, Some } from "@sekhmet/enum/option";
+
+function fromNullable<T>(value: T | null | undefined): Option<T> {
+	return value === null || value === undefined ? None() : Some(value);
+}
+
+const env: Record<string, string | undefined> = { PORT: "8080" };
+
+assertEquals(fromNullable(env.PORT).map(Number).unwrapOr(80), 8080);
+assertEquals(fromNullable(env.HOST).unwrapOr("localhost"), "localhost");
+```
+
+## Wrap a function that throws
+
+Turn a throwing call into a `Result` once, at the edge, so the rest of the code
+handles failure as a value.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Err, Ok, type Result } from "@sekhmet/enum/result";
+
+function parseJson(text: string): Result<unknown, string> {
+	try {
+		return Ok(JSON.parse(text));
+	} catch (error: unknown) {
+		return Err(error instanceof Error ? error.message : String(error));
+	}
+}
+
+assertEquals(parseJson('{"a":1}').isOk(), true);
+assertEquals(parseJson("{").isErr(), true);
+```
+
+## Validate in steps
+
+`andThen` runs the next step only on success, so the first failure is the
+result.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Err, Ok, type Result } from "@sekhmet/enum/result";
+
+type Signup = { name: string; age: number };
+
+const requireName = (input: Signup): Result<Signup, string> =>
+	input.name.trim() === "" ? Err("name is required") : Ok(input);
+
+const requireAdult = (input: Signup): Result<Signup, string> =>
+	input.age < 18 ? Err("must be 18 or older") : Ok(input);
+
+const validate = (input: Signup): Result<Signup, string> =>
+	Ok<Signup, string>(input).andThen(requireName).andThen(requireAdult);
+
+assertEquals(validate({ name: "Ada", age: 36 }).isOk(), true);
+assertEquals(validate({ name: "", age: 12 }).unwrapErr(), "name is required");
+```
+
+## Recover from an error
+
+`orElse` tries an alternative when the result is an error; `unwrapOrElse`
+computes a fallback value from the error.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Err, Ok, type Result } from "@sekhmet/enum/result";
+
+const fromCache = (key: string): Result<string, string> =>
+	Err(`cache miss: ${key}`);
+const fromDisk = (key: string): Result<string, string> =>
+	Ok(`${key} from disk`);
+
+assertEquals(
+	fromCache("a").orElse(() => fromDisk("a")).unwrap(),
+	"a from disk",
+);
+assertEquals(
+	fromCache("b").unwrapOrElse((error) => `default (${error})`),
+	"default (cache miss: b)",
+);
+```
+
+## Combine two optional values
+
+```ts
+import { assertEquals } from "@std/assert";
+import { None, Some } from "@sekhmet/enum/option";
+
+const width = Some(3);
+const height = Some(4);
+
+assertEquals(width.zipWith(height, (w, h) => w * h).unwrapOr(0), 12);
+assertEquals(width.zipWith(None<number>(), (w, h) => w * h).unwrapOr(0), 0);
+```
+
+## Turn an `Option` of a `Result` inside out
+
+`transpose` swaps the layers: `Some(Ok(x))` becomes `Ok(Some(x))`, `None`
+becomes `Ok(None)`, and `Some(Err(e))` becomes `Err(e)`. It is a function, not a
+method, because its input is an option of a result.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { None, Some, transpose } from "@sekhmet/enum/option";
+import { Err, Ok, type Result } from "@sekhmet/enum/result";
+
+const parse = (text: string): Result<number, string> =>
+	Number.isNaN(Number(text)) ? Err(`bad number: ${text}`) : Ok(Number(text));
+
+// An optional field that must be valid when present
+assertEquals(transpose(Some("5").map(parse)).unwrap().unwrap(), 5);
+assertEquals(transpose(None<string>().map(parse)).unwrap().isNone(), true);
+assertEquals(transpose(Some("x").map(parse)).unwrapErr(), "bad number: x");
+```
+
+## Lazily fill a cache slot
+
+The mutating `Option` operations suit a slot that is filled once.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { None } from "@sekhmet/enum/option";
+
+let computed = 0;
+const slot = None<number>();
+const expensive = () => {
+	computed++;
+	return 42;
+};
+
+assertEquals(slot.getOrInsertWith(expensive), 42);
+assertEquals(slot.getOrInsertWith(expensive), 42);
+assertEquals(computed, 1); // the second call reused the stored value
+```
+
+## Sort by several keys
+
+`andThen` on an `Ordering` breaks ties; `reverse` flips the direction.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { compareBy, compareByString } from "@sekhmet/enum/ordering";
+
+type Task = { title: string; priority: number };
+
+const tasks: Task[] = [
+	{ title: "b", priority: 1 },
+	{ title: "a", priority: 1 },
+	{ title: "c", priority: 2 },
+];
+
+// Highest priority first, then by title
+tasks.sort((x, y) =>
+	compareBy(x, y, (t) => t.priority)
+		.reverse()
+		.andThen(compareByString(x, y, (t) => t.title))
+		.toNumber()
+);
+
+assertEquals(tasks.map((t) => t.title), ["c", "a", "b"]);
+```
+
+## Model a connection with a `Latch`
+
+A `Latch` keeps two typed states and switches between them in place, which suits
+a resource held inside another object.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Active, type Latch } from "@sekhmet/enum/latch";
+
+class Session {
+	#state: Latch<{ token: string }, { reason: string }> = Active({
+		token: "t-1",
+	});
+
+	logout(reason: string): void {
+		this.#state.deactivate({ reason });
+	}
+
+	describe(): string {
+		return this.#state.mapOrElse(
+			({ token }) => `signed in (${token})`,
+			({ reason }) => `signed out: ${reason}`,
+		);
+	}
+}
+
+const session = new Session();
+session.logout("expired");
+assertEquals(session.describe(), "signed out: expired");
+```
+
+## Define your own enum
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Enum, type Split } from "@sekhmet/enum/core";
+
+type Payment = Split<{
+	Card: [last4: string];
+	Cash: [];
+	Voucher: [code: string];
+}>;
+
+const label = (payment: Enum<Payment>): string =>
+	payment.match({
+		Card: (last4) => `card ending ${last4}`,
+		Cash: () => "cash",
+		Voucher: (code) => `voucher ${code}`,
+	});
+
+assertEquals(label(new Enum<Payment>("Card", "4242")), "card ending 4242");
+assertEquals(label(new Enum<Payment>("Cash")), "cash");
+```

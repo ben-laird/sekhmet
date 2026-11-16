@@ -1,3 +1,9 @@
+/**
+ * The `Ordering` class and its `Less`, `Equal` and `Greater` constructors.
+ *
+ * @module
+ */
+
 import { Enum, type Split } from "@/src/core/mini/core.ts";
 
 /**
@@ -6,8 +12,10 @@ import { Enum, type Split } from "@/src/core/mini/core.ts";
  * @returns An Ordering in the Less state
  *
  * @example
- * ```ts ignore
- * const ord = Less(); // Ordering
+ * ```ts
+ * import { Less, type Ordering } from "@sekhmet/enum/ordering/mini";
+ *
+ * const ord: Ordering = Less();
  * ```
  */
 export function Less(): Ordering {
@@ -20,8 +28,10 @@ export function Less(): Ordering {
  * @returns An Ordering in the Equal state
  *
  * @example
- * ```ts ignore
- * const ord = Equal(); // Ordering
+ * ```ts
+ * import { Equal, type Ordering } from "@sekhmet/enum/ordering/mini";
+ *
+ * const ord: Ordering = Equal();
  * ```
  */
 export function Equal(): Ordering {
@@ -34,8 +44,10 @@ export function Equal(): Ordering {
  * @returns An Ordering in the Greater state
  *
  * @example
- * ```ts ignore
- * const ord = Greater(); // Ordering
+ * ```ts
+ * import { Greater, type Ordering } from "@sekhmet/enum/ordering/mini";
+ *
+ * const ord: Ordering = Greater();
  * ```
  */
 export function Greater(): Ordering {

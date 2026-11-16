@@ -1,3 +1,9 @@
+/**
+ * Switching a latch in place: the `activate*` and `deactivate*` functions.
+ *
+ * @module
+ */
+
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { match } from "@/src/core/mini/exit.ts";
 import type { Option } from "@/src/option/mini/core.ts";
@@ -14,10 +20,13 @@ import { Latch } from "./core.ts";
  * @returns The same Latch instance, now potentially in Inactive state
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, deactivate } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
  * deactivate(latch, "paused");
- * // latch is now Inactive("paused")
+ * assertEquals(latch, Inactive("paused"));
  * ```
  */
 export function deactivate<A, I>(
@@ -47,10 +56,13 @@ export function deactivate<A, I>(
  * @returns The same Latch instance, now potentially in Inactive state
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, deactivateWith } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
- * deactivateWith(latch, (n) => `was: ${n}`);
- * // latch is now Inactive("was: 42")
+ * deactivateWith(latch, (n) => "was: " + n);
+ * assertEquals(latch, Inactive("was: 42"));
  * ```
  */
 export function deactivateWith<A, I>(
@@ -80,10 +92,17 @@ export function deactivateWith<A, I>(
  * @returns The same Latch instance, potentially deactivated
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, deactivateIf } from "@sekhmet/enum/latch/mini";
+ * import { None, Some } from "@sekhmet/enum/option/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
- * deactivateIf(latch, Some("paused")); // deactivates
  * deactivateIf(latch, None()); // no change
+ * assertEquals(latch, Active(42));
+ *
+ * deactivateIf(latch, Some("paused")); // deactivates
+ * assertEquals(latch, Inactive("paused"));
  * ```
  */
 export function deactivateIf<A, I>(
@@ -107,9 +126,14 @@ export function deactivateIf<A, I>(
  * @returns The same Latch instance, potentially deactivated
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, deactivateWhen } from "@sekhmet/enum/latch/mini";
+ * import { None, Some } from "@sekhmet/enum/option/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
- * deactivateWhen(latch, (n) => n > 40 ? Some("too high") : None());
+ * deactivateWhen(latch, (n) => (n > 40 ? Some("too high") : None()));
+ * assertEquals(latch, Inactive("too high"));
  * ```
  */
 export function deactivateWhen<A, I>(
@@ -133,11 +157,14 @@ export function deactivateWhen<A, I>(
  * @returns A new Latch containing the previous state
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, deactivateReplace } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
  * const previous = deactivateReplace(latch, "paused");
- * // latch is now Inactive("paused")
- * // previous is Active(42)
+ * assertEquals(latch, Inactive("paused"));
+ * assertEquals(previous, Active(42));
  * ```
  */
 export function deactivateReplace<A, I>(
@@ -164,10 +191,13 @@ export function deactivateReplace<A, I>(
  * @returns The same Latch instance, now potentially in Active state
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, activate } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Inactive("paused");
  * activate(latch, 42);
- * // latch is now Active(42)
+ * assertEquals(latch, Active(42));
  * ```
  */
 export function activate<A, I>(
@@ -197,10 +227,13 @@ export function activate<A, I>(
  * @returns The same Latch instance, now potentially in Active state
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, activateWith } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Inactive("42");
  * activateWith(latch, (s) => parseInt(s, 10));
- * // latch is now Active(42)
+ * assertEquals(latch, Active(42));
  * ```
  */
 export function activateWith<A, I>(
@@ -230,10 +263,17 @@ export function activateWith<A, I>(
  * @returns The same Latch instance, potentially activated
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, activateIf } from "@sekhmet/enum/latch/mini";
+ * import { None, Some } from "@sekhmet/enum/option/mini";
+ *
  * const latch: Latch<number, string> = Inactive("paused");
- * activateIf(latch, Some(42)); // activates
  * activateIf(latch, None()); // no change
+ * assertEquals(latch, Inactive("paused"));
+ *
+ * activateIf(latch, Some(42)); // activates
+ * assertEquals(latch, Active(42));
  * ```
  */
 export function activateIf<A, I>(
@@ -257,9 +297,14 @@ export function activateIf<A, I>(
  * @returns The same Latch instance, potentially activated
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, activateWhen } from "@sekhmet/enum/latch/mini";
+ * import { None, Some } from "@sekhmet/enum/option/mini";
+ *
  * const latch: Latch<number, string> = Inactive("42");
- * activateWhen(latch, (s) => s.match(/^\d+$/) ? Some(parseInt(s, 10)) : None());
+ * activateWhen(latch, (s) => (/^\d+$/.test(s) ? Some(parseInt(s, 10)) : None()));
+ * assertEquals(latch, Active(42));
  * ```
  */
 export function activateWhen<A, I>(
@@ -283,11 +328,14 @@ export function activateWhen<A, I>(
  * @returns A new Latch containing the previous state
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, activateReplace } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Inactive("paused");
  * const previous = activateReplace(latch, 42);
- * // latch is now Active(42)
- * // previous is Inactive("paused")
+ * assertEquals(latch, Active(42));
+ * assertEquals(previous, Inactive("paused"));
  * ```
  */
 export function activateReplace<A, I>(

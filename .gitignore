@@ -228,3 +228,6 @@ $RECYCLE.BIN/
 *.vsix
 # Agent worktrees (git worktree checkouts of this repo)
 .claude/worktrees/
+
+# Docs site pages assembled by `deno task docs:assemble`
+scripts/docs-site/content/

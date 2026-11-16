@@ -1,3 +1,9 @@
+/**
+ * The `Option` class and its `Some` and `None` constructors.
+ *
+ * @module
+ */
+
 import { Enum, type Split } from "@/src/core/mini/core.ts";
 
 /**
@@ -7,8 +13,10 @@ import { Enum, type Split } from "@/src/core/mini/core.ts";
  * @returns An Option in the Some state containing the provided value
  *
  * @example
- * ```ts ignore
- * const opt = Some(42); // Option<number>
+ * ```ts
+ * import { type Option, Some } from "@sekhmet/enum/option/mini";
+ *
+ * const opt: Option<number> = Some(42);
  * ```
  */
 export function Some<T>(value: T): Option<T> {
@@ -21,8 +29,10 @@ export function Some<T>(value: T): Option<T> {
  * @returns An Option in the None state, representing the absence of a value
  *
  * @example
- * ```ts ignore
- * const opt = None<number>(); // Option<number>
+ * ```ts
+ * import { None, type Option } from "@sekhmet/enum/option/mini";
+ *
+ * const opt: Option<number> = None<number>();
  * ```
  */
 export function None<T = never>(): Option<T> {
@@ -49,7 +59,9 @@ export type { Variants as OptionVariants };
  * @template T - The type of the value that may be present
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { None, type Option, Some } from "@sekhmet/enum/option/mini";
+ *
  * const some: Option<number> = Some(42);
  * const none: Option<number> = None();
  * ```

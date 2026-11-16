@@ -1,4 +1,20 @@
 /**
+ * {@linkcode Subtle}: wraps a creator function so the functionality it builds
+ * is reached only through {@linkcode useSubtle}, not a public property.
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Subtle, useSubtle } from "@sekhmet/primordials/subtle";
+ *
+ * const greeter = new Subtle({ create: (name: string) => `hello, ${name}` });
+ * assertEquals(useSubtle(greeter, "Ada"), "hello, Ada");
+ * ```
+ *
+ * @module
+ */
+
+/**
  * The internal symbol used to coordinate subtle operations
  */
 export const subtle: unique symbol = Symbol("@sekhmet/subtle");

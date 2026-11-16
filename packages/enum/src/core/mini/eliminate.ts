@@ -1,3 +1,10 @@
+/**
+ * Narrowing an enum by ruling variants out: the complement of the `isolate`
+ * functions, as type guards, assertions, inspectors and iterators.
+ *
+ * @module
+ */
+
 import { getStructParams } from "@sekhmet/primordials/struct";
 import type { Eliminate, Enum, SomeVariant, Values } from "./core.ts";
 import { union, unionKinds } from "./exit.ts";

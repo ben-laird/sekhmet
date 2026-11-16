@@ -97,6 +97,10 @@ Scripts (`scripts/`, unpublished):
 - `@sekhmet/add`: scaffolds a new workspace from `scripts/add/templates/`
   (`deno task add`)
 - `@sekhmet/ci`: runs lint, type check, doc lint, publish readiness, JSR dry run and tests (`deno task ci`)
+- `@sekhmet/docs-site`: the VitePress docs site; assembles the root README and
+  every package's `README.md` and `docs/*.md` into a sidebar per package
+  (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
+  `.github/workflows/docs.yml`)
 
 ### Core Design Principles
 

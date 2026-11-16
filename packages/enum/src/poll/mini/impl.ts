@@ -16,12 +16,12 @@ import { Pending, type Poll, Ready } from "./core.ts";
  * @returns A new Poll with the mapped value (if Ready) or Pending (if Pending)
  *
  * @example
- * ```ts ignore
- * const ready = Ready(5);
- * const doubled = map(ready, (x) => x * 2); // Ready(10)
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Pending, Ready, map } from "@sekhmet/enum/poll/mini";
  *
- * const pending = Pending<number>();
- * const result = map(pending, (x) => x * 2); // Pending<number>
+ * assertEquals(map(Ready(5), (x) => x * 2), Ready(10));
+ * assertEquals(map(Pending<number>(), (x) => x * 2), Pending());
  * ```
  */
 export function map<T, U>(self: Poll<T>, mapping: (value: T) => U): Poll<U> {
@@ -38,13 +38,12 @@ export function map<T, U>(self: Poll<T>, mapping: (value: T) => U): Poll<U> {
  * @returns `true` if the Poll is Ready, `false` if Pending
  *
  * @example
- * ```ts ignore
- * const poll: Poll<number> = Ready(42);
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Pending, Ready, isReady } from "@sekhmet/enum/poll/mini";
  *
- * if (isReady(poll)) {
- *   // poll is known to be Ready here
- *   console.log("Value is ready");
- * }
+ * assertEquals(isReady(Ready(42)), true);
+ * assertEquals(isReady(Pending()), false);
  * ```
  */
 export function isReady<T>(self: Poll<T>): self is Poll<T> {
@@ -61,13 +60,12 @@ export function isReady<T>(self: Poll<T>): self is Poll<T> {
  * @returns `true` if the Poll is Pending, `false` if Ready
  *
  * @example
- * ```ts ignore
- * const poll: Poll<number> = Pending();
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Pending, Ready, isPending } from "@sekhmet/enum/poll/mini";
  *
- * if (isPending(poll)) {
- *   // poll is known to be Pending here
- *   console.log("Value is not ready yet");
- * }
+ * assertEquals(isPending(Pending()), true);
+ * assertEquals(isPending(Ready(42)), false);
  * ```
  */
 export function isPending<T>(self: Poll<T>): self is Poll<never> {

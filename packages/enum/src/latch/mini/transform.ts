@@ -1,3 +1,10 @@
+/**
+ * Transforming a latch: `map`, `mapInactive`, `mapOr`, `mapOrElse`, the
+ * `inspect` and `iter` functions, and conversion to `Option` and `Result`.
+ *
+ * @module
+ */
+
 import { match, union } from "@/src/core/mini/exit.ts";
 import { isolate } from "@/src/core/mini/isolate.ts";
 import { None, type Option, Some } from "@/src/option/mini/core.ts";
@@ -13,7 +20,9 @@ import { Active, Inactive, type Latch } from "./core.ts";
  * @returns Some containing the active value if Active, None if Inactive
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Active, type Latch, active } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
  * const opt = active(latch); // Some(42)
  * ```
@@ -34,7 +43,9 @@ export function active<A, I>(self: Latch<A, I>): Option<A> {
  * @returns Some containing the inactive value if Inactive, None if Active
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Inactive, type Latch, inactive } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Inactive("paused");
  * const opt = inactive(latch); // Some("paused")
  * ```
@@ -55,7 +66,9 @@ export function inactive<A, I>(self: Latch<A, I>): Option<I> {
  * @returns Ok with the active value, or Err with the inactive value
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Active, type Latch, toResult } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
  * const result = toResult(latch); // Ok(42)
  * ```
@@ -78,9 +91,12 @@ export function toResult<A, I>(self: Latch<A, I>): Result<A, I> {
  * @returns A new Latch with the mapped active value, or the original if Inactive
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, type Latch, map } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
- * const doubled = map(latch, (n) => n * 2); // Active(84)
+ * assertEquals(map(latch, (n) => n * 2), Active(84));
  * ```
  */
 export function map<A, I, B>(
@@ -105,9 +121,15 @@ export function map<A, I, B>(
  * @returns The mapped value if Active, otherwise the default value
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, mapOr } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
- * const result = mapOr(latch, 0, (n) => n * 2); // 84
+ * assertEquals(mapOr(latch, 0, (n) => n * 2), 84);
+ *
+ * const paused: Latch<number, string> = Inactive("paused");
+ * assertEquals(mapOr(paused, 0, (n) => n * 2), 0);
  * ```
  */
 export function mapOr<A, I, B>(
@@ -133,13 +155,15 @@ export function mapOr<A, I, B>(
  * @returns The result of the appropriate mapping function
  *
  * @example
- * ```ts ignore
- * const latch: Latch<number, string> = Active(42);
- * const msg = mapOrElse(
- *   latch,
- *   (n) => `Value: ${n}`,
- *   (s) => `Paused: ${s}`,
- * ); // "Value: 42"
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, mapOrElse } from "@sekhmet/enum/latch/mini";
+ *
+ * const describe = (latch: Latch<number, string>): string =>
+ *   mapOrElse(latch, (n) => "Value: " + n, (s) => "Paused: " + s);
+ *
+ * assertEquals(describe(Active(42)), "Value: 42");
+ * assertEquals(describe(Inactive("user")), "Paused: user");
  * ```
  */
 export function mapOrElse<A, I, T>(
@@ -164,9 +188,12 @@ export function mapOrElse<A, I, T>(
  * @returns A new Latch with the mapped inactive value, or the original if Active
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Inactive, type Latch, mapInactive } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Inactive("error");
- * const mapped = mapInactive(latch, (s) => s.toUpperCase()); // Inactive("ERROR")
+ * assertEquals(mapInactive(latch, (s) => s.toUpperCase()), Inactive("ERROR"));
  * ```
  */
 export function mapInactive<A, I, J>(
@@ -189,9 +216,15 @@ export function mapInactive<A, I, J>(
  * @returns The original Latch unchanged
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, type Latch, inspect } from "@sekhmet/enum/latch/mini";
+ *
+ * const seen: number[] = [];
  * const latch: Latch<number, string> = Active(42);
- * inspect(latch, (n) => console.log("Active value:", n));
+ *
+ * assertEquals(inspect(latch, (n) => seen.push(n)), latch);
+ * assertEquals(seen, [42]);
  * ```
  */
 export function inspect<A, I>(
@@ -217,9 +250,15 @@ export function inspect<A, I>(
  * @returns The original Latch unchanged
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Inactive, type Latch, inspectInactive } from "@sekhmet/enum/latch/mini";
+ *
+ * const seen: string[] = [];
  * const latch: Latch<number, string> = Inactive("paused");
- * inspectInactive(latch, (s) => console.log("Inactive value:", s));
+ *
+ * assertEquals(inspectInactive(latch, (s) => seen.push(s)), latch);
+ * assertEquals(seen, ["paused"]);
  * ```
  */
 export function inspectInactive<A, I>(
@@ -244,11 +283,15 @@ export function inspectInactive<A, I>(
  * @yields The active value if Active
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, iter } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Active(42);
- * for (const value of iter(latch)) {
- *   console.log(value); // 42
- * }
+ * assertEquals(Array.from(iter(latch)), [42]);
+ *
+ * const paused: Latch<number, string> = Inactive("paused");
+ * assertEquals(Array.from(iter(paused)), []);
  * ```
  */
 export function* iter<A, I>(self: Latch<A, I>): Generator<A, void, undefined> {
@@ -268,11 +311,15 @@ export function* iter<A, I>(self: Latch<A, I>): Generator<A, void, undefined> {
  * @yields The inactive value if Inactive
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, Inactive, type Latch, iterInactive } from "@sekhmet/enum/latch/mini";
+ *
  * const latch: Latch<number, string> = Inactive("paused");
- * for (const value of iterInactive(latch)) {
- *   console.log(value); // "paused"
- * }
+ * assertEquals(Array.from(iterInactive(latch)), ["paused"]);
+ *
+ * const running: Latch<number, string> = Active(42);
+ * assertEquals(Array.from(iterInactive(running)), []);
  * ```
  */
 export function* iterInactive<A, I>(

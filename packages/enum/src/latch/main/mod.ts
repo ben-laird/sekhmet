@@ -7,6 +7,18 @@
  *
  * Generated from `../mini/mod.ts` by `deno task gen:main`; edit the mini source, then regenerate.
  *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, type Latch } from "@sekhmet/enum/latch";
+ *
+ * const connection: Latch<string, string> = Active("socket");
+ * connection.deactivate("closed by peer");
+ *
+ * assertEquals(connection.isActive(), false);
+ * assertEquals(connection.inactive().unwrap(), "closed by peer");
+ * ```
+ *
  * @module
  */
 
@@ -43,16 +55,19 @@ export type { LatchVariants } from "../mini/mod.ts";
  * @template A - The type of the active value
  * @template I - The type of the inactive value
  * @example
- * ```ts ignore
- * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch/mini/core";
- * import { match } from "@sekhmet/enum/core/mini/exit";
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { match } from "@sekhmet/enum/core/mini";
+ * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
  *
- * const connection: Latch<Socket, Error> = Active(socket);
+ * const describe = (connection: Latch<number, Error>): string =>
+ *   match(connection)({
+ *     Active: (port) => "connected on port " + port,
+ *     Inactive: (error) => "connection failed: " + error.message,
+ *   });
  *
- * match(connection)({
- *   Active: (socket) => socket.send(data),
- *   Inactive: (error) => console.error("Connection failed:", error),
- * });
+ * assertEquals(describe(Active(8080)), "connected on port 8080");
+ * assertEquals(describe(Inactive(new Error("refused"))), "connection failed: refused");
  * ```
  */
 export class Latch<out A, out I> extends mini.Latch<A, I> {
@@ -79,13 +94,16 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param otherLatch - The Latch to return if Active
 	 * @returns The other Latch if Active, otherwise this Latch's Inactive state
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const a: Latch<number, string> = Active(1);
 	 * const b: Latch<number, string> = Active(2);
-	 * const result = a.and(b); // Active(2)
+	 * assertEquals(a.and(b), Active(2));
 	 *
 	 * const c: Latch<number, string> = Inactive("error");
-	 * const result2 = c.and(b); // Inactive("error")
+	 * assertEquals(c.and(b), Inactive("error"));
 	 * ```
 	 * @see {@link mini.and}
 	 */
@@ -100,10 +118,15 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param otherLatch - Function to compute the next Latch from the active value
 	 * @returns The computed Latch if Active, otherwise this Latch's Inactive state
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
+	 * const double = (n: number): Latch<number, string> =>
+	 *   n > 0 ? Active(n * 2) : Inactive("negative");
+	 *
 	 * const latch: Latch<number, string> = Active(42);
-	 * const result = latch.andThen((n) => n > 0 ? Active(n * 2) : Inactive("negative"));
-	 * // Active(84)
+	 * assertEquals(latch.andThen(double), Active(84));
 	 * ```
 	 * @see {@link mini.andThen}
 	 */
@@ -118,13 +141,16 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param fallbackLatch - The Latch to return if Inactive
 	 * @returns This Latch if Active, otherwise the fallback
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const a: Latch<number, string> = Inactive("error");
 	 * const b: Latch<number, string> = Active(42);
-	 * const result = a.or(b); // Active(42)
+	 * assertEquals(a.or(b), Active(42));
 	 *
 	 * const c: Latch<number, string> = Active(1);
-	 * const result2 = c.or(b); // Active(1)
+	 * assertEquals(c.or(b), Active(1));
 	 * ```
 	 * @see {@link mini.or}
 	 */
@@ -139,10 +165,12 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param fallbackLatch - Function to compute the fallback from the inactive value
 	 * @returns This Latch if Active, otherwise the computed fallback
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Inactive("error");
-	 * const result = latch.orElse((s) => Active(s.length));
-	 * // Active(5)
+	 * assertEquals(latch.orElse((s) => Active(s.length)), Active(5));
 	 * ```
 	 * @see {@link mini.orElse}
 	 */
@@ -158,12 +186,15 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param defaultValue - The value to return if Inactive
 	 * @returns The active value or the default
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const active: Latch<number, string> = Active(42);
-	 * active.unwrapOr(0); // 42
+	 * assertEquals(active.unwrapOr(0), 42);
 	 *
 	 * const inactive: Latch<number, string> = Inactive("error");
-	 * inactive.unwrapOr(0); // 0
+	 * assertEquals(inactive.unwrapOr(0), 0);
 	 * ```
 	 * @see {@link mini.unwrapOr}
 	 */
@@ -177,9 +208,12 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param defaultValue - Function to compute the default from the inactive value
 	 * @returns The active value or the computed default
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const inactive: Latch<number, string> = Inactive("42");
-	 * inactive.unwrapOrElse((s) => parseInt(s, 10)); // 42
+	 * assertEquals(inactive.unwrapOrElse((s) => parseInt(s, 10)), 42);
 	 * ```
 	 * @see {@link mini.unwrapOrElse}
 	 */
@@ -194,10 +228,13 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param deactivatingValue - The value for the Inactive state
 	 * @returns The same Latch instance, now potentially in Inactive state
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
 	 * latch.deactivate("paused");
-	 * // latch is now Inactive("paused")
+	 * assertEquals(latch, Inactive("paused"));
 	 * ```
 	 * @see {@link mini.deactivate}
 	 */
@@ -212,10 +249,13 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param deactivatingFn - Function to compute the inactive value from the active value
 	 * @returns The same Latch instance, now potentially in Inactive state
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
-	 * latch.deactivateWith((n) => `was: ${n}`);
-	 * // latch is now Inactive("was: 42")
+	 * latch.deactivateWith((n) => "was: " + n);
+	 * assertEquals(latch, Inactive("was: 42"));
 	 * ```
 	 * @see {@link mini.deactivateWith}
 	 */
@@ -230,10 +270,17 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param option - An Option containing the potential deactivating value
 	 * @returns The same Latch instance, potentially deactivated
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 * import { None, Some } from "@sekhmet/enum/option/mini";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
-	 * latch.deactivateIf(Some("paused")); // deactivates
 	 * latch.deactivateIf(None()); // no change
+	 * assertEquals(latch, Active(42));
+	 *
+	 * latch.deactivateIf(Some("paused")); // deactivates
+	 * assertEquals(latch, Inactive("paused"));
 	 * ```
 	 * @see {@link mini.deactivateIf}
 	 */
@@ -248,9 +295,14 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param option - Function that takes the active value and returns an Option
 	 * @returns The same Latch instance, potentially deactivated
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 * import { None, Some } from "@sekhmet/enum/option/mini";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
-	 * latch.deactivateWhen((n) => n > 40 ? Some("too high") : None());
+	 * latch.deactivateWhen((n) => (n > 40 ? Some("too high") : None()));
+	 * assertEquals(latch, Inactive("too high"));
 	 * ```
 	 * @see {@link mini.deactivateWhen}
 	 */
@@ -265,11 +317,14 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param deactivatingValue - The value for the Inactive state
 	 * @returns A new Latch containing the previous state
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
 	 * const previous = latch.deactivateReplace("paused");
-	 * // latch is now Inactive("paused")
-	 * // previous is Active(42)
+	 * assertEquals(latch, Inactive("paused"));
+	 * assertEquals(previous, Active(42));
 	 * ```
 	 * @see {@link mini.deactivateReplace}
 	 */
@@ -284,10 +339,13 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param activatingValue - The value for the Active state
 	 * @returns The same Latch instance, now potentially in Active state
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Inactive("paused");
 	 * latch.activate(42);
-	 * // latch is now Active(42)
+	 * assertEquals(latch, Active(42));
 	 * ```
 	 * @see {@link mini.activate}
 	 */
@@ -302,10 +360,13 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param activatingFn - Function to compute the active value from the inactive value
 	 * @returns The same Latch instance, now potentially in Active state
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Inactive("42");
 	 * latch.activateWith((s) => parseInt(s, 10));
-	 * // latch is now Active(42)
+	 * assertEquals(latch, Active(42));
 	 * ```
 	 * @see {@link mini.activateWith}
 	 */
@@ -320,10 +381,17 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param option - An Option containing the potential activating value
 	 * @returns The same Latch instance, potentially activated
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 * import { None, Some } from "@sekhmet/enum/option/mini";
+	 *
 	 * const latch: Latch<number, string> = Inactive("paused");
-	 * latch.activateIf(Some(42)); // activates
 	 * latch.activateIf(None()); // no change
+	 * assertEquals(latch, Inactive("paused"));
+	 *
+	 * latch.activateIf(Some(42)); // activates
+	 * assertEquals(latch, Active(42));
 	 * ```
 	 * @see {@link mini.activateIf}
 	 */
@@ -338,9 +406,14 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param option - Function that takes the inactive value and returns an Option
 	 * @returns The same Latch instance, potentially activated
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 * import { None, Some } from "@sekhmet/enum/option/mini";
+	 *
 	 * const latch: Latch<number, string> = Inactive("42");
-	 * latch.activateWhen((s) => s.match(/^\d+$/) ? Some(parseInt(s, 10)) : None());
+	 * latch.activateWhen((s) => (/^\d+$/.test(s) ? Some(parseInt(s, 10)) : None()));
+	 * assertEquals(latch, Active(42));
 	 * ```
 	 * @see {@link mini.activateWhen}
 	 */
@@ -355,11 +428,14 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param activatingValue - The value for the Active state
 	 * @returns A new Latch containing the previous state
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Inactive("paused");
 	 * const previous = latch.activateReplace(42);
-	 * // latch is now Active(42)
-	 * // previous is Inactive("paused")
+	 * assertEquals(latch, Active(42));
+	 * assertEquals(previous, Inactive("paused"));
 	 * ```
 	 * @see {@link mini.activateReplace}
 	 */
@@ -372,11 +448,17 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 *
 	 * @returns True if the Latch is Active, narrowing the type accordingly
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
 	 * if (latch.isActive()) {
-	 *   // latch is now Latch<number, never>
+	 *   const narrowed: Latch<number, never> = latch;
 	 * }
+	 *
+	 * assertEquals(latch.isActive(), true);
+	 * assertEquals(Inactive("paused").isActive(), false);
 	 * ```
 	 * @see {@link mini.isActive}
 	 */
@@ -391,11 +473,14 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param predicate - Additional condition the active value must satisfy
 	 * @returns True if Active and the predicate returns true
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
-	 * if (latch.isActiveAnd((n) => n > 0)) {
-	 *   // latch is Active and value is positive
-	 * }
+	 *
+	 * assertEquals(latch.isActiveAnd((n) => n > 0), true);
+	 * assertEquals(latch.isActiveAnd((n) => n < 0), false);
 	 * ```
 	 * @see {@link mini.isActiveAnd}
 	 */
@@ -410,11 +495,17 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 *
 	 * @returns True if the Latch is Inactive, narrowing the type accordingly
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Inactive("paused");
 	 * if (latch.isInactive()) {
-	 *   // latch is now Latch<never, string>
+	 *   const narrowed: Latch<never, string> = latch;
 	 * }
+	 *
+	 * assertEquals(latch.isInactive(), true);
+	 * assertEquals(Active(42).isInactive(), false);
 	 * ```
 	 * @see {@link mini.isInactive}
 	 */
@@ -429,11 +520,14 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param predicate - Additional condition the inactive value must satisfy
 	 * @returns True if Inactive and the predicate returns true
 	 * @example
-	 * ```ts ignore
-	 * const latch: Latch<number, string> = Inactive("error");
-	 * if (latch.isInactiveAnd((s) => s.startsWith("error"))) {
-	 *   // latch is Inactive and value starts with "error"
-	 * }
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
+	 * const latch: Latch<number, string> = Inactive("error: timeout");
+	 *
+	 * assertEquals(latch.isInactiveAnd((s) => s.startsWith("error")), true);
+	 * assertEquals(latch.isInactiveAnd((s) => s.startsWith("paused")), false);
 	 * ```
 	 * @see {@link mini.isInactiveAnd}
 	 */
@@ -448,7 +542,9 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 *
 	 * @returns Some containing the active value if Active, None if Inactive
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { Active, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
 	 * const opt = latch.active(); // Some(42)
 	 * ```
@@ -463,7 +559,9 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 *
 	 * @returns Some containing the inactive value if Inactive, None if Active
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Inactive("paused");
 	 * const opt = latch.inactive(); // Some("paused")
 	 * ```
@@ -478,7 +576,9 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 *
 	 * @returns Ok with the active value, or Err with the inactive value
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { Active, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
 	 * const result = latch.toResult(); // Ok(42)
 	 * ```
@@ -495,9 +595,12 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param mapping - Function to apply to the active value
 	 * @returns A new Latch with the mapped active value, or the original if Inactive
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
-	 * const doubled = latch.map((n) => n * 2); // Active(84)
+	 * assertEquals(latch.map((n) => n * 2), Active(84));
 	 * ```
 	 * @see {@link mini.map}
 	 */
@@ -513,9 +616,15 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param mapping - Function to apply to the active value
 	 * @returns The mapped value if Active, otherwise the default value
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
-	 * const result = latch.mapOr(0, (n) => n * 2); // 84
+	 * assertEquals(latch.mapOr(0, (n) => n * 2), 84);
+	 *
+	 * const paused: Latch<number, string> = Inactive("paused");
+	 * assertEquals(paused.mapOr(0, (n) => n * 2), 0);
 	 * ```
 	 * @see {@link mini.mapOr}
 	 */
@@ -531,12 +640,15 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param inactiveMapping - Function to apply if Inactive
 	 * @returns The result of the appropriate mapping function
 	 * @example
-	 * ```ts ignore
-	 * const latch: Latch<number, string> = Active(42);
-	 * const msg = latch.mapOrElse(
-	 *   (n) => `Value: ${n}`,
-	 *   (s) => `Paused: ${s}`,
-	 * ); // "Value: 42"
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
+	 * const describe = (latch: Latch<number, string>): string =>
+	 *   latch.mapOrElse((n) => "Value: " + n, (s) => "Paused: " + s);
+	 *
+	 * assertEquals(describe(Active(42)), "Value: 42");
+	 * assertEquals(describe(Inactive("user")), "Paused: user");
 	 * ```
 	 * @see {@link mini.mapOrElse}
 	 */
@@ -554,9 +666,12 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param mapping - Function to apply to the inactive value
 	 * @returns A new Latch with the mapped inactive value, or the original if Active
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Inactive("error");
-	 * const mapped = latch.mapInactive((s) => s.toUpperCase()); // Inactive("ERROR")
+	 * assertEquals(latch.mapInactive((s) => s.toUpperCase()), Inactive("ERROR"));
 	 * ```
 	 * @see {@link mini.mapInactive}
 	 */
@@ -570,9 +685,15 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param inspector - Function to execute with the active value
 	 * @returns The original Latch unchanged
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, type Latch } from "@sekhmet/enum/latch";
+	 *
+	 * const seen: number[] = [];
 	 * const latch: Latch<number, string> = Active(42);
-	 * latch.inspect((n) => console.log("Active value:", n));
+	 *
+	 * assertEquals(latch.inspect((n) => seen.push(n)), latch);
+	 * assertEquals(seen, [42]);
 	 * ```
 	 * @see {@link mini.inspect}
 	 */
@@ -586,9 +707,15 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @param inspector - Function to execute with the inactive value
 	 * @returns The original Latch unchanged
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
+	 * const seen: string[] = [];
 	 * const latch: Latch<number, string> = Inactive("paused");
-	 * latch.inspectInactive((s) => console.log("Inactive value:", s));
+	 *
+	 * assertEquals(latch.inspectInactive((s) => seen.push(s)), latch);
+	 * assertEquals(seen, ["paused"]);
 	 * ```
 	 * @see {@link mini.inspectInactive}
 	 */
@@ -601,11 +728,15 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 *
 	 * @yields The active value if Active
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
-	 * for (const value of latch.iter()) {
-	 *   console.log(value); // 42
-	 * }
+	 * assertEquals(Array.from(latch.iter()), [42]);
+	 *
+	 * const paused: Latch<number, string> = Inactive("paused");
+	 * assertEquals(Array.from(paused.iter()), []);
 	 * ```
 	 * @see {@link mini.iter}
 	 */
@@ -618,11 +749,15 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 *
 	 * @yields The inactive value if Inactive
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Inactive("paused");
-	 * for (const value of latch.iterInactive()) {
-	 *   console.log(value); // "paused"
-	 * }
+	 * assertEquals(Array.from(latch.iterInactive()), ["paused"]);
+	 *
+	 * const running: Latch<number, string> = Active(42);
+	 * assertEquals(Array.from(running.iterInactive()), []);
 	 * ```
 	 * @see {@link mini.iterInactive}
 	 */
@@ -637,9 +772,14 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @returns The active value
 	 * @throws {Error} If the Latch is Inactive
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals, assertThrows } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
-	 * const value = latch.expect("Expected active connection"); // 42
+	 * assertEquals(latch.expect("Expected active connection"), 42);
+	 *
+	 * assertThrows(() => Inactive("paused").expect("Expected active connection"), Error, "Expected active connection");
 	 * ```
 	 * @see {@link mini.expect}
 	 */
@@ -653,9 +793,14 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @returns The active value
 	 * @throws {Error} If the Latch is Inactive
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals, assertThrows } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Active(42);
-	 * const value = latch.unwrap(); // 42
+	 * assertEquals(latch.unwrap(), 42);
+	 *
+	 * assertThrows(() => Inactive("paused").unwrap(), Error, "Latch unwrap failed!");
 	 * ```
 	 * @see {@link mini.unwrap}
 	 */
@@ -670,9 +815,14 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @returns The inactive value
 	 * @throws {Error} If the Latch is Active
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals, assertThrows } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Inactive("paused");
-	 * const value = latch.expectInactive("Expected inactive state"); // "paused"
+	 * assertEquals(latch.expectInactive("Expected inactive state"), "paused");
+	 *
+	 * assertThrows(() => Active(42).expectInactive("Expected inactive state"), Error, "Expected inactive state");
 	 * ```
 	 * @see {@link mini.expectInactive}
 	 */
@@ -686,9 +836,14 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @returns The inactive value
 	 * @throws {Error} If the Latch is Active
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals, assertThrows } from "@std/assert";
+	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
+	 *
 	 * const latch: Latch<number, string> = Inactive("paused");
-	 * const value = latch.unwrapInactive(); // "paused"
+	 * assertEquals(latch.unwrapInactive(), "paused");
+	 *
+	 * assertThrows(() => Active(42).unwrapInactive(), Error, "Latch unwrap failed!");
 	 * ```
 	 * @see {@link mini.unwrapInactive}
 	 */
@@ -705,8 +860,10 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
  * @param active - The value for the active state
  * @returns A Latch in the Active state containing the provided value
  * @example
- * ```ts ignore
- * const latch = Active<number, string>(42);
+ * ```ts
+ * import { Active, type Latch } from "@sekhmet/enum/latch";
+ *
+ * const latch: Latch<number, string> = Active<number, string>(42);
  * ```
  */
 export function Active<A = unknown, I = never>(active: A): Latch<A, I> {
@@ -721,8 +878,10 @@ export function Active<A = unknown, I = never>(active: A): Latch<A, I> {
  * @param inactive - The value for the inactive state
  * @returns A Latch in the Inactive state containing the provided value
  * @example
- * ```ts ignore
- * const latch = Inactive<number, string>("paused");
+ * ```ts
+ * import { Inactive, type Latch } from "@sekhmet/enum/latch";
+ *
+ * const latch: Latch<number, string> = Inactive<number, string>("paused");
  * ```
  */
 export function Inactive<A = never, I = unknown>(inactive: I): Latch<A, I> {
