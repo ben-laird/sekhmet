@@ -369,7 +369,7 @@ export const FEATURES: readonly Feature[] = [
 			"const text = new Schema((input: unknown) =>",
 			'\ttypeof input === "string" ? Ok(input) : Err(InvalidType({ input, expected: "string" })),',
 			");",
-			"const length = fromStandard(toStandard(text)).map((s) => s.length);",
+			"const length = fromStandard(toStandard({ schema: text })).map((s) => s.length);",
 			"",
 			'assertEquals(unwrap(length.parseSync("four")), 4);',
 		].join("\n"),

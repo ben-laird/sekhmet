@@ -89,7 +89,7 @@ and `Async` otherwise.
 v1 in both directions, with no dependency on `@standard-schema/spec` (its
 types are copied locally):
 
-- `toStandard(schema)` exposes a schema whose input is `unknown` to any tool
+- `toStandard({ schema })` exposes a schema whose input is `unknown` to any tool
   that accepts a Standard Schema. `SchemaIssue` and `Issues<SchemaIssue>`
   errors become Standard issues with `formatIssue`'s message and their path;
   any other error type needs a `toIssue` option, and the types require it.
@@ -109,7 +109,7 @@ const text = new Schema((input: unknown) =>
 		? Ok(input)
 		: Err(InvalidType({ input, expected: "string" })),
 );
-const standard = toStandard(text);
+const standard = toStandard({ schema: text });
 
 assertEquals(standard["~standard"].validate(1), {
 	issues: [{ message: "Expected string, received number" }],

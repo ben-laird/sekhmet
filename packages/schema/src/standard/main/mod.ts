@@ -17,7 +17,7 @@
  * const text = new Schema((input: unknown) =>
  * 	typeof input === "string" ? Ok(input) : Err(InvalidType({ input, expected: "string" })),
  * );
- * const length = fromStandard(toStandard(text)).map((s) => s.length);
+ * const length = fromStandard(toStandard({ schema: text })).map((s) => s.length);
  *
  * assertEquals(unwrap(length.parseSync("four")), 4);
  * ```
@@ -42,6 +42,7 @@ export type {
 	StandardTypes,
 	StandardValidateOptions,
 	ToStandardOptions,
+	ToStandardSchema,
 } from "../mini/mod.ts";
 export { EMPTY_FAILURE_MESSAGE, toStandard } from "../mini/mod.ts";
 

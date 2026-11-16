@@ -20,4 +20,8 @@ export type {
 	StandardTypes,
 	StandardValidateOptions,
 } from "./spec.ts";
-export { type ToStandardOptions, toStandard } from "./to-standard.ts";
+export {
+	type ToStandardOptions,
+	type ToStandardSchema,
+	toStandard,
+} from "./to-standard.ts";
