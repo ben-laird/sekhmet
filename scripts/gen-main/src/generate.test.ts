@@ -142,7 +142,7 @@ Deno.test("generateMain emits the header, mini import and class extending mini",
 	);
 	assertStringIncludes(
 		output,
-		"return new Box(...getStructParams(self).variant);",
+		"const view = new Box<T>(...params.variant);\n\t\tview[struct] = params;",
 	);
 });
 

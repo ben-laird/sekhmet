@@ -10,7 +10,7 @@
  * @module
  */
 
-import { getStructParams } from "@sekhmet/primordials/struct";
+import { getStructParams, struct } from "@sekhmet/primordials/struct";
 import * as mini from "../mini/mod.ts";
 
 export type { PollVariants } from "../mini/mod.ts";
@@ -33,15 +33,19 @@ export type { PollVariants } from "../mini/mod.ts";
  */
 export class Poll<out T> extends mini.Poll<T> {
 	/**
-	 * Converts a mini {@linkcode mini.Poll} into a main `Poll`, returning it unchanged when it already is one.
+	 * Views a mini {@linkcode mini.Poll} as a main `Poll`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
 	 *
 	 * @param self - The Poll to convert
-	 * @returns `self` as a main `Poll`
+	 * @returns A main `Poll` sharing `self`'s state
 	 */
 	static fromMini<T>(self: mini.Poll<T>): Poll<T> {
 		if (self instanceof Poll) return self;
 
-		return new Poll(...getStructParams(self).variant);
+		const params = getStructParams(self);
+		const view = new Poll<T>(...params.variant);
+		view[struct] = params;
+
+		return view;
 	}
 
 	/**

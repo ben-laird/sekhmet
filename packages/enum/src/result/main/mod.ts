@@ -10,7 +10,7 @@
  * @module
  */
 
-import { getStructParams } from "@sekhmet/primordials/struct";
+import { getStructParams, struct } from "@sekhmet/primordials/struct";
 import { Option } from "../../option/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
@@ -50,15 +50,19 @@ export type { ResultVariants } from "../mini/mod.ts";
  */
 export class Result<out T, out E> extends mini.Result<T, E> {
 	/**
-	 * Converts a mini {@linkcode mini.Result} into a main `Result`, returning it unchanged when it already is one.
+	 * Views a mini {@linkcode mini.Result} as a main `Result`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
 	 *
 	 * @param self - The Result to convert
-	 * @returns `self` as a main `Result`
+	 * @returns A main `Result` sharing `self`'s state
 	 */
 	static fromMini<T, E>(self: mini.Result<T, E>): Result<T, E> {
 		if (self instanceof Result) return self;
 
-		return new Result(...getStructParams(self).variant);
+		const params = getStructParams(self);
+		const view = new Result<T, E>(...params.variant);
+		view[struct] = params;
+
+		return view;
 	}
 
 	/**

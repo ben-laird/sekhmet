@@ -662,20 +662,25 @@ function renderClass({
 	});
 	const fromMiniDoc = renderJsDoc({
 		jsDoc: {
-			doc: `Converts a mini {@linkcode mini.${primary}} into a main \`${primary}\`, returning it unchanged when it already is one.`,
+			doc: `Views a mini {@linkcode mini.${primary}} as a main \`${primary}\`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.`,
 			tags: [
 				{ kind: "param", name: "self", doc: `The ${primary} to convert` },
-				{ kind: "return", doc: `\`self\` as a main \`${primary}\`` },
+				{
+					kind: "return",
+					doc: `A main \`${primary}\` sharing \`self\`'s state`,
+				},
 			],
 		},
 		context,
 		indent: "\t",
 	});
+	// An Enum's constructor takes the variant, not the struct params, so the
+	// view is built from the variant and then rebound to the source's params.
 	const rebuilt =
 		construct === "variant"
-			? `new ${primary}(...getStructParams(self).variant)`
-			: `new ${primary}(getStructParams(self))`;
-	const fromMini = `${fromMiniDoc}\tstatic fromMini${staticTypeParams}(self: mini.${primary}${applied}): ${primary}${applied} {\n\t\tif (self instanceof ${primary}) return self;\n\n\t\treturn ${rebuilt};\n\t}\n`;
+			? `const params = getStructParams(self);\n\t\tconst view = new ${primary}${applied}(...params.variant);\n\t\tview[struct] = params;\n\n\t\treturn view;`
+			: `return new ${primary}(getStructParams(self));`;
+	const fromMini = `${fromMiniDoc}\tstatic fromMini${staticTypeParams}(self: mini.${primary}${applied}): ${primary}${applied} {\n\t\tif (self instanceof ${primary}) return self;\n\n\t\t${rebuilt}\n\t}\n`;
 
 	const body = [fromMini, ...methods.map((method) => method.source)].join("\n");
 
@@ -710,7 +715,9 @@ function renderImports({
 	miniSpecifier: string;
 }): string {
 	const lines = [
-		'import { getStructParams } from "@sekhmet/primordials/struct";',
+		module.feature.construct === "variant"
+			? 'import { getStructParams, struct } from "@sekhmet/primordials/struct";'
+			: 'import { getStructParams } from "@sekhmet/primordials/struct";',
 		`import * as mini from "${miniSpecifier}";`,
 		...(module.feature.wraps ?? []).map(
 			(target) => `import { ${target.type} } from "${target.from}";`,
@@ -831,6 +838,7 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		localNames: new Set([
 			"mini",
 			"getStructParams",
+			"struct",
 			...wrapNames,
 			...wrapperSymbols.map((symbol) => symbol.name),
 		]),

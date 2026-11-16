@@ -10,7 +10,7 @@
  * @module
  */
 
-import { getStructParams } from "@sekhmet/primordials/struct";
+import { getStructParams, struct } from "@sekhmet/primordials/struct";
 import * as mini from "../mini/mod.ts";
 
 export type { OrderingVariants } from "../mini/mod.ts";
@@ -46,15 +46,19 @@ export type { OrderingVariants } from "../mini/mod.ts";
  */
 export class Ordering extends mini.Ordering {
 	/**
-	 * Converts a mini {@linkcode mini.Ordering} into a main `Ordering`, returning it unchanged when it already is one.
+	 * Views a mini {@linkcode mini.Ordering} as a main `Ordering`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
 	 *
 	 * @param self - The Ordering to convert
-	 * @returns `self` as a main `Ordering`
+	 * @returns A main `Ordering` sharing `self`'s state
 	 */
 	static fromMini(self: mini.Ordering): Ordering {
 		if (self instanceof Ordering) return self;
 
-		return new Ordering(...getStructParams(self).variant);
+		const params = getStructParams(self);
+		const view = new Ordering(...params.variant);
+		view[struct] = params;
+
+		return view;
 	}
 
 	/**

@@ -40,10 +40,10 @@ export { FiberError, FiberState } from "../mini/mod.ts";
  */
 export class Fiber<I, T, E> extends mini.Fiber<I, T, E> {
 	/**
-	 * Converts a mini {@linkcode mini.Fiber} into a main `Fiber`, returning it unchanged when it already is one.
+	 * Views a mini {@linkcode mini.Fiber} as a main `Fiber`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
 	 *
 	 * @param self - The Fiber to convert
-	 * @returns `self` as a main `Fiber`
+	 * @returns A main `Fiber` sharing `self`'s state
 	 */
 	static fromMini<I, T, E>(self: mini.Fiber<I, T, E>): Fiber<I, T, E> {
 		if (self instanceof Fiber) return self;

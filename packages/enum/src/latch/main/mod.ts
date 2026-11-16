@@ -10,7 +10,7 @@
  * @module
  */
 
-import { getStructParams } from "@sekhmet/primordials/struct";
+import { getStructParams, struct } from "@sekhmet/primordials/struct";
 import type { Option as MiniOption } from "@/src/option/mini/core.ts";
 import { Option } from "../../option/main/mod.ts";
 import { Result } from "../../result/main/mod.ts";
@@ -57,15 +57,19 @@ export type { LatchVariants } from "../mini/mod.ts";
  */
 export class Latch<out A, out I> extends mini.Latch<A, I> {
 	/**
-	 * Converts a mini {@linkcode mini.Latch} into a main `Latch`, returning it unchanged when it already is one.
+	 * Views a mini {@linkcode mini.Latch} as a main `Latch`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
 	 *
 	 * @param self - The Latch to convert
-	 * @returns `self` as a main `Latch`
+	 * @returns A main `Latch` sharing `self`'s state
 	 */
 	static fromMini<A, I>(self: mini.Latch<A, I>): Latch<A, I> {
 		if (self instanceof Latch) return self;
 
-		return new Latch(...getStructParams(self).variant);
+		const params = getStructParams(self);
+		const view = new Latch<A, I>(...params.variant);
+		view[struct] = params;
+
+		return view;
 	}
 
 	/**

@@ -10,7 +10,7 @@
  * @module
  */
 
-import { getStructParams } from "@sekhmet/primordials/struct";
+import { getStructParams, struct } from "@sekhmet/primordials/struct";
 import * as mini from "../mini/mod.ts";
 
 export type {
@@ -35,15 +35,19 @@ export type {
  */
 export class Enum<out T extends mini.SomeVariant> extends mini.Enum<T> {
 	/**
-	 * Converts a mini {@linkcode mini.Enum} into a main `Enum`, returning it unchanged when it already is one.
+	 * Views a mini {@linkcode mini.Enum} as a main `Enum`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
 	 *
 	 * @param self - The Enum to convert
-	 * @returns `self` as a main `Enum`
+	 * @returns A main `Enum` sharing `self`'s state
 	 */
 	static fromMini<T extends mini.SomeVariant>(self: mini.Enum<T>): Enum<T> {
 		if (self instanceof Enum) return self;
 
-		return new Enum(...getStructParams(self).variant);
+		const params = getStructParams(self);
+		const view = new Enum<T>(...params.variant);
+		view[struct] = params;
+
+		return view;
 	}
 
 	/**

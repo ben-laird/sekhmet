@@ -44,10 +44,10 @@ export { EffectError, ExceptionOccurred, Failed } from "../mini/mod.ts";
  */
 export class Effect<I, T, E> extends mini.Effect<I, T, E> {
 	/**
-	 * Converts a mini {@linkcode mini.Effect} into a main `Effect`, returning it unchanged when it already is one.
+	 * Views a mini {@linkcode mini.Effect} as a main `Effect`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
 	 *
 	 * @param self - The Effect to convert
-	 * @returns `self` as a main `Effect`
+	 * @returns A main `Effect` sharing `self`'s state
 	 */
 	static fromMini<I, T, E>(self: mini.Effect<I, T, E>): Effect<I, T, E> {
 		if (self instanceof Effect) return self;

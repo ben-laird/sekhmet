@@ -20,7 +20,7 @@
  * @module
  */
 
-import { getStructParams } from "@sekhmet/primordials/struct";
+import { getStructParams, struct } from "@sekhmet/primordials/struct";
 import type { Result as MiniResult } from "@/src/result/mini/core.ts";
 import { Result } from "../../result/main/mod.ts";
 import * as mini from "../mini/mod.ts";
@@ -46,15 +46,19 @@ export { unzip } from "../mini/mod.ts";
  */
 export class Option<out T> extends mini.Option<T> {
 	/**
-	 * Converts a mini {@linkcode mini.Option} into a main `Option`, returning it unchanged when it already is one.
+	 * Views a mini {@linkcode mini.Option} as a main `Option`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
 	 *
 	 * @param self - The Option to convert
-	 * @returns `self` as a main `Option`
+	 * @returns A main `Option` sharing `self`'s state
 	 */
 	static fromMini<T>(self: mini.Option<T>): Option<T> {
 		if (self instanceof Option) return self;
 
-		return new Option(...getStructParams(self).variant);
+		const params = getStructParams(self);
+		const view = new Option<T>(...params.variant);
+		view[struct] = params;
+
+		return view;
 	}
 
 	/**

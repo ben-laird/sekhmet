@@ -101,3 +101,17 @@ Deno.test("Option mutating methods mutate the receiver", () => {
 	assertEquals(taken.unwrap(), 7);
 	assertEquals(option.isNone(), true);
 });
+
+Deno.test("a main view of a mini Option shares its state", () => {
+	// Given: a mini Some returned through a main method
+	const miniOption = mini.Some(1);
+	const view = None<number>().or(miniOption);
+
+	// When: taking the value out through the main view
+	const taken = view.take();
+
+	// Then: the mini source was emptied too, and the view is a main Option
+	assertInstanceOf(view, Option);
+	assertEquals(taken.unwrap(), 1);
+	assertEquals(mini.isNone(miniOption), true);
+});

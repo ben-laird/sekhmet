@@ -1,3 +1,4 @@
+import { getStructParams } from "@sekhmet/primordials/struct";
 import {
 	assertEquals,
 	assertInstanceOf,
@@ -51,4 +52,15 @@ Deno.test("Enum.fromMini converts a mini Enum and keeps a main one", () => {
 	assertInstanceOf(converted, Enum);
 	assertEquals(converted.union(), 1);
 	assertStrictEquals(kept, mainShape);
+});
+
+Deno.test("Enum.fromMini shares the mini instance's struct params", () => {
+	// Given: a mini Enum
+	const miniShape = new mini.Enum<Shape>("Circle", 1);
+
+	// When: converting it to main
+	const view = Enum.fromMini(miniShape);
+
+	// Then: both read and write the same state
+	assertStrictEquals(getStructParams(view), getStructParams(miniShape));
 });

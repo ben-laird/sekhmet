@@ -362,7 +362,11 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   top level) returns the main class. The result goes through the class's
   static `fromMini`, which returns the value unchanged when it already is a
   main instance (so methods that return `self` keep its identity) and
-  otherwise rebuilds it. Types listed in `wraps` (e.g. `Option.okOr` returning
+  otherwise returns a main view that shares the mini instance's struct params,
+  so a change through either is visible through both (Struct-based classes
+  pass the params to the constructor; Enum-based ones are built from the
+  variant and then rebound to the same params through the `struct` symbol).
+  Types listed in `wraps` (e.g. `Option.okOr` returning
   `Result`) convert to that feature's main class the same way. Nested
   occurrences (`Generator<Option<T>>`, parameters) stay mini types.
 - **Constructors and other free functions.** A function without `self` that
@@ -380,7 +384,11 @@ export class Option<out T> extends mini.Option<T> {
 	static fromMini<T>(self: mini.Option<T>): Option<T> {
 		if (self instanceof Option) return self;
 
-		return new Option(...getStructParams(self).variant);
+		const params = getStructParams(self);
+		const view = new Option<T>(...params.variant);
+		view[struct] = params;
+
+		return view;
 	}
 
 	map<U>(mapping: (value: T) => U): Option<U> {

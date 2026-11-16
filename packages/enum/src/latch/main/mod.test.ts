@@ -67,3 +67,16 @@ Deno.test("Latch conversions return main Options and Results", () => {
 	assertEquals(active.map((n) => n + 1).unwrap(), 6);
 	assertEquals(result.map((n) => n * 2).unwrap(), 10);
 });
+
+Deno.test("a main view of a mini Latch shares its state", () => {
+	// Given: a mini Inactive latch returned through a main method
+	const miniLatch = mini.Inactive<number, string>("off");
+	const view = Active<number, string>(1).and(miniLatch);
+
+	// When: activating the main view
+	view.activate(9);
+
+	// Then: the mini source is Active too
+	assertInstanceOf(view, Latch);
+	assertEquals(mini.unwrap(miniLatch), 9);
+});
