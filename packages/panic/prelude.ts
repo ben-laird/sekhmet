@@ -1,7 +1,7 @@
 export {
 	Panic,
-	panic,
-	panicWithoutCause,
 	type PanicSource,
 	type PanicSourceBase,
+	panic,
+	panicWithoutCause,
 } from "./src/mini/core.ts";
