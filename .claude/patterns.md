@@ -455,6 +455,16 @@ methods.
 - If generation fails, `deno task gen:main` names the feature, the symbol and
   the reason.
 
+### Parameters: one object, except the receiver
+
+Functions with more than one parameter take a single object parameter
+(`prefix({ issues, path })`, `object({ shape, unknownKeys })`), so call sites
+name every argument. The one exception is a self-first mini function the
+generator turns into a main method: `map(self, mapping)` keeps its positional
+`self`, because its main form is the one-argument method `value.map(mapping)`
+and every package shares that convention. _Confirmed by the owner,
+2026-11-16._
+
 ## Type Utility Patterns
 
 ### Extracting variant information
