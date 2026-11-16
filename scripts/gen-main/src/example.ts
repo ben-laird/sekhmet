@@ -114,7 +114,8 @@ export function toMethodForm({
 		if (at < 0) break;
 
 		const before = code.charAt(at - 1);
-		if (at > 0 && IDENTIFIER_CHAR.test(before)) {
+		const isSpread = code.slice(at - 3, at) === "...";
+		if (at > 0 && IDENTIFIER_CHAR.test(before) && !isSpread) {
 			output += code.slice(cursor, at + call.length);
 			cursor = at + call.length;
 			continue;

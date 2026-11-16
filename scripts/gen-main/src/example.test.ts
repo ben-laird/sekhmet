@@ -123,6 +123,17 @@ Deno.test("toMethodForm leaves other identifiers and methods alone", () => {
 	assertEquals(rewritten, code);
 });
 
+Deno.test("toMethodForm rewrites a spread call", () => {
+	// Given: a call spread into an array
+	const code = "[...iter(Some(42))]";
+
+	// When: rewriting calls of iter
+	const rewritten = toMethodForm({ code, name: "iter" });
+
+	// Then: the spread operand becomes a method call
+	assertEquals(rewritten, "[...Some(42).iter()]");
+});
+
 Deno.test("toMethodForm gives up on unbalanced calls", () => {
 	// Given: a call missing its closing parenthesis
 	const code = "map(Some(1), f";
