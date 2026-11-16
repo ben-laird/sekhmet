@@ -40,6 +40,7 @@ jobs:
     # and publish it (scripts/release also refuses unless HEAD is main's tip).
     # startsWith, not contains: a squash merge can mention the prefix in its body.
     if: ${{ github.ref == 'refs/heads/main' && !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    timeout-minutes: 30
     permissions:
       contents: write
       id-token: write

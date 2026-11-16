@@ -18,3 +18,8 @@ discovery:
 
 tagging:
   format: "{package}@{version}"
+
+# Bounds each package's `deno publish`; a stuck publish fails that package
+# (retry with a forced release run) inside the job's 30-minute limit.
+publishing:
+  timeout: 5m
