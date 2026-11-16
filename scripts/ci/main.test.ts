@@ -1,5 +1,12 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { biomeCiCommand, ciSteps, EXIT_CODES, main } from "./main.ts";
+import { exists } from "@std/fs/exists";
+import {
+	biomeCiCommand,
+	ciSteps,
+	coverageCleanupCommand,
+	EXIT_CODES,
+	main,
+} from "./main.ts";
 
 const ENVIRONMENTS = [
 	{ isCI: false, isAI: false },
@@ -78,6 +85,44 @@ Deno.test("ciSteps cleans up coverage data locally even after a failure, and kee
 	assertEquals(localCleanup?.condition, "always");
 	assertEquals(localCleanup?.dependsOn, ["Show coverage report"]);
 	assertEquals(ciCleanup, undefined);
+});
+
+Deno.test("coverageCleanupCommand removes a populated coverage directory", async () => {
+	// Given: a coverage directory holding profiles and a generated report
+	const root = await Deno.makeTempDir({ prefix: "ci-cleanup-" });
+	const dir = `${root}/coverage`;
+	await Deno.mkdir(`${dir}/html`, { recursive: true });
+	await Deno.writeTextFile(`${dir}/profile.json`, "{}");
+	await Deno.writeTextFile(`${dir}/lcov.info`, "");
+	await Deno.writeTextFile(`${dir}/html/index.html`, "");
+
+	try {
+		// When: running the cleanup step's command on it
+		const output = await coverageCleanupCommand({ dir }).output();
+
+		// Then: it succeeds and the directory is gone
+		assertEquals(output.success, true);
+		assertEquals(await exists(dir), false);
+	} finally {
+		await Deno.remove(root, { recursive: true });
+	}
+});
+
+Deno.test("coverageCleanupCommand succeeds when there is no coverage directory", async () => {
+	// Given: no coverage directory, as when lint failed and blocked the tests
+	const root = await Deno.makeTempDir({ prefix: "ci-cleanup-" });
+
+	try {
+		// When: running the cleanup step's command
+		const output = await coverageCleanupCommand({
+			dir: `${root}/coverage`,
+		}).output();
+
+		// Then: there is nothing to clean, which is not a failure
+		assertEquals(output.success, true);
+	} finally {
+		await Deno.remove(root, { recursive: true });
+	}
 });
 
 Deno.test("main function exists and is callable", () => {
