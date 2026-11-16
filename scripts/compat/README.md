@@ -34,9 +34,9 @@ and a verdict. Exit codes:
    validated (Zod) and summarized:
    - **node, bun:** `node run.mjs <report.json>` / `bun run.mjs <report.json>`.
    - **chromium, firefox, webkit:** Playwright opens a headless page on
-     `https://compat.test` (served from the bundle by request interception;
-     HTTPS so the page is a secure context, which `crypto.randomUUID()` needs)
-     and evaluates `import("/suite.js")`.
+     `http://compat.test` (served from the bundle by request interception;
+     plain HTTP on purpose, so the run proves the packages need no secure
+     context) and evaluates `import("/suite.js")`.
    - **workerd:** Miniflare runs a module worker whose `fetch` handler runs the
      suite and returns the report. No `nodejs_compat` flag; compatibility date
      2026-07-30.

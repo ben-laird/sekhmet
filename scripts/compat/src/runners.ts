@@ -30,11 +30,8 @@ export const SUITE_TIMEOUT_MS: number = 5 * 60 * 1000;
  */
 export const WORKERD_COMPATIBILITY_DATE = "2026-07-30";
 
-/**
- * The page origin. It is HTTPS so the page is a secure context: the packages
- * call `crypto.randomUUID()`, which browsers expose only in secure contexts.
- */
-const PAGE_ORIGIN = "https://compat.test";
+/** Plain HTTP on purpose: the packages must not need a secure context. */
+const PAGE_ORIGIN = "http://compat.test";
 
 const BROWSERS = { chromium, firefox, webkit } as const;
 
