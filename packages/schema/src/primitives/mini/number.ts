@@ -1,5 +1,13 @@
-import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import {
+	InvalidType,
+	type SchemaIssue,
+	TooBig,
+	TooSmall,
+} from "@/src/core/mini/issue.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
+import type { CoerceMode } from "./coerce.ts";
+import { coerceNumber } from "./convert.ts";
 
 /**
  * Represents a numeric bound with inclusivity.
@@ -29,64 +37,156 @@ export interface Range {
  */
 export interface NumberSchemaOptions {
 	/**
-	 * If true, coerce non-number values to numbers using Number().
-	 * If false, non-number values will result in a TypeError.
+	 * How a non-number is treated (see {@linkcode CoerceMode}): rejected
+	 * (`false`), strictly coerced (`true`: trimmed decimal or exponent
+	 * strings, booleans as 1/0, bigints in the safe-integer range), or
+	 * converted with `Number()` (`"native"`). A coerced value is still
+	 * checked, so `NaN` from `Number("abc")` fails unless `nan: true`.
 	 *
 	 * @default false
 	 */
-	coerce?: boolean;
+	coerce?: CoerceMode;
 
 	/**
-	 * Optional range constraint for the number.
-	 * If provided, numbers outside this range will result in a TypeError.
+	 * Whether `NaN` is accepted. By default it fails with an `InvalidType`
+	 * issue (received `"nan"`).
+	 *
+	 * @default false
+	 */
+	nan?: boolean;
+
+	/**
+	 * Whether `Infinity` and `-Infinity` are accepted. By default they fail
+	 * with an `InvalidType` issue (received `"infinity"`).
+	 *
+	 * @default false
+	 */
+	infinite?: boolean;
+
+	/**
+	 * A range the number must fall in: a value below `min` fails with
+	 * `TooSmall`, one above `max` with `TooBig`.
 	 */
 	range?: Range;
+}
+
+/** The issue a number violates, if any, under the schema's options. */
+function violation(
+	value: number,
+	options: NumberSchemaOptions | undefined,
+): SchemaIssue | undefined {
+	if (Number.isNaN(value)) {
+		return options?.nan === true
+			? undefined
+			: InvalidType({ input: value, expected: "number" });
+	}
+	if (!Number.isFinite(value) && options?.infinite !== true) {
+		return InvalidType({ input: value, expected: "number" });
+	}
+
+	const range = options?.range;
+	if (range === undefined) return undefined;
+
+	const [minimum, lower] = range.min;
+	const [maximum, upper] = range.max;
+	const minInclusive = lower === "inclusive";
+	const maxInclusive = upper === "inclusive";
+	if (minInclusive ? value < minimum : value <= minimum) {
+		return TooSmall({
+			input: value,
+			origin: "number",
+			minimum,
+			inclusive: minInclusive,
+		});
+	}
+	if (maxInclusive ? value > maximum : value >= maximum) {
+		return TooBig({
+			input: value,
+			origin: "number",
+			maximum,
+			inclusive: maxInclusive,
+		});
+	}
+
+	return undefined;
 }
 
 /**
  * Creates a schema that validates and optionally coerces numeric values.
  *
- * By default, this schema only accepts number inputs and returns a TypeError
- * for non-number values. With `coerce: true`, it will convert any input to
- * a number using the Number() function.
+ * It is strict by default: it accepts only finite numbers (`-0` included),
+ * failing with an `InvalidType` issue otherwise. `nan: true` and
+ * `infinite: true` allow `NaN` and `±Infinity`, and `range` bounds the
+ * value. Chain {@linkcode int}, {@linkcode safe}, {@linkcode multipleOf},
+ * {@linkcode min} and {@linkcode max} for further checks.
+ *
+ * `coerce: true` also accepts trimmed decimal or exponent strings
+ * (`" 12 "`, `"1e3"`), booleans as 1/0 and bigints in the safe-integer
+ * range, and rejects `""`, `"0x10"`, `null`, `undefined`, `[]` and `{}`.
+ * `coerce: "native"` uses `Number()` instead, whose result is still
+ * checked.
  *
  * @param options Configuration options
  * @returns A schema that validates numeric inputs
  *
  * @example
  * ```ts
- * import { number } from "@sekhmet/schema/primitives/mini/number";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { number } from "@sekhmet/schema/primitives/mini";
  *
  * const schema = number();
- * parseSync(schema, 42); // Ok(42)
- * parseSync(schema, "123"); // Err(TypeError)
+ *
+ * assertEquals(unwrap(parseSync(schema, 42)), 42);
+ * assertEquals(isErr(parseSync(schema, Number.NaN)), true);
+ * assertEquals(isErr(parseSync(schema, "42")), true);
  * ```
  *
  * @example
  * ```ts
- * import { number } from "@sekhmet/schema/primitives/mini/number";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { number } from "@sekhmet/schema/primitives/mini";
  *
- * const schema = number({ coerce: true });
- * parseSync(schema, "123"); // Ok(123)
- * parseSync(schema, true); // Ok(1)
+ * const ratio = number({
+ * 	range: { min: [0, "inclusive"], max: [1, "non-inclusive"] },
+ * });
+ *
+ * assertEquals(isOk(parseSync(ratio, 0)), true);
+ * assertEquals(isErr(parseSync(ratio, 1)), true);
+ * ```
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { number } from "@sekhmet/schema/primitives/mini";
+ *
+ * const strict = number({ coerce: true });
+ * assertEquals(unwrap(parseSync(strict, " 1e3 ")), 1000);
+ * assertEquals(isErr(parseSync(strict, "")), true);
+ *
+ * const native = number({ coerce: "native" });
+ * assertEquals(unwrap(parseSync(native, "")), 0);
+ * assertEquals(isErr(parseSync(native, "abc")), true);
  * ```
  */
 export function number(
 	options?: NumberSchemaOptions,
-): Schema<unknown, number, TypeError> {
-	const coerce = options?.coerce ?? false;
+): Schema<unknown, number, SchemaIssue> {
+	const mode = options?.coerce ?? false;
 
-	return new Schema((input) => {
-		if (typeof input !== "number") {
-			if (coerce) {
-				return Ok(Number(input));
-			}
-
-			return Err(new TypeError());
+	return new Schema((input): Result<number, SchemaIssue> => {
+		const value = coerceNumber(input, mode);
+		if (value === undefined) {
+			return Err(InvalidType({ input, expected: "number" }));
 		}
 
-		return Ok(input);
+		const issue = violation(value, options);
+
+		return issue === undefined ? Ok(value) : Err(issue);
 	});
 }

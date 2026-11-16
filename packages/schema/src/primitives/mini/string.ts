@@ -1,63 +1,71 @@
-import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
+import type { CoerceMode } from "./coerce.ts";
+import { coerceString } from "./convert.ts";
 
 /**
  * Options for configuring the string schema.
  */
 export interface StringSchemaOptions {
 	/**
-	 * If true, coerce non-string values to strings using String().
-	 * If false, non-string values will result in a TypeError.
+	 * How a non-string is treated (see {@linkcode CoerceMode}): rejected
+	 * (`false`), strictly coerced (`true`: finite numbers, bigints and
+	 * booleans), or converted with `String()` (`"native"`).
 	 *
 	 * @default false
 	 */
-	coerce?: boolean;
+	coerce?: CoerceMode;
 }
 
 /**
  * Creates a schema that validates and optionally coerces string values.
  *
- * By default, this schema only accepts string inputs and returns a TypeError
- * for non-string values. With `coerce: true`, it will convert any input to
- * a string using the String() function.
+ * By default it accepts only strings, failing with an `InvalidType` issue
+ * otherwise. `coerce: true` also accepts finite numbers, bigints and
+ * booleans, as their `String()` form; `null`, `undefined`, `NaN`, objects
+ * and symbols still fail. `coerce: "native"` converts anything `String()`
+ * can.
  *
  * @param options Configuration options
  * @returns A schema that validates string inputs
  *
  * @example
  * ```ts
- * import { string } from "@sekhmet/schema/primitives/mini/string";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
  *
- * const schema = string();
- * parseSync(schema, "hello"); // Ok("hello")
- * parseSync(schema, 123); // Err(TypeError)
+ * assertEquals(unwrap(parseSync(string(), "hello")), "hello");
+ * assertEquals(isErr(parseSync(string(), 123)), true);
  * ```
  *
  * @example
  * ```ts
- * import { string } from "@sekhmet/schema/primitives/mini/string";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
  *
- * const schema = string({ coerce: true });
- * parseSync(schema, 123); // Ok("123")
- * parseSync(schema, true); // Ok("true")
+ * const strict = string({ coerce: true });
+ * assertEquals(unwrap(parseSync(strict, 123)), "123");
+ * assertEquals(isErr(parseSync(strict, null)), true);
+ *
+ * const native = string({ coerce: "native" });
+ * assertEquals(unwrap(parseSync(native, null)), "null");
  * ```
  */
 export function string(
 	options?: StringSchemaOptions,
-): Schema<unknown, string, TypeError> {
-	const coerce = options?.coerce ?? false;
+): Schema<unknown, string, SchemaIssue> {
+	const mode = options?.coerce ?? false;
 
-	return new Schema((input) => {
-		if (typeof input !== "string") {
-			if (coerce) {
-				return Ok(String(input));
-			}
+	return new Schema((input): Result<string, SchemaIssue> => {
+		const value = coerceString(input, mode);
 
-			return Err(new TypeError());
-		}
-
-		return Ok(input);
+		return value === undefined
+			? Err(InvalidType({ input, expected: "string" }))
+			: Ok(value);
 	});
 }

@@ -21,116 +21,872 @@
  * @module
  */
 
+import type { SchemaIssue } from "@/src/core/mini/issue.ts";
+import type { Schema as MiniSchema } from "@/src/core/mini/schema.ts";
 import { Schema } from "../../core/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
 export type {
 	BooleanSchemaOptions,
 	Bound,
+	CoerceMode,
+	LimitOptions,
+	Literal,
+	NormalizationForm,
 	NumberSchemaOptions,
 	Range,
+	StringboolOptions,
 	StringSchemaOptions,
 } from "../mini/mod.ts";
+export {
+	EMAIL_PATTERN,
+	STRINGBOOL_FALSY,
+	STRINGBOOL_TRUTHY,
+	UUID_PATTERN,
+} from "../mini/mod.ts";
+
+/**
+ * Creates a schema that accepts only bigints, failing with an `InvalidType`
+ * issue otherwise. It does not coerce: a number is rejected.
+ *
+ * @returns A schema accepting only bigints
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { bigint } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isOk(parseSync(bigint(), 10n)), true);
+ * assertEquals(isErr(parseSync(bigint(), 10)), true);
+ * ```
+ */
+export function bigint(): Schema<unknown, bigint, SchemaIssue> {
+	return Schema.fromMini(mini.bigint());
+}
 
 /**
  * Creates a schema that validates and optionally coerces boolean values.
  *
- * By default, this schema only accepts boolean inputs and returns a TypeError
- * for non-boolean values. With `coerce: true`, it will convert any input to
- * a boolean using the Boolean() function.
+ * By default it accepts only booleans, failing with an `InvalidType` issue
+ * otherwise. `coerce: true` also accepts `0`/`1`, `0n`/`1n` and
+ * `stringbool`'s default words (so `"false"` is `false`); anything else,
+ * such as `"maybe"`, `2` or `null`, still fails. `coerce: "native"` uses
+ * `Boolean()`, so every value converts and `"false"` is `true`.
+ *
+ * To read strings from env vars, query params or forms, prefer
+ * `stringbool()`, which accepts only strings and takes its own word lists.
  *
  * @param options - Configuration options
  * @returns A schema that validates boolean inputs
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { boolean } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
- * const schema = boolean();
- * parseSync(schema, true); // Ok(true)
- * parseSync(schema, "true"); // Err(TypeError)
+ * assertEquals(unwrap(parseSync(boolean(), true)), true);
+ * assertEquals(isErr(parseSync(boolean(), "true")), true);
  * ```
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { boolean } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
- * const schema = boolean({ coerce: true });
- * parseSync(schema, "true"); // Ok(true)
- * parseSync(schema, 0); // Ok(false)
- * parseSync(schema, 1); // Ok(true)
+ * const strict = boolean({ coerce: true });
+ * assertEquals(unwrap(parseSync(strict, "false")), false);
+ * assertEquals(unwrap(parseSync(strict, 1)), true);
+ * assertEquals(isErr(parseSync(strict, "maybe")), true);
+ *
+ * const native = boolean({ coerce: "native" });
+ * assertEquals(unwrap(parseSync(native, "false")), true);
  * ```
  */
 export function boolean(
 	options?: mini.BooleanSchemaOptions,
-): Schema<unknown, boolean, TypeError> {
+): Schema<unknown, boolean, SchemaIssue> {
 	return Schema.fromMini(mini.boolean(options));
+}
+
+/**
+ * Creates a schema that accepts only valid `Date` objects. Anything else,
+ * including an `Invalid Date` (one whose time is `NaN`), fails with an
+ * `InvalidType` issue; the issue's `received` tells the two apart
+ * (`"invalid date"`). It does not coerce: a date string or a timestamp is
+ * rejected. The accepted `Date` is returned as is, not copied.
+ *
+ * @returns A schema accepting only valid dates
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { date } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isOk(parseSync(date(), new Date(0))), true);
+ * assertEquals(isErr(parseSync(date(), new Date("nope"))), true);
+ * assertEquals(isErr(parseSync(date(), "1970-01-01")), true);
+ * ```
+ */
+export function date(): Schema<unknown, Date, SchemaIssue> {
+	return Schema.fromMini(mini.date());
+}
+
+/**
+ * Creates a schema that accepts exactly one primitive value, failing with an
+ * `InvalidValue` issue otherwise. Values compare with SameValueZero (as
+ * `Array.prototype.includes` does), so `literal(Number.NaN)` accepts `NaN`
+ * and `literal(0)` accepts `-0`. The output type is the literal's own type.
+ *
+ * @template T - The literal's type, inferred as narrowly as possible
+ * @param value - The only accepted value
+ * @returns A schema accepting only `value`
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { literal } from "@sekhmet/schema/primitives";
+ *
+ * const admin = literal("admin");
+ * const role: "admin" = unwrap(parseSync(admin, "admin"));
+ *
+ * assertEquals(role, "admin");
+ * assertEquals(isErr(parseSync(admin, "user")), true);
+ * ```
+ */
+export function literal<const T extends mini.Literal>(
+	value: T,
+): Schema<unknown, T, SchemaIssue> {
+	return Schema.fromMini(mini.literal(value));
+}
+
+/**
+ * Creates a schema that rejects every value with an `InvalidType` issue
+ * expecting `"never"`, so its output type is `never`. Use it to forbid a
+ * field, or as the schema of a case that cannot occur.
+ *
+ * @returns A schema accepting nothing
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { never } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isErr(parseSync(never(), undefined)), true);
+ * ```
+ */
+export function never(): Schema<unknown, never, SchemaIssue> {
+	return Schema.fromMini(mini.never());
+}
+
+/**
+ * Creates a schema that accepts only `null`, failing with an `InvalidType`
+ * issue otherwise (`undefined` included).
+ *
+ * Named `null_` because `null` is a reserved word; the trailing underscore
+ * is the usual escape for a keyword.
+ *
+ * @returns A schema accepting only `null`
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { null_ } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isOk(parseSync(null_(), null)), true);
+ * assertEquals(isErr(parseSync(null_(), undefined)), true);
+ * ```
+ */
+export function null_(): Schema<unknown, null, SchemaIssue> {
+	return Schema.fromMini(mini.null_());
 }
 
 /**
  * Creates a schema that validates and optionally coerces numeric values.
  *
- * By default, this schema only accepts number inputs and returns a TypeError
- * for non-number values. With `coerce: true`, it will convert any input to
- * a number using the Number() function.
+ * It is strict by default: it accepts only finite numbers (`-0` included),
+ * failing with an `InvalidType` issue otherwise. `nan: true` and
+ * `infinite: true` allow `NaN` and `±Infinity`, and `range` bounds the
+ * value. Chain {@linkcode int}, {@linkcode safe}, {@linkcode multipleOf},
+ * {@linkcode min} and {@linkcode max} for further checks.
+ *
+ * `coerce: true` also accepts trimmed decimal or exponent strings
+ * (`" 12 "`, `"1e3"`), booleans as 1/0 and bigints in the safe-integer
+ * range, and rejects `""`, `"0x10"`, `null`, `undefined`, `[]` and `{}`.
+ * `coerce: "native"` uses `Number()` instead, whose result is still
+ * checked.
  *
  * @param options - Configuration options
  * @returns A schema that validates numeric inputs
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
  * const schema = number();
- * parseSync(schema, 42); // Ok(42)
- * parseSync(schema, "123"); // Err(TypeError)
+ *
+ * assertEquals(unwrap(parseSync(schema, 42)), 42);
+ * assertEquals(isErr(parseSync(schema, Number.NaN)), true);
+ * assertEquals(isErr(parseSync(schema, "42")), true);
  * ```
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
- * const schema = number({ coerce: true });
- * parseSync(schema, "123"); // Ok(123)
- * parseSync(schema, true); // Ok(1)
+ * const ratio = number({
+ * 	range: { min: [0, "inclusive"], max: [1, "non-inclusive"] },
+ * });
+ *
+ * assertEquals(isOk(parseSync(ratio, 0)), true);
+ * assertEquals(isErr(parseSync(ratio, 1)), true);
+ * ```
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { number } from "@sekhmet/schema/primitives";
+ *
+ * const strict = number({ coerce: true });
+ * assertEquals(unwrap(parseSync(strict, " 1e3 ")), 1000);
+ * assertEquals(isErr(parseSync(strict, "")), true);
+ *
+ * const native = number({ coerce: "native" });
+ * assertEquals(unwrap(parseSync(native, "")), 0);
+ * assertEquals(isErr(parseSync(native, "abc")), true);
  * ```
  */
 export function number(
 	options?: mini.NumberSchemaOptions,
-): Schema<unknown, number, TypeError> {
+): Schema<unknown, number, SchemaIssue> {
 	return Schema.fromMini(mini.number(options));
+}
+
+/**
+ * Checks that a number is an integer; anything else fails with an
+ * `InvalidType` issue expecting `"integer"`.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The number schema to check
+ * @returns A schema that also rejects non-integers
+ * @example
+ * ```ts
+ * import { assert } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { int, number } from "@sekhmet/schema/primitives";
+ *
+ * const count = int(number());
+ *
+ * assert(isOk(parseSync(count, 3)));
+ * assert(isErr(parseSync(count, 3.5)));
+ * ```
+ */
+export function int<I, E>(
+	self: MiniSchema<I, number, E>,
+): Schema<I, number, E | SchemaIssue> {
+	return Schema.fromMini(mini.int(self));
+}
+
+/**
+ * Checks that a number is at most `maximum` (or below it, with
+ * `inclusive: false`), failing with a `TooBig` issue.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The number schema to check
+ * @param maximum - The upper bound
+ * @param options - Whether the bound is inclusive (the default)
+ * @returns A schema that also rejects values above the bound
+ * @example
+ * ```ts
+ * import { assert } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { max, number } from "@sekhmet/schema/primitives";
+ *
+ * const percent = max(number(), 100);
+ *
+ * assert(isOk(parseSync(percent, 100)));
+ * assert(isErr(parseSync(percent, 101)));
+ * ```
+ */
+export function max<I, E>(
+	self: MiniSchema<I, number, E>,
+	maximum: number,
+	options?: mini.LimitOptions,
+): Schema<I, number, E | SchemaIssue> {
+	return Schema.fromMini(mini.max(self, maximum, options));
+}
+
+/**
+ * Checks that a number is at least `minimum` (or above it, with
+ * `inclusive: false`), failing with a `TooSmall` issue.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The number schema to check
+ * @param minimum - The lower bound
+ * @param options - Whether the bound is inclusive (the default)
+ * @returns A schema that also rejects values below the bound
+ * @example
+ * ```ts
+ * import { assert } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { min, number } from "@sekhmet/schema/primitives";
+ *
+ * const positive = min(number(), 0, { inclusive: false });
+ *
+ * assert(isOk(parseSync(positive, 0.5)));
+ * assert(isErr(parseSync(positive, 0)));
+ * ```
+ */
+export function min<I, E>(
+	self: MiniSchema<I, number, E>,
+	minimum: number,
+	options?: mini.LimitOptions,
+): Schema<I, number, E | SchemaIssue> {
+	return Schema.fromMini(mini.min(self, minimum, options));
+}
+
+/**
+ * Checks that a number is a multiple of `divisor`, failing with a
+ * `NotMultipleOf` issue. Decimal divisors compare at the precision of their
+ * written form, so `0.3` is a multiple of `0.1` despite floating point.
+ *
+ * Panics with a `RangeError` when `divisor` is not a positive finite number.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The number schema to check
+ * @param divisor - The positive number the value must be a multiple of
+ * @returns A schema that also rejects non-multiples
+ * @example
+ * ```ts
+ * import { assert } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { multipleOf, number } from "@sekhmet/schema/primitives";
+ *
+ * const price = multipleOf(number(), 0.01);
+ *
+ * assert(isOk(parseSync(price, 19.99)));
+ * assert(isErr(parseSync(price, 19.999)));
+ * ```
+ */
+export function multipleOf<I, E>(
+	self: MiniSchema<I, number, E>,
+	divisor: number,
+): Schema<I, number, E | SchemaIssue> {
+	return Schema.fromMini(mini.multipleOf(self, divisor));
+}
+
+/**
+ * Checks that a number is a safe integer, one that a `number` represents
+ * exactly (`Number.MIN_SAFE_INTEGER` to `Number.MAX_SAFE_INTEGER`). A
+ * non-integer fails with `InvalidType`; an integer out of range with
+ * `TooSmall` or `TooBig`.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The number schema to check
+ * @returns A schema that also rejects unsafe integers
+ * @example
+ * ```ts
+ * import { assert } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { number, safe } from "@sekhmet/schema/primitives";
+ *
+ * const id = safe(number());
+ *
+ * assert(isOk(parseSync(id, 2 ** 53 - 1)));
+ * assert(isErr(parseSync(id, 2 ** 53)));
+ * ```
+ */
+export function safe<I, E>(
+	self: MiniSchema<I, number, E>,
+): Schema<I, number, E | SchemaIssue> {
+	return Schema.fromMini(mini.safe(self));
 }
 
 /**
  * Creates a schema that validates and optionally coerces string values.
  *
- * By default, this schema only accepts string inputs and returns a TypeError
- * for non-string values. With `coerce: true`, it will convert any input to
- * a string using the String() function.
+ * By default it accepts only strings, failing with an `InvalidType` issue
+ * otherwise. `coerce: true` also accepts finite numbers, bigints and
+ * booleans, as their `String()` form; `null`, `undefined`, `NaN`, objects
+ * and symbols still fail. `coerce: "native"` converts anything `String()`
+ * can.
  *
  * @param options - Configuration options
  * @returns A schema that validates string inputs
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
- * const schema = string();
- * parseSync(schema, "hello"); // Ok("hello")
- * parseSync(schema, 123); // Err(TypeError)
+ * assertEquals(unwrap(parseSync(string(), "hello")), "hello");
+ * assertEquals(isErr(parseSync(string(), 123)), true);
  * ```
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
- * const schema = string({ coerce: true });
- * parseSync(schema, 123); // Ok("123")
- * parseSync(schema, true); // Ok("true")
+ * const strict = string({ coerce: true });
+ * assertEquals(unwrap(parseSync(strict, 123)), "123");
+ * assertEquals(isErr(parseSync(strict, null)), true);
+ *
+ * const native = string({ coerce: "native" });
+ * assertEquals(unwrap(parseSync(native, null)), "null");
  * ```
  */
 export function string(
 	options?: mini.StringSchemaOptions,
-): Schema<unknown, string, TypeError> {
+): Schema<unknown, string, SchemaIssue> {
 	return Schema.fromMini(mini.string(options));
+}
+
+/**
+ * Checks that a string has at most `maximum` characters (UTF-16 code units,
+ * as {@linkcode minLength} counts them), failing with a `TooBig` issue.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @param maximum - The most characters allowed
+ * @returns A schema that also rejects longer strings
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { maxLength, string } from "@sekhmet/schema/primitives";
+ *
+ * const code = maxLength(string(), 3);
+ *
+ * assertEquals(isOk(parseSync(code, "abc")), true);
+ * assertEquals(isErr(parseSync(code, "abcd")), true);
+ * ```
+ */
+export function maxLength<I, E>(
+	self: MiniSchema<I, string, E>,
+	maximum: number,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.maxLength(self, maximum));
+}
+
+/**
+ * Checks that a string has at least `minimum` characters, failing with a
+ * `TooSmall` issue. Length is `String.prototype.length`: UTF-16 code units,
+ * so an emoji outside the Basic Multilingual Plane counts as 2.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @param minimum - The fewest characters allowed
+ * @returns A schema that also rejects shorter strings
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { minLength, string } from "@sekhmet/schema/primitives";
+ *
+ * const name = minLength(string(), 2);
+ *
+ * assertEquals(isOk(parseSync(name, "Al")), true);
+ * assertEquals(isErr(parseSync(name, "A")), true);
+ * ```
+ */
+export function minLength<I, E>(
+	self: MiniSchema<I, string, E>,
+	minimum: number,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.minLength(self, minimum));
+}
+
+/**
+ * Transforms a string to a Unicode normalization form (`NFC` by default), so
+ * that canonically equivalent strings compare equal: `"é"` written as one
+ * code point or as `e` plus a combining accent becomes the same string. It
+ * never fails.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to transform
+ * @param form - The normalization form; `"NFC"` when omitted
+ * @returns A schema whose output is normalized
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { normalize, string } from "@sekhmet/schema/primitives";
+ *
+ * const decomposed = "é";
+ *
+ * assertEquals(unwrap(parseSync(normalize(string()), decomposed)), "é");
+ * ```
+ */
+export function normalize<I, E>(
+	self: MiniSchema<I, string, E>,
+	form?: mini.NormalizationForm,
+): Schema<I, string, E> {
+	return Schema.fromMini(mini.normalize(self, form));
+}
+
+/**
+ * Checks that a string matches `pattern`, failing with an `InvalidFormat`
+ * issue (format `"regex"`) that carries the pattern. The pattern's `g` and
+ * `y` flags are ignored, so its `lastIndex` never makes a check stateful.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @param pattern - The pattern the string must match
+ * @returns A schema that also rejects non-matching strings
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { regex, string } from "@sekhmet/schema/primitives";
+ *
+ * const slug = regex(string(), /^[a-z0-9-]+$/);
+ *
+ * assertEquals(isOk(parseSync(slug, "hello-world")), true);
+ * assertEquals(isErr(parseSync(slug, "Hello World")), true);
+ * ```
+ */
+export function regex<I, E>(
+	self: MiniSchema<I, string, E>,
+	pattern: RegExp,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.regex(self, pattern));
+}
+
+/**
+ * Transforms a string by removing leading and trailing whitespace (as
+ * `String.prototype.trim` does). It never fails; chain checks after it to
+ * validate the trimmed value.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to transform
+ * @returns A schema whose output is trimmed
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string, trim } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(unwrap(parseSync(trim(string()), "  hi \n")), "hi");
+ * ```
+ */
+export function trim<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E> {
+	return Schema.fromMini(mini.trim(self));
+}
+
+/**
+ * Checks that a string is an email address matching
+ * {@linkcode EMAIL_PATTERN}, failing with an `InvalidFormat` issue (format
+ * `"email"`). The pattern is deliberately pragmatic, not RFC 5322: it
+ * accepts the addresses people type and rejects the exotic forms mail
+ * systems rarely support.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects non-email strings
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { email, string } from "@sekhmet/schema/primitives";
+ *
+ * const address = email(string());
+ *
+ * assertEquals(isOk(parseSync(address, "ada+news@example.co.uk")), true);
+ * assertEquals(isErr(parseSync(address, "ada@localhost")), true);
+ * ```
+ */
+export function email<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.email(self));
+}
+
+/**
+ * Checks that a string is an ISO 8601 calendar date, `YYYY-MM-DD`, that
+ * exists (so `2023-02-29` fails but `2024-02-29` passes), failing with an
+ * `InvalidFormat` issue (format `"date"`).
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects strings that are not ISO dates
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { isoDate, string } from "@sekhmet/schema/primitives";
+ *
+ * const day = isoDate(string());
+ *
+ * assertEquals(isOk(parseSync(day, "2024-02-29")), true);
+ * assertEquals(isErr(parseSync(day, "2023-02-29")), true);
+ * ```
+ */
+export function isoDate<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.isoDate(self));
+}
+
+/**
+ * Checks that a string is an ISO 8601 date-time with a UTC offset: an
+ * {@linkcode isoDate}, `T`, an {@linkcode isoTime}, then `Z` or `±HH:MM`
+ * (as RFC 3339 requires, since a date-time without an offset is
+ * ambiguous). It fails with an `InvalidFormat` issue (format
+ * `"date-time"`).
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects strings that are not ISO date-times
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { isoDateTime, string } from "@sekhmet/schema/primitives";
+ *
+ * const instant = isoDateTime(string());
+ *
+ * assertEquals(isOk(parseSync(instant, "2026-11-16T09:30:00Z")), true);
+ * assertEquals(isOk(parseSync(instant, "2026-11-16T09:30+05:30")), true);
+ * assertEquals(isErr(parseSync(instant, "2026-11-16T09:30:00")), true);
+ * ```
+ */
+export function isoDateTime<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.isoDateTime(self));
+}
+
+/**
+ * Checks that a string is an ISO 8601 time of day without an offset,
+ * `HH:MM`, `HH:MM:SS` or `HH:MM:SS.fraction` (24-hour, no leap second),
+ * failing with an `InvalidFormat` issue (format `"time"`).
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects strings that are not ISO times
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { isoTime, string } from "@sekhmet/schema/primitives";
+ *
+ * const time = isoTime(string());
+ *
+ * assertEquals(isOk(parseSync(time, "23:59:59.999")), true);
+ * assertEquals(isErr(parseSync(time, "24:00")), true);
+ * ```
+ */
+export function isoTime<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.isoTime(self));
+}
+
+/**
+ * Checks that a string is an absolute URL by the WHATWG URL Standard (what
+ * `new URL(value)` accepts, tested with `URL.canParse`), failing with an
+ * `InvalidFormat` issue (format `"url"`). Any scheme is accepted, so
+ * `mailto:` and `data:` URLs pass; chain {@linkcode regex} to restrict it.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects strings that are not URLs
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string, url } from "@sekhmet/schema/primitives";
+ *
+ * const link = url(string());
+ *
+ * assertEquals(isOk(parseSync(link, "https://example.com/a?b=c")), true);
+ * assertEquals(isErr(parseSync(link, "example.com")), true);
+ * ```
+ */
+export function url<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.url(self));
+}
+
+/**
+ * Checks that a string is a UUID matching {@linkcode UUID_PATTERN}, failing
+ * with an `InvalidFormat` issue (format `"uuid"`).
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects non-UUID strings
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string, uuid } from "@sekhmet/schema/primitives";
+ *
+ * const id = uuid(string());
+ *
+ * assertEquals(isOk(parseSync(id, "550e8400-e29b-41d4-a716-446655440000")), true);
+ * assertEquals(isErr(parseSync(id, "550e8400")), true);
+ * ```
+ */
+export function uuid<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.uuid(self));
+}
+
+/**
+ * Creates a schema that reads a string as a boolean, for env vars, query
+ * params and form fields. The string is trimmed and matched ignoring case
+ * against the truthy and falsy word lists (`STRINGBOOL_TRUTHY` and
+ * `STRINGBOOL_FALSY` by default: `true 1 yes on y enabled` and
+ * `false 0 no off n disabled`).
+ *
+ * A non-string fails with an `InvalidType` issue, and a string in neither
+ * list with an `InvalidValue` issue listing the accepted words. Panics with a
+ * `RangeError` when a word is in both lists.
+ *
+ * @param options - The word lists
+ * @returns A schema from a string to a boolean
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { stringbool } from "@sekhmet/schema/primitives";
+ *
+ * const flag = stringbool();
+ *
+ * assertEquals(unwrap(parseSync(flag, " Yes ")), true);
+ * assertEquals(unwrap(parseSync(flag, "OFF")), false);
+ * assertEquals(isErr(parseSync(flag, "maybe")), true);
+ * ```
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { stringbool } from "@sekhmet/schema/primitives";
+ *
+ * const answer = stringbool({ truthy: ["oui"], falsy: ["non"] });
+ *
+ * assertEquals(unwrap(parseSync(answer, "Oui")), true);
+ * ```
+ */
+export function stringbool(
+	options?: mini.StringboolOptions,
+): Schema<unknown, boolean, SchemaIssue> {
+	return Schema.fromMini(mini.stringbool(options));
+}
+
+/**
+ * Creates a schema that accepts only symbols, failing with an `InvalidType`
+ * issue otherwise.
+ *
+ * @returns A schema accepting only symbols
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { symbol } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isOk(parseSync(symbol(), Symbol("id"))), true);
+ * assertEquals(isErr(parseSync(symbol(), "id")), true);
+ * ```
+ */
+export function symbol(): Schema<unknown, symbol, SchemaIssue> {
+	return Schema.fromMini(mini.symbol());
+}
+
+/**
+ * Creates a schema that accepts only `undefined`, failing with an
+ * `InvalidType` issue otherwise (`null` included).
+ *
+ * Named `undefined_` to match {@linkcode null_} and to avoid shadowing the
+ * global `undefined`.
+ *
+ * @returns A schema accepting only `undefined`
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { undefined_ } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(isOk(parseSync(undefined_(), undefined)), true);
+ * assertEquals(isErr(parseSync(undefined_(), null)), true);
+ * ```
+ */
+export function undefined_(): Schema<unknown, undefined, SchemaIssue> {
+	return Schema.fromMini(mini.undefined_());
+}
+
+/**
+ * Creates a schema that accepts every value unchanged and never fails, so
+ * its error type is `never`. Use it for a field whose value is passed
+ * through without validation.
+ *
+ * @returns A schema accepting anything
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { unknown } from "@sekhmet/schema/primitives";
+ *
+ * const payload = { any: "thing" };
+ *
+ * assertEquals(unwrap(parseSync(unknown(), payload)), payload);
+ * ```
+ */
+export function unknown(): Schema<unknown, unknown, never> {
+	return Schema.fromMini(mini.unknown());
 }

@@ -1,6 +1,8 @@
 import { match } from "@sekhmet/enum/core/mini/exit";
-import { assertEquals, assertExists } from "@std/assert";
-import { parseSync } from "@/src/core/mini/schema.ts";
+import { Err } from "@sekhmet/enum/result/mini";
+import { assertEquals } from "@std/assert";
+import { InvalidType } from "@/src/core/mini/issue.ts";
+import { ParseError, parseSync } from "@/src/core/mini/schema.ts";
 import { boolean } from "./boolean.ts";
 
 Deno.test("boolean accepts boolean values", () => {
@@ -27,19 +29,10 @@ Deno.test("boolean rejects non-boolean values by default", () => {
 	// When: parsing a non-boolean
 	const result = parseSync(schema, "true");
 
-	// Then: it should fail with a TypeError
-	const error = match(result)({
-		Ok: () => null,
-		Err: (e) => e,
-	});
-	assertExists(error);
-
+	// Then: it fails with an InvalidType issue
 	assertEquals(
-		match(error)({
-			UnexpectedAsyncParse: () => false,
-			ParseError: (e) => e instanceof TypeError,
-		}),
-		true,
+		result,
+		Err(ParseError(InvalidType({ input: "true", expected: "boolean" }))),
 	);
 });
 

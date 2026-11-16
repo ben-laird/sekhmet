@@ -93,11 +93,21 @@ A primitive accepts only its own type unless asked to coerce.
   `number({ infinite: true })` allow them. `-0` is accepted.
 - `number`'s `range` option is honoured (it was declared but ignored before
   this design). Checks: `int`, `safe` (safe integer), `multipleOf`,
-  min/max with inclusivity.
+  `min`/`max` with inclusivity (`min(number(), 0, { inclusive: false })`).
 - New leaf schemas: `bigint`, `date` (rejects `Invalid Date`), `literal`,
-  `null`, `undefined`, `symbol`, `unknown`, `never`.
-- String checks: min/max length, `trim`, Unicode normalisation, `regex`, and
-  formats (email, url, uuid, ISO date/time).
+  `null`, `undefined`, `symbol`, `unknown`, `never`. The `null` and
+  `undefined` schemas are exported as `null_` and `undefined_`: `null` is a
+  reserved word, and a function named `undefined` would shadow the global.
+- String checks: `minLength`/`maxLength` (named apart from the number
+  bounds), `trim`, `normalize` (Unicode, NFC by default), `regex`, and
+  formats `email`, `url`, `uuid`, `isoDate`, `isoTime`, `isoDateTime`.
+  `email` uses a pragmatic pattern (`EMAIL_PATTERN`), not RFC 5322; `url`
+  is what `URL.canParse` accepts.
+- Checks are `self`-first mini functions typed on the output they refine
+  (`int(self: Schema<I, number, E>)`), so they apply after a `map` too.
+  Until gen-main can add methods to `Schema` from another feature, the
+  main entrypoint exposes them as functions returning the main `Schema`
+  (`int(number()).map(…)`), not as methods (`number().int()`).
 
 ### Coercion has two named modes
 

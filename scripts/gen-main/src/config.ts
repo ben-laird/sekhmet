@@ -85,6 +85,12 @@ const RESULT: WrapTarget = {
 	from: "../../result/main/mod.ts",
 	mappers: ["map", "mapErr"],
 };
+/** Enum's main `Result`, imported from another package through its entrypoint. */
+const ENUM_RESULT: WrapTarget = {
+	type: "Result",
+	from: "@sekhmet/enum/result",
+	mappers: ["map", "mapErr"],
+};
 const SCHEMA_MAPPERS: readonly (string | undefined)[] = [
 	undefined,
 	"map",
@@ -273,6 +279,7 @@ export const FEATURES: readonly Feature[] = [
 		primary: "Schema",
 		construct: "params",
 		mappers: SCHEMA_MAPPERS,
+		wraps: [ENUM_RESULT],
 		example: [
 			'import { assertEquals } from "@std/assert";',
 			'import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";',
