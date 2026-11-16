@@ -32,8 +32,10 @@ export type {
 	LimitOptions,
 	NumberSchemaOptions,
 	Range,
+	StringboolOptions,
 	StringSchemaOptions,
 } from "../mini/mod.ts";
+export { STRINGBOOL_FALSY, STRINGBOOL_TRUTHY } from "../mini/mod.ts";
 
 /**
  * Creates a schema that validates and optionally coerces boolean values.
@@ -297,4 +299,48 @@ export function string(
 	options?: mini.StringSchemaOptions,
 ): Schema<unknown, string, SchemaIssue> {
 	return Schema.fromMini(mini.string(options));
+}
+
+/**
+ * Creates a schema that reads a string as a boolean, for env vars, query
+ * params and form fields. The string is trimmed and matched ignoring case
+ * against the truthy and falsy word lists (`STRINGBOOL_TRUTHY` and
+ * `STRINGBOOL_FALSY` by default: `true 1 yes on y enabled` and
+ * `false 0 no off n disabled`).
+ *
+ * A non-string fails with an `InvalidType` issue, and a string in neither
+ * list with an `InvalidValue` issue listing the accepted words. Panics with a
+ * `RangeError` when a word is in both lists.
+ *
+ * @param options - The word lists
+ * @returns A schema from a string to a boolean
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { stringbool } from "@sekhmet/schema/primitives";
+ *
+ * const flag = stringbool();
+ *
+ * assertEquals(unwrap(parseSync(flag, " Yes ")), true);
+ * assertEquals(unwrap(parseSync(flag, "OFF")), false);
+ * assertEquals(isErr(parseSync(flag, "maybe")), true);
+ * ```
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { stringbool } from "@sekhmet/schema/primitives";
+ *
+ * const answer = stringbool({ truthy: ["oui"], falsy: ["non"] });
+ *
+ * assertEquals(unwrap(parseSync(answer, "Oui")), true);
+ * ```
+ */
+export function stringbool(
+	options?: mini.StringboolOptions,
+): Schema<unknown, boolean, SchemaIssue> {
+	return Schema.fromMini(mini.stringbool(options));
 }

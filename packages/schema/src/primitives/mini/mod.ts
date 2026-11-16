@@ -23,3 +23,9 @@ export {
 	safe,
 } from "./number-checks.ts";
 export { type StringSchemaOptions, string } from "./string.ts";
+export {
+	STRINGBOOL_FALSY,
+	STRINGBOOL_TRUTHY,
+	type StringboolOptions,
+	stringbool,
+} from "./stringbool.ts";
