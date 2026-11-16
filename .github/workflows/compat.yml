@@ -1,0 +1,69 @@
+# Runtime compatibility, layer 1 (#20): the unit suite on every runtime JSR
+# lists the packages for, through `deno task compat:test <runtime>`
+# (scripts/compat). It tests the source, so it runs on every pull request and
+# every push to main. Layer 2, the smoke test of what is actually published on
+# JSR, is compat-smoke.yml.
+#
+# `deno task ci` stays Deno-only; this workflow adds the other runtimes.
+
+name: compat
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: compat-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: suite (${{ matrix.runtime }}${{ matrix.node && format(', Node {0}', matrix.node) || '' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # One runtime's failure must not cancel, and so hide, the others'.
+      fail-fast: false
+      matrix:
+        include:
+          # Node: the maintenance LTS line and the active LTS line, which is
+          # also the latest release until Node 27 ships (2027-04).
+          - runtime: node
+            node: "24"
+          - runtime: node
+            node: "26"
+          - runtime: bun
+          - runtime: chromium
+          - runtime: firefox
+          - runtime: webkit
+          - runtime: workerd
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.9.8
+          cache: true
+
+      # Node runs the node job, and Playwright and Miniflare for the others.
+      - if: ${{ matrix.runtime != 'bun' }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node || '26' }}
+
+      - if: ${{ matrix.runtime == 'bun' }}
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
+
+      - name: Install the Playwright browser and its system libraries
+        if: ${{ contains(fromJSON('["chromium", "firefox", "webkit"]'), matrix.runtime) }}
+        run: deno run -A npm:playwright@1.65.1 install --with-deps ${{ matrix.runtime }}
+
+      - name: deno task compat:test ${{ matrix.runtime }}
+        run: deno task compat:test ${{ matrix.runtime }}

@@ -1,0 +1,17 @@
+{
+	"name": "@sekhmet/compat",
+	"version": "0.1.0",
+	"publish": false,
+
+	"exports": {
+		".": "./main.ts"
+	},
+
+	"imports": {
+		"@/": "./",
+
+		"miniflare": "npm:miniflare@4.20260730.0",
+		"playwright": "npm:playwright@1.65.1",
+		"zod": "npm:zod@^4.1.0"
+	}
+}

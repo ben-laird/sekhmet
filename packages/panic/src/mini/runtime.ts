@@ -170,21 +170,78 @@ export interface PanicRuntime {
 }
 
 /**
- * The hook every runtime starts with, like Rust's default hook: it writes
- * `panicked: …` to `console.error`, followed by the payload's stack when the
- * payload is an `Error`.
+ * The hook every runtime starts with, like Rust's default hook: it writes a
+ * `panicked: …` report to `console.error`.
+ *
+ * For an `Error` payload (a {@linkcode Panic} included) the report is
+ * `panicked: <name>: <message>` (`panicked: <name>` when the message is
+ * empty), then the stack frames on the lines below. The header comes from the
+ * payload itself, so it reads the same on every engine: V8 and Bun open a
+ * stack with a header line of their own, which is dropped, while Firefox and
+ * WebKit stacks hold only frames. Any other object is handed to the console
+ * to format, and a primitive is printed as a string.
  *
  * @param info The unwind to report
  */
 export const defaultPanicHook: PanicHook = ({ payload, stack }) => {
 	if (stack !== undefined) {
-		console.error(`panicked: ${stack}`);
+		console.error(`panicked: ${errorReport({ payload, stack })}`);
 	} else if (isObjectLike(payload)) {
 		console.error("panicked:", payload);
 	} else {
 		console.error(`panicked: ${String(payload)}`);
 	}
 };
+
+/** An `Error` payload's header, read so that a Proxy trap cannot throw. */
+function headerOf(
+	payload: unknown,
+): { header: string; message: string } | undefined {
+	try {
+		if (!(payload instanceof Error)) return undefined;
+		const { name, message } = payload;
+		return { header: message === "" ? name : `${name}: ${message}`, message };
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Drops the header V8 and Bun put at the top of a stack. It is found by the
+ * message, not by line, so a multi-line message is dropped whole, and not by
+ * the name, which Bun records as `Error` for a subclass with a name getter.
+ */
+function framesOf({
+	stack,
+	message,
+}: {
+	stack: string;
+	message: string;
+}): string {
+	if (message === "") {
+		const [first = "", ...rest] = stack.split("\n");
+		return /^\s+at |@/.test(first) ? stack : rest.join("\n");
+	}
+	const marker = `: ${message}`;
+	const at = stack.indexOf(marker);
+	return at >= 0 && !stack.slice(0, at).includes("\n")
+		? stack.slice(at + marker.length).replace(/^\n/, "")
+		: stack;
+}
+
+/** The `Error` report: the payload's own header, then the stack frames. */
+function errorReport({
+	payload,
+	stack,
+}: {
+	payload: unknown;
+	stack: string;
+}): string {
+	const header = headerOf(payload);
+	if (header === undefined) return stack;
+	const frames = framesOf({ stack, message: header.message }).trimEnd();
+	return frames === "" ? header.header : `${header.header}\n${frames}`;
+}
 
 /**
  * Creates an independent panic runtime. Create one at your program's entry
