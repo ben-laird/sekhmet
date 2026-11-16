@@ -40,14 +40,24 @@ Deno.test("renderSuiteEntry() imports runSuite and lazily imports each file", ()
 	// When: the entry is rendered
 	const source = renderSuiteEntry({
 		suite: join(ROOT, "scripts", "compat", "src", "suite.ts"),
+		uncaught: join(ROOT, "scripts", "compat", "src", "uncaught.ts"),
 		root: ROOT,
 		files,
 	});
 
-	// Then: it wires runSuite, installs Deno.test, and loads each file on demand
+	// Then: it wires runSuite, installs Deno.test, watches globalThis for
+	// uncaught errors, and loads each file on demand
 	assertStringIncludes(
 		source,
 		'import { runSuite } from "file:///repo/scripts/compat/src/suite.ts";',
+	);
+	assertStringIncludes(
+		source,
+		'import { watchUncaught } from "file:///repo/scripts/compat/src/uncaught.ts";',
+	);
+	assertStringIncludes(
+		source,
+		"watch: (listener) => watchUncaught({ host: globalThis, listener }),",
 	);
 	assertStringIncludes(
 		source,

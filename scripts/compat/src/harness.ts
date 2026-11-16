@@ -56,8 +56,13 @@ export interface HarnessRun {
 export interface Harness {
 	/** Registers a test, accepting every `Deno.test` call form */
 	test: (...args: unknown[]) => void;
-	/** Runs every registered test in order */
-	run: () => Promise<HarnessRun>;
+	/**
+	 * Runs every registered test in order. `onTest`, when given, hears the
+	 * name of each test as it starts and `undefined` once it ends.
+	 */
+	run: (options?: {
+		onTest?: (test: string | undefined) => void;
+	}) => Promise<HarnessRun>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -230,15 +235,21 @@ export function createHarness(): Harness {
 		test: (...args) => {
 			definitions.push(normalizeDefinition(args));
 		},
-		run: async () => {
+		run: async ({ onTest } = {}) => {
 			const usedOnly = definitions.some((definition) => definition.only);
 			const tests: TestReport[] = [];
 			for (const definition of definitions) {
-				tests.push(
-					usedOnly && !definition.only
-						? { name: definition.name, outcome: { kind: "ignored" }, steps: [] }
-						: await runDefinition(definition),
-				);
+				if (usedOnly && !definition.only) {
+					tests.push({
+						name: definition.name,
+						outcome: { kind: "ignored" },
+						steps: [],
+					});
+					continue;
+				}
+				onTest?.(definition.name);
+				tests.push(await runDefinition(definition));
+				onTest?.(undefined);
 			}
 			return { tests, usedOnly };
 		},

@@ -7,7 +7,12 @@
 
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { z } from "zod";
-import type { FileReport, SuiteReport, TestReport } from "./protocol.ts";
+import type {
+	FileReport,
+	SuiteReport,
+	TestReport,
+	UncaughtScope,
+} from "./protocol.ts";
 
 const outcomeSchema = z.discriminatedUnion("kind", [
 	z.object({ kind: z.literal("passed") }),
@@ -25,7 +30,17 @@ const testReportSchema: z.ZodType<TestReport> = z.object({
 
 const locationShape = { package: z.string(), path: z.string() };
 
+const uncaughtSchema = z.object({
+	scope: z.discriminatedUnion("kind", [
+		z.object({ kind: z.literal("test"), path: z.string(), test: z.string() }),
+		z.object({ kind: z.literal("file"), path: z.string() }),
+		z.object({ kind: z.literal("run") }),
+	]),
+	error: z.string(),
+});
+
 const suiteReportSchema: z.ZodType<SuiteReport> = z.object({
+	uncaught: z.array(uncaughtSchema),
 	files: z.array(
 		z.discriminatedUnion("kind", [
 			z.object({
@@ -54,6 +69,33 @@ export function parseSuiteReport(data: unknown): Result<SuiteReport, string> {
 	return parsed.success
 		? Ok(parsed.data)
 		: Err(`malformed suite report: ${z.prettifyError(parsed.error)}`);
+}
+
+/**
+ * Adds the uncaught errors the host saw outside the suite's own watch (a
+ * browser's page errors) to a report, scoped to the whole run.
+ *
+ * @param options.report - The suite report
+ * @param options.hostErrors - The errors the host saw, described
+ * @returns The report with one uncaught entry per host error
+ */
+export function withHostErrors({
+	report,
+	hostErrors,
+}: {
+	report: SuiteReport;
+	hostErrors: readonly string[];
+}): SuiteReport {
+	return {
+		...report,
+		uncaught: [
+			...report.uncaught,
+			...hostErrors.map((error) => ({
+				scope: { kind: "run" as const },
+				error,
+			})),
+		],
+	};
 }
 
 /** Pass/fail counts for one package. */
@@ -144,6 +186,7 @@ export type Problem =
 	| { kind: "load-failed"; path: string; error: string }
 	| { kind: "test-failed"; path: string; test: string; error: string }
 	| { kind: "used-only"; path: string }
+	| { kind: "uncaught"; scope: UncaughtScope; error: string }
 	| { kind: "no-tests" };
 
 function failuresIn({
@@ -173,7 +216,8 @@ function failuresIn({
 
 /**
  * Lists every reason a run is not green: a file that failed to load, a test
- * or step that failed, a file that used `only`, or a run with no tests.
+ * or step that failed, a file that used `only`, an uncaught error, or a run
+ * with no tests.
  *
  * @param report - The suite report
  * @returns The problems, empty when the run is green
@@ -192,11 +236,27 @@ export function problemsOf(report: SuiteReport): Problem[] {
 			? [...failures, { kind: "used-only", path: file.path }]
 			: failures;
 	});
+	const uncaught = report.uncaught.map(
+		({ scope, error }): Problem => ({ kind: "uncaught", scope, error }),
+	);
 	const tests = report.files.reduce(
 		(total, file) => total + (file.kind === "ran" ? file.tests.length : 0),
 		0,
 	);
-	return tests === 0 ? [...problems, { kind: "no-tests" }] : problems;
+	return tests === 0
+		? [...problems, ...uncaught, { kind: "no-tests" }]
+		: [...problems, ...uncaught];
+}
+
+function describeScope(scope: UncaughtScope): string {
+	switch (scope.kind) {
+		case "test":
+			return `${scope.path} :: ${scope.test}`;
+		case "file":
+			return scope.path;
+		case "run":
+			return "outside any test file";
+	}
 }
 
 function describeProblem(problem: Problem): string {
@@ -207,6 +267,8 @@ function describeProblem(problem: Problem): string {
 			return `FAILED ${problem.path} :: ${problem.test}\n${problem.error}`;
 		case "used-only":
 			return `ONLY ${problem.path} uses \`only\`, which fails the run`;
+		case "uncaught":
+			return `UNCAUGHT ${describeScope(problem.scope)}\n${problem.error}`;
 		case "no-tests":
 			return "NO TESTS the suite registered no tests";
 	}

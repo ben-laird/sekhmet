@@ -42,19 +42,23 @@ export function locateTestFile({
 
 /**
  * Renders the suite entry: it exports `run()`, which installs a fresh
- * `Deno.test` shim per file and runs every file in the given order.
+ * `Deno.test` shim per file, runs every file in the given order, and watches
+ * `globalThis` for uncaught errors meanwhile.
  *
  * @param options.suite - The absolute path of `src/suite.ts`
+ * @param options.uncaught - The absolute path of `src/uncaught.ts`
  * @param options.root - The absolute repository root
  * @param options.files - The test files, as repository-relative locations
  * @returns TypeScript source for `deno bundle`
  */
 export function renderSuiteEntry({
 	suite,
+	uncaught,
 	root,
 	files,
 }: {
 	suite: string;
+	uncaught: string;
 	root: string;
 	files: readonly TestFileLocation[];
 }): string {
@@ -66,12 +70,14 @@ export function renderSuiteEntry({
 	});
 	return [
 		`import { runSuite } from ${JSON.stringify(toFileUrl(suite).href)};`,
+		`import { watchUncaught } from ${JSON.stringify(toFileUrl(uncaught).href)};`,
 		"",
 		"export function run() {",
 		"\treturn runSuite({",
 		"\t\tinstall: (test) => {",
 		"\t\t\tObject.assign(globalThis, { Deno: { test, noColor: true } });",
 		"\t\t},",
+		"\t\twatch: (listener) => watchUncaught({ host: globalThis, listener }),",
 		"\t\tfiles: [",
 		...entries,
 		"\t\t],",
