@@ -7,7 +7,6 @@ import type { AllowlistEntry } from "./allowlist.ts";
  */
 export const ALLOWLIST: readonly AllowlistEntry[] = [
 	// READMEs and README fixes come with the docs work
-	missingReadme("matrix"),
 	missingReadme("panic"),
 
 	// Cross-package types (Struct, Enum, Split, Result) in public signatures
