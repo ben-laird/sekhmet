@@ -110,6 +110,15 @@ Scripts (`scripts/`, unpublished):
   every package's `README.md` and `docs/*.md` into a sidebar per package
   (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
   `.github/workflows/docs.yml`)
+- `@sekhmet/dv`: the pinned dv release CLI, run frozen (`deno task dv <args>`,
+  e.g. `deno task dv add`, `deno task dv status`)
+- `@sekhmet/dv-plugin`: the dv plugin that versions and publishes `packages/*`
+  to JSR
+- `@sekhmet/gen-main`: generates each feature's main (method-chaining)
+  `main/mod.ts` from its mini barrel (`deno task gen:main`; `--check` in CI)
+- `@sekhmet/release`: the release driver `.github/workflows/release.yml` runs
+  on every push to main: versions pending Records, tags, publishes, and opens
+  GitHub Releases
 
 ### Core Design Principles
 
@@ -238,7 +247,8 @@ fix(@sekhmet/primordials): correct Struct type inference
 
 **Scopes**: Use package names: `@sekhmet/effect`, `@sekhmet/enum`,
 `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/vow`,
-and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`
+and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`,
+`@sekhmet/dv`, `@sekhmet/dv-plugin`, `@sekhmet/gen-main`, `@sekhmet/release`
 for scripts
 
 ## Infrastructure Code Conventions
