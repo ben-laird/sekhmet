@@ -7,6 +7,12 @@ import {
 	type StepTimeout,
 	type WorkflowStep,
 } from "@/mod.ts";
+import {
+	greenMarkerPath,
+	stagedSnapshot,
+	writeGreenMarker,
+} from "@/src/git.ts";
+import { type GreenRunDecision, greenRunDecision } from "@/src/green-run.ts";
 
 /**
  * Exit codes for CI workflow failures.
@@ -405,11 +411,13 @@ export function coverageCleanupCommand({ dir }: { dir: string }): StepCommand {
 
 /**
  * Main entry point for the CI workflow. Reads the environment, picks this
- * run's coverage directory, runs {@linkcode ciSteps} and exits with the
- * workflow's exit code.
+ * run's coverage directory, runs {@linkcode ciSteps}, records a green run
+ * for the staged tree when the run earns one (see `src/green-run.ts`) and
+ * exits with the workflow's exit code.
  */
 export async function main(): Promise<void> {
 	const isCI = Deno.env.get("CI") === "true";
+	const before = await stagedSnapshot();
 	const result = await runWorkflow(
 		ciSteps({
 			isCI,
@@ -417,7 +425,33 @@ export async function main(): Promise<void> {
 			coverageDir: await coverageDirFor({ isCI }),
 		}),
 	);
+	const after = await stagedSnapshot();
+	console.error(
+		await recordGreenRun(
+			greenRunDecision({ steps: result.steps, before, after }),
+		),
+	);
 	Deno.exit(result.exitCode);
+}
+
+/**
+ * Carries out a {@linkcode GreenRunDecision}: writes the green marker that
+ * the commit gate's `pre-commit` hook reads, or leaves it alone.
+ *
+ * @param decision - Whether to record the run
+ * @returns The one line to print about it
+ */
+async function recordGreenRun(decision: GreenRunDecision): Promise<string> {
+	if (decision.kind === "skip") {
+		return `No green run recorded: ${decision.reason}.`;
+	}
+	const path = await greenMarkerPath();
+	const written = path.ok
+		? await writeGreenMarker({ path: path.value, tree: decision.tree })
+		: path;
+	return written.ok
+		? `Recorded a green run for staged tree ${decision.tree}.`
+		: `No green run recorded: ${written.error}.`;
 }
 
 if (import.meta.main) {
