@@ -3,7 +3,9 @@ import {
 	assertEquals,
 	assertInstanceOf,
 	assertStrictEquals,
+	unreachable,
 } from "@std/assert";
+import { assertType, type IsExact } from "@std/testing/types";
 import * as mini from "../mini/mod.ts";
 import { Enum } from "./mod.ts";
 
@@ -37,6 +39,60 @@ Deno.test("main Enum methods narrow and match like their mini functions", () => 
 	assertEquals(area, 9);
 	assertEquals(side, 3);
 	assertEquals(shape.unionKinds(), "Square");
+});
+
+Deno.test("main isolateAnd() narrows the value to a type-guard predicate", async (t) => {
+	type Reading = mini.Split<{ Value: [value: string | number]; Missing: [] }>;
+
+	await t.step("the guarded value is the guarded type", () => {
+		// Given: a main Enum whose value may be a string or a number
+		const reading: Enum<Reading> = new Enum<Reading>("Value", 42);
+
+		// When: isolating Value with a guard for numbers
+		if (
+			reading.isolateAnd(
+				"Value",
+				(value): value is number => typeof value === "number",
+			)
+		) {
+			// Then: only the Value arm is needed, and the value is a number
+			const value = reading.union();
+			assertType<IsExact<typeof value, number>>(true);
+			assertEquals(reading.match({ Value: (n) => n + 1 }), 43);
+		} else {
+			unreachable();
+		}
+	});
+
+	await t.step("an unguarded match needs every arm", () => {
+		// Given: a main Enum whose value may be a string or a number
+		const reading: Enum<Reading> = new Enum<Reading>("Value", 42);
+
+		// When: matching with only the Value arm
+		// @ts-expect-error: the Missing arm is missing
+		const next = reading.match({ Value: () => 0 });
+
+		// Then: the match is rejected at compile time
+		assertEquals(next, 0);
+	});
+
+	await t.step("the else-branch is not narrowed", () => {
+		// Given: a main Enum holding a string
+		const reading: Enum<Reading> = new Enum<Reading>("Value", "high");
+
+		// When: the numeric guard fails
+		if (
+			reading.isolateAnd(
+				"Value",
+				(value): value is number => typeof value === "number",
+			)
+		) {
+			unreachable();
+		} else {
+			// Then: it keeps its declared type
+			assertType<IsExact<typeof reading, Enum<Reading>>>(true);
+		}
+	});
 });
 
 Deno.test("Enum.fromMini converts a mini Enum and keeps a main one", () => {
