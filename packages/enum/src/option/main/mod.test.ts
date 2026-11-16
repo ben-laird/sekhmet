@@ -4,9 +4,9 @@ import {
 	assertStrictEquals,
 } from "@std/assert";
 import * as coreMini from "@/src/core/mini/mod.ts";
-import { Result } from "@/src/result/main/mod.ts";
+import { Err, Ok, Result } from "@/src/result/main/mod.ts";
 import * as mini from "../mini/mod.ts";
-import { flatten, None, Option, Some } from "./mod.ts";
+import { flatten, None, Option, Some, transpose, unzip } from "./mod.ts";
 
 Deno.test("Option methods chain on main constructors", () => {
 	// Given: a main Some
@@ -114,4 +114,34 @@ Deno.test("a main view of a mini Option shares its state", () => {
 	assertInstanceOf(view, Option);
 	assertEquals(taken.unwrap(), 1);
 	assertEquals(mini.isNone(miniOption), true);
+});
+
+Deno.test("unzip returns a tuple of main Options", () => {
+	// Given: a main Some holding a pair
+	const pair = Some<[number, string]>([1, "a"]);
+
+	// When: unzipping it and chaining on each half
+	const [first, second] = unzip(pair);
+
+	// Then: both halves are main Options that chain
+	assertInstanceOf(first, Option);
+	assertInstanceOf(second, Option);
+	assertEquals(first.map((n) => n + 1).unwrap(), 2);
+	assertEquals(second.map((s) => s.toUpperCase()).unwrap(), "A");
+});
+
+Deno.test("transpose returns a main Result holding a main Option", () => {
+	// Given: a main Some of an Ok and a main Some of an Err
+	const okInside = Some(Ok<number, string>(5));
+	const errInside = Some(Err<number, string>("bad"));
+
+	// When: transposing them and chaining through both layers
+	const transposed = transpose(okInside);
+	const inner = transposed.unwrap();
+
+	// Then: the Result and the Option inside it are both main
+	assertInstanceOf(transposed, Result);
+	assertInstanceOf(inner, Option);
+	assertEquals(inner.map((n) => n * 2).unwrap(), 10);
+	assertEquals(transpose(errInside).unwrapErr(), "bad");
 });

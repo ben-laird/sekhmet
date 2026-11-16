@@ -26,7 +26,6 @@ import { Result } from "../../result/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
 export type { OptionVariants } from "../mini/mod.ts";
-export { unzip } from "../mini/mod.ts";
 
 /**
  * A type-safe optional value that can be either Some (containing a value) or None (empty).
@@ -674,6 +673,27 @@ export class Option<out T> extends mini.Option<T> {
 }
 
 /**
+ * Splits an Option of a tuple into a tuple of Options.
+ *
+ * Converts Some([first, second]) into [Some(first), Some(second)].
+ * Converts None into [None(), None()].
+ *
+ * @param opt - An Option containing a tuple of two values
+ * @returns A tuple of two Options, one for each value
+ * @example
+ * ```ts ignore
+ * unzip(Some([1, "hi"])); // [Some(1), Some("hi")]
+ * unzip(None());          // [None(), None()]
+ * ```
+ */
+export function unzip<T, U>(
+	opt: mini.Option<[first: T, second: U]>,
+): [first: Option<T>, second: Option<U>] {
+	const [element0, element1] = mini.unzip(opt);
+	return [Option.fromMini(element0), Option.fromMini(element1)];
+}
+
+/**
  * Transposes an Option of a Result into a Result of an Option.
  *
  * Converts Some(Ok(x)) into Ok(Some(x)).
@@ -691,8 +711,10 @@ export class Option<out T> extends mini.Option<T> {
  */
 export function transpose<T, E>(
 	opt: mini.Option<MiniResult<T, E>>,
-): Result<mini.Option<T>, E> {
-	return Result.fromMini(mini.transpose(opt));
+): Result<Option<T>, E> {
+	return Result.fromMini(mini.transpose(opt)).map((value0) =>
+		Option.fromMini(value0),
+	);
 }
 
 /**

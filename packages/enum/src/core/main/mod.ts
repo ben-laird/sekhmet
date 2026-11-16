@@ -152,10 +152,12 @@ export class Enum<out T extends mini.SomeVariant> extends mini.Enum<T> {
 	 * @yields The enum if none of the kinds match
 	 * @see {@link mini.iterAllEliminated}
 	 */
-	iterAllEliminated<const K extends T[0]>(
+	*iterAllEliminated<const K extends T[0]>(
 		kinds: ReadonlySet<K>,
-	): Generator<mini.Enum<mini.Eliminate<T, K>>, void> {
-		return mini.iterAllEliminated(this, kinds);
+	): Generator<Enum<mini.Eliminate<T, K>>, void> {
+		for (const item of mini.iterAllEliminated(this, kinds)) {
+			yield Enum.fromMini(item);
+		}
 	}
 
 	/**
@@ -308,9 +310,11 @@ export class Enum<out T extends mini.SomeVariant> extends mini.Enum<T> {
 	 * @yields The enum if any kind matches
 	 * @see {@link mini.iterAnyIsolated}
 	 */
-	iterAnyIsolated<const K extends T[0]>(
+	*iterAnyIsolated<const K extends T[0]>(
 		kinds: ReadonlySet<K>,
-	): Generator<mini.Enum<mini.Isolate<T, K>>, void> {
-		return mini.iterAnyIsolated(this, kinds);
+	): Generator<Enum<mini.Isolate<T, K>>, void> {
+		for (const item of mini.iterAnyIsolated(this, kinds)) {
+			yield Enum.fromMini(item);
+		}
 	}
 }

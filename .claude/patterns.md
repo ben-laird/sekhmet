@@ -338,7 +338,8 @@ To give a new feature a generated main, add an entry to `FEATURES` in
 	output: "packages/enum/src/option/main/mod.ts", // the generated file
 	primary: "Option", // the mini class main extends
 	construct: "variant", // "variant" for Enum subclasses, "params" for plain Structs
-	wraps: [{ type: "Result", from: "../../result/main/mod.ts" }], // optional
+	mappers: ["map"], // optional: the main method mapping each type argument
+	wraps: [{ type: "Result", from: "../../result/main/mod.ts", mappers: ["map", "mapErr"] }], // optional
 	uncurry: [], // optional: curried functions whose method takes the inner parameters
 	omit: [], // optional: mini exports to leave out of main
 }
@@ -366,14 +367,35 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   so a change through either is visible through both (Struct-based classes
   pass the params to the constructor; Enum-based ones are built from the
   variant and then rebound to the same params through the `struct` symbol).
-  Types listed in `wraps` (e.g. `Option.okOr` returning
-  `Result`) convert to that feature's main class the same way. Nested
-  occurrences (`Generator<Option<T>>`, parameters) stay mini types.
-- **Constructors and other free functions.** A function without `self` that
-  returns the primary type (`Some`, `None`, `flatten`, `compareNumbers`,
-  `fork`) is re-declared in main as a wrapper that returns the main class, so
-  `Some(1).map(…)` chains. Everything else mini exports is re-exported
-  unchanged.
+- **Rule: conversions to another feature's type return that feature's main
+  class.** In main, chaining never drops back to mini, even across types:
+  `Some(1).okOr("e")` is a main `Result`, `Ok(1).ok()` a main `Option`,
+  `fiber.joinEffect()` a main `Effect`. A feature lists the other features'
+  types it returns under `wraps` in `scripts/gen-main/src/config.ts`; they
+  convert through that class's `fromMini` exactly like the primary.
+- **Where conversion applies.** Every position of a return type that a caller
+  receives a value from:
+  - the return type itself (`Option<T>`);
+  - a wrap target nested in a wrap target's type arguments
+    (`transpose` returns `Result<Option<T>, E>`), converted through the outer
+    class's mapper for that argument, declared as `mappers` in the config
+    (`["map", "mapErr"]` for `Result`). The outer value is then a new instance
+    produced by that mapper rather than a view of the mini one;
+  - the plain elements of a returned tuple (`unzip` returns
+    `[first: Option<T>, second: Option<U>]`);
+  - the yielded values of a returned `Generator`/`IterableIterator` whose
+    return type is `void`; the method becomes a generator that re-yields each
+    value, so it stays lazy (`Enum.iterAnyIsolated`).
+
+  Parameters keep their mini types (they accept main and mini values alike),
+  as do positions the generator can't convert without changing behaviour:
+  unions, tuples with optional elements, generators with a non-`void` return
+  value, and other generic containers.
+- **Constructors and other free functions.** A function without `self` whose
+  return needs converting (`Some`, `None`, `flatten`, `unzip`, `transpose`,
+  `compareNumbers`, `fork`) is re-declared in main as a wrapper that returns
+  main classes, so `Some(1).map(…)` chains. Everything else mini exports is
+  re-exported unchanged.
 
 ```ts ignore
 // mini/transform.ts

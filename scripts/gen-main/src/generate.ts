@@ -4,11 +4,12 @@
  *
  * - Every exported function whose first parameter is `self: <Primary>`
  *   becomes a method of `class <Primary> extends mini.<Primary>`.
- * - A top-level return type naming the primary (or a configured wrap target)
- *   becomes the main class, and the result is converted with its static
- *   `fromMini`, so calls chain.
- * - Other functions returning the primary (constructors such as `Some`) are
- *   re-declared as wrappers returning the main class.
+ * - A return type naming the primary or a configured wrap target (at the top
+ *   level, in a wrap target's type arguments, in tuple elements, or as a
+ *   generator's yielded type) is spelled as the main class, and the result is
+ *   converted with its static `fromMini` (see `convert.ts`), so calls chain.
+ * - Other functions whose return needs converting (constructors such as
+ *   `Some`) are re-declared as wrappers returning main classes.
  * - Everything else is re-exported from mini unchanged.
  *
  * @module
@@ -16,6 +17,13 @@
 
 import { dirname, relative } from "@std/path/posix";
 import type { Feature } from "./config.ts";
+import {
+	type Conversion,
+	type ConvertContext,
+	conversionKey,
+	convertedBody,
+	convertReturn,
+} from "./convert.ts";
 import type {
 	ClassDeclaration,
 	DocSymbol,
@@ -88,6 +96,8 @@ interface Module {
 	readonly feature: Feature;
 	readonly miniNames: ReadonlySet<string>;
 	readonly wrapNames: ReadonlySet<string>;
+	/** Each wrap target's mapper per type argument (for nested conversion). */
+	readonly mappers: ReadonlyMap<string, readonly (string | undefined)[]>;
 	readonly localNames: ReadonlySet<string>;
 	readonly sources: ReadonlyMap<string, string>;
 	readonly outputUrl: string;
@@ -217,6 +227,30 @@ function renderWrapped({
 	return args.length === 0 ? target : `${target}<${args.join(", ")}>`;
 }
 
+/** Whether a return type names a wrap target anywhere main converts it. */
+function needsConversion({
+	wrapNames,
+	type,
+}: {
+	wrapNames: ReadonlySet<string>;
+	type: TypeNode | undefined;
+}): boolean {
+	if (type === undefined) return false;
+
+	const planned = convertReturn({
+		type,
+		context: {
+			render: () => "",
+			wrapTarget: (inner) => wrapTargetOf(wrapNames, inner),
+			mappers: () => [],
+		},
+	});
+
+	// A plan that fails (a missing mapper) still needs converting; rendering
+	// the wrapper reports the failure.
+	return !planned.ok || planned.value.conversion.kind !== "none";
+}
+
 function signaturesOf(symbol: DocSymbol): FunctionDeclaration[] {
 	const functions = symbol.declarations.filter(
 		(declaration): declaration is FunctionDeclaration =>
@@ -300,8 +334,28 @@ interface MethodHead {
 	readonly head: string;
 	readonly body: string;
 	readonly doc: string;
-	readonly wrap: string | undefined;
+	readonly conversion: Conversion;
 	readonly isPredicate: boolean;
+}
+
+/** The conversion context for rendering return types in `module`. */
+function convertContextFor({
+	module,
+	context,
+}: {
+	module: Module;
+	context: RenderContext;
+}): ConvertContext {
+	return {
+		render: (type) => renderType({ type, context }),
+		wrapTarget: (type) => wrapTargetOf(module.wrapNames, type),
+		mappers: (target) => module.mappers.get(target) ?? [],
+	};
+}
+
+/** The prefix that makes a member a generator when it re-yields lazily. */
+function generatorStar(conversion: Conversion): string {
+	return conversion.kind === "iterable" ? "*" : "";
 }
 
 /** Renders one signature of a `self`-first function as a method. */
@@ -412,35 +466,55 @@ function methodHead({
 		? `mini.${name}(${outerArgs})(${methodParams.map(forwardParam).join(", ")})`
 		: `mini.${name}(${outerArgs})`;
 
-	const wrap = wrapTargetOf(module.wrapNames, finalReturn);
-	const { returnText, body } = (() => {
-		if (finalReturn.kind === "predicate") {
-			const subject =
-				finalReturn.subject === "self" ? "this" : finalReturn.subject;
-			const target =
-				finalReturn.type === undefined
-					? ""
-					: ` is ${renderWrapped({ module, type: finalReturn.type, context })}`;
-			const asserts = finalReturn.asserts ? "asserts " : "";
-
-			return {
-				returnText: `${asserts}${subject}${target}`,
-				body: finalReturn.asserts ? `${call};` : `return ${call};`,
-			};
+	if (finalReturn.kind !== "predicate") {
+		const converted = convertReturn({
+			type: finalReturn,
+			context: convertContextFor({ module, context }),
+		});
+		if (!converted.ok) {
+			return failure({ feature, symbol: name, message: converted.error });
 		}
+		const { text, conversion } = converted.value;
+		const isVoid =
+			finalReturn.kind === "keyword" && finalReturn.keyword === "void";
 
-		const returnText = renderWrapped({ module, type: finalReturn, context });
-		if (wrap !== undefined) {
-			return { returnText, body: `return ${wrap}.fromMini(${call});` };
-		}
-		if (finalReturn.kind === "keyword" && finalReturn.keyword === "void") {
-			return { returnText, body: `${call};` };
-		}
+		return ok({
+			head: `${generatorStar(conversion)}${name}${typeParams}(${paramList}): ${text}`,
+			body: convertedBody({ call, conversion, isVoid, indent: "\t\t" }),
+			doc: renderMethodDoc({ name, signature, rename, context }),
+			conversion,
+			isPredicate: false,
+		});
+	}
 
-		return { returnText, body: `return ${call};` };
-	})();
+	const subject = finalReturn.subject === "self" ? "this" : finalReturn.subject;
+	const target =
+		finalReturn.type === undefined
+			? ""
+			: ` is ${renderWrapped({ module, type: finalReturn.type, context })}`;
+	const asserts = finalReturn.asserts ? "asserts " : "";
 
-	const doc = renderJsDoc({
+	return ok({
+		head: `${name}${typeParams}(${paramList}): ${asserts}${subject}${target}`,
+		body: finalReturn.asserts ? `${call};` : `return ${call};`,
+		doc: renderMethodDoc({ name, signature, rename, context }),
+		conversion: { kind: "none" },
+		isPredicate: true,
+	});
+}
+
+function renderMethodDoc({
+	name,
+	signature,
+	rename,
+	context,
+}: {
+	name: string;
+	signature: FunctionDeclaration;
+	rename: ReadonlyMap<string, string>;
+	context: RenderContext;
+}): string {
+	return renderJsDoc({
 		jsDoc: methodDoc({
 			name,
 			jsDoc: signature.jsDoc,
@@ -448,14 +522,6 @@ function methodHead({
 		}),
 		context,
 		indent: "\t",
-	});
-
-	return ok({
-		head: `${name}${typeParams}(${paramList}): ${returnText}`,
-		body,
-		doc,
-		wrap,
-		isPredicate: finalReturn.kind === "predicate",
 	});
 }
 
@@ -468,11 +534,11 @@ function overloadImplementation({
 }: {
 	feature: Feature;
 	name: string;
-	heads: readonly { wrap: string | undefined; isPredicate: boolean }[];
+	heads: readonly { conversion: Conversion; isPredicate: boolean }[];
 	receiver: "this" | undefined;
 }): Generated<{ signature: string; body: string }> {
-	const wraps = new Set(heads.map((head) => head.wrap));
-	if (wraps.size > 1) {
+	const keys = new Set(heads.map((head) => conversionKey(head.conversion)));
+	if (keys.size > 1) {
 		return failure({
 			feature,
 			symbol: name,
@@ -489,14 +555,19 @@ function overloadImplementation({
 
 	const args = receiver === undefined ? "args" : `[${receiver}, ...args]`;
 	const call = `Reflect.apply(mini.${name}, undefined, ${args})`;
-	const [wrap] = wraps;
+	const [first] = heads;
+	const conversion = first?.conversion ?? { kind: "none" };
+	if (conversion.kind !== "none" && conversion.kind !== "value") {
+		return failure({
+			feature,
+			symbol: name,
+			message: "overloads can only convert a plain return value",
+		});
+	}
 
 	return ok({
 		signature: `${name}(...args: unknown[]): unknown`,
-		body:
-			wrap === undefined
-				? `return ${call};`
-				: `return ${wrap}.fromMini(${call});`,
+		body: convertedBody({ call, conversion, isVoid: false, indent: "" }),
 	});
 }
 
@@ -547,7 +618,7 @@ function renderMethod({
 	});
 }
 
-/** Renders a non-`self` function that returns a wrap target as a main wrapper. */
+/** Renders a non-`self` function whose return needs converting as a main wrapper. */
 function renderWrapper({
 	module,
 	symbol,
@@ -560,7 +631,7 @@ function renderWrapper({
 	const heads: {
 		head: string;
 		doc: string;
-		wrap: string | undefined;
+		conversion: Conversion;
 		isPredicate: boolean;
 	}[] = [];
 
@@ -596,10 +667,23 @@ function renderWrapper({
 			context,
 		});
 
+		const converted = convertReturn({
+			type: returnType,
+			context: convertContextFor({ module, context }),
+		});
+		if (!converted.ok) {
+			return failure({
+				feature,
+				symbol: symbol.name,
+				message: converted.error,
+			});
+		}
+		const { text, conversion } = converted.value;
+
 		heads.push({
-			head: `export function ${symbol.name}${typeParams}(${params}): ${renderWrapped({ module, type: returnType, context })}`,
+			head: `export function${generatorStar(conversion)} ${symbol.name}${typeParams}(${params}): ${text}`,
 			doc,
-			wrap: wrapTargetOf(module.wrapNames, returnType),
+			conversion,
 			isPredicate: false,
 		});
 	}
@@ -608,10 +692,16 @@ function renderWrapper({
 	const [onlySignature] = signatures;
 	if (heads.length === 1 && only !== undefined && onlySignature !== undefined) {
 		const args = onlySignature.params.map(forwardParam).join(", ");
+		const body = convertedBody({
+			call: `mini.${symbol.name}(${args})`,
+			conversion: only.conversion,
+			isVoid: false,
+			indent: "\t",
+		});
 
 		return ok({
 			name: symbol.name,
-			source: `${only.doc}${only.head} {\n\treturn ${only.wrap}.fromMini(mini.${symbol.name}(${args}));\n}\n`,
+			source: `${only.doc}${only.head} {\n\t${body}\n}\n`,
 		});
 	}
 
@@ -805,6 +895,12 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		...(feature.wraps ?? []).map((t) => t.type),
 	]);
 	const miniNames = new Set(symbols.map((symbol) => symbol.name));
+	const mappers = new Map<string, readonly (string | undefined)[]>([
+		[feature.primary, feature.mappers ?? []],
+		...(feature.wraps ?? []).map(
+			(target) => [target.type, target.mappers ?? []] as const,
+		),
+	]);
 
 	const methodSymbols: DocSymbol[] = [];
 	const wrapperSymbols: DocSymbol[] = [];
@@ -830,8 +926,8 @@ export function generateMain(input: GenerateInput): Generated<string> {
 					message: "overloads must all or none take `self` first",
 				});
 			}
-			const returnsWrapped = signatures.map(
-				(sig) => wrapTargetOf(wrapNames, sig.returnType) !== undefined,
+			const returnsWrapped = signatures.map((sig) =>
+				needsConversion({ wrapNames, type: sig.returnType }),
 			);
 			if (returnsWrapped.some(Boolean)) {
 				wrapperSymbols.push(symbol);
@@ -849,6 +945,7 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		feature,
 		miniNames,
 		wrapNames,
+		mappers,
 		sources,
 		outputUrl,
 		typeImports: new Map(),

@@ -10,6 +10,12 @@ export interface WrapTarget {
 	readonly type: string;
 	/** The main module exporting the class, relative to the generated file. */
 	readonly from: string;
+	/**
+	 * The main method mapping each of the type's type arguments, by position
+	 * (e.g. `["map", "mapErr"]` for `Result<T, E>`); used to convert a wrap
+	 * target nested in a type argument.
+	 */
+	readonly mappers?: readonly (string | undefined)[];
 }
 
 /** One feature whose main entrypoint is generated from its mini barrel. */
@@ -28,6 +34,8 @@ export interface Feature {
 	 * passes a Struct's params through unchanged.
 	 */
 	readonly construct: "variant" | "params";
+	/** The primary's mapper per type argument; see {@linkcode WrapTarget.mappers}. */
+	readonly mappers?: readonly (string | undefined)[];
 	/** Other features' main classes that top-level return types convert to. */
 	readonly wraps?: readonly WrapTarget[];
 	/** Curried mini functions whose method takes the returned function's parameters. */
@@ -38,8 +46,16 @@ export interface Feature {
 	readonly example?: string;
 }
 
-const OPTION: WrapTarget = { type: "Option", from: "../../option/main/mod.ts" };
-const RESULT: WrapTarget = { type: "Result", from: "../../result/main/mod.ts" };
+const OPTION: WrapTarget = {
+	type: "Option",
+	from: "../../option/main/mod.ts",
+	mappers: ["map"],
+};
+const RESULT: WrapTarget = {
+	type: "Result",
+	from: "../../result/main/mod.ts",
+	mappers: ["map", "mapErr"],
+};
 
 /** Every generated main entrypoint. */
 export const FEATURES: readonly Feature[] = [
@@ -57,6 +73,7 @@ export const FEATURES: readonly Feature[] = [
 		output: "packages/enum/src/option/main/mod.ts",
 		primary: "Option",
 		construct: "variant",
+		mappers: ["map"],
 		wraps: [RESULT],
 		example: [
 			'import { Some } from "@sekhmet/enum/option";',
@@ -73,6 +90,7 @@ export const FEATURES: readonly Feature[] = [
 		output: "packages/enum/src/result/main/mod.ts",
 		primary: "Result",
 		construct: "variant",
+		mappers: ["map", "mapErr"],
 		wraps: [OPTION],
 	},
 	{
@@ -88,6 +106,7 @@ export const FEATURES: readonly Feature[] = [
 		output: "packages/enum/src/latch/main/mod.ts",
 		primary: "Latch",
 		construct: "variant",
+		mappers: ["map", "mapInactive"],
 		wraps: [OPTION, RESULT],
 	},
 	{
@@ -96,6 +115,7 @@ export const FEATURES: readonly Feature[] = [
 		output: "packages/enum/src/poll/main/mod.ts",
 		primary: "Poll",
 		construct: "variant",
+		mappers: ["map"],
 	},
 	{
 		entrypoint: "@sekhmet/effect/effect",
@@ -103,6 +123,7 @@ export const FEATURES: readonly Feature[] = [
 		output: "packages/effect/src/effect/main/mod.ts",
 		primary: "Effect",
 		construct: "params",
+		mappers: [undefined, "map", "mapError"],
 		example: [
 			'import { Success } from "@sekhmet/effect/effect";',
 			"",
@@ -118,7 +139,13 @@ export const FEATURES: readonly Feature[] = [
 		output: "packages/effect/src/fiber/main/mod.ts",
 		primary: "Fiber",
 		construct: "params",
-		wraps: [{ type: "Effect", from: "../../effect/main/mod.ts" }],
+		wraps: [
+			{
+				type: "Effect",
+				from: "../../effect/main/mod.ts",
+				mappers: [undefined, "map", "mapError"],
+			},
+		],
 		// The `@sekhmet/effect` barrel also re-exports effect/main's `Failed`;
 		// exporting FiberError's constructors here too would make it ambiguous.
 		omit: ["Failed", "Cancelled", "Panicked"],

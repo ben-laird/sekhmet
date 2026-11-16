@@ -64,3 +64,16 @@ Deno.test("Enum.fromMini shares the mini instance's struct params", () => {
 	// Then: both read and write the same state
 	assertStrictEquals(getStructParams(view), getStructParams(miniShape));
 });
+
+Deno.test("Enum's iterator methods yield main Enums lazily", () => {
+	// Given: a main Enum holding a Circle
+	const shape = new Enum<Shape>("Circle", 1);
+
+	// When: iterating the Enums that match Circle
+	const matches = shape.iterAnyIsolated(new Set(["Circle"] as const));
+	const [first] = [...matches];
+
+	// Then: the yielded Enum is the main receiver itself
+	assertInstanceOf(first, Enum);
+	assertStrictEquals(first, shape);
+});

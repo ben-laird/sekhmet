@@ -243,8 +243,8 @@ Deno.test("generateMain does not return from void methods", () => {
 	assertStringIncludes(output, "clear(): void {\n\t\tmini.clear(this);\n\t}");
 });
 
-Deno.test("generateMain keeps nested primary types as mini types", () => {
-	// Given: a function returning the primary inside a generic
+Deno.test("generateMain re-yields generators of the primary lazily as main", () => {
+	// Given: a function returning a Generator of the primary
 	const iter = fn(
 		"iter",
 		signature({
@@ -253,7 +253,7 @@ Deno.test("generateMain keeps nested primary types as mini types", () => {
 			returnType: {
 				kind: "ref",
 				name: "Generator",
-				args: [named("Box", [typeParam("T")])],
+				args: [named("Box", [typeParam("T")]), keyword("void")],
 				resolution: { kind: "global" },
 			},
 		}),
@@ -262,9 +262,66 @@ Deno.test("generateMain keeps nested primary types as mini types", () => {
 	// When: generating
 	const output = source([iter]);
 
-	// Then: only a top-level return converts; the nested one stays mini
-	assertStringIncludes(output, "iter(): Generator<mini.Box<T>> {");
-	assertStringIncludes(output, "return mini.iter(this);");
+	// Then: the method is a generator converting each yielded value
+	assertStringIncludes(output, "*iter(): Generator<Box<T>, void> {");
+	assertStringIncludes(
+		output,
+		"for (const item of mini.iter(this)) {\n\t\t\tyield Box.fromMini(item);\n\t\t}",
+	);
+});
+
+Deno.test("generateMain converts primary types in returned tuples", () => {
+	// Given: a free function returning a labeled-free tuple of Boxes
+	const split = fn(
+		"split",
+		signature({
+			typeParams: ["T"],
+			params: [param("pair", named("Box", [typeParam("T")]))],
+			returnType: {
+				kind: "tuple",
+				elements: [named("Box", [typeParam("T")]), keyword("number")],
+			},
+		}),
+	);
+
+	// When: generating
+	const output = source([split]);
+
+	// Then: the Box element converts and the other passes through
+	assertStringIncludes(
+		output,
+		"export function split<T>(pair: mini.Box<T>): [Box<T>, number] {",
+	);
+	assertStringIncludes(
+		output,
+		"const [element0, element1] = mini.split(pair);",
+	);
+	assertStringIncludes(output, "return [Box.fromMini(element0), element1];");
+});
+
+Deno.test("generateMain converts wrap targets nested in type arguments through mappers", () => {
+	// Given: Box<Box<T>> returned by a method, with Box's mapper declared
+	const nest = fn(
+		"nest",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: named("Box", [named("Box", [typeParam("T")])]),
+		}),
+	);
+
+	// When: generating with and without the mapper
+	const output = source([nest], { ...FEATURE, mappers: ["map"] });
+	const missing = generate([nest]);
+
+	// Then: the inner Box converts through the outer's map, or generation explains what's missing
+	assertStringIncludes(output, "nest(): Box<Box<T>> {");
+	assertStringIncludes(
+		output,
+		"return Box.fromMini(mini.nest(this)).map((value0) => Box.fromMini(value0));",
+	);
+	assert(!missing.ok);
+	assertStringIncludes(missing.error.message, "no mapper");
 });
 
 Deno.test("generateMain forwards overloads through one implementation", () => {
