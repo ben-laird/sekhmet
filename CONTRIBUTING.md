@@ -497,7 +497,10 @@ and the task runs with `--frozen`. CI puts the same launcher on `PATH` as `dv`
 
 ### What happens on merge
 
-`.github/workflows/release.yml` runs `scripts/release/main.ts`:
+`.github/workflows/release.yml` first runs the full gate (`deno task ci`);
+a red tree stops the job before anything is versioned or published. It then
+runs `scripts/release/main.ts`, which only proceeds from the commit `main`
+points at:
 
 1. `dv version` consumes pending Records: it bumps each `deno.json`, writes
    each package's `CHANGELOG.md`, and commits `chore(release): …` to `main`.
@@ -505,14 +508,16 @@ and the task runs with `--frozen`. CI puts the same launcher on `PATH` as `dv`
    `deno publish` per package, dependencies first (primordials before enum,
    and so on). JSR authenticates the workflow over GitHub OIDC, so no token
    is stored. Then it pushes the tags.
-3. Each tag that reached JSR gets a GitHub Release with its changelog section.
+3. Each package uploaded to JSR gets a GitHub Release with its changelog
+   section.
 
 An untagged version is released even without a Record, which is how the
 first run publishes every package at its current `0.1.0`. A merge with no
-Records and nothing untagged releases nothing. If a publish
-fails, the job fails after the other packages publish; rerun the `release`
-workflow from the Actions tab with **force** checked. Versions already on JSR
-are skipped.
+Records and nothing untagged releases nothing. If a publish fails (or takes
+longer than five minutes), the job fails after the other packages publish;
+rerun the `release` workflow on `main` from the Actions tab with **force**
+checked. Versions already on JSR are skipped, and the recovered packages get
+their GitHub Releases.
 
 Only packages under `packages/` are released. Members marked
 `"publish": false` (everything in `scripts/`) never are.
