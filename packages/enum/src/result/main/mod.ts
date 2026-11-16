@@ -27,6 +27,7 @@
  */
 
 import { getStructParams, struct } from "@sekhmet/primordials/struct";
+import type { Enum, Isolate } from "@/src/core/mini/core.ts";
 import { Option } from "../../option/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
@@ -277,21 +278,32 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	/**
 	 * Checks if a Result is in the Ok variant.
 	 *
-	 * This is a type guard that narrows the Result type to Ok, allowing safe
-	 * access to the success value.
+	 * Narrows both the variant and the type parameters: the Result becomes its Ok
+	 * variant, so its value can be read directly, and a `Result<T, never>`, which
+	 * fits a Result with any error type.
 	 *
 	 * @returns true if the Result is Ok, false otherwise
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Err, Ok } from "@sekhmet/enum/result";
+	 * import { union } from "@sekhmet/enum/core/mini";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
 	 * assertEquals(Ok(42).isOk(), true);
 	 * assertEquals(Err("failed").isOk(), false);
+	 *
+	 * const result: Result<number, string> = Ok(42);
+	 * if (result.isOk()) {
+	 *   const value: number = union(result); // the variant: result is Ok
+	 *   const other: Result<number, Error> = result; // the type parameters: a Result<number, never>
+	 *   assertEquals(value, 42);
+	 *   assertEquals(other, result);
+	 * }
 	 * ```
 	 * @see {@link mini.isOk}
 	 */
-	isOk(): this is Result<T, never> {
+	isOk(): this is Enum<Isolate<mini.ResultVariants<T, E>, "Ok">> &
+		Result<T, never> {
 		return mini.isOk(this);
 	}
 
@@ -299,7 +311,9 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * Checks if a Result is Ok and its value satisfies a predicate.
 	 *
 	 * This combines variant checking with value validation, providing a type guard
-	 * that narrows both the variant and the value type.
+	 * that narrows both the variant and the type parameters: the Result becomes its
+	 * Ok variant and a `Result<U, never>`, where `U` is the type a type-guard
+	 * predicate guards (or `T` for a boolean predicate).
 	 *
 	 * @template U - The narrowed type when the predicate is a type guard
 	 * @param predicate - A function that tests the Ok value (may be a type guard)
@@ -308,7 +322,7 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
 	 * import { match } from "@sekhmet/enum/core/mini";
-	 * import { Ok } from "@sekhmet/enum/result";
+	 * import { Ok, type Result } from "@sekhmet/enum/result";
 	 *
 	 * assertEquals(Ok(42).isOkAnd((n) => n > 40), true);
 	 * assertEquals(Ok(7).isOkAnd((n) => n > 40), false);
@@ -317,39 +331,51 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * const value: unknown = "hello";
 	 * const result = Ok(value);
 	 * if (result.isOkAnd((v): v is string => typeof v === "string")) {
-	 *   const shout = match(result)({
-	 *     Ok: (v) => v.toUpperCase(), // TypeScript knows v is string
-	 *     Err: () => "",
-	 *   });
+	 *   // the variant: result is Ok holding a string, so no Err arm is needed
+	 *   const shout = match(result)({ Ok: (v) => v.toUpperCase() });
+	 *   // the type parameters: result is a Result<string, never>
+	 *   const narrowed: Result<string, Error> = result;
 	 *   assertEquals(shout, "HELLO");
+	 *   assertEquals(narrowed, result);
 	 * }
 	 * ```
 	 * @see {@link mini.isOkAnd}
 	 */
 	isOkAnd<U extends T>(
 		predicate: ((value: T) => value is U) | ((value: T) => boolean),
-	): this is Result<U, never> {
+	): this is Enum<Isolate<mini.ResultVariants<U, E>, "Ok">> & Result<U, never> {
 		return mini.isOkAnd(this, predicate);
 	}
 
 	/**
 	 * Checks if a Result is in the Err variant.
 	 *
-	 * This is a type guard that narrows the Result type to Err, allowing safe
-	 * access to the error value.
+	 * Narrows both the variant and the type parameters: the Result becomes its Err
+	 * variant, so its error can be read directly, and a `Result<never, E>`, which
+	 * fits a Result with any value type.
 	 *
 	 * @returns true if the Result is Err, false otherwise
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Err, Ok } from "@sekhmet/enum/result";
+	 * import { union } from "@sekhmet/enum/core/mini";
+	 * import { Err, Ok, type Result } from "@sekhmet/enum/result";
 	 *
 	 * assertEquals(Err(new Error("Failed")).isErr(), true);
 	 * assertEquals(Ok(42).isErr(), false);
+	 *
+	 * const result: Result<number, string> = Err("failed");
+	 * if (result.isErr()) {
+	 *   const error: string = union(result); // the variant: result is Err
+	 *   const other: Result<boolean, string> = result; // the type parameters: a Result<never, string>
+	 *   assertEquals(error, "failed");
+	 *   assertEquals(other, result);
+	 * }
 	 * ```
 	 * @see {@link mini.isErr}
 	 */
-	isErr(): this is Result<never, E> {
+	isErr(): this is Enum<Isolate<mini.ResultVariants<T, E>, "Err">> &
+		Result<never, E> {
 		return mini.isErr(this);
 	}
 
@@ -357,7 +383,9 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * Checks if a Result is Err and its error satisfies a predicate.
 	 *
 	 * This combines variant checking with error validation, providing a type guard
-	 * that narrows both the variant and the error type.
+	 * that narrows both the variant and the type parameters: the Result becomes its
+	 * Err variant and a `Result<never, F>`, where `F` is the type a type-guard
+	 * predicate guards (or `E` for a boolean predicate).
 	 *
 	 * @template F - The narrowed error type when the predicate is a type guard
 	 * @param predicate - A function that tests the Err value (may be a type guard)
@@ -375,18 +403,20 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * type NetworkError = { code: number };
 	 * const result2: Result<string, Error | NetworkError> = Err({ code: 404 });
 	 * if (result2.isErrAnd((e): e is NetworkError => "code" in e)) {
-	 *   const code = match(result2)({
-	 *     Ok: () => 0,
-	 *     Err: (e) => e.code, // TypeScript knows e is NetworkError
-	 *   });
+	 *   // the variant: result2 is Err holding a NetworkError, so no Ok arm is needed
+	 *   const code = match(result2)({ Err: (e) => e.code });
+	 *   // the type parameters: result2 is a Result<never, NetworkError>
+	 *   const narrowed: Result<number, NetworkError> = result2;
 	 *   assertEquals(code, 404);
+	 *   assertEquals(narrowed, result2);
 	 * }
 	 * ```
 	 * @see {@link mini.isErrAnd}
 	 */
 	isErrAnd<F extends E>(
 		predicate: ((value: E) => value is F) | ((value: E) => boolean),
-	): this is Result<never, F> {
+	): this is Enum<Isolate<mini.ResultVariants<T, F>, "Err">> &
+		Result<never, F> {
 		return mini.isErrAnd(this, predicate);
 	}
 
