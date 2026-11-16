@@ -54,34 +54,37 @@ assertEquals(unwrap(parseSync(length, "four")), 4);
 
 ## Composites
 
-`@sekhmet/schema/composites` builds schemas from schemas: `object`, `array`
-(with `minItems`/`maxItems`), `tuple`, `record`, `union`,
-`discriminatedUnion`, `enumOf`, `optional`, `nullable` and `lazy`. Each reports
-every failing part as `Issues`, located by its path from the root:
+`@sekhmet/schema/composites` builds schemas from schemas: `object`, `array`,
+`tuple`, `record`, `union`, `discriminatedUnion`, `enumOf`, `optional`,
+`nullable` and `lazy`. Each reports every failing part as `Issues`, located by
+its path from the root:
 
 ```ts
 import { assertEquals } from "@std/assert";
 import { Err, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
 import { array, object } from "@sekhmet/schema/composites";
-import { entries, parseAsync, Schema } from "@sekhmet/schema/core/mini";
+import { entries, Schema } from "@sekhmet/schema/core";
 
 const text = new Schema((input: unknown) =>
 	typeof input === "string" ? Ok(input) : Err("not text"),
 );
-const user = object({ name: text, tags: array(text) }).strict();
+const user = object({
+	shape: { name: text, tags: array({ item: text, minItems: 1 }) },
+	unknownKeys: "strict",
+});
 
-const issues = unwrapErr(
-	await parseAsync(user, { name: 1, tags: ["a", 2], admin: true }),
+const found = unwrapErr(
+	await user.parseAsync({ name: 1, tags: ["a", 2], admin: true }),
 );
 assertEquals(
-	entries(issues).map(({ path }) => path),
+	entries(found).map(({ path }) => path),
 	[["name"], ["tags", 1], ["admin"]],
 );
 ```
 
-An `object` strips undeclared keys; `.strict()` reports each one and
-`.passthrough()` keeps them. A composite is `Sync` when every child parse is,
-and `Async` otherwise.
+An `object` strips undeclared keys; `unknownKeys: "strict"` reports each one
+and `unknownKeys: "passthrough"` keeps them. A composite is `Sync` when every
+child parse is, and `Async` otherwise.
 
 ## Standard Schema
 

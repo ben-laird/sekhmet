@@ -1,4 +1,3 @@
-import { getStructParams, type struct } from "@sekhmet/primordials/struct";
 import { type SchemaIssue, UnknownKey } from "@/src/core/mini/issue.ts";
 import { type Flatten, type Issues, issues } from "@/src/core/mini/issues.ts";
 import {
@@ -6,7 +5,6 @@ import {
 	type ErrorOf,
 	type Input,
 	type Output,
-	type Parser,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import {
@@ -143,44 +141,8 @@ export type ObjectError<S extends Shape> = Issues<
 >;
 
 /**
- * An object schema's parser, carrying the declaration it was built from so
- * `strict`, `passthrough` and `strip` can rebuild it.
- *
- * @template S The object's shape
- * @template U What the object does with undeclared keys
- *
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { getStructParams } from "@sekhmet/primordials/struct";
- * import { object } from "@sekhmet/schema/composites/mini";
- *
- * assertEquals(getStructParams(object({})).unknownKeys, "strip");
- * ```
- */
-export interface ObjectParser<S extends Shape, U extends UnknownKeys>
-	extends Parser<ObjectInput<S>, ObjectOutput<S, U>, ObjectError<S>> {
-	/** The fields. */
-	readonly shape: S;
-	/** What the object does with undeclared keys. */
-	readonly unknownKeys: U;
-}
-
-/**
- * An object schema holds an {@linkcode ObjectParser}, not just a parser.
- *
- * @template S The object's shape
- * @template U What the object does with undeclared keys
- */
-export interface ObjectSchema<S extends Shape, U extends UnknownKeys> {
-	/** The parser, with the object's declaration. */
-	[struct]: ObjectParser<S, U>;
-}
-
-/**
- * A schema for objects with known fields. Its parser remembers the
- * {@linkcode Shape}, so `strict`, `passthrough` and `strip` can change what
- * it does with undeclared keys.
+ * What {@linkcode object} builds a schema from: the fields, and what to do
+ * with keys they don't declare.
  *
  * @template S The object's shape
  * @template U What the object does with undeclared keys
@@ -189,28 +151,30 @@ export interface ObjectSchema<S extends Shape, U extends UnknownKeys> {
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { unwrap } from "@sekhmet/enum/result/mini";
- * import { object } from "@sekhmet/schema/composites/mini";
+ * import { object, type ObjectOptions } from "@sekhmet/schema/composites/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
  *
- * const user = object({ name: string() });
+ * const options = { shape: { name: string() }, unknownKeys: "passthrough" } satisfies ObjectOptions<
+ * 	{ name: ReturnType<typeof string> },
+ * 	"passthrough"
+ * >;
  *
- * assertEquals(unwrap(parseSync(user, { name: "Ada", admin: true })), { name: "Ada" });
+ * assertEquals(unwrap(parseSync(object(options), { name: "Ada", admin: true })), {
+ * 	name: "Ada",
+ * 	admin: true,
+ * });
  * ```
  */
-// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: narrows the struct params under --isolatedDeclarations, as Struct itself does (microsoft/TypeScript#61892)
-export class ObjectSchema<
-	S extends Shape,
-	U extends UnknownKeys,
-> extends Schema<ObjectInput<S>, ObjectOutput<S, U>, ObjectError<S>> {
+export interface ObjectOptions<S extends Shape, U extends UnknownKeys> {
+	/** Each field's schema. */
+	readonly shape: S;
 	/**
-	 * Wraps an object parser; build one with {@linkcode object}.
+	 * What to do with undeclared keys (see {@linkcode UnknownKeys}).
 	 *
-	 * @param parser The parser and its declaration
+	 * @default "strip"
 	 */
-	constructor(parser: ObjectParser<S, U>) {
-		super(parser);
-	}
+	readonly unknownKeys?: U;
 }
 
 /** The issues for each undeclared key of a strict object. */
@@ -226,22 +190,76 @@ function unknownKeyIssues(
 	return first === undefined ? undefined : issues([first, ...rest]);
 }
 
-/** Builds an object parser from its declaration. */
-function objectParser<S extends Shape, U extends UnknownKeys>(declaration: {
-	shape: S;
-	unknownKeys: U;
-}): ObjectParser<S, U>;
-function objectParser(declaration: {
-	shape: Readonly<Record<string, Child>>;
-	unknownKeys: UnknownKeys;
-}): ((input: unknown) => Parsed) & {
-	shape: Readonly<Record<string, Child>>;
-	unknownKeys: UnknownKeys;
-} {
-	const { shape, unknownKeys } = declaration;
+/**
+ * Creates a schema for objects with the given fields. Every field is
+ * parsed, and every failing field is reported at its path. A missing key is
+ * parsed as `undefined`, so only fields that accept `undefined` (see
+ * `optional`) may be missing; they become optional properties.
+ *
+ * Keys the shape doesn't declare are stripped from the output by default;
+ * `unknownKeys: "strict"` reports each as an `UnknownKey` issue at its path,
+ * and `unknownKeys: "passthrough"` copies them to the output unchecked.
+ *
+ * A non-object input (including `null` and arrays) fails with an
+ * `InvalidType` issue at the root.
+ *
+ * @template S The object's shape
+ * @template U What the object does with undeclared keys
+ * @param options The fields, and what to do with undeclared keys
+ * @returns A schema for objects of that shape
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { object } from "@sekhmet/schema/composites/mini";
+ * import { entries, parseAsync, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const text = new Schema((input: unknown) =>
+ * 	typeof input === "string" ? Ok(input) : Err("not text"),
+ * );
+ * const user = object({
+ * 	shape: { name: text, address: object({ shape: { zip: text } }) },
+ * });
+ *
+ * const found = unwrapErr(await parseAsync(user, { name: 1, address: { zip: 2 } }));
+ * assertEquals(
+ * 	entries(found).map(({ path }) => path),
+ * 	[["name"], ["address", "zip"]],
+ * );
+ * ```
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { object } from "@sekhmet/schema/composites/mini";
+ * import { entries, parseAsync, parseSync } from "@sekhmet/schema/core/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const shape = { name: string() };
+ * const strict = object({ shape, unknownKeys: "strict" });
+ * const loose = object({ shape, unknownKeys: "passthrough" });
+ * const input = { name: "Ada", admin: true };
+ *
+ * assertEquals(unwrap(parseSync(object({ shape }), input)), { name: "Ada" });
+ * assertEquals(unwrap(parseSync(loose, input)), input);
+ * const [issue] = entries(unwrapErr(await parseAsync(strict, input)));
+ * assertEquals(issue.path, ["admin"]);
+ * ```
+ */
+export function object<S extends Shape, U extends UnknownKeys = "strip">(
+	options: ObjectOptions<S, U>,
+): Schema<ObjectInput<S>, ObjectOutput<S, U>, ObjectError<S>>;
+export function object(options: {
+	readonly shape: Readonly<Record<string, Child>>;
+	readonly unknownKeys?: UnknownKeys;
+}): Schema<unknown, unknown, Issues<unknown>> {
+	const { shape } = options;
+	const unknownKeys = options.unknownKeys ?? "strip";
 	const fields = Object.entries(shape);
 
-	const parser = (input: unknown): Parsed => {
+	return new Schema((input: unknown): Parsed => {
 		if (!isRecord(input)) return invalidType({ input, expected: "object" });
 
 		const undeclared = Object.keys(input).filter(
@@ -268,134 +286,5 @@ function objectParser(declaration: {
 						: []),
 				]),
 		});
-	};
-
-	return Object.assign(parser, { shape, unknownKeys });
-}
-
-/**
- * Creates a schema for objects with the given fields. Every field is
- * parsed, and every failing field is reported at its path. A missing key is
- * parsed as `undefined`, so only fields that accept `undefined` (see
- * `optional`) may be missing; they become optional properties. Keys the
- * shape doesn't declare are stripped from the output; see
- * {@linkcode strict} and {@linkcode passthrough}.
- *
- * A non-object input (including `null` and arrays) fails with an
- * `InvalidType` issue at the root.
- *
- * @template S The object's shape
- * @param shape Each field's schema
- * @returns A schema for objects of that shape
- *
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { unwrapErr } from "@sekhmet/enum/result/mini";
- * import { object } from "@sekhmet/schema/composites/mini";
- * import { entries, parse, Schema } from "@sekhmet/schema/core/mini";
- * import { Err, Ok } from "@sekhmet/enum/result/mini";
- * import { union } from "@sekhmet/enum/core/mini/exit";
- *
- * const text = new Schema((input: unknown) =>
- * 	typeof input === "string" ? Ok(input) : Err("not text"),
- * );
- * const user = object({ name: text, address: object({ zip: text }) });
- *
- * const issues = unwrapErr(await union(parse(user, { name: 1, address: { zip: 2 } })));
- * assertEquals(
- * 	entries(issues).map(({ path }) => path),
- * 	[["name"], ["address", "zip"]],
- * );
- * ```
- */
-export function object<S extends Shape>(shape: S): ObjectSchema<S, "strip"> {
-	return new ObjectSchema(objectParser({ shape, unknownKeys: "strip" }));
-}
-
-/**
- * Makes an object schema report each undeclared key as an `UnknownKey`
- * issue at that key's path.
- *
- * @template S The object's shape
- * @template U What the object did with undeclared keys
- * @param self The object schema
- * @returns The same object schema, rejecting undeclared keys
- *
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { unwrapErr } from "@sekhmet/enum/result/mini";
- * import { object, strict } from "@sekhmet/schema/composites/mini";
- * import { entries, formatIssue, parseAsync } from "@sekhmet/schema/core/mini";
- *
- * const empty = strict(object({}));
- * const [issue] = entries(unwrapErr(await parseAsync(empty, { admin: true })));
- *
- * assertEquals(issue.path, ["admin"]);
- * ```
- */
-export function strict<S extends Shape, U extends UnknownKeys>(
-	self: ObjectSchema<S, U>,
-): ObjectSchema<S, "strict"> {
-	const { shape } = getStructParams(self);
-
-	return new ObjectSchema(objectParser({ shape, unknownKeys: "strict" }));
-}
-
-/**
- * Makes an object schema copy undeclared keys to its output unchecked.
- *
- * @template S The object's shape
- * @template U What the object did with undeclared keys
- * @param self The object schema
- * @returns The same object schema, keeping undeclared keys
- *
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { unwrap } from "@sekhmet/enum/result/mini";
- * import { object, passthrough } from "@sekhmet/schema/composites/mini";
- * import { parseSync } from "@sekhmet/schema/core/mini";
- *
- * const loose = passthrough(object({}));
- *
- * assertEquals(unwrap(parseSync(loose, { admin: true })), { admin: true });
- * ```
- */
-export function passthrough<S extends Shape, U extends UnknownKeys>(
-	self: ObjectSchema<S, U>,
-): ObjectSchema<S, "passthrough"> {
-	const { shape } = getStructParams(self);
-
-	return new ObjectSchema(objectParser({ shape, unknownKeys: "passthrough" }));
-}
-
-/**
- * Makes an object schema drop undeclared keys from its output: the default,
- * restored after {@linkcode strict} or {@linkcode passthrough}.
- *
- * @template S The object's shape
- * @template U What the object did with undeclared keys
- * @param self The object schema
- * @returns The same object schema, stripping undeclared keys
- *
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { unwrap } from "@sekhmet/enum/result/mini";
- * import { object, strict, strip } from "@sekhmet/schema/composites/mini";
- * import { parseSync } from "@sekhmet/schema/core/mini";
- *
- * const lenient = strip(strict(object({})));
- *
- * assertEquals(unwrap(parseSync(lenient, { admin: true })), {});
- * ```
- */
-export function strip<S extends Shape, U extends UnknownKeys>(
-	self: ObjectSchema<S, U>,
-): ObjectSchema<S, "strip"> {
-	const { shape } = getStructParams(self);
-
-	return new ObjectSchema(objectParser({ shape, unknownKeys: "strip" }));
+	});
 }

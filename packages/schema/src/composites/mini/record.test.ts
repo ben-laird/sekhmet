@@ -31,7 +31,7 @@ const laterCount: Schema<unknown, number, "not a number"> = new Schema(
 
 Deno.test("record parses every key and value", () => {
 	// Given: a record from short names to numbers
-	const scores = record(name, count);
+	const scores = record({ key: name, value: count });
 
 	// When: parsing a matching object
 	const parsed = unwrap(parseSync(scores, { ada: 3, bo: 4 }));
@@ -42,7 +42,7 @@ Deno.test("record parses every key and value", () => {
 
 Deno.test("record reports failing keys and values at their key", async () => {
 	// Given: a record from short names to numbers
-	const scores = record(name, count);
+	const scores = record({ key: name, value: count });
 
 	// When: parsing a bad key and, under another key, a bad value
 	const issues = unwrapErr(
@@ -59,7 +59,7 @@ Deno.test("record reports failing keys and values at their key", async () => {
 Deno.test("record outputs the key schema's output as the key", () => {
 	// Given: a record whose key schema upper-cases
 	const upper = new Schema((input: string) => Ok(input.toUpperCase()));
-	const scores = record(upper, count);
+	const scores = record({ key: upper, value: count });
 
 	// When: parsing an object
 	const parsed = unwrap(parseSync(scores, { ada: 3 }));
@@ -70,7 +70,7 @@ Deno.test("record outputs the key schema's output as the key", () => {
 
 Deno.test("record rejects non-objects with InvalidType at the root", async () => {
 	// Given: a record schema
-	const scores = record(name, count);
+	const scores = record({ key: name, value: count });
 
 	// When: parsing an array
 	const issues = unwrapErr(await parseAsync(scores, [1]));
@@ -83,7 +83,7 @@ Deno.test("record rejects non-objects with InvalidType at the root", async () =>
 
 Deno.test("record is Async when its value schema is", async () => {
 	// Given: a record with an async value schema
-	const scores = record(name, laterCount);
+	const scores = record({ key: name, value: laterCount });
 
 	// When: parsing with it
 	const kind = unionKinds(parse(scores, { ada: 1 }));
@@ -95,8 +95,8 @@ Deno.test("record is Async when its value schema is", async () => {
 
 Deno.test("record infers its input, output and error types", () => {
 	// Given: records with string keys and with finite keys
-	const scores = record(name, count);
-	const flags = record(enumOf(["a", "b"]), count);
+	const scores = record({ key: name, value: count });
+	const flags = record({ key: enumOf(["a", "b"]), value: count });
 
 	// When: reading their types
 	// Then: string keys give a Record; finite keys are each optional

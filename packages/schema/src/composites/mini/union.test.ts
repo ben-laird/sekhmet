@@ -63,7 +63,7 @@ Deno.test("union's first matching option wins and later options don't run", () =
 
 Deno.test("union fails with InvalidUnion carrying each option's issues", async () => {
 	// Given: a union of text and an object
-	const either = union([text, object({ n: count })]);
+	const either = union([text, object({ shape: { n: count } })]);
 
 	// When: parsing a value neither accepts
 	const input = { n: "x" };

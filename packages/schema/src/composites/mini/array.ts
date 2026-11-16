@@ -1,15 +1,10 @@
-import { match, union } from "@sekhmet/enum/core/mini/exit";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { type SchemaIssue, TooBig, TooSmall } from "@/src/core/mini/issue.ts";
 import {
-	concat,
 	type Flatten,
 	fromError,
 	type Issues,
-	toIssues,
 } from "@/src/core/mini/issues.ts";
-import { map as mapPotential } from "@/src/core/mini/potential.ts";
-import { parse, Schema } from "@/src/core/mini/schema.ts";
+import { Schema } from "@/src/core/mini/schema.ts";
 import {
 	type Child,
 	compose,
@@ -37,9 +32,73 @@ import {
 export type ArrayInput<I> = unknown extends I ? unknown : readonly I[];
 
 /**
+ * What {@linkcode array} builds a schema from: the element schema, and
+ * bounds on the array's length.
+ *
+ * @template I The element schema's input type
+ * @template O The element schema's output type
+ * @template E The element schema's error type
+ *
+ * @example
+ * ```ts
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import type { ArrayOptions } from "@sekhmet/schema/composites/mini";
+ * import { Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const tags: ArrayOptions<unknown, unknown, never> = {
+ * 	item: new Schema((input: unknown) => Ok(input)),
+ * 	minItems: 1,
+ * };
+ * ```
+ */
+export interface ArrayOptions<I, O, E> {
+	/** The schema for each element. */
+	readonly item: Schema<I, O, E>;
+	/**
+	 * The fewest elements allowed (inclusive); a shorter array fails with a
+	 * `TooSmall` issue (origin `"array"`) at the root.
+	 */
+	readonly minItems?: number;
+	/**
+	 * The most elements allowed (inclusive); a longer array fails with a
+	 * `TooBig` issue (origin `"array"`) at the root.
+	 */
+	readonly maxItems?: number;
+}
+
+/** The length issue of an array, if its length is out of bounds. */
+function lengthIssue({
+	input,
+	minItems,
+	maxItems,
+}: {
+	input: readonly unknown[];
+	minItems: number | undefined;
+	maxItems: number | undefined;
+}): Issues<SchemaIssue> | undefined {
+	const { length } = input;
+	if (minItems !== undefined && length < minItems) {
+		return fromError(
+			TooSmall({ input, origin: "array", minimum: minItems, inclusive: true }),
+		);
+	}
+	if (maxItems !== undefined && length > maxItems) {
+		return fromError(
+			TooBig({ input, origin: "array", maximum: maxItems, inclusive: true }),
+		);
+	}
+
+	return undefined;
+}
+
+/**
  * Creates a schema for arrays whose every element `item` accepts. Every
  * element is parsed, and every failing element is reported at its index.
  * A non-array input fails with an `InvalidType` issue at the root.
+ *
+ * `minItems` and `maxItems` bound the length (JSON Schema's names, apart
+ * from the string length options). A length out of bounds is reported at
+ * the root, after any failing elements, so both are seen at once.
  *
  * The input is `unknown` when `item` accepts anything, and otherwise an
  * array of `item`'s input.
@@ -47,7 +106,7 @@ export type ArrayInput<I> = unknown extends I ? unknown : readonly I[];
  * @template I The element schema's input type
  * @template O The element schema's output type
  * @template E The element schema's error type
- * @param item The schema for each element
+ * @param options The element schema and the length bounds
  * @returns A schema for arrays of `item`
  *
  * @example
@@ -60,15 +119,35 @@ export type ArrayInput<I> = unknown extends I ? unknown : readonly I[];
  * const positive = new Schema((input: unknown) =>
  * 	typeof input === "number" && input > 0 ? Ok(input) : Err("not positive"),
  * );
- * const issues = unwrapErr(await parseAsync(array(positive), [1, -2, 3, 0]));
+ * const found = unwrapErr(await parseAsync(array({ item: positive }), [1, -2, 3, 0]));
  *
- * assertEquals(entries(issues).map(({ path }) => path), [[1], [3]]);
+ * assertEquals(entries(found).map(({ path }) => path), [[1], [3]]);
+ * ```
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { array } from "@sekhmet/schema/composites/mini";
+ * import { entries, formatIssue, parseAsync, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const anything = new Schema((input: unknown) => Ok(input));
+ * const pair = array({ item: anything, minItems: 1, maxItems: 2 });
+ * const [{ error }] = entries(unwrapErr(await parseAsync(pair, [1, 2, 3])));
+ *
+ * assertEquals(formatIssue(error), "Too big: expected array to have <= 2 items");
  * ```
  */
 export function array<I, O, E>(
-	item: Schema<I, O, E>,
+	options: ArrayOptions<I, O, E>,
 ): Schema<ArrayInput<I>, O[], Issues<Flatten<E> | SchemaIssue>>;
-export function array(item: Child): Schema<unknown, unknown, Issues<unknown>> {
+export function array(options: {
+	readonly item: Child;
+	readonly minItems?: number;
+	readonly maxItems?: number;
+}): Schema<unknown, unknown, Issues<unknown>> {
+	const { item, minItems, maxItems } = options;
+
 	return new Schema((input: unknown): Parsed => {
 		if (!isArray(input)) return invalidType({ input, expected: "array" });
 
@@ -76,111 +155,8 @@ export function array(item: Child): Schema<unknown, unknown, Issues<unknown>> {
 			pending: input.map((value, index) =>
 				run({ key: index, child: item, value }),
 			),
-			extra: undefined,
+			extra: lengthIssue({ input, minItems, maxItems }),
 			build: (outputs) => outputs.map(([, output]) => output),
 		});
 	});
-}
-
-/** Adds a length issue to a parse's result, when `tooFar` finds one. */
-function checkLength<I, O extends readonly unknown[], E>(
-	self: Schema<I, O, E>,
-	tooFar: (input: unknown, length: number) => SchemaIssue | undefined,
-): Schema<I, O, Issues<Flatten<E> | SchemaIssue>> {
-	return new Schema((input) =>
-		union(
-			mapPotential(parse(self, input), (result) =>
-				match(result)({
-					Ok: (output): Result<O, Issues<Flatten<E> | SchemaIssue>> => {
-						const issue = tooFar(input, output.length);
-						return issue === undefined ? Ok(output) : Err(fromError(issue));
-					},
-					Err: (error) => {
-						const found = toIssues(error);
-						const issue = isArray(input)
-							? tooFar(input, input.length)
-							: undefined;
-						return Err(
-							issue === undefined ? found : concat([found, fromError(issue)]),
-						);
-					},
-				}),
-			),
-		),
-	);
-}
-
-/**
- * Requires an array schema's output to have at least `minimum` elements,
- * failing with a `TooSmall` issue (origin `"array"`) at the root. When the
- * array also has failing elements and its input is too short, both are
- * reported.
- *
- * @template I The input type
- * @template O The array output type
- * @template E The error type
- * @param self The array schema
- * @param minimum The fewest elements allowed (inclusive)
- * @returns The schema, with the length check
- *
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
- * import { array, minItems } from "@sekhmet/schema/composites/mini";
- * import { entries, formatIssue, parseAsync, Schema } from "@sekhmet/schema/core/mini";
- *
- * const anything = new Schema((input: unknown) => Ok(input));
- * const nonEmpty = minItems(array(anything), 1);
- * const [{ error }] = entries(unwrapErr(await parseAsync(nonEmpty, [])));
- *
- * assertEquals(formatIssue(error), "Too small: expected array to have >= 1 items");
- * ```
- */
-export function minItems<I, O extends readonly unknown[], E>(
-	self: Schema<I, O, E>,
-	minimum: number,
-): Schema<I, O, Issues<Flatten<E> | SchemaIssue>> {
-	return checkLength(self, (input, length) =>
-		length < minimum
-			? TooSmall({ input, origin: "array", minimum, inclusive: true })
-			: undefined,
-	);
-}
-
-/**
- * Requires an array schema's output to have at most `maximum` elements,
- * failing with a `TooBig` issue (origin `"array"`) at the root, mirroring
- * {@linkcode minItems}.
- *
- * @template I The input type
- * @template O The array output type
- * @template E The error type
- * @param self The array schema
- * @param maximum The most elements allowed (inclusive)
- * @returns The schema, with the length check
- *
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
- * import { array, maxItems } from "@sekhmet/schema/composites/mini";
- * import { entries, formatIssue, parseAsync, Schema } from "@sekhmet/schema/core/mini";
- *
- * const anything = new Schema((input: unknown) => Ok(input));
- * const pair = maxItems(array(anything), 2);
- * const [{ error }] = entries(unwrapErr(await parseAsync(pair, [1, 2, 3])));
- *
- * assertEquals(formatIssue(error), "Too big: expected array to have <= 2 items");
- * ```
- */
-export function maxItems<I, O extends readonly unknown[], E>(
-	self: Schema<I, O, E>,
-	maximum: number,
-): Schema<I, O, Issues<Flatten<E> | SchemaIssue>> {
-	return checkLength(self, (input, length) =>
-		length > maximum
-			? TooBig({ input, origin: "array", maximum, inclusive: true })
-			: undefined,
-	);
 }

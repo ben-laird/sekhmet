@@ -175,7 +175,7 @@ const tagged = new Schema((input: unknown) =>
 			),
 );
 
-Deno.test("fromStandard(toStandard({ schema: schema })) round-trips", async (t) => {
+Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
 	await t.step("outputs are preserved", async () => {
 		// Given: a schema round-tripped through Standard Schema
 		const schema = fromStandard(toStandard({ schema: tagged }));
