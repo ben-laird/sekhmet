@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
 import { match } from "@sekhmet/enum/core/mini/exit";
+import { assertEquals, assertExists } from "@std/assert";
 import { parseSync } from "@/src/core/mini/schema.ts";
 import { boolean } from "./boolean.ts";
 
@@ -32,9 +32,10 @@ Deno.test("boolean rejects non-boolean values by default", () => {
 		Ok: () => null,
 		Err: (e) => e,
 	});
+	assertExists(error);
 
 	assertEquals(
-		match(error!)({
+		match(error)({
 			UnexpectedAsyncParse: () => false,
 			ParseError: (e) => e instanceof TypeError,
 		}),

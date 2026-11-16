@@ -10,8 +10,8 @@ import {
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import {
 	from,
-	map as mapPotential,
 	type MaybePromise,
+	map as mapPotential,
 	type Potential,
 } from "./potential.ts";
 

@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
 import { match } from "@sekhmet/enum/core/mini/exit";
+import { assertEquals } from "@std/assert";
 import { Async, from, map, Sync } from "./potential.ts";
 
 Deno.test("Sync creates a synchronous Potential", () => {

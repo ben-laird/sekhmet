@@ -1,6 +1,6 @@
-import { assertEquals } from "@std/assert";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { assertEquals, assertExists } from "@std/assert";
 import {
 	filter,
 	map,
@@ -77,9 +77,10 @@ Deno.test("parseSync fails with asynchronous schema", () => {
 		Ok: () => null,
 		Err: (e) => e,
 	});
+	assertExists(error);
 
 	assertEquals(
-		match(error!)({
+		match(error)({
 			UnexpectedAsyncParse: () => "async",
 			ParseError: () => "parse",
 		}),
@@ -99,9 +100,10 @@ Deno.test("parseSync wraps parse errors", () => {
 		Ok: () => null,
 		Err: (e) => e,
 	});
+	assertExists(error);
 
 	assertEquals(
-		match(error!)({
+		match(error)({
 			UnexpectedAsyncParse: () => "async",
 			ParseError: () => "parse",
 		}),
@@ -174,9 +176,10 @@ Deno.test("map preserves errors", () => {
 		Ok: () => null,
 		Err: (e) => e,
 	});
+	assertExists(error);
 
 	assertEquals(
-		match(error!)({
+		match(error)({
 			UnexpectedAsyncParse: () => false,
 			ParseError: () => true,
 		}),
@@ -189,7 +192,7 @@ Deno.test("mapErr transforms errors", () => {
 	const schema = new Schema((_input: number) => Err(new TypeError("original")));
 
 	// When: mapping the error
-	const mapped = mapErr(schema, (e) => new Error(e.message + " transformed"));
+	const mapped = mapErr(schema, (e) => new Error(`${e.message} transformed`));
 	const result = parseSync(mapped, 10);
 
 	// Then: the error should be transformed
@@ -197,8 +200,9 @@ Deno.test("mapErr transforms errors", () => {
 		Ok: () => null,
 		Err: (e) => e,
 	});
+	assertExists(error);
 
-	const innerError = match(error!)({
+	const innerError = match(error)({
 		UnexpectedAsyncParse: () => null,
 		ParseError: (e) => e,
 	});
@@ -239,9 +243,10 @@ Deno.test("pipe short-circuits on first error", () => {
 		Ok: () => null,
 		Err: (e) => e,
 	});
+	assertExists(error);
 
 	assertEquals(
-		match(error!)({
+		match(error)({
 			UnexpectedAsyncParse: () => false,
 			ParseError: () => true,
 		}),
@@ -282,9 +287,10 @@ Deno.test("filter rejects values that fail the predicate", () => {
 		Ok: () => null,
 		Err: (e) => e,
 	});
+	assertExists(error);
 
 	assertEquals(
-		match(error!)({
+		match(error)({
 			UnexpectedAsyncParse: () => false,
 			ParseError: () => true,
 		}),

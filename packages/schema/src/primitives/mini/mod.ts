@@ -7,6 +7,11 @@
  * @module
  */
 
-export { boolean, type BooleanSchemaOptions } from "./boolean.ts";
-export { number, type Bound, type NumberSchemaOptions, type Range } from "./number.ts";
-export { string, type StringSchemaOptions } from "./string.ts";
+export { type BooleanSchemaOptions, boolean } from "./boolean.ts";
+export {
+	type Bound,
+	type NumberSchemaOptions,
+	number,
+	type Range,
+} from "./number.ts";
+export { type StringSchemaOptions, string } from "./string.ts";

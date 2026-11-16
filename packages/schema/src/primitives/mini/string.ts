@@ -1,4 +1,4 @@
-import { Ok, Err } from "@sekhmet/enum/result/mini";
+import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { Schema } from "@/src/core/mini/schema.ts";
 
 /**
