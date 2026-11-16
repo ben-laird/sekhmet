@@ -179,9 +179,10 @@ list above, and why:
   `union` fails with `Issues<SchemaIssue>` (one `InvalidUnion` at the root,
   holding each option's issues); `enumOf` is a leaf and fails with a bare
   `SchemaIssue`.
-- **Optional fields** are those whose output includes `undefined` (built with
-  `optional`). A missing key is parsed as `undefined` and left out of the
-  output; a key present as `undefined` is kept.
+- _Superseded by [Optional keys](#optional-keys-28) (2026-11-16):_ optional
+  fields were those whose output includes `undefined` (built with
+  `optional`); a missing key was parsed as `undefined` and left out of the
+  output, and a key present as `undefined` was kept.
 - **`array` length checks are `minItems` / `maxItems`** (JSON Schema's
   names), apart from the string length options. They also report alongside
   element issues when the input is an array of the wrong length.
@@ -324,6 +325,45 @@ to collide on.
 `.array()` takes no arguments: it is a shape modifier like `.optional()`,
 and the length bounds stay on `array({ item, minItems, maxItems })`, one way
 to write them.
+
+### Optional keys (#28)
+
+Owner decision (2026-11-16): an object's key-optionality is declared in its
+shape, apart from value-optionality.
+
+- **A shape value is a schema or a field entry.** A schema is a required key;
+  a `Field`, `{ schema, key }` with `key: KeyPresence` (`"required"` or
+  `"optional"`), says whether the key may be missing. `"required"` is the
+  same as a bare schema, and the `key` field leaves room for more presences.
+  `object` tells the two apart at runtime with `instanceof Schema`.
+- **`.optional()` (mini `optional(self)`) is value-optional only**: it accepts
+  `undefined`, and its output is `T | undefined`, everywhere (object fields,
+  array items, tuple slots, the top level). It does not make a key optional.
+- **The four field kinds**, under `exactOptionalPropertyTypes` (input and
+  output alike, type-tested):
+
+  | Shape value                                        | Type                          | Missing key | Present as `undefined` |
+  | -------------------------------------------------- | ----------------------------- | ----------- | ---------------------- |
+  | `string()`                                         | `{ a: string }`               | fails       | fails                  |
+  | `string().optional()`                              | `{ a: string \| undefined }`  | fails       | kept                   |
+  | `{ schema: string(), key: "optional" }`            | `{ a?: string }`              | left out    | fails                  |
+  | `{ schema: string().optional(), key: "optional" }` | `{ a?: string \| undefined }` | left out    | kept                   |
+
+- **A missing required key fails with the inner issue at `[key]`**, as before
+  this decision: it is parsed as `undefined` with the field's schema
+  stripped of its `.optional()` (through any `.nullable()`), so
+  `string().optional()` reports `string`'s `InvalidType`. A schema that
+  itself accepts `undefined` (`unknown()`, a union with `undefined_()`)
+  passes, and the output keeps the key, as its type says. `object` finds
+  the `.optional()` from metadata the modifiers record against their parser
+  (internal, not public API); the types no longer infer optionality from
+  `undefined extends Output`.
+- `discriminatedUnion` and `record` were unaffected: neither relied on the
+  old inference.
+- _Superseded the same day:_ an earlier decision had `.optional()` take
+  `{ of: "either" | "key" | "value" }`. Carrying that through `object`'s
+  types needed a fourth `Schema` type parameter or an intersection marker;
+  declaring key-optionality in the shape needs neither.
 
 ### Single-object parameters
 

@@ -89,24 +89,30 @@ Deno.test(".optional() and .nullable() pass undefined and null through", () => {
 	);
 });
 
-Deno.test("the modifiers' types: arrays, optional keys and nullable values", () => {
-	// Given: schemas built with the modifier methods
+Deno.test("the modifiers' types: arrays, optional values and nullable values", () => {
+	// Given: schemas built with the modifier methods, and a key-optional field
 	const tags = string().array();
 	const user = object({
-		shape: { name: string(), age: number().optional(), tags },
+		shape: {
+			name: string(),
+			age: number().optional(),
+			email: { schema: string(), key: "optional" },
+			tags,
+		},
 	});
 	const nickname = string().nullable();
 
 	// When: reading their types
-	// Then: .array() maps the element's types, .optional() makes the key
-	// optional, and .nullable() adds null to the input and output
+	// Then: .array() maps the element's types, .optional() adds undefined to
+	// the value (its key stays required), a key: "optional" entry makes the
+	// key optional, and .nullable() adds null to the input and output
 	assertType<IsExact<Input<typeof tags>, unknown>>(true);
 	assertType<IsExact<Output<typeof tags>, string[]>>(true);
 	assertType<IsExact<ErrorOf<typeof tags>, Issues<SchemaIssue>>>(true);
 	assertType<
 		IsExact<
 			Output<typeof user>,
-			{ name: string; tags: string[]; age?: number | undefined }
+			{ name: string; tags: string[]; age: number | undefined; email?: string }
 		>
 	>(true);
 	assertType<IsExact<Output<typeof nickname>, string | null>>(true);
