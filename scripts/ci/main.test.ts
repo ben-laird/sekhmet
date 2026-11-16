@@ -505,7 +505,7 @@ Deno.test("coverageSummaryCommand reads the LCOV report from a run's own coverag
 
 		// Then: it read that report, not the repo's coverage/
 		assertEquals(output.success, true);
-		const totals = coverageOutputs(output).context?.["coverage"];
+		const totals = coverageOutputs(output).context?.coverage;
 		assertEquals(JSON.stringify(totals).includes('"covered":1'), true);
 	} finally {
 		await Deno.remove(root, { recursive: true });
