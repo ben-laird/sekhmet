@@ -3,6 +3,7 @@ import { lineAt, sourceViews } from "./source.ts";
 
 Deno.test("sourceViews keeps every view the length of the source, newlines in place", () => {
 	// Given: a source with comments, strings and a template literal
+	// biome-ignore lint/suspicious/noTemplateCurlyInString: source text under test
 	const text = 'const a = "x"; // note\n/* block\n */ const b = `t ${a} u`;\n';
 
 	// When: splitting it into views
@@ -32,8 +33,9 @@ Deno.test("sourceViews separates code, comments and string contents", () => {
 	assertEquals(comments.trim(), '// from "z"');
 });
 
-Deno.test("sourceViews reads code inside a template's ${…} and resumes the template after it", () => {
+Deno.test("sourceViews reads code inside a template interpolation and resumes the template after it", () => {
 	// Given: a template whose interpolation holds braces and a comment-like string
+	// biome-ignore lint/suspicious/noTemplateCurlyInString: source text under test
 	const text = "`a ${ {k: 1}.k } // not a comment`; // real";
 
 	// When: splitting it into views
