@@ -10,13 +10,6 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	missingReadme("matrix"),
 	missingReadme("panic"),
 	missingReadme("vow"),
-	{
-		check: "specifiers",
-		file: "packages/enum/README.md",
-		message:
-			'"@sekhmet/framework/entrypoint" names @sekhmet/framework, which is not a workspace package',
-		until: "#8",
-	},
 
 	// Cross-package types (Struct, Enum, Split, Result) in public signatures
 	// that the package does not re-export; how to resolve them is undecided

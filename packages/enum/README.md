@@ -1,53 +1,168 @@
-# Enum
+# @sekhmet/enum
 
-A framework for representing a collection of possibilities a value could take
-without using unions, making checking for variants much easier.
+Rust-style enums for TypeScript: an `Enum` base class whose variants are
+tuples, plus the types built on it: `Option`, `Result`, `Ordering`, `Latch`
+and `Poll`.
 
-## Features
+Each value is a class instance holding one variant, `[kind]` or
+`[kind, value]`. You narrow it with type guards (`isolate`, `isSome`, `isOk`)
+or handle every variant with `match`, which TypeScript checks for
+exhaustiveness.
 
-1. **Comprehensive.** Want to do something with your enum? We got a function for
-   that.
-2. **Flexible size.** Either use the whole kitchen sink, just the one function,
-   or any variation in between. Only pay for what you need for your bundle with
-   our `mini` framework flavor for each entrypoint.
-3. **Composable & Covariant.** `Enum<A> | Enum<B> <-> Enum<A | B>`
+## Install
 
-## Installation
+The package is published on [JSR](https://jsr.io/@sekhmet/enum).
 
-Note that you will often not need to install Sekhmet Primordials, because
-they're usually only used internally by other packages. This likely does not
-apply if you're building a Sekhmet library of your own though.
-
-Install with your favorite JSR-compatible or NPM-compatible package manager.
-
-### NPM
-
-```bash
-npm install @sekhmet/enum
-```
-
-### Yarn
-
-```bash
-yarn add @sekhmet/enum
-```
-
-### PNPM
-
-```bash
-pnpm add @sekhmet/enum
-```
-
-### Deno
-
-```bash
+```sh
 deno add jsr:@sekhmet/enum
 ```
 
-Then simply import the module you'd like to use.
+For Node.js, Bun and other npm-compatible runtimes, install through JSR's npm
+compatibility layer:
 
-```ts ignore
-import {} from "@sekhmet/framework/entrypoint";
+```sh
+npx jsr add @sekhmet/enum      # npm
+pnpm dlx jsr add @sekhmet/enum # pnpm
+yarn dlx jsr add @sekhmet/enum # yarn
+bunx jsr add @sekhmet/enum     # bun
 ```
 
-## Usage
+The package has no root export: import the feature you need.
+
+| Entrypoint              | What it holds                                |
+| ----------------------- | -------------------------------------------- |
+| `@sekhmet/enum/core`    | `Enum`, `Split`, `Isolate`, `Eliminate`      |
+| `@sekhmet/enum/option`  | `Option`: `Some(value)` or `None()`          |
+| `@sekhmet/enum/result`  | `Result`: `Ok(value)` or `Err(error)`        |
+| `@sekhmet/enum/ordering`| `Ordering`: `Less()`, `Equal()`, `Greater()` |
+| `@sekhmet/enum/latch`   | `Latch`: `Active(a)` or `Inactive(i)`        |
+| `@sekhmet/enum/poll`    | `Poll`: `Ready(value)` or `Pending()`        |
+
+## Main and mini
+
+Every feature comes in two styles with the same behaviour:
+
+- **Main** (`@sekhmet/enum/option`): classes with methods, so calls chain.
+- **Mini** (`@sekhmet/enum/option/mini`): free functions that take the value
+  first, so a bundler keeps only the functions you import.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Some } from "@sekhmet/enum/option";
+import { filter, map, Some as MiniSome, unwrapOr } from "@sekhmet/enum/option/mini";
+
+// Main: methods
+const main = Some(21)
+	.map((n) => n * 2)
+	.filter((n) => n > 40)
+	.unwrapOr(0);
+
+// Mini: functions
+const mini = unwrapOr(filter(map(MiniSome(21), (n) => n * 2), (n) => n > 40), 0);
+
+assertEquals(main, 42);
+assertEquals(mini, 42);
+```
+
+A main value is also a mini value, so mini functions accept it. A main
+method that returns another feature's type returns that feature's main class:
+`Some(1).okOr("missing")` is a main `Result`.
+
+## Option
+
+```ts
+import { assertEquals } from "@std/assert";
+import { None, type Option, Some } from "@sekhmet/enum/option";
+
+function findUser(id: number): Option<{ name: string }> {
+	return id === 1 ? Some({ name: "Ada" }) : None();
+}
+
+assertEquals(findUser(1).map((user) => user.name).unwrapOr("anonymous"), "Ada");
+assertEquals(findUser(2).map((user) => user.name).unwrapOr("anonymous"), "anonymous");
+```
+
+## Result
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Err, Ok, type Result } from "@sekhmet/enum/result";
+
+function parsePort(text: string): Result<number, string> {
+	const port = Number(text);
+	return Number.isInteger(port) && port > 0 ? Ok(port) : Err(`invalid port: ${text}`);
+}
+
+assertEquals(parsePort("8080").unwrapOr(80), 8080);
+assertEquals(parsePort("http").mapErr((e) => e.toUpperCase()).unwrapErr(), "INVALID PORT: HTTP");
+```
+
+## Ordering
+
+```ts
+import { assertEquals } from "@std/assert";
+import { compareNumbers, compareStrings } from "@sekhmet/enum/ordering";
+
+const people = [
+	{ name: "Bea", age: 30 },
+	{ name: "Al", age: 30 },
+];
+
+people.sort((a, b) =>
+	compareNumbers(a.age, b.age).andThen(compareStrings(a.name, b.name)).toNumber(),
+);
+
+assertEquals(people.map((p) => p.name), ["Al", "Bea"]);
+```
+
+## Latch
+
+A `Latch` is a two-state value you switch in place.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Active, type Latch } from "@sekhmet/enum/latch";
+
+const connection: Latch<string, string> = Active("socket");
+connection.deactivate("closed by peer");
+
+assertEquals(connection.isActive(), false);
+```
+
+## Poll
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Pending, Ready } from "@sekhmet/enum/poll";
+
+assertEquals(Ready(1).map((n) => n + 1).isReady(), true);
+assertEquals(Pending<number>().isPending(), true);
+```
+
+## Your own enums
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Enum, type Split } from "@sekhmet/enum/core";
+
+type Shape = Split<{ Circle: [radius: number]; Square: [side: number] }>;
+
+const square = new Enum<Shape>("Square", 3);
+const area = square.match({
+	Circle: (radius) => Math.PI * radius ** 2,
+	Square: (side) => side ** 2,
+});
+
+assertEquals(area, 9);
+```
+
+## Learn more
+
+- Guides: [getting started](docs/getting-started.md),
+  [concepts](docs/concepts.md) and [recipes](docs/recipes.md), also on the
+  [docs site](https://ben-laird.github.io/sekhmet/enum/).
+- API reference: [jsr.io/@sekhmet/enum](https://jsr.io/@sekhmet/enum).
+
+## License
+
+MIT. See [LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/enum/LICENSE.md).
