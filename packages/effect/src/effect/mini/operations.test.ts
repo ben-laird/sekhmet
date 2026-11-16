@@ -471,6 +471,41 @@ Deno.test("an exception thrown by the wrapped effect reaches the operation", asy
 	}
 });
 
+Deno.test("an Async setup that resolves and then throws panics, wrapped or not", async (t) => {
+	// A throw after resolving is a bug in the effect, so it panics consistently.
+	const resolveThenThrow = new Effect<void, number, string>(() =>
+		Async((resolve) => {
+			resolve(Ready(Ok(5)));
+			throw boom;
+		}),
+	);
+
+	await t.step("bare effect", () => {
+		// Given: the effect on its own
+		// When: running it
+		const result = run(resolveThenThrow);
+
+		// Then: the fiber panics with the thrown value
+		assertEquals(result, Err(Panicked(boom)));
+	});
+
+	await t.step("identity law: map(e, x => x) ≡ e", () => {
+		// Given: the effect, wrapped once and twice in identity maps
+		// When: running each
+		const once = run(TestSubject.map(resolveThenThrow, (x) => x));
+		const twice = run(
+			TestSubject.map(
+				TestSubject.map(resolveThenThrow, (x) => x),
+				(x) => x,
+			),
+		);
+
+		// Then: both match the bare effect
+		assertEquals(once, run(resolveThenThrow));
+		assertEquals(twice, run(resolveThenThrow));
+	});
+});
+
 Deno.test("a throwing inspector turns the result into a panic", async (t) => {
 	const other = new Error("inspector failed");
 	const throwOther = () => {

@@ -61,11 +61,16 @@ function transformEffect<I, T, E, U, F>(
 				Ready: (result) => handleReady(result, input, ctx),
 				Async: (continuationFn) => {
 					return Async((resolve) => {
+						let resolved = false;
 						try {
 							return continuationFn((continuation) => {
+								resolved = true;
 								resolve(loop(continuation));
 							});
 						} catch (exception: unknown) {
+							// A throw after resolving is a bug in the effect: rethrow so the
+							// fiber panics, exactly as it would for the unwrapped effect.
+							if (resolved) throw exception;
 							resolve(loop(Ready(Err(ExceptionOccurred(exception)))));
 						}
 					});
