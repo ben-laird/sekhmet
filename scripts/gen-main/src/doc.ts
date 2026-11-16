@@ -173,6 +173,8 @@ export interface OtherDeclaration {
 	readonly kind: "other";
 	/** Whether the declaration exists only at the type level. */
 	readonly typeOnly: boolean;
+	/** An interface's own property names (not inherited ones); absent otherwise. */
+	readonly properties?: readonly string[];
 }
 
 /** One declaration of an exported symbol. */
@@ -685,11 +687,33 @@ const TYPE_ONLY_KINDS: ReadonlySet<unknown> = new Set([
 	"interface",
 ]);
 
+function propertyName(value: unknown, path: string): Decoded<string> {
+	const property = object(value, path);
+	if (!property.ok) return property;
+
+	return string(field(property.value, "name"), `${path}.name`);
+}
+
+/** An interface, kept by its own property names (to check borrowed fields). */
+function decodeInterface(decl: object, path: string): Decoded<Declaration> {
+	const def = object(field(decl, "def"), `${path}.def`);
+	if (!def.ok) return def;
+	const properties = list(
+		field(def.value, "properties"),
+		`${path}.def.properties`,
+		propertyName,
+	);
+	if (!properties.ok) return properties;
+
+	return ok({ kind: "other", typeOnly: true, properties: properties.value });
+}
+
 function decodeDeclaration(value: unknown, path: string): Decoded<Declaration> {
 	const decl = object(value, path);
 	if (!decl.ok) return decl;
 
 	const kind = field(decl.value, "kind");
+	if (kind === "interface") return decodeInterface(decl.value, path);
 	if (kind !== "function" && kind !== "class") {
 		return ok({ kind: "other", typeOnly: TYPE_ONLY_KINDS.has(kind) });
 	}
