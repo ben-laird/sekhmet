@@ -173,19 +173,20 @@ export function cancel<I, T, E>(self: Fiber<I, T, E>): void {
 	const { fiberState } = getStructParams(self);
 	const result: FiberResult<T, E> = Err(Cancelled<E>());
 
+	// Mark Complete before any callback runs, so re-entrant cancels are no-ops.
 	match(fiberState)({
 		Queued: ({ finalizers }) => {
-			runFinalizers(finalizers, result);
 			getStructParams(fiberState).variant = ["Complete", result];
+			runFinalizers(finalizers, result);
 		},
 		Running: ({ finalizers }) => {
-			runFinalizers(finalizers, result);
 			getStructParams(fiberState).variant = ["Complete", result];
+			runFinalizers(finalizers, result);
 		},
 		Suspended: ({ cancellation, finalizers }) => {
+			getStructParams(fiberState).variant = ["Complete", result];
 			cancellation?.();
 			runFinalizers(finalizers, result);
-			getStructParams(fiberState).variant = ["Complete", result];
 		},
 		Complete: () => {},
 	});

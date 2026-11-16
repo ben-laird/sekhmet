@@ -194,21 +194,22 @@ function complete<I, T, E>(
 ): void {
 	const { fiberState } = getStructParams(self);
 
+	// Mark Complete before finalizers run, so a re-entrant cancel is a no-op.
 	match(fiberState)({
 		Queued: ({ finalizers }) => {
-			runFinalizers(finalizers);
-
 			getStructParams(fiberState).variant = ["Complete", result];
+
+			runFinalizers(finalizers);
 		},
 		Running: ({ finalizers }) => {
-			runFinalizers(finalizers);
-
 			getStructParams(fiberState).variant = ["Complete", result];
+
+			runFinalizers(finalizers);
 		},
 		Suspended: ({ finalizers }) => {
-			runFinalizers(finalizers);
-
 			getStructParams(fiberState).variant = ["Complete", result];
+
+			runFinalizers(finalizers);
 		},
 		Complete: () => {},
 	});

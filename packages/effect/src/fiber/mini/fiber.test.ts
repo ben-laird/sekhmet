@@ -314,3 +314,19 @@ Deno.test("cancel() with a throwing finalizer logs and skips later finalizers", 
 	assertEquals(errorLog.calls.length, 1);
 	assertEquals(stateOf(fiber), "Complete");
 });
+
+Deno.test("a finalizer that cancels its own fiber does not re-notify joiners", () => {
+	// Given: a suspended fiber whose first joiner re-enters cancel()
+	const control = controlledEffect<number>();
+	const fiber = fork(runtimeWith(sync()), control.effect);
+	join(fiber, () => cancel(fiber));
+	const { finalizer, seen } = recorder<number, string>();
+	join(fiber, finalizer);
+
+	// When: cancelling it
+	cancel(fiber);
+
+	// Then: every joiner and the cleanup ran exactly once
+	assertEquals(seen, [Err(Cancelled<never>())]);
+	assertEquals(control.cleanups(), 1);
+});

@@ -250,3 +250,19 @@ Deno.test("joinEffect() turns the fiber's error into a typed failure", async (t)
 		assertEquals(joined(), Err(Failed(Cancelled())));
 	});
 });
+
+Deno.test("cancelling a zip cancels each side exactly once", () => {
+	// Given: a zip suspended on two async sides
+	const left = controlled<number, string>();
+	const right = controlled<number, string>();
+	const fiber = forkSync(zip(left.effect, right.effect), undefined);
+	const result = probe(fiber);
+
+	// When: cancelling the zip
+	cancel(fiber);
+
+	// Then: it is cancelled and each side was cleaned up once
+	assertEquals(result(), Err(Cancelled<string>()));
+	assertEquals(left.cleanups(), 1);
+	assertEquals(right.cleanups(), 1);
+});

@@ -2,10 +2,21 @@ import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
+import type { FiberResult } from "@/src/fiber/mini/fiber-error.ts";
 import { Scheduler } from "@/src/scheduler/scheduler.ts";
 import { sync } from "@/src/scheduler/schedules.ts";
-import { Async, Ready } from "../continuation/continuation.ts";
-import { Effect, Failed, Failure, Success } from "../effect/mini/effect.ts";
+import {
+	Async,
+	type Continuation,
+	Ready,
+} from "../continuation/continuation.ts";
+import {
+	Effect,
+	type EffectResult,
+	Failed,
+	Failure,
+	Success,
+} from "../effect/mini/effect.ts";
 import {
 	and,
 	andThen,
@@ -14,7 +25,7 @@ import {
 	or,
 	orElse,
 } from "../effect/mini/operations.ts";
-import { cancel } from "../fiber/mini/fiber.ts";
+import { cancel, join } from "../fiber/mini/fiber.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { fork } from "./mod.ts";
 
@@ -761,4 +772,35 @@ Deno.test("deeply nested map operations", () => {
 			throw new Error("Fiber suspended");
 		},
 	});
+});
+
+Deno.test("a finalizer that cancels its completing fiber does not change the result", () => {
+	// Given: a suspended fiber whose first joiner cancels it on completion
+	let resume:
+		| ((c: Continuation<EffectResult<number, never>>) => void)
+		| undefined;
+	const runtime = new Runtime({
+		input: undefined,
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
+	});
+	const fiber = fork(
+		runtime,
+		new Effect<void, number, never>(() =>
+			Async((resolve) => {
+				resume = resolve;
+			}),
+		),
+	);
+	join(fiber, () => cancel(fiber));
+	const seen: FiberResult<number, never>[] = [];
+	join(fiber, (result) => seen.push(result));
+
+	// When: the fiber completes successfully
+	resume?.(Ready(Ok(1)));
+
+	// Then: joiners see only the success, and it remains the final result
+	assertEquals(seen, [Ok(1)]);
+	const late: FiberResult<number, never>[] = [];
+	join(fiber, (result) => late.push(result));
+	assertEquals(late, [Ok(1)]);
 });
