@@ -1,8 +1,8 @@
 // Runs the bundled probe in a Playwright browser and prints its report.
 // Copied into the smoke run's temporary project and run there with Node:
 //   node runners/browser.mjs <chromium|firefox|webkit> <dist-dir>
-// The page is served from an intercepted https origin, so it is a secure
-// context (crypto.randomUUID and friends exist), as on a real site.
+// The page is served from an intercepted plain-http origin on purpose: the
+// published packages must not need a secure context (no crypto.randomUUID).
 
 import { readFile } from "node:fs/promises";
 import { join, normalize } from "node:path";
@@ -11,7 +11,7 @@ import { chromium, firefox, webkit } from "playwright";
 
 const REPORT_MARKER = "COMPAT_SMOKE_REPORT ";
 const REPORT_GLOBAL = "__compatSmokeReport";
-const ORIGIN = "https://compat-smoke.test";
+const ORIGIN = "http://compat-smoke.test";
 const TIMEOUT_MS = 60_000;
 
 const [engineName, distDir] = process.argv.slice(2);

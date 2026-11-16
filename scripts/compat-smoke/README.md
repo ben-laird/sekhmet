@@ -21,12 +21,12 @@ deno task compat:smoke <node|bun|chromium|firefox|webkit|workerd> [options]
 2. In a new temporary directory (never inside the repository), installs them
    the way a user of the runtime would:
 
-   | Runtime                         | Install                                                                                                | Run                                            |
-   | ------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
-   | `node`                          | `npx jsr add`                                                                                          | `node`, resolving packages from `node_modules` |
-   | `bun`                           | `bunx jsr add`                                                                                         | `bun`, resolving packages from `node_modules`  |
-   | `chromium`, `firefox`, `webkit` | `npm install @sekhmet/x@npm:@jsr/sekhmet__x@<version>` from `https://npm.jsr.io`, bundled with esbuild | Playwright, on a secure (`https`) page         |
-   | `workerd`                       | the same npm install, bundled into one Worker module                                                   | Miniflare (workerd)                            |
+   | Runtime                         | Install                                                                                                | Run                                                    |
+   | ------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+   | `node`                          | `npx jsr add`                                                                                          | `node`, resolving packages from `node_modules`         |
+   | `bun`                           | `bunx jsr add`                                                                                         | `bun`, resolving packages from `node_modules`          |
+   | `chromium`, `firefox`, `webkit` | `npm install @sekhmet/x@npm:@jsr/sekhmet__x@<version>` from `https://npm.jsr.io`, bundled with esbuild | Playwright, on a plain-`http` page (no secure context) |
+   | `workerd`                       | the same npm install, bundled into one Worker module                                                   | Miniflare (workerd)                                    |
 
 3. Imports **every export path** each package publishes (root, every subpath,
    every `/mini` path and single-function path) and runs one exercise per
