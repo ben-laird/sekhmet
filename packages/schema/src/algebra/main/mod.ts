@@ -28,8 +28,16 @@ import type { Schema as MiniSchema } from "@/src/core/mini/schema.ts";
 import { Schema } from "../../core/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
-export type { Branded, OrOptions, ReadonlyOutput } from "../mini/mod.ts";
-export { BRAND } from "../mini/mod.ts";
+export type {
+	Branded,
+	OmitOptions,
+	OrOptions,
+	PartialShape,
+	PickOptions,
+	ReadonlyOutput,
+	RequiredShape,
+} from "../mini/mod.ts";
+export { BRAND, omit, partial, pick, required } from "../mini/mod.ts";
 
 /**
  * Brands a schema's output `name`: its output type becomes
