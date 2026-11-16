@@ -122,21 +122,32 @@ export function docLinks(text: string): string {
 	);
 }
 
+/** Where repository files are browsed, for links to files the site has no page for. */
+export const REPOSITORY_BLOB =
+	"https://github.com/ben-laird/sekhmet/blob/main/";
+
 /**
  * Rewrites the root README's links for the site: links into
  * `packages/<dir>/README.md` or `packages/<dir>/docs/<page>.md` become that
- * package's site pages.
+ * package's site pages, and other relative links (such as `LICENSE.md`)
+ * point at the file in the repository.
  *
  * @param text - The root README markdown
  * @returns The home page markdown
  */
 export function rootLinks(text: string): string {
-	return rewriteLinks(text, (target) =>
-		target
+	return rewriteLinks(text, (target) => {
+		const packagePage = target
 			.replace(/^(?:\.\/)?packages\/([\w-]+)\/README\.md/, "/$1/")
 			.replace(/^(?:\.\/)?packages\/([\w-]+)\/docs\/([\w-]+)\.md/, "/$1/$2")
-			.replace(/^(?:\.\/)?packages\/([\w-]+)\/?$/, "/$1/"),
-	);
+			.replace(/^(?:\.\/)?packages\/([\w-]+)\/?$/, "/$1/");
+		if (packagePage !== target) return packagePage;
+
+		const isRelative = !/^(?:[a-z]+:|\/|#)/i.test(target);
+		return isRelative
+			? `${REPOSITORY_BLOB}${target.replace(/^\.\//, "")}`
+			: target;
+	});
 }
 
 /** Orders doc files: {@linkcode LEADING_PAGES} first, then by name. */

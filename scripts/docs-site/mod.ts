@@ -17,6 +17,7 @@ export {
 	docLinks,
 	LEADING_PAGES,
 	planSite,
+	REPOSITORY_BLOB,
 	readmeLinks,
 	rootLinks,
 	titleOf,

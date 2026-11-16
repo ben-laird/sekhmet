@@ -67,6 +67,21 @@ Deno.test("rootLinks points package links at package sections", () => {
 	assertEquals(rewritten, "[a](/enum/) [b](/effect/) [c](/enum/concepts)");
 });
 
+Deno.test("rootLinks points other relative links at the repository", () => {
+	// Given: root-file links, an absolute URL and an in-page anchor
+	const text =
+		"[l](LICENSE.md) [c](./CONTRIBUTING.md) [j](https://jsr.io/@sekhmet) [a](#packages)";
+
+	// When: rewriting it for the site
+	const rewritten = rootLinks(text);
+
+	// Then: only the relative file links change, to the repository's files
+	assertEquals(
+		rewritten,
+		"[l](https://github.com/ben-laird/sekhmet/blob/main/LICENSE.md) [c](https://github.com/ben-laird/sekhmet/blob/main/CONTRIBUTING.md) [j](https://jsr.io/@sekhmet) [a](#packages)",
+	);
+});
+
 Deno.test("planSite builds a section per package with guides in order", () => {
 	// Given: a package with a README and three guides, and one with nothing
 	const packages = [
