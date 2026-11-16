@@ -13,6 +13,7 @@ get started and understand the project conventions.
 - [Testing](#testing)
 - [Commit Guidelines](#commit-guidelines)
 - [Pull Request Process](#pull-request-process)
+- [Releasing](#releasing)
 - [Adding New Packages](#adding-new-packages)
 
 ## Standards & Conventions
@@ -25,6 +26,8 @@ This project follows established industry standards and conventions:
   commit messages for clear history and automated changelog generation
 - **[Semantic Versioning](https://semver.org/)** - Version numbering scheme
   (MAJOR.MINOR.PATCH)
+- **[dv](https://jsr.io/@dv-cli/dv)** - Records drive versions, changelogs and
+  JSR releases (see [Releasing](#releasing))
 
 ### Code Quality
 
@@ -108,7 +111,10 @@ sekhmet/
 │   └── vow/          # Synchronous promise-like values
 ├── scripts/          # Build and development scripts
 │   ├── add/          # Package scaffolding tool (deno task add)
-│   └── ci/           # CI workflow runner (deno task ci)
+│   ├── ci/           # CI workflow runner (deno task ci)
+│   ├── dv-plugin/    # dv plugin: versions and publishes packages/* to JSR
+│   └── release/      # Release driver run by .github/workflows/release.yml
+├── .dv/              # dv config and pending Records
 ├── deno.json         # Workspace configuration
 ├── biome.json        # Linter/formatter config
 ├── LICENSE.md        # MIT license
@@ -443,6 +449,56 @@ chore(@sekhmet/enum): add eliminate mini exports
 - [ ] `isolatedDeclarations` compatibility maintained
 - [ ] No external dependencies added
 - [ ] CI checks passing
+- [ ] A dv Record for each user-visible package change (see [Releasing](#releasing))
+
+## Releasing
+
+Every merge to `main` can release. There is no release branch or release PR:
+the Records a PR carries decide what ships.
+
+### Adding a Record
+
+When a PR changes what a package's users see, add a Record describing it:
+
+```bash
+dv add --packages @sekhmet/enum --type feat --message "Add Option.zip"
+```
+
+This writes a file under `.dv/records/` and stages it; commit it with the
+change. Types are `fix` (patch), `feat` (minor) and `feat!`/`fix!` (breaking).
+While a package is `0.x`, breaking changes bump the minor version. Refactors,
+tests and docs need no Record. `dv status` previews the bumps, and the
+`dv-validate` check rejects malformed Records or unknown packages.
+
+Install `dv` with the version CI pins (`.github/actions/setup-dv`), for
+example by putting this launcher on your `PATH` as `dv`:
+
+```sh
+#!/bin/sh
+exec deno eval --quiet --no-config --no-lock 'import { main } from "jsr:@dv-cli/dv@0.11.0"; Deno.exit(await main(Deno.args));' -- "$@"
+```
+
+### What happens on merge
+
+`.github/workflows/release.yml` runs `scripts/release/main.ts`:
+
+1. `dv version` consumes pending Records: it bumps each `deno.json`, writes
+   each package's `CHANGELOG.md`, and commits `chore(release): …` to `main`.
+2. `dv release` tags each untagged version as `<package>@<version>` and runs
+   `deno publish` per package, dependencies first (primordials before enum,
+   and so on). JSR authenticates the workflow over GitHub OIDC, so no token
+   is stored. Then it pushes the tags.
+3. Each tag that reached JSR gets a GitHub Release with its changelog section.
+
+An untagged version is released even without a Record, which is how the
+first run publishes every package at its current `0.1.0`. A merge with no
+Records and nothing untagged releases nothing. If a publish
+fails, the job fails after the other packages publish; rerun the `release`
+workflow from the Actions tab with **force** checked. Versions already on JSR
+are skipped.
+
+Only packages under `packages/` are released. Members marked
+`"publish": false` (everything in `scripts/`) never are.
 
 ## Adding New Packages
 
