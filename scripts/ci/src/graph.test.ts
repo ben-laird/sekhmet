@@ -171,6 +171,44 @@ Deno.test("executeStepGraph throws error for missing dependency", async () => {
 	}
 });
 
+Deno.test("executeStepGraph throws error for a dependency cycle without running any step", async () => {
+	// Given: A depends on C, C on B, and B on A
+	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
+	const marker = `${artifactsDir}/ran`;
+	const steps: WorkflowStep[] = [
+		{ name: "Free", command: new Deno.Command("touch", { args: [marker] }) },
+		{
+			name: "A",
+			dependsOn: ["C"],
+			command: new Deno.Command("echo", { args: ["a"] }),
+		},
+		{
+			name: "B",
+			dependsOn: ["A"],
+			command: new Deno.Command("echo", { args: ["b"] }),
+		},
+		{
+			name: "C",
+			dependsOn: ["B"],
+			command: new Deno.Command("echo", { args: ["c"] }),
+		},
+	];
+
+	try {
+		// When/Then: executing the step graph throws, naming the cycle
+		await assertRejects(
+			async () => await executeStepGraph(steps, artifactsDir),
+			Error,
+			'Dependency cycle: "A" -> "C" -> "B" -> "A"',
+		);
+
+		// Then: the graph was rejected before any step ran
+		assertEquals(await exists(marker), false);
+	} finally {
+		await Deno.remove(artifactsDir, { recursive: true });
+	}
+});
+
 Deno.test("executeStepGraph accumulates environment outputs", async () => {
 	// Given: steps that produce environment outputs
 	const steps: WorkflowStep[] = [
@@ -550,6 +588,93 @@ Deno.test("executeStepGraph handles deeply nested diamond dependencies", async (
 		assertEquals(results.get("L2-B")?.status, "passed");
 		assertEquals(results.get("L2-C")?.status, "passed");
 		assertEquals(results.get("Final")?.status, "passed");
+	} finally {
+		await Deno.remove(artifactsDir, { recursive: true });
+	}
+});
+
+Deno.test("executeStepGraph runs each step exactly once, however many dependents reach it", async () => {
+	// Given: a chain Root -> Middle -> Leaf where every step logs each run
+	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
+	const log = `${artifactsDir}/runs.log`;
+	const logRun = (name: string): Deno.Command =>
+		new Deno.Command("sh", { args: ["-c", `echo ${name} >> "${log}"`] });
+	const steps: WorkflowStep[] = [
+		{ name: "Root", command: logRun("Root") },
+		{ name: "Middle", dependsOn: ["Root"], command: logRun("Middle") },
+		{ name: "Leaf", dependsOn: ["Middle"], command: logRun("Leaf") },
+	];
+
+	try {
+		// When: executing the step graph
+		await executeStepGraph(steps, artifactsDir);
+
+		// Then: each command ran once, in dependency order
+		const runs = (await Deno.readTextFile(log)).trim().split("\n");
+		assertEquals(runs, ["Root", "Middle", "Leaf"]);
+	} finally {
+		await Deno.remove(artifactsDir, { recursive: true });
+	}
+});
+
+Deno.test("executeStepGraph judges a dependent on its dependency's final status, not an unrelated failure", async () => {
+	// Given: the CI shape: an unrelated step that fails fast, a slow test step
+	// that passes but fails if run twice (mkdir lock), a function-condition
+	// report on it, and an always-run cleanup after the report
+	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
+	const log = `${artifactsDir}/events.log`;
+	const lock = `${artifactsDir}/test-lock`;
+	const logged = (name: string, body = "true"): Deno.Command =>
+		new Deno.Command("sh", {
+			args: [
+				"-c",
+				`echo "${name}:start" >> "${log}" && ${body} && echo "${name}:end" >> "${log}"`,
+			],
+		});
+	const steps: WorkflowStep[] = [
+		{ name: "Biome Check", command: logged("Biome Check", "exit 1") },
+		{
+			name: "Deno Test",
+			command: logged("Deno Test", `mkdir "${lock}" && sleep 0.3`),
+		},
+		{
+			name: "Show coverage report",
+			dependsOn: ["Deno Test"],
+			condition: () => true,
+			command: logged("Show coverage report"),
+		},
+		{
+			name: "Cleanup coverage data",
+			dependsOn: ["Show coverage report"],
+			condition: "always",
+			command: logged("Cleanup coverage data"),
+		},
+	];
+
+	try {
+		// When: executing the step graph
+		const results = await executeStepGraph(steps, artifactsDir);
+
+		// Then: the unrelated failure is recorded but blocks nothing
+		assertEquals(results.get("Biome Check")?.status, "failed");
+		assertEquals(results.get("Deno Test")?.status, "passed");
+		assertEquals(results.get("Show coverage report")?.status, "passed");
+		assertEquals(results.get("Cleanup coverage data")?.status, "passed");
+
+		// Then: the test step ran once, and each dependent started only after
+		// its dependency finished
+		const events = (await Deno.readTextFile(log)).trim().split("\n");
+		const at = (event: string): number => {
+			const index = events.indexOf(event);
+			assertEquals(index >= 0, true, `missing ${event} in ${events}`);
+			return index;
+		};
+		assertEquals(events.filter((e) => e === "Deno Test:start").length, 1);
+		assertEquals(at("Deno Test:end") < at("Show coverage report:start"), true);
+		assertEquals(
+			at("Show coverage report:end") < at("Cleanup coverage data:start"),
+			true,
+		);
 	} finally {
 		await Deno.remove(artifactsDir, { recursive: true });
 	}
