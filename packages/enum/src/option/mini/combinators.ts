@@ -1,6 +1,6 @@
 import { match, union } from "@/src/core/mini/exit.ts";
 import { isolate } from "@/src/core/mini/isolate.ts";
-import { Ok, type Result } from "@/src/result/mini/core.ts";
+import { Err, Ok, type Result } from "@/src/result/mini/core.ts";
 import { None, type Option, Some } from "./core.ts";
 import { map, mapOr } from "./transform.ts";
 import { unwrapOr } from "./unwrap.ts";
@@ -300,10 +300,12 @@ export function unzip<T, U>(
 export function transpose<T, E>(
 	opt: Option<Result<T, E>>,
 ): Result<Option<T>, E> {
-	return mapOr(opt, Ok(None()), () => {
-		// TODO - impl transpose()
-		throw new Error("impl transpose()");
-	});
+	return mapOr(opt, Ok(None()), (result) =>
+		match(result)({
+			Ok: (value): Result<Option<T>, E> => Ok(Some(value)),
+			Err: (err): Result<Option<T>, E> => Err(err),
+		}),
+	);
 }
 
 /**

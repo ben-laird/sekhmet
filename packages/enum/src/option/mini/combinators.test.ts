@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { match } from "@/src/core/mini/exit.ts";
 import { isolate } from "@/src/core/mini/isolate.ts";
+import { Err, Ok } from "@/src/result/mini/core.ts";
 import * as TestSubject from "./combinators.ts";
 import { None, Some } from "./core.ts";
 
@@ -485,4 +486,53 @@ Deno.test("flatten() returns None for None", () => {
 
 	// Then: None is returned
 	assertEquals(isolate(subject, "None"), true);
+});
+
+Deno.test("transpose() maps None to Ok(None)", () => {
+	// Given: an Option with a None variant over a Result
+	const option = None<ReturnType<typeof Ok<number, string>>>();
+
+	// When: calling transpose()
+	const subject = TestSubject.transpose(option);
+
+	// Then: an Ok containing None is returned
+	const inner = match(subject)({
+		Ok: (value) => value,
+		Err: () => Some(-1),
+	});
+	assertEquals(isolate(inner, "None"), true);
+});
+
+Deno.test("transpose() maps Some(Ok(x)) to Ok(Some(x))", () => {
+	// Given: an Option containing a successful Result
+	const option = Some(Ok<number, string>(5));
+
+	// When: calling transpose()
+	const subject = TestSubject.transpose(option);
+
+	// Then: an Ok containing Some of the value is returned
+	const value = match(subject)({
+		Ok: (inner) =>
+			match(inner)({
+				Some: (x) => x,
+				None: () => -1,
+			}),
+		Err: () => -2,
+	});
+	assertEquals(value, 5);
+});
+
+Deno.test("transpose() maps Some(Err(e)) to Err(e)", () => {
+	// Given: an Option containing a failed Result
+	const option = Some(Err<number, string>("fail"));
+
+	// When: calling transpose()
+	const subject = TestSubject.transpose(option);
+
+	// Then: the error is propagated as an Err
+	const error = match(subject)({
+		Ok: () => "not an error",
+		Err: (err) => err,
+	});
+	assertEquals(error, "fail");
 });
