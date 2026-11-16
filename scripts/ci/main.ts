@@ -393,17 +393,19 @@ export function coverageCleanupCommand({ dir }: { dir: string }): StepCommand {
 
 /**
  * Main entry point for the CI workflow. Reads the environment, picks this
- * run's coverage directory and runs {@linkcode ciSteps}.
+ * run's coverage directory, runs {@linkcode ciSteps} and exits with the
+ * workflow's exit code.
  */
 export async function main(): Promise<void> {
 	const isCI = Deno.env.get("CI") === "true";
-	await runWorkflow(
+	const result = await runWorkflow(
 		ciSteps({
 			isCI,
 			isAI: Deno.env.get("CI_AI") === "true",
 			coverageDir: await coverageDirFor({ isCI }),
 		}),
 	);
+	Deno.exit(result.exitCode);
 }
 
 if (import.meta.main) {
