@@ -10,6 +10,8 @@ import {
 	EXIT_CODES,
 	main,
 	readinessCommand,
+	STEP_TIMEOUT,
+	STEP_TIMEOUT_MS,
 	TEST_TIMEOUT_MS,
 } from "./main.ts";
 import { spawnCommand } from "./mod.ts";
@@ -39,29 +41,54 @@ Deno.test("EXIT_CODES are defined with unique values", () => {
 	assertEquals(EXIT_CODES.GENERATED_MAIN_STALE, 11);
 	assertEquals(EXIT_CODES.DV_VALIDATE_FAILED, 12);
 	assertEquals(EXIT_CODES.TESTS_TIMED_OUT, 13);
+	assertEquals(EXIT_CODES.STEP_TIMED_OUT, 14);
 	const uniqueValues = new Set(values);
 	assertEquals(values.length, uniqueValues.size, "Exit codes should be unique");
 });
 
-Deno.test("ciSteps gives every step its own exit code", () => {
+Deno.test("ciSteps gives every step its own failure code, and no timeout code is a failure code", () => {
 	for (const environment of ENVIRONMENTS) {
 		// Given: the CI steps for an environment
 		const steps = ciSteps(environment);
 
-		// When: collecting each step's exit code, and its timeout's if it has one
+		// When: collecting each step's failure code and its timeout's code
 		const codes = steps.map((step) => step.exitCode);
-		const timeoutCodes = steps.flatMap((step) =>
-			step.timeout ? [step.timeout.exitCode] : [],
+		const timeoutCodes = new Set(
+			steps.flatMap((step) => (step.timeout ? [step.timeout.exitCode] : [])),
 		);
 
-		// Then: every step declares one, and no two codes are shared
+		// Then: every step declares a failure code, and no two share one
 		assertEquals(
 			codes.filter((code) => code === undefined).length,
 			0,
 			`steps without an exit code in ${JSON.stringify(environment)}`,
 		);
-		const all = [...codes, ...timeoutCodes];
-		assertEquals(new Set(all).size, all.length);
+		assertEquals(new Set(codes).size, codes.length);
+		// Then: steps may share a timeout code, but none is also a failure code
+		assertEquals(
+			codes.filter((code) => code !== undefined && timeoutCodes.has(code)),
+			[],
+		);
+	}
+});
+
+Deno.test("ciSteps times out every step but Deno Test after the shared 10 minutes", () => {
+	for (const environment of ENVIRONMENTS) {
+		// Given: the CI steps for an environment
+		const steps = ciSteps(environment);
+
+		// When: collecting the timeouts of every step but Deno Test
+		const others = steps.filter((step) => step.name !== "Deno Test");
+
+		// Then: each has the shared timeout, so no step can hang the gate
+		for (const step of others) {
+			assertEquals(step.timeout, STEP_TIMEOUT, step.name);
+		}
+		assertEquals(STEP_TIMEOUT, {
+			ms: STEP_TIMEOUT_MS,
+			exitCode: EXIT_CODES.STEP_TIMED_OUT,
+		});
+		assertEquals(STEP_TIMEOUT_MS, 600_000);
 	}
 });
 

@@ -131,7 +131,26 @@ export function formatStepStatusLine({
 }
 
 /**
- * Formats and displays workflow results to the console.
+ * The error a timed-out step raises, naming the step: several steps share one
+ * timeout exit code, so the code alone does not say which one hung.
+ *
+ * @param options.name - The step's name
+ * @param options.afterMs - The time limit it hit, in milliseconds
+ * @returns e.g. `"Deno Lint" timed out after 600 s; its process tree was killed`
+ */
+export function stepTimeoutMessage({
+	name,
+	afterMs,
+}: {
+	name: string;
+	afterMs: number;
+}): string {
+	return `"${name}" timed out after ${afterMs / 1000} s; its process tree was killed`;
+}
+
+/**
+ * Formats and displays workflow results to the console, raising an error
+ * (a GitHub Actions annotation in CI) that names each step that timed out.
  * Returns the exit code to use (0 for success, specific code for first failure).
  */
 export async function formatWorkflowOutput(
@@ -146,6 +165,15 @@ export async function formatWorkflowOutput(
 		console.log(formatStepStatusLine({ step, result }));
 
 		if (result.status !== "passed" && result.status !== "failed") continue;
+
+		if (result.timedOutAfterMs !== undefined) {
+			adapter.error(
+				stepTimeoutMessage({
+					name: result.name,
+					afterMs: result.timedOutAfterMs,
+				}),
+			);
+		}
 
 		// Show output if configured
 		const output = result.output;

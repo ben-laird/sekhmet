@@ -4,12 +4,16 @@ import {
 	runWorkflow,
 	type StepCommand,
 	type StepOutputs,
+	type StepTimeout,
 	type WorkflowStep,
 } from "@/mod.ts";
 
 /**
  * Exit codes for CI workflow failures.
- * Each step has a unique exit code to identify which step failed.
+ * Each step has a unique failure code to identify which step failed. A step
+ * that outlives its timeout ends with a timeout code instead, which no step
+ * uses as its failure code: Deno Test has its own, and every other step shares
+ * `STEP_TIMED_OUT`, so the timeout message names the step.
  */
 export const EXIT_CODES = {
 	/** Exit code when Deno lint fails */
@@ -38,6 +42,8 @@ export const EXIT_CODES = {
 	DV_VALIDATE_FAILED: 12,
 	/** Exit code when tests outlive {@linkcode TEST_TIMEOUT_MS} and are killed */
 	TESTS_TIMED_OUT: 13,
+	/** Exit code when any step but Deno Test outlives {@linkcode STEP_TIMEOUT_MS} and is killed */
+	STEP_TIMED_OUT: 14,
 } as const;
 
 /**
@@ -47,6 +53,21 @@ export const EXIT_CODES = {
  * job's 30-minute budget instead of eating all of it.
  */
 export const TEST_TIMEOUT_MS: number = 5 * 60 * 1000;
+
+/**
+ * How long every step but Deno Test may run before its process tree is
+ * killed: 10 minutes. Each takes seconds when warm, but lint, check, Biome,
+ * dv and the JSR dry run fetch dependencies, so a cold CI runner can stall on
+ * the network; this fails such a stall within a third of the release job's
+ * 30-minute budget.
+ */
+export const STEP_TIMEOUT_MS: number = 10 * 60 * 1000;
+
+/** The timeout every step but Deno Test gets (see {@linkcode STEP_TIMEOUT_MS}). */
+export const STEP_TIMEOUT: StepTimeout = {
+	ms: STEP_TIMEOUT_MS,
+	exitCode: EXIT_CODES.STEP_TIMED_OUT,
+};
 
 /**
  * The environment the CI workflow adapts to.
@@ -134,10 +155,11 @@ export function dvValidateCommand(): StepCommand {
  * - Coverage reporting
  * - Local cleanup of coverage data
  *
- * Every step has its own entry in {@linkcode EXIT_CODES}.
+ * Every step has its own entry in {@linkcode EXIT_CODES}, and a timeout:
+ * Deno Test its own, every other step {@linkcode STEP_TIMEOUT}.
  */
 export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
-	return [
+	const steps: WorkflowStep[] = [
 		// Parallel linting (no dependencies, will run concurrently)
 		{
 			name: "Deno Lint",
@@ -250,6 +272,7 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 		// Local cleanup (runs even if tests failed); CI keeps the coverage data
 		...(isCI ? [] : [cleanupStep()]),
 	];
+	return steps.map((step) => ({ timeout: STEP_TIMEOUT, ...step }));
 }
 
 /**
