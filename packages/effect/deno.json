@@ -2,7 +2,6 @@
 	"name": "@sekhmet/effect",
 	"version": "0.1.0",
 	"license": "MIT",
-	"publish": false,
 
 	"exports": {
 		".": "./mod.ts",
