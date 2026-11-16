@@ -96,11 +96,15 @@ interface Module {
 
 const EMPTY_RENAME: ReadonlyMap<string, string> = new Map();
 
-function failure(
-	feature: Feature,
-	symbol: string | undefined,
-	message: string,
-): Generated<never> {
+function failure({
+	feature,
+	symbol,
+	message,
+}: {
+	feature: Feature;
+	symbol: string | undefined;
+	message: string;
+}): Generated<never> {
 	return err({
 		kind: "generate",
 		entrypoint: feature.entrypoint,
@@ -301,14 +305,18 @@ function methodHead({
 	const [self, ...params] = signature.params;
 	const selfType = self?.type;
 	if (selfType?.kind !== "ref") {
-		return failure(feature, name, "`self` must be typed as the primary class");
+		return failure({
+			feature,
+			symbol: name,
+			message: "`self` must be typed as the primary class",
+		});
 	}
 	if (selfType.args.length !== classParams.length) {
-		return failure(
+		return failure({
 			feature,
-			name,
-			`\`self\` must pass all ${classParams.length} of ${feature.primary}'s type parameters`,
-		);
+			symbol: name,
+			message: `\`self\` must pass all ${classParams.length} of ${feature.primary}'s type parameters`,
+		});
 	}
 
 	const rename = new Map<string, string>();
@@ -321,11 +329,11 @@ function methodHead({
 			signature.typeParams.some((tp) => tp.name === arg.name) &&
 			!rename.has(arg.name);
 		if (!isBareParam || arg.kind !== "ref" || classParam === undefined) {
-			return failure(
+			return failure({
 				feature,
-				name,
-				`\`self\`'s type arguments must be distinct type parameters of ${name}`,
-			);
+				symbol: name,
+				message: `\`self\`'s type arguments must be distinct type parameters of ${name}`,
+			});
 		}
 		rename.set(arg.name, classParam.name);
 	}
@@ -335,14 +343,18 @@ function methodHead({
 	const curried = feature.uncurry?.includes(name) ?? false;
 	const returnType = signature.returnType;
 	if (returnType === undefined) {
-		return failure(feature, name, "the return type must be annotated");
+		return failure({
+			feature,
+			symbol: name,
+			message: "the return type must be annotated",
+		});
 	}
 	if (curried && (returnType.kind !== "function" || params.length > 0)) {
-		return failure(
+		return failure({
 			feature,
-			name,
-			"only `(self) => (…) => R` functions can be uncurried",
-		);
+			symbol: name,
+			message: "only `(self) => (…) => R` functions can be uncurried",
+		});
 	}
 
 	const finalReturn =
@@ -358,11 +370,11 @@ function methodHead({
 
 	const clash = methodTypeParams.find((tp) => classNames.has(tp.name));
 	if (clash !== undefined) {
-		return failure(
+		return failure({
 			feature,
-			name,
-			`type parameter ${clash.name} shadows ${feature.primary}'s; rename it in mini`,
-		);
+			symbol: name,
+			message: `type parameter ${clash.name} shadows ${feature.primary}'s; rename it in mini`,
+		});
 	}
 
 	const context = contextFor({
@@ -445,18 +457,18 @@ function overloadImplementation({
 }): Generated<{ signature: string; body: string }> {
 	const wraps = new Set(heads.map((head) => head.wrap));
 	if (wraps.size > 1) {
-		return failure(
+		return failure({
 			feature,
-			name,
-			"overloads must agree on whether they return the primary type",
-		);
+			symbol: name,
+			message: "overloads must agree on whether they return the primary type",
+		});
 	}
 	if (heads.some((head) => head.isPredicate)) {
-		return failure(
+		return failure({
 			feature,
-			name,
-			"overloaded type predicates are not supported",
-		);
+			symbol: name,
+			message: "overloaded type predicates are not supported",
+		});
 	}
 
 	const args = receiver === undefined ? "args" : `[${receiver}, ...args]`;
@@ -544,7 +556,11 @@ function renderWrapper({
 		});
 		const returnType = signature.returnType;
 		if (returnType === undefined) {
-			return failure(feature, symbol.name, "the return type must be annotated");
+			return failure({
+				feature,
+				symbol: symbol.name,
+				message: "the return type must be annotated",
+			});
 		}
 
 		const typeParams = renderTypeParams({
@@ -753,11 +769,11 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		(decl): decl is ClassDeclaration => decl.kind === "class",
 	);
 	if (declaration === undefined) {
-		return failure(
+		return failure({
 			feature,
-			feature.primary,
-			"the mini barrel must export the primary class",
-		);
+			symbol: feature.primary,
+			message: "the mini barrel must export the primary class",
+		});
 	}
 
 	const wrapNames = new Set([
@@ -784,11 +800,11 @@ export function generateMain(input: GenerateInput): Generated<string> {
 				continue;
 			}
 			if (selfFirst.some(Boolean)) {
-				return failure(
+				return failure({
 					feature,
-					symbol.name,
-					"overloads must all or none take `self` first",
-				);
+					symbol: symbol.name,
+					message: "overloads must all or none take `self` first",
+				});
 			}
 			const returnsWrapped = signatures.map(
 				(sig) => wrapTargetOf(wrapNames, sig.returnType) !== undefined,
