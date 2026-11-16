@@ -14,6 +14,7 @@
  */
 
 import { dirname, relative, resolve } from "@std/path";
+import { z } from "zod";
 
 /** A value or the reason there is none. */
 export type Result<T> =
@@ -77,6 +78,30 @@ export type LinkState =
 const SCOPE = "@sekhmet/";
 const CHECKOUT_ALIASES: ReadonlySet<string> = new Set(["main", "checkout"]);
 const OFF_ALIASES: ReadonlySet<string> = new Set(["off", "unlink"]);
+
+const JsonObjectSchema = z.record(z.string(), z.unknown());
+
+const PackageSchema = z.object({
+	name: z.string().startsWith(SCOPE, { error: `no \`${SCOPE}*\` name` }),
+	version: z.string().optional().catch(undefined),
+});
+
+const ImportsSchema = JsonObjectSchema.optional();
+
+const LinksSchema = z
+	.array(z.unknown())
+	.transform((links) =>
+		links.filter((link): link is string => typeof link === "string"),
+	)
+	.catch([]);
+
+function describeIssues(error: z.ZodError): string {
+	return error.issues
+		.map(({ path, message }) =>
+			path.length === 0 ? message : `\`${path.join(".")}\`: ${message}`,
+		)
+		.join("; ");
+}
 
 /**
  * Parses `play:link`'s arguments. `main`/`checkout` name this clone's own
@@ -186,13 +211,12 @@ export function decodePackage({
 	json: unknown;
 	directory: string;
 }): Result<LinkedPackage> {
-	if (!isObject(json)) return { ok: false, error: "not a JSON object" };
-	const name = json.name;
-	if (typeof name !== "string" || !name.startsWith(SCOPE)) {
-		return { ok: false, error: `no \`${SCOPE}*\` name` };
+	const parsed = PackageSchema.safeParse(json);
+	if (!parsed.success) {
+		return { ok: false, error: describeIssues(parsed.error) };
 	}
-	const version = json.version;
-	return typeof version === "string"
+	const { name, version } = parsed.data;
+	return version !== undefined
 		? { ok: true, value: { name, version, directory } }
 		: { ok: true, value: { name, directory } };
 }
@@ -282,15 +306,16 @@ export function removeLink(config: JsonObject): Result<JsonObject | undefined> {
 }
 
 function ownImports(config: JsonObject): Result<Record<string, unknown>> {
-	const imports = config.imports;
-	if (imports === undefined) return { ok: true, value: {} };
-	if (!isObject(imports)) {
+	const imports = ImportsSchema.safeParse(config.imports);
+	if (!imports.success) {
 		return { ok: false, error: "`imports` is not an object" };
 	}
 	return {
 		ok: true,
 		value: Object.fromEntries(
-			Object.entries(imports).filter(([name]) => !name.startsWith(SCOPE)),
+			Object.entries(imports.data ?? {}).filter(
+				([name]) => !name.startsWith(SCOPE),
+			),
 		),
 	};
 }
@@ -310,10 +335,8 @@ export function readLinkState({
 	config: JsonObject | undefined;
 	playground: string;
 }): LinkState {
-	const links = config?.links;
-	if (!Array.isArray(links)) return { kind: "unlinked" };
-	const resolved = links.flatMap((link: unknown) =>
-		typeof link === "string" ? [resolve(playground, link)] : [],
+	const resolved = LinksSchema.parse(config?.links).map((link) =>
+		resolve(playground, link),
 	);
 	const [first] = resolved;
 	if (first === undefined) return { kind: "unlinked" };
@@ -394,11 +417,8 @@ export function parseConfig(text: string): Result<JsonObject> {
 		const reason = error instanceof Error ? error.message : String(error);
 		return { ok: false, error: `not valid JSON (${reason})` };
 	}
-	return isObject(json)
-		? { ok: true, value: json }
+	const parsed = JsonObjectSchema.safeParse(json);
+	return parsed.success
+		? { ok: true, value: parsed.data }
 		: { ok: false, error: "not a JSON object" };
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
