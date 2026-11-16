@@ -3,6 +3,7 @@ import { stripAnsiCode } from "@std/fmt/colors";
 import {
 	formatAIOutput,
 	formatStepStatusLine,
+	stepTimeoutMessage,
 	workflowExitCode,
 } from "./output.ts";
 import type { StepResult, WorkflowStep } from "./types.ts";
@@ -259,4 +260,23 @@ Deno.test("formatAIOutput carries a step's captured context as structured output
 	assertEquals(output.steps, [
 		{ name: "Coverage Summary", status: "passed", outputs: { coverage } },
 	]);
+});
+
+Deno.test("stepTimeoutMessage names the step, since steps share a timeout code", () => {
+	// Given: two steps that hit the same shared time limit
+	const afterMs = 600_000;
+
+	// When: rendering each one's timeout message
+	const lint = stepTimeoutMessage({ name: "Deno Lint", afterMs });
+	const dryRun = stepTimeoutMessage({ name: "JSR Publish Dry Run", afterMs });
+
+	// Then: each names its own step and the limit it hit
+	assertEquals(
+		lint,
+		'"Deno Lint" timed out after 600 s; its process tree was killed',
+	);
+	assertEquals(
+		dryRun,
+		'"JSR Publish Dry Run" timed out after 600 s; its process tree was killed',
+	);
 });

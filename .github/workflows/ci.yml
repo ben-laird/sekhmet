@@ -28,11 +28,13 @@ jobs:
           deno-version: v2.9.8
           cache: true
 
-      # Actions sets GITHUB_ACTIONS=true, which scripts/ci detects: CI output
-      # mode, coverage kept on disk (no cleanup step).
+      # Actions sets CI=true and GITHUB_ACTIONS=true, which scripts/ci detects:
+      # CI output mode, coverage kept on disk (no cleanup step).
       - name: deno task ci
         run: deno task ci
 
+      # Under CI=true the gate writes coverage to ./coverage (CI_COVERAGE_DIR in
+      # scripts/ci/main.ts); local runs use a per-run temp dir instead.
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v7

@@ -4,12 +4,16 @@ import {
 	runWorkflow,
 	type StepCommand,
 	type StepOutputs,
+	type StepTimeout,
 	type WorkflowStep,
 } from "@/mod.ts";
 
 /**
  * Exit codes for CI workflow failures.
- * Each step has a unique exit code to identify which step failed.
+ * Each step has a unique failure code to identify which step failed. A step
+ * that outlives its timeout ends with a timeout code instead, which no step
+ * uses as its failure code: Deno Test has its own, and every other step shares
+ * `STEP_TIMED_OUT`, so the timeout message names the step.
  */
 export const EXIT_CODES = {
 	/** Exit code when Deno lint fails */
@@ -38,6 +42,8 @@ export const EXIT_CODES = {
 	DV_VALIDATE_FAILED: 12,
 	/** Exit code when tests outlive {@linkcode TEST_TIMEOUT_MS} and are killed */
 	TESTS_TIMED_OUT: 13,
+	/** Exit code when any step but Deno Test outlives {@linkcode STEP_TIMEOUT_MS} and is killed */
+	STEP_TIMED_OUT: 14,
 } as const;
 
 /**
@@ -49,6 +55,21 @@ export const EXIT_CODES = {
 export const TEST_TIMEOUT_MS: number = 5 * 60 * 1000;
 
 /**
+ * How long every step but Deno Test may run before its process tree is
+ * killed: 10 minutes. Each takes seconds when warm, but lint, check, Biome,
+ * dv and the JSR dry run fetch dependencies, so a cold CI runner can stall on
+ * the network; this fails such a stall within a third of the release job's
+ * 30-minute budget.
+ */
+export const STEP_TIMEOUT_MS: number = 10 * 60 * 1000;
+
+/** The timeout every step but Deno Test gets (see {@linkcode STEP_TIMEOUT_MS}). */
+export const STEP_TIMEOUT: StepTimeout = {
+	ms: STEP_TIMEOUT_MS,
+	exitCode: EXIT_CODES.STEP_TIMED_OUT,
+};
+
+/**
  * The environment the CI workflow adapts to.
  */
 export interface CIEnvironment {
@@ -56,6 +77,42 @@ export interface CIEnvironment {
 	isCI: boolean;
 	/** Running for an AI agent (`CI_AI=true`) */
 	isAI: boolean;
+}
+
+/**
+ * One run of the CI workflow: its environment, and the coverage directory
+ * this run alone writes (see {@linkcode coverageDirFor}).
+ */
+export interface CIRun extends CIEnvironment {
+	/** Where Deno Test writes coverage profiles and the lcov/HTML reports */
+	coverageDir: string;
+}
+
+/**
+ * Where CI keeps coverage: the path `.github/workflows/ci.yml` uploads as the
+ * `coverage-html` artifact (`coverage/html`, `coverage/lcov.info`).
+ */
+export const CI_COVERAGE_DIR = "coverage";
+
+/**
+ * The coverage directory for one run. `deno test --clean` deletes its
+ * coverage directory, so two gates sharing one in a checkout break each other
+ * (#18). A local run gets a fresh temp directory of its own, which its cleanup
+ * step removes. In CI it is {@linkcode CI_COVERAGE_DIR}: each job runs one
+ * gate in a fresh checkout, and the artifact upload needs a stable path.
+ *
+ * @param options.isCI - Running in a CI service
+ * @param options.makeTempDir - Creates a unique temp directory (default: `Deno.makeTempDir`)
+ * @returns The directory path
+ */
+export async function coverageDirFor({
+	isCI,
+	makeTempDir = () => Deno.makeTempDir({ prefix: "sekhmet-ci-coverage-" }),
+}: {
+	isCI: boolean;
+	makeTempDir?: () => Promise<string>;
+}): Promise<string> {
+	return isCI ? CI_COVERAGE_DIR : await makeTempDir();
 }
 
 /**
@@ -126,7 +183,7 @@ export function dvValidateCommand(): StepCommand {
 }
 
 /**
- * The CI workflow's steps for an environment:
+ * The CI workflow's steps for a run:
  * - Parallel linting (Deno lint, Biome check, per-package documentation lint,
  *   publish readiness, generated-main freshness, `dv validate`, JSR dry run)
  * - Type checking
@@ -134,10 +191,12 @@ export function dvValidateCommand(): StepCommand {
  * - Coverage reporting
  * - Local cleanup of coverage data
  *
- * Every step has its own entry in {@linkcode EXIT_CODES}.
+ * Every step has its own entry in {@linkcode EXIT_CODES}, and a timeout:
+ * Deno Test its own, every other step {@linkcode STEP_TIMEOUT}. Every
+ * coverage step uses the run's `coverageDir`.
  */
-export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
-	return [
+export function ciSteps({ isCI, isAI, coverageDir }: CIRun): WorkflowStep[] {
+	const steps: WorkflowStep[] = [
 		// Parallel linting (no dependencies, will run concurrently)
 		{
 			name: "Deno Lint",
@@ -216,7 +275,7 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 					"--allow-read",
 					"--allow-write",
 					"--allow-run",
-					"--coverage",
+					`--coverage=${coverageDir}`,
 					// Drop profiles left by an earlier run whose cleanup did not run
 					"--clean",
 				],
@@ -231,11 +290,14 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 			showOutput: true,
 			exitCode: EXIT_CODES.COVERAGE_FAILED,
 
-			command: { program: "deno", args: ["coverage", "--detailed"] },
+			command: {
+				program: "deno",
+				args: ["coverage", "--detailed", coverageDir],
+			},
 		},
 
 		// Coverage table on the GitHub job summary, or totals in the AI JSON;
-		// reads the coverage/lcov.info that Deno Test wrote
+		// reads the lcov.info that Deno Test wrote to the coverage directory
 		{
 			name: "Coverage Summary",
 			dependsOn: ["Deno Test"],
@@ -243,24 +305,35 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 			showOutput: (status) => isCI || status === "failed",
 			exitCode: EXIT_CODES.COVERAGE_SUMMARY_FAILED,
 
-			command: coverageSummaryCommand(isCI ? "github" : "json"),
+			command: coverageSummaryCommand({
+				format: isCI ? "github" : "json",
+				coverageDir,
+			}),
 			...(isCI ? {} : { captureOutputs: coverageOutputs }),
 		},
 
 		// Local cleanup (runs even if tests failed); CI keeps the coverage data
-		...(isCI ? [] : [cleanupStep()]),
+		...(isCI ? [] : [cleanupStep(coverageDir)]),
 	];
+	return steps.map((step) => ({ timeout: STEP_TIMEOUT, ...step }));
 }
 
 /**
- * The coverage summary over `coverage/lcov.info` (see `coverage-summary.ts`):
- * `github` appends a markdown table to the job summary, `json` prints the
- * totals for {@linkcode coverageOutputs}.
+ * The coverage summary over `<coverageDir>/lcov.info` (see
+ * `coverage-summary.ts`): `github` appends a markdown table to the job
+ * summary, `json` prints the totals for {@linkcode coverageOutputs}.
  *
- * @param format - Where the summary goes
+ * @param options.format - Where the summary goes
+ * @param options.coverageDir - The coverage directory Deno Test wrote
  * @returns The command to run
  */
-export function coverageSummaryCommand(format: "github" | "json"): StepCommand {
+export function coverageSummaryCommand({
+	format,
+	coverageDir,
+}: {
+	format: "github" | "json";
+	coverageDir: string;
+}): StepCommand {
 	return {
 		program: "deno",
 		args: [
@@ -271,6 +344,8 @@ export function coverageSummaryCommand(format: "github" | "json"): StepCommand {
 			"--allow-env",
 			fromFileUrl(new URL("./coverage-summary.ts", import.meta.url)),
 			format,
+			"--coverage-dir",
+			coverageDir,
 		],
 	};
 }
@@ -292,7 +367,7 @@ export function coverageOutputs(output: Deno.CommandOutput): StepOutputs {
 	}
 }
 
-function cleanupStep(): WorkflowStep {
+function cleanupStep(coverageDir: string): WorkflowStep {
 	return {
 		name: "Cleanup coverage data",
 		dependsOn: ["Show coverage report", "Coverage Summary"],
@@ -300,7 +375,7 @@ function cleanupStep(): WorkflowStep {
 		condition: "always",
 		exitCode: EXIT_CODES.CLEANUP_FAILED,
 
-		command: coverageCleanupCommand(),
+		command: coverageCleanupCommand({ dir: coverageDir }),
 	};
 }
 
@@ -309,26 +384,24 @@ function cleanupStep(): WorkflowStep {
  * that `deno test --coverage` writes. Succeeds when the directory is absent,
  * as when a lint failure blocked the tests.
  *
- * @param options.dir - The coverage directory (default: `coverage`)
+ * @param options.dir - The coverage directory
  * @returns The command to run
  */
-export function coverageCleanupCommand({
-	dir = "coverage",
-}: {
-	dir?: string;
-} = {}): StepCommand {
+export function coverageCleanupCommand({ dir }: { dir: string }): StepCommand {
 	return { program: "rm", args: ["-rf", dir] };
 }
 
 /**
- * Main entry point for the CI workflow. Reads the environment and runs
- * {@linkcode ciSteps}.
+ * Main entry point for the CI workflow. Reads the environment, picks this
+ * run's coverage directory and runs {@linkcode ciSteps}.
  */
 export async function main(): Promise<void> {
+	const isCI = Deno.env.get("CI") === "true";
 	await runWorkflow(
 		ciSteps({
-			isCI: Deno.env.get("CI") === "true",
+			isCI,
 			isAI: Deno.env.get("CI_AI") === "true",
+			coverageDir: await coverageDirFor({ isCI }),
 		}),
 	);
 }
