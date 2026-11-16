@@ -294,6 +294,11 @@ gone; their logic is internal.
   `int`, `safe`, `min`, `max`, `multipleOf`; for `string`, `minLength`,
   `maxLength`, `format`, `regex`. A check of a value after a `map` is a
   `filter` (checks were once `self`-first and applied after a `map` too).
+- **Allowed means accepted** (owner decision, 2026-11-16): with `nan: true`,
+  `NaN` passes without any other check, since none means anything for it.
+  With `infinite: true`, `±Infinity` still meets `min` and `max`, which
+  compare it meaningfully (`Infinity` fails `max: 10` and passes `min: 0`),
+  but skips `int`, `safe` and `multipleOf`. Finite numbers meet every check.
 - **`bigint` and `date` gained bounds** (`date` compares times), as the
   issues' `"bigint"` and `"date"` origins already anticipated; neither
   coerces.

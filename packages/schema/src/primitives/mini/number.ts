@@ -2,7 +2,7 @@ import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Schema } from "@/src/core/mini/schema.ts";
 import type { Bound } from "./bound.ts";
-import { type Inspect, leaf, when } from "./check.ts";
+import { firstIssue, type Inspect, leaf, when } from "./check.ts";
 import type { CoerceMode } from "./coerce.ts";
 import { coerceNumber } from "./convert.ts";
 import {
@@ -30,7 +30,9 @@ export interface NumberSchemaOptions {
 
 	/**
 	 * Whether `NaN` is accepted. By default it fails with an `InvalidType`
-	 * issue (received `"nan"`).
+	 * issue (received `"nan"`). Allowed means accepted: with `nan: true`, `NaN`
+	 * passes without any other check (`min`, `max`, `int`, `safe`,
+	 * `multipleOf`), since none of them means anything for it.
 	 *
 	 * @default false
 	 */
@@ -38,7 +40,10 @@ export interface NumberSchemaOptions {
 
 	/**
 	 * Whether `Infinity` and `-Infinity` are accepted. By default they fail
-	 * with an `InvalidType` issue (received `"infinity"`).
+	 * with an `InvalidType` issue (received `"infinity"`). With
+	 * `infinite: true` they still meet `min` and `max`, which compare them
+	 * meaningfully (`Infinity` fails `max: 10` and passes `min: 0`), but skip
+	 * `int`, `safe` and `multipleOf`.
 	 *
 	 * @default false
 	 */
@@ -84,19 +89,36 @@ export interface NumberSchemaOptions {
 	readonly multipleOf?: number;
 }
 
-/** Fails `NaN` and `±Infinity` unless the options allow them. */
-function finite(options: NumberSchemaOptions): Inspect<number> {
+/**
+ * The number's checks: `NaN` is accepted outright when allowed, `±Infinity`
+ * meets only the bounds when allowed, and a finite number meets every check,
+ * in the documented order.
+ */
+function inspectNumber(options: NumberSchemaOptions): Inspect<number> {
+	const bounds = [
+		...when({ option: options.min, inspect: minimum }),
+		...when({ option: options.max, inspect: maximum }),
+	];
+	const checks = [
+		...(options.int === true ? [isInteger] : []),
+		...(options.safe === true ? [isSafeInteger] : []),
+		...bounds,
+		...when({ option: options.multipleOf, inspect: multipleOf }),
+	];
+
 	return (value) => {
 		if (Number.isNaN(value)) {
 			return options.nan === true
 				? undefined
 				: InvalidType({ input: value, expected: "number" });
 		}
-		if (!Number.isFinite(value) && options.infinite !== true) {
-			return InvalidType({ input: value, expected: "number" });
+		if (!Number.isFinite(value)) {
+			return options.infinite === true
+				? firstIssue({ value, inspections: bounds })
+				: InvalidType({ input: value, expected: "number" });
 		}
 
-		return undefined;
+		return firstIssue({ value, inspections: checks });
 	};
 }
 
@@ -115,7 +137,8 @@ function finite(options: NumberSchemaOptions): Inspect<number> {
  *
  * The checks run on the (coerced) number in this order, and the first that
  * fails is reported: `NaN`/`±Infinity`, `int`, `safe`, `min`, `max`,
- * `multipleOf`.
+ * `multipleOf`. An allowed `NaN` skips every other check, and an allowed
+ * `±Infinity` meets only `min` and `max`.
  *
  * @param options Coercion and checks
  * @returns A schema that validates numeric inputs
@@ -186,13 +209,6 @@ function numberSchema(
 				? Err(InvalidType({ input, expected: "number" }))
 				: Ok(value);
 		},
-		inspections: [
-			finite(options),
-			...(options.int === true ? [isInteger] : []),
-			...(options.safe === true ? [isSafeInteger] : []),
-			...when({ option: options.min, inspect: minimum }),
-			...when({ option: options.max, inspect: maximum }),
-			...when({ option: options.multipleOf, inspect: multipleOf }),
-		],
+		inspections: [inspectNumber(options)],
 	});
 }

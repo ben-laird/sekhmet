@@ -17,7 +17,7 @@ import { Schema } from "@/src/core/mini/schema.ts";
 export type Inspect<O> = (output: O) => SchemaIssue | undefined;
 
 /** The first issue `inspections` find in `value`, in order. */
-function firstIssue<O>({
+export function firstIssue<O>({
 	value,
 	inspections,
 }: {

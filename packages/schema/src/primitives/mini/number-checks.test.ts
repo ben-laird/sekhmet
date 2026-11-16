@@ -214,6 +214,119 @@ Deno.test("checks report the first failure in their documented order", () => {
 	]);
 });
 
+Deno.test("an allowed NaN is accepted without any other check", () => {
+	for (const options of [
+		{ min: 0 },
+		{ max: 0 },
+		{ int: true },
+		{ safe: true },
+		{ multipleOf: 2 },
+		{ min: 0, max: 1, int: true, safe: true, multipleOf: 2 },
+	]) {
+		// Given: a schema allowing NaN, with a check NaN can't meet
+		const schema = number({ nan: true, ...options });
+
+		// When: parsing NaN
+		const result = parseSync(schema, Number.NaN);
+
+		// Then: allowed means accepted, so NaN passes
+		assertEquals(result, Ok(Number.NaN), JSON.stringify(options));
+	}
+});
+
+Deno.test("an allowed ±Infinity meets min and max, but no other check", async (t) => {
+	await t.step("min and max compare it", () => {
+		// Given: schemas allowing ±Infinity, bounded below and above
+		const atLeast = number({ infinite: true, min: 0 });
+		const atMost = number({ infinite: true, max: 10 });
+		const inf = Number.POSITIVE_INFINITY;
+		const negInf = Number.NEGATIVE_INFINITY;
+
+		// When: parsing each infinity against each bound
+		// Then: Infinity passes min and fails max, -Infinity the reverse
+		assertParses(atLeast, [
+			[inf, Ok(inf)],
+			[
+				negInf,
+				failed(
+					TooSmall({
+						input: negInf,
+						origin: "number",
+						minimum: 0,
+						inclusive: true,
+					}),
+				),
+			],
+		]);
+		assertParses(atMost, [
+			[negInf, Ok(negInf)],
+			[
+				inf,
+				failed(
+					TooBig({
+						input: inf,
+						origin: "number",
+						maximum: 10,
+						inclusive: true,
+					}),
+				),
+			],
+		]);
+	});
+
+	await t.step("int, safe and multipleOf are skipped", () => {
+		for (const options of [{ int: true }, { safe: true }, { multipleOf: 2 }]) {
+			// Given: a schema allowing ±Infinity, with an integer-only check
+			const schema = number({ infinite: true, ...options });
+
+			// When: parsing both infinities
+			// Then: they pass, since the check means nothing for them
+			assertParses(schema, [
+				[Number.POSITIVE_INFINITY, Ok(Number.POSITIVE_INFINITY)],
+				[Number.NEGATIVE_INFINITY, Ok(Number.NEGATIVE_INFINITY)],
+			]);
+		}
+	});
+});
+
+Deno.test("without nan or infinite, NaN and ±Infinity fail before any check", () => {
+	// Given: a schema with every check but neither nan nor infinite
+	const schema = number({ min: 0, int: true, multipleOf: 2 });
+
+	// When: parsing NaN and the infinities
+	// Then: each fails as the wrong type, not a failed check
+	assertParses(schema, [
+		[
+			Number.NaN,
+			failed(InvalidType({ input: Number.NaN, expected: "number" })),
+		],
+		[
+			Number.POSITIVE_INFINITY,
+			failed(
+				InvalidType({ input: Number.POSITIVE_INFINITY, expected: "number" }),
+			),
+		],
+	]);
+});
+
+Deno.test("allowing NaN or ±Infinity leaves finite numbers fully checked", () => {
+	// Given: a schema allowing both, with every check
+	const schema = number({ nan: true, infinite: true, int: true, min: 0 });
+
+	// When: parsing finite values failing a check
+	// Then: the checks still apply to them
+	assertParses(schema, [
+		[2, Ok(2)],
+		[1.5, failed(InvalidType({ input: 1.5, expected: "integer" }))],
+		[
+			-1,
+			failed(
+				TooSmall({ input: -1, origin: "number", minimum: 0, inclusive: true }),
+			),
+		],
+	]);
+});
+
 Deno.test("checks run on the coerced number", () => {
 	// Given: a coercing number schema checked to be at least 3
 	const schema = number({ coerce: true, min: 3 });
