@@ -18,8 +18,11 @@ Each feature has two forms:
 
 - **Main** (`@sekhmet/schema/core`, `@sekhmet/schema/primitives`,
   `@sekhmet/schema/composites`, `@sekhmet/schema/standard`): the
-  method-chaining API, `string().map((s) => s.length)`. It is generated from
-  mini by `deno task gen:main`.
+  method-chaining API, `string().optional().map((s) => s?.length)`. Every
+  main `Schema` has the shape modifiers `.array()`, `.optional()` and
+  `.nullable()`, the transforms `.map`, `.mapErr`, `.pipe` and `.filter`, and
+  `.parse`, `.parseSync` and `.parseAsync`. It is generated from mini by
+  `deno task gen:main`.
 - **Mini** (`@sekhmet/schema/core/mini`, `@sekhmet/schema/primitives/mini`,
   `@sekhmet/schema/composites/mini`, `@sekhmet/schema/standard/mini`):
   tree-shakable functions, `map(string(), (s) => s.length)`, with a subpath per
@@ -50,6 +53,28 @@ import { string } from "@sekhmet/schema/primitives/mini";
 const length = map(string(), (text) => text.length);
 
 assertEquals(unwrap(parseSync(length, "four")), 4);
+```
+
+## Checks are options
+
+Checks and transforms are options of the schema they refine, the same in mini
+and main: `number({ int: true, min: 0 })`,
+`string({ trim: true, minLength: 3, format: "email" })`,
+`bigint({ multipleOf: 2n })`, `date({ max: new Date() })`. A `min` or `max` is
+inclusive; `{ value, inclusive: false }` excludes the bound itself. Coercion
+and the transforms (`trim`, `normalize`) apply before the checks, and a
+primitive reports the first check that fails.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import { number, string } from "@sekhmet/schema/primitives";
+
+const email = string({ trim: true, format: "email" });
+const ratio = number({ min: 0, max: { value: 1, inclusive: false } });
+
+assertEquals(unwrap(email.parseSync(" ada@example.com ")), "ada@example.com");
+assertEquals(isErr(ratio.parseSync(1)), true);
 ```
 
 ## Composites
