@@ -107,19 +107,25 @@ Before contributing:
 ### Playground
 
 `playground/` at the repository root is gitignored and never checked by
-`deno task ci`, so keep scratch scripts and notebooks there. Your editor still
-covers it: the Deno language server (hovers, completions, type errors) and
-Biome (formatting, lint, organize imports) and Deno's lint all see the folder.
-Imports of `@sekhmet/*` resolve to the checked-out source, so you are always
-playing with the current branch (or, after `deno task play:link`, with a
+`deno task ci`, so keep scratch scripts, tests and notebooks there. Your editor
+still covers it: the Deno language server (hovers, completions, type errors,
+Deno's lint) and Biome (formatting, lint, organize imports) both see the
+folder. Imports of `@sekhmet/*` resolve to the checked-out source, so you are
+always playing with the current branch (or, after `deno task play:link`, with a
 worktree's):
 
 ```bash
 deno run playground/try.ts         # any script that imports @sekhmet/*
 deno check playground/try.ts       # type-check it
+deno test playground/              # run the Deno.test files in it
 deno lint playground/              # Deno's lint rules
 deno task fmt playground/          # format and lint-fix it with Biome
 ```
+
+Playground tests are ordinary `Deno.test` files (`playground/try.test.ts`)
+that import `@std/assert`, `@std/testing` and `@sekhmet/*` as the packages'
+own tests do; `deno test playground/try.test.ts` runs one. They are scratch, so
+the Given/When/Then comments the gate requires elsewhere are up to you.
 
 The gate stays off it in two ways: Biome, `deno check`, `deno lint` and
 `deno test` run over the paths git does not ignore
@@ -141,8 +147,8 @@ for it, so the commands above, and the editor, treat it like any other folder.
 Your editor's `playground/` lives in the main checkout, but the branch you want
 to try often lives in a worktree (`.claude/worktrees/…`). `play:link` writes a
 `playground/deno.json` that links every `@sekhmet/*` package to that tree, so
-hovers, completions, `deno run` and `deno check` in `playground/` all use its
-source:
+hovers, completions and the `deno` commands in `playground/` use its source
+(see "Which commands follow the link" below):
 
 ```bash
 deno task play:link refactor/schema-declarative  # the worktree on that branch
@@ -160,15 +166,27 @@ deno task play:link off                          # back to the root workspace
 - **The file is not a workspace member**, so Deno treats `playground/` as a
   standalone project and prints
   `Warning: config file …/playground/deno.json is not a member of the workspace … Ignoring the parent workspace config.`
-  That warning is expected while linked. The root workspace's `imports` (such
-  as `@std/*`) no longer apply there; add any you need to
-  `playground/deno.json` yourself.
-- **It owns three keys**: the `@sekhmet/*` entries of `imports` (one `jsr:`
-  specifier per package, which `links` overrides, so unpublished packages work
-  too), `links` (every package of the target, relative to `playground/`), and
-  `compilerOptions` (copied from the target's root `deno.json`, so strictness
-  matches). Every other key and import you add is kept on relink and on `off`;
-  `off` deletes the file only when nothing of yours is left in it.
+  That warning is expected while linked. The root workspace no longer applies
+  there, so `play:link` copies the target root `deno.json`'s other `imports`
+  (`@std/assert`, `@std/testing`, `@~/`, …) into the file, rebasing relative
+  paths onto `playground/`.
+- **It owns what it writes**: the `@sekhmet/*` entries of `imports` (one
+  `jsr:` specifier per package, which `links` overrides, so unpublished
+  packages work too), the root imports it copied, `links` (every package of the
+  target, relative to `playground/`), and `compilerOptions` (copied from the
+  target's root `deno.json`, so strictness matches). It records the root
+  imports it copied under a `playLink` key, so a relink or `off` removes
+  exactly those. An import you set yourself keeps your value and is never
+  recorded, and every other key you add is kept on relink and on `off`; `off`
+  deletes the file only when nothing of yours is left in it.
+- **Which commands follow the link** depends on where Deno looks for a
+  config. `deno test`, `deno check` and `deno info` start from the current
+  directory; `deno run` and `deno lint` start from the file. So run from inside
+  the playground (`cd playground && deno test`), where every command uses the
+  link. From the repository root, `deno run playground/try.ts` and
+  `deno lint playground/` use the link, but `deno test playground/` and
+  `deno check playground/try.ts` use the root workspace (this checkout's
+  packages) unless you pass `--config playground/deno.json`.
 - **Restart the Deno language server after switching** (VS Code:
   `Deno: Restart Language Server`) so it resolves through the new `links`.
 - **Worktrees go away after their branch merges.** `deno task play:link` with no
