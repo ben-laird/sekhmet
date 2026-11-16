@@ -11,7 +11,7 @@ import type { Target } from "@/src/runtime.ts";
 
 /**
  * The exact tool versions a run installs. Bump them together with
- * `.github/workflows/compat.yml`, which installs Playwright's system
+ * `.github/workflows/compat-smoke.yml`, which installs Playwright's system
  * dependencies at the same version.
  */
 export const TOOLS: {
