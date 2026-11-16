@@ -71,7 +71,12 @@ export type TypeNode =
 	| { readonly kind: "union"; readonly types: readonly TypeNode[] }
 	| { readonly kind: "intersection"; readonly types: readonly TypeNode[] }
 	| { readonly kind: "array"; readonly element: TypeNode }
-	| { readonly kind: "tuple"; readonly elements: readonly TypeNode[] }
+	| {
+			readonly kind: "tuple";
+			readonly elements: readonly TypeNode[];
+			/** Element labels, recovered from source since `deno doc` drops them. */
+			readonly labels?: readonly (string | undefined)[];
+	  }
 	| { readonly kind: "rest"; readonly type: TypeNode }
 	| { readonly kind: "optional"; readonly type: TypeNode }
 	| { readonly kind: "parenthesized"; readonly type: TypeNode }

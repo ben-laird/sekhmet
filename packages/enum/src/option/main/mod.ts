@@ -208,7 +208,7 @@ export class Option<out T> extends mini.Option<T> {
 	 * ```
 	 * @see {@link mini.zip}
 	 */
-	zip<U>(other: mini.Option<U>): Option<[T, U]> {
+	zip<U>(other: mini.Option<U>): Option<[first: T, second: U]> {
 		return Option.fromMini(mini.zip(this, other));
 	}
 
@@ -577,7 +577,7 @@ export class Option<out T> extends mini.Option<T> {
 	 * @returns The result of mapping if self is Some, otherwise the default value
 	 * @see {@link mini.mapOr}
 	 */
-	mapOr<U>(...handlers: [U, (value: T) => U]): U;
+	mapOr<U>(...handlers: [defaultValue: U, mapping: (value: T) => U]): U;
 	mapOr(...args: unknown[]): unknown {
 		return Reflect.apply(mini.mapOr, undefined, [this, ...args]);
 	}
@@ -613,7 +613,7 @@ export class Option<out T> extends mini.Option<T> {
 	 * @returns The result of calling the appropriate handler function
 	 * @see {@link mini.mapOrElse}
 	 */
-	mapOrElse<U>(...handlers: [() => U, (value: T) => U]): U;
+	mapOrElse<U>(...handlers: [None: () => U, Some: (value: T) => U]): U;
 	mapOrElse(...args: unknown[]): unknown {
 		return Reflect.apply(mini.mapOrElse, undefined, [this, ...args]);
 	}

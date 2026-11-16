@@ -41,6 +41,7 @@ import {
 	sliceFromByte,
 	type TypeParamModifiers,
 	typeParamModifiers,
+	withTupleLabels,
 } from "./source.ts";
 
 /** The header that marks a file as generated. */
@@ -238,6 +239,20 @@ function isSelfOfPrimary(primary: string, param: Param | undefined): boolean {
 	);
 }
 
+/** A signature with the tuple labels `deno doc` dropped restored from source. */
+function labelled(
+	module: Module,
+	signature: FunctionDeclaration,
+): FunctionDeclaration {
+	const source = module.sources.get(signature.location.filename);
+	if (source === undefined) return signature;
+
+	return withTupleLabels({
+		declaration: signature,
+		text: sliceFromByte({ source, byteIndex: signature.location.byteIndex }),
+	});
+}
+
 function modifiersOf(
 	module: Module,
 	declaration: FunctionDeclaration | ClassDeclaration,
@@ -293,7 +308,7 @@ interface MethodHead {
 function methodHead({
 	module,
 	name,
-	signature,
+	signature: declared,
 	classParams,
 }: {
 	module: Module;
@@ -302,6 +317,7 @@ function methodHead({
 	classParams: readonly TypeParam[];
 }): Generated<MethodHead> {
 	const { feature } = module;
+	const signature = labelled(module, declared);
 	const [self, ...params] = signature.params;
 	const selfType = self?.type;
 	if (selfType?.kind !== "ref") {
@@ -548,7 +564,8 @@ function renderWrapper({
 		isPredicate: boolean;
 	}[] = [];
 
-	for (const signature of signatures) {
+	for (const declared of signatures) {
+		const signature = labelled(module, declared);
 		const context = contextFor({
 			module,
 			fileUrl: signature.location.filename,

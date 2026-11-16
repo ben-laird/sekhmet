@@ -179,3 +179,22 @@ Deno.test("renderJsDoc groups tags and indents the block", () => {
 		].join("\n"),
 	);
 });
+
+Deno.test("renderType prints tuple labels", () => {
+	// Given: a labeled tuple with an optional and a rest element
+	const type: TypeNode = {
+		kind: "tuple",
+		elements: [
+			param("A"),
+			{ kind: "optional", type: param("B") },
+			{ kind: "rest", type: { kind: "array", element: param("B") } },
+		],
+		labels: ["first", "second", "rest"],
+	};
+
+	// When: rendering it
+	const rendered = renderType({ type, context: CONTEXT });
+
+	// Then: each element keeps its label and marker
+	assertEquals(rendered, "[first: T, second?: B, ...rest: B[]]");
+});

@@ -74,7 +74,7 @@ export function renderType({
 		case "array":
 			return `${render(type.element)}[]`;
 		case "tuple":
-			return `[${type.elements.map(render).join(", ")}]`;
+			return renderTuple({ tuple: type, render });
 		case "rest":
 			return `...${render(type.type)}`;
 		case "optional":
@@ -108,6 +108,33 @@ export function renderType({
 		case "this":
 			return "this";
 	}
+}
+
+/**
+ * Renders a tuple type, labelling each element that has a recovered label.
+ *
+ * @param options.tuple - The tuple
+ * @param options.render - How an (unlabeled) element type is rendered
+ * @returns The TypeScript source for the tuple
+ */
+export function renderTuple({
+	tuple,
+	render,
+}: {
+	tuple: Extract<TypeNode, { kind: "tuple" }>;
+	render: (element: TypeNode) => string;
+}): string {
+	const elements = tuple.elements.map((element, i) => {
+		const label = tuple.labels?.[i];
+		if (label === undefined) return render(element);
+		if (element.kind === "rest") return `...${label}: ${render(element.type)}`;
+		if (element.kind === "optional")
+			return `${label}?: ${render(element.type)}`;
+
+		return `${label}: ${render(element)}`;
+	});
+
+	return `[${elements.join(", ")}]`;
 }
 
 function renderObject({

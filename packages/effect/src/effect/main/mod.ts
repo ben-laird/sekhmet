@@ -68,7 +68,7 @@ export class Effect<I, T, E> extends mini.Effect<I, T, E> {
 	 * ```
 	 * @see {@link mini.zip}
 	 */
-	zip<U>(other: mini.Effect<I, U, E>): Effect<I, [T, U], E> {
+	zip<U>(other: mini.Effect<I, U, E>): Effect<I, [left: T, right: U], E> {
 		return Effect.fromMini(mini.zip(this, other));
 	}
 

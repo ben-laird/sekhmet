@@ -1,5 +1,12 @@
 import { assertEquals } from "@std/assert";
-import { sliceFromByte, splitTopLevel, typeParamModifiers } from "./source.ts";
+import type { FunctionDeclaration, TypeNode } from "./doc.ts";
+import {
+	sliceFromByte,
+	splitTopLevel,
+	tupleLabels,
+	typeParamModifiers,
+	withTupleLabels,
+} from "./source.ts";
 
 Deno.test("typeParamModifiers reads const modifiers on a function", () => {
 	// Given: a function declaration with a const type parameter
@@ -75,4 +82,76 @@ Deno.test("splitTopLevel ignores nested commas", () => {
 
 	// Then: it splits only at the top level
 	assertEquals(pieces, ["A", " B extends Map<K, V>", " C = [1, 2]"]);
+});
+
+Deno.test("tupleLabels reads tuple labels in source order", () => {
+	// Given: a signature with a labeled rest tuple and a labeled return tuple
+	const declaration =
+		"export function f<T>(self: Box<T>, ...handlers: [defaultValue: U, mapping?: (v: T[]) => U]): [first: T, ...rest: U[]] { return [a[0], b]; }";
+
+	// When: reading the first two tuples' labels
+	const labels = tupleLabels({ declaration, count: 2 });
+
+	// Then: array types and indexed access are skipped, and labels keep their order
+	assertEquals(labels, [
+		["defaultValue", "mapping"],
+		["first", "rest"],
+	]);
+});
+
+Deno.test("tupleLabels reports unlabeled elements and too few tuples", () => {
+	// Given: a signature with one unlabeled tuple
+	const declaration = "export function g(): [number, string] {}";
+
+	// When: reading one and then two tuples
+	const one = tupleLabels({ declaration, count: 1 });
+	const two = tupleLabels({ declaration, count: 2 });
+
+	// Then: elements without labels are undefined, and a missing tuple fails
+	assertEquals(one, [[undefined, undefined]]);
+	assertEquals(two, undefined);
+});
+
+Deno.test("withTupleLabels attaches labels to a declaration's tuples", () => {
+	// Given: a decoded `zip` whose return type is an unlabeled tuple
+	const element = (name: string): TypeNode => ({
+		kind: "ref",
+		name,
+		args: [],
+		resolution: { kind: "typeParam" },
+	});
+	const zip: FunctionDeclaration = {
+		kind: "function",
+		location: { filename: "file:///a.ts", byteIndex: 0 },
+		jsDoc: undefined,
+		typeParams: [],
+		params: [],
+		returnType: {
+			kind: "ref",
+			name: "Effect",
+			args: [{ kind: "tuple", elements: [element("T"), element("U")] }],
+			resolution: { kind: "local" },
+		},
+		hasBody: true,
+	};
+
+	// When: attaching labels from its source
+	const labeled = withTupleLabels({
+		declaration: zip,
+		text: "export function zip<T, U>(): Effect<[left: T, right: U]> {}",
+	});
+
+	// Then: the tuple carries its labels
+	assertEquals(labeled.returnType, {
+		kind: "ref",
+		name: "Effect",
+		args: [
+			{
+				kind: "tuple",
+				elements: [element("T"), element("U")],
+				labels: ["left", "right"],
+			},
+		],
+		resolution: { kind: "local" },
+	});
 });
