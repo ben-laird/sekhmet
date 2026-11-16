@@ -1,6 +1,7 @@
-# Release on merge to main. Every push runs scripts/release/main.ts:
+# Release on merge to main. Every push runs the full quality gate
+# (`deno task ci`), then scripts/release/main.ts:
 #
-#   1. dv status        capture what is pending before Records are consumed
+#   1. dv status       capture what is pending before Records are consumed
 #   2. dv version       bump manifests, write CHANGELOGs, commit (if Records)
 #   3. git push         put the chore(release) commit on main
 #   4. dv release       tag, publish each package to JSR in dependency order,
@@ -52,6 +53,11 @@ jobs:
         with:
           deno-version: v2.9.8
           cache: true
+
+      # Never publish a red tree. main has no branch protection, so the merge
+      # may not have passed ci.yml; run the same gate before any dv step.
+      - name: Quality gate
+        run: deno task ci
 
       # dv itself is pinned by scripts/dv/deno.json and deno.lock.
       - uses: ./.github/actions/setup-dv
