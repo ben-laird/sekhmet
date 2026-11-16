@@ -3,7 +3,7 @@
 /**
  * Main entrypoint for `@sekhmet/schema/core`: the method-chaining API.
  *
- * `Schema` here extends the mini `Schema` from `@sekhmet/schema/core/mini`, so its instances work with every mini function too. Each `self`-first mini function is a method, and functions whose mini form returns `Schema` return this main class, so calls chain.
+ * `Schema` here extends the mini `Schema` from `@sekhmet/schema/core/mini`, so its instances work with every mini function too. Each `self`-first mini function is a method, and functions whose mini form returns `Schema` return this main class, so calls chain. It also takes `array`, `optional`, `nullable` from `@sekhmet/schema/composites/mini` as methods.
  *
  * Generated from `../mini/mod.ts` by `deno task gen:main`; edit the mini source, then regenerate.
  *
@@ -27,6 +27,7 @@
 import { Result } from "@sekhmet/enum/result";
 import type { Result as MiniResult } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
+import * as composites from "../../composites/mini/mod.ts";
 import * as mini from "../mini/mod.ts";
 
 export type {
@@ -314,5 +315,99 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 */
 	pipe<P>(nextSchema: mini.Schema<O, P, E>): Schema<I, P, E> {
 		return Schema.fromMini(mini.pipe(this, nextSchema));
+	}
+
+	/**
+	 * Creates a schema for arrays whose every element `item` accepts. Every
+	 * element is parsed, and every failing element is reported at its index.
+	 * A non-array input fails with an `InvalidType` issue at the root.
+	 *
+	 * `minItems` and `maxItems` bound the length (JSON Schema's names, apart
+	 * from the string length options). A length out of bounds is reported at
+	 * the root, after any failing elements, so both are seen at once.
+	 *
+	 * The input is `unknown` when `item` accepts anything, and otherwise an
+	 * array of `item`'s input.
+	 *
+	 * @returns A schema for arrays of `item`
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
+	 * import { entries, Schema } from "@sekhmet/schema/core";
+	 *
+	 * const positive = new Schema((input: unknown) =>
+	 * 	typeof input === "number" && input > 0 ? Ok(input) : Err("not positive"),
+	 * );
+	 * const found = unwrapErr(await positive.array().parseAsync([1, -2, 3, 0]));
+	 *
+	 * assertEquals(entries(found).map(({ path }) => path), [[1], [3]]);
+	 * ```
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
+	 * import { array } from "@sekhmet/schema/composites";
+	 * import { entries, formatIssue, Schema } from "@sekhmet/schema/core";
+	 *
+	 * const anything = new Schema((input: unknown) => Ok(input));
+	 * const pair = array({ item: anything, minItems: 1, maxItems: 2 });
+	 * const [{ error }] = entries(unwrapErr(await pair.parseAsync([1, 2, 3])));
+	 *
+	 * assertEquals(formatIssue(error), "Too big: expected array to have <= 2 items");
+	 * ```
+	 * @see {@link composites.array}
+	 */
+	array(): Schema<
+		composites.ArrayInput<I>,
+		O[],
+		mini.Issues<mini.Flatten<E> | mini.SchemaIssue>
+	> {
+		return Schema.fromMini(composites.array({ item: this }));
+	}
+
+	/**
+	 * Makes a schema also accept `undefined`, which it passes through without
+	 * running `self`. In an `object`, a field built with `optional` may be
+	 * missing, and becomes an optional property.
+	 *
+	 * @returns A schema for `self`'s values or `undefined`
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
+	 * import { object } from "@sekhmet/schema/composites";
+	 * import { Schema } from "@sekhmet/schema/core";
+	 *
+	 * const text = new Schema((input: unknown) => Ok(String(input)));
+	 * const user = object({ shape: { nickname: text.optional() } });
+	 *
+	 * assertEquals(unwrap(user.parseSync({})), {});
+	 * ```
+	 * @see {@link composites.optional}
+	 */
+	optional(): Schema<I | undefined, O | undefined, E> {
+		return Schema.fromMini(composites.optional(this));
+	}
+
+	/**
+	 * Makes a schema also accept `null`, which it passes through without
+	 * running `self`.
+	 *
+	 * @returns A schema for `self`'s values or `null`
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
+	 * import { Schema } from "@sekhmet/schema/core";
+	 *
+	 * const text = new Schema((input: unknown) => Ok(String(input)));
+	 *
+	 * assertEquals(unwrap(text.nullable().parseSync(null)), null);
+	 * ```
+	 * @see {@link composites.nullable}
+	 */
+	nullable(): Schema<I | null, O | null, E> {
+		return Schema.fromMini(composites.nullable(this));
 	}
 }

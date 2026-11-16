@@ -315,6 +315,19 @@ export const FEATURES: readonly Feature[] = [
 		construct: "params",
 		mappers: SCHEMA_MAPPERS,
 		wraps: [ENUM_RESULT],
+		// The shape modifiers belong to composites but read best chained.
+		borrows: [
+			{
+				entrypoint: "@sekhmet/schema/composites",
+				mini: "packages/schema/src/composites/mini/mod.ts",
+				namespace: "composites",
+				methods: [
+					{ name: "array", field: "item" },
+					{ name: "optional" },
+					{ name: "nullable" },
+				],
+			},
+		],
 		example: [
 			'import { assertEquals } from "@std/assert";',
 			'import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";',
@@ -388,11 +401,15 @@ export const FEATURES: readonly Feature[] = [
 		example: [
 			'import { assertEquals } from "@std/assert";',
 			'import { unwrap } from "@sekhmet/enum/result/mini";',
-			'import { array, object } from "@sekhmet/schema/composites";',
-			'import { string } from "@sekhmet/schema/primitives";',
+			'import { object } from "@sekhmet/schema/composites";',
+			'import { number, string } from "@sekhmet/schema/primitives";',
 			"",
 			"const user = object({",
-			"\tshape: { name: string(), tags: array({ item: string() }) },",
+			"\tshape: {",
+			"\t\tname: string({ minLength: 1 }),",
+			"\t\tage: number({ int: true, min: 0 }).optional(),",
+			"\t\ttags: string().array(),",
+			"\t},",
 			'\tunknownKeys: "strict",',
 			"});",
 			"",

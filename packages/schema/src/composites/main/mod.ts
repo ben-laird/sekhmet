@@ -11,11 +11,15 @@
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { unwrap } from "@sekhmet/enum/result/mini";
- * import { array, object } from "@sekhmet/schema/composites";
- * import { string } from "@sekhmet/schema/primitives";
+ * import { object } from "@sekhmet/schema/composites";
+ * import { number, string } from "@sekhmet/schema/primitives";
  *
  * const user = object({
- * 	shape: { name: string(), tags: array({ item: string() }) },
+ * 	shape: {
+ * 		name: string({ minLength: 1 }),
+ * 		age: number({ int: true, min: 0 }).optional(),
+ * 		tags: string().array(),
+ * 	},
  * 	unknownKeys: "strict",
  * });
  *
