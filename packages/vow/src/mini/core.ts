@@ -33,19 +33,24 @@ export type { Variants as VowVariants };
  * @template T The type of the resolved value
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { map, Vow, vowWithResolver, wait } from "@sekhmet/vow";
+ * import { assertEquals } from "@std/assert";
+ *
  * // Create a vow that resolves immediately
  * const vow = new Vow<number>((resolve) => {
  *   resolve(42);
  * });
  *
  * // Chain transformations
- * const doubled = vow.andThen((n) => n * 2);
+ * const doubled = map(vow, (n) => n * 2);
+ * assertEquals(await wait(doubled), 84);
  *
  * // Create a deferred vow
  * const { vow: deferred, resolve } = vowWithResolver<string>();
- * deferred.andThen((s) => console.log("Resolved:", s));
- * resolve("hello"); // Logs: "Resolved: hello"
+ * const greeting = map(deferred, (s) => `Resolved: ${s}`);
+ * resolve("hello");
+ * assertEquals(await wait(greeting), "Resolved: hello");
  * ```
  */
 export class Vow<T> extends Enum<Variants<T>> {

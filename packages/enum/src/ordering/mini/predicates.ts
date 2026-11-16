@@ -1,4 +1,4 @@
-import { isolate } from "@sekhmet/enum/core/mini/isolate";
+import { isolate } from "@/src/core/mini/isolate.ts";
 import type { Ordering } from "./core.ts";
 
 /**

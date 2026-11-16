@@ -7,13 +7,13 @@
  * convert results back into main `Effect` instances for chaining.
  *
  * @example
- * ```ts ignore
- * import { Success } from "@sekhmet/effect/effect/main";
+ * ```ts
+ * import { Success } from "@sekhmet/effect/effect";
  *
- * const result = Success(5)
- *   .map(x => x * 2)
- *   .inspect(x => console.log("value:", x))
- *   .mapError(e => `error: ${e}`);
+ * const effect = Success(5)
+ *   .map((x) => x * 2)
+ *   .inspect((x) => console.log("value:", x))
+ *   .mapError((e) => `error: ${e}`);
  * ```
  *
  * @module
@@ -21,6 +21,15 @@
 
 import { getStructParams } from "@sekhmet/primordials/struct";
 import * as mini from "../mini/mod.ts";
+
+export type {
+	EffectErrorVariants,
+	EffectFn,
+	EffectOutput,
+	EffectResult,
+	ResultArms,
+} from "../mini/mod.ts";
+export { EffectError, ExceptionOccurred, Failed } from "../mini/mod.ts";
 
 /**
  * Converts a mini Effect into a main Effect using the memento pattern.
@@ -167,9 +176,7 @@ export class Effect<I, T, E> extends mini.Effect<I, T, E> {
 	 * @returns A new effect that tries this and falls back on error
 	 * @see {@link mini.orElse}
 	 */
-	orElse<F>(
-		fallbackStep: (error: E) => mini.Effect<I, T, F>,
-	): Effect<I, T, F> {
+	orElse<F>(fallbackStep: (error: E) => mini.Effect<I, T, F>): Effect<I, T, F> {
 		return fromMini(mini.orElse(this, fallbackStep));
 	}
 
@@ -183,4 +190,28 @@ export class Effect<I, T, E> extends mini.Effect<I, T, E> {
 	zip<U>(other: mini.Effect<I, U, E>): Effect<I, [left: T, right: U], E> {
 		return fromMini(mini.zip(this, other));
 	}
+}
+
+/**
+ * Creates a main effect that immediately succeeds with the given value.
+ *
+ * @template T - Success value type
+ * @param value - The success value
+ * @returns A main effect that produces the success value
+ * @see {@link mini.Success}
+ */
+export function Success<T>(value: T): Effect<void, T, never> {
+	return fromMini(mini.Success(value));
+}
+
+/**
+ * Creates a main effect that immediately fails with the given typed error.
+ *
+ * @template E - Error type
+ * @param error - The error value
+ * @returns A main effect that produces the error
+ * @see {@link mini.Failure}
+ */
+export function Failure<E>(error: E): Effect<void, never, E> {
+	return fromMini(mini.Failure(error));
 }

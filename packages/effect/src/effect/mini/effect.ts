@@ -4,10 +4,10 @@
  * @module
  */
 
-import type { ExecutionContext } from "@sekhmet/effect/runtime/runtime";
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { Struct } from "@sekhmet/primordials/struct";
+import type { ExecutionContext } from "@/src/runtime/runtime.ts";
 import type { Continuation } from "../../continuation/continuation.ts";
 import { Ready } from "../../continuation/continuation.ts";
 

@@ -14,7 +14,12 @@ import { getStructParams } from "@sekhmet/primordials/struct";
 import { Effect } from "../../effect/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
-export { fork } from "../mini/mod.ts";
+export type {
+	FiberErrorVariants,
+	FiberResult,
+	Finalizer,
+} from "../mini/mod.ts";
+export { FiberError, fork } from "../mini/mod.ts";
 
 /**
  * Full-featured Fiber class providing a fluent, method-based API.

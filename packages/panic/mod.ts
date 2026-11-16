@@ -1,9 +1,8 @@
-export * from "./src/mini/mod.ts";
-
 export {
 	Panic,
-	panic,
-	panicWithoutCause,
 	type PanicSource,
 	type PanicSourceBase,
+	panic,
+	panicWithoutCause,
 } from "./prelude.ts";
+export * from "./src/mini/mod.ts";

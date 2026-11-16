@@ -24,17 +24,18 @@ export interface VowWithResolver<T> {
  * @returns An object containing the vow and its resolve function
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { map, vowWithResolver, wait } from "@sekhmet/vow";
+ * import { assertEquals } from "@std/assert";
+ *
  * const { vow, resolve } = vowWithResolver<string>();
  *
  * // Set up what happens when resolved
- * vow.andThen((value) => {
- *   console.log("Got:", value);
- * });
+ * const message = map(vow, (value) => `Got: ${value}`);
  *
  * // Later, resolve it
  * resolve("hello world");
- * // Logs: "Got: hello world"
+ * assertEquals(await wait(message), "Got: hello world");
  * ```
  */
 export function vowWithResolver<T>(): VowWithResolver<T> {

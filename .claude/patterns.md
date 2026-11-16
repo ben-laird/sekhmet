@@ -575,6 +575,5 @@ import { isolate, eliminate } from "@sekhmet/enum/core/mini";
 // ⚠️ Acceptable - import from main (larger bundle)
 import { isolate, eliminate } from "@sekhmet/enum/core";
 
-// ❌ Avoid - imports everything (largest bundle)
-import { isolate, eliminate } from "@sekhmet/enum";
+// ❌ Not available - @sekhmet/enum has no root export; import a feature subpath
 ```
