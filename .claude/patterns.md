@@ -391,6 +391,16 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   as do positions the generator can't convert without changing behaviour:
   unions, tuples with optional elements, generators with a non-`void` return
   value, and other generic containers.
+- **Import cycles.** Because of that rule, main modules that convert to each
+  other import each other (`option/main` ↔ `result/main`; `latch/main` imports
+  both). The cycle is safe because a generated module uses another feature's
+  class only inside function and method bodies, never while the module
+  evaluates; `scripts/gen-main/src/cycle.ts` checks every generated module for
+  module-scope uses and fails generation if it finds one. The cost is bundle
+  size: importing any of these main entrypoints pulls in the main classes it
+  converts to (and theirs), so `@sekhmet/enum/option` also loads
+  `@sekhmet/enum/result`'s main module. Use the mini entrypoints when bundle
+  size matters.
 - **Constructors and other free functions.** A function without `self` whose
   return needs converting (`Some`, `None`, `flatten`, `unzip`, `transpose`,
   `compareNumbers`, `fork`) is re-declared in main as a wrapper that returns

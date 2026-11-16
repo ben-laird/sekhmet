@@ -24,6 +24,7 @@ import {
 	convertedBody,
 	convertReturn,
 } from "./convert.ts";
+import { moduleScopeValueUses } from "./cycle.ts";
 import type {
 	ClassDeclaration,
 	DocSymbol,
@@ -988,5 +989,21 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		...wrappers.map((wrapper) => wrapper.source),
 	].filter((part) => part !== "");
 
-	return ok(parts.join("\n"));
+	const source = parts.join("\n");
+
+	// Main modules that convert to each other's classes import each other, so
+	// a wrap target may only be used once the cycle has finished evaluating.
+	const uses = moduleScopeValueUses({
+		source,
+		names: (feature.wraps ?? []).map((target) => target.type),
+	});
+	if (uses.length > 0) {
+		return failure({
+			feature,
+			symbol: undefined,
+			message: `wrap targets are used at module scope, which the main import cycle can't allow: ${uses.join(", ")}`,
+		});
+	}
+
+	return ok(source);
 }

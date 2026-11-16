@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import type { Feature } from "./config.ts";
+import { moduleScopeValueUses } from "./cycle.ts";
 import type {
 	DocSymbol,
 	FunctionDeclaration,
@@ -734,4 +735,34 @@ Deno.test("generateMain rejects overloaded type predicates", () => {
 		symbol: "guard",
 		message: "overloaded type predicates are not supported",
 	});
+});
+
+Deno.test("generateMain uses wrap targets only inside bodies", () => {
+	// Given: a feature converting to another feature's main class, by method and by wrapper
+	const feature: Feature = {
+		...FEATURE,
+		wraps: [{ type: "Bag", from: "../../bag/main/mod.ts" }],
+	};
+	const bag: TypeNode = {
+		kind: "ref",
+		name: "Bag",
+		args: [],
+		resolution: {
+			kind: "import",
+			specifier: "../../bag/mini/core.ts",
+			name: "Bag",
+		},
+	};
+	const toBag = fn(
+		"toBag",
+		signature({ typeParams: ["T"], params: [selfBox("T")], returnType: bag }),
+	);
+	const emptyBag = fn("emptyBag", signature({ params: [], returnType: bag }));
+
+	// When: generating
+	const output = source([toBag, emptyBag], feature);
+
+	// Then: Bag is never used while the module evaluates, so the import cycle is safe
+	assertStringIncludes(output, "Bag.fromMini(");
+	assertEquals(moduleScopeValueUses({ source: output, names: ["Bag"] }), []);
 });
