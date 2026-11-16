@@ -32,6 +32,10 @@
 		"@~/": "./"
 	},
 
+	"publish": {
+		"exclude": ["**/*.test.ts"]
+	},
+
 	"fmt": {
 		"useTabs": true
 	},
