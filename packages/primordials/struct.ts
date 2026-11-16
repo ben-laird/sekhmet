@@ -1,4 +1,23 @@
 /**
+ * {@linkcode Struct}: a base class that keeps its data behind a symbol, read
+ * with {@linkcode getStructParams}. Sekhmet's enums, effects and fibers are
+ * built on it.
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { getStructParams, Struct } from "@sekhmet/primordials/struct";
+ *
+ * class Point extends Struct<{ x: number; y: number }> {}
+ *
+ * const point = new Point({ x: 1, y: 2 });
+ * assertEquals(getStructParams(point).x, 1);
+ * ```
+ *
+ * @module
+ */
+
+/**
  * The internal symbol used to coordinate between a {@linkcode Struct} and the {@linkcode getStructParams} function
  */
 export const struct: unique symbol = Symbol("@sekhmet/struct");
