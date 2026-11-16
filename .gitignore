@@ -231,3 +231,6 @@ $RECYCLE.BIN/
 
 # Docs site pages assembled by `deno task docs:assemble`
 scripts/docs-site/content/
+
+# Scratch scripts and notebooks for trying the packages (deno task play)
+/playground/
