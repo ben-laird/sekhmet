@@ -60,9 +60,11 @@ Deno.test("issues holds exactly the entries it was given, in order", () => {
 
 Deno.test("issues rejects an empty list at the type level", () => {
 	// Given: no entries
-	// When: building issues from them
-	// @ts-expect-error: Issues is never empty
-	const build = (): Issues<never> => issues([]);
+	// When: building issues from them, in a function that is never called
+	const build = (): void => {
+		// @ts-expect-error: Issues is never empty, so only the empty list errs
+		issues([]);
+	};
 
 	// Then: it is a type error (and the call is never made)
 	assertEquals(typeof build, "function");
