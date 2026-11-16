@@ -34,9 +34,11 @@ npx jsr add @sekhmet/panic
 
 ## Run your program inside a runtime
 
-```ts ignore
+```ts
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
+import { Err } from "@sekhmet/enum/result/mini/core";
 import { mapErr } from "@sekhmet/enum/result/mini/transform";
+import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
 
@@ -44,10 +46,13 @@ function main(): number {
 	panic({ message: "config is missing a port", cause: null });
 }
 
-// Every throw inside main is reported once, then returned as Err
+// Every throw inside main is reported once (to console.error by default),
+// then returned as Err
 const result = mapErr(runtime.catchUnwind(main), (payload) =>
 	payload instanceof Panic ? payload.message : "unknown failure",
 );
+
+assertEquals(result, Err("config is missing a port"));
 ```
 
 `catchUnwind` catches **every** throw, not only `Panic`s. The `Err` holds the

@@ -89,8 +89,19 @@ export interface PanicRuntime {
 	 * @returns `Ok` of the return value, or `Err` of the thrown payload
 	 *
 	 * @example
-	 * ```ts ignore
-	 * const result = runtime.catchUnwind(() => JSON.parse(text));
+	 * ```ts
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 * import { isErr } from "@sekhmet/enum/result/mini/predicates";
+	 * import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+	 * import { assert, assertInstanceOf } from "@std/assert";
+	 *
+	 * const runtime = definePanicRuntime();
+	 * runtime.setHook(() => {}); // keep the example quiet
+	 *
+	 * const result = runtime.catchUnwind(() => JSON.parse("{ not json"));
+	 *
+	 * assert(isErr(result));
+	 * assertInstanceOf(unwrapErr(result), SyntaxError);
 	 * ```
 	 */
 	readonly catchUnwind: <T>(
@@ -115,8 +126,16 @@ export interface PanicRuntime {
 	 * @returns A promise of `Ok` of the resolved value, or `Err` of the payload
 	 *
 	 * @example
-	 * ```ts ignore
-	 * const result = await runtime.catchUnwindAsync(() => fetch(url));
+	 * ```ts
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 * import { Ok } from "@sekhmet/enum/result/mini/core";
+	 * import { assertEquals } from "@std/assert";
+	 *
+	 * const runtime = definePanicRuntime();
+	 *
+	 * const result = await runtime.catchUnwindAsync(async () => 42);
+	 *
+	 * assertEquals(result, Ok(42));
 	 * ```
 	 */
 	readonly catchUnwindAsync: <T>(
@@ -175,21 +194,31 @@ export const defaultPanicHook: PanicHook = ({ payload, stack }) => {
  * @returns A runtime whose hook starts as {@linkcode defaultPanicHook}
  *
  * @example
- * ```ts ignore
- * import { definePanicRuntime, Panic } from "@sekhmet/panic";
+ * ```ts
+ * import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
+ * import { Err } from "@sekhmet/enum/result/mini/core";
  * import { mapErr } from "@sekhmet/enum/result/mini/transform";
+ * import { assertEquals } from "@std/assert";
  *
  * const runtime = definePanicRuntime();
+ * const log: string[] = [];
+ * runtime.setHook(() => log.push("reported")); // stands in for a real reporter
  *
+ * // Chain: take the previous hook and call it from the new one
  * const previous = runtime.takeHook();
+ * let panics = 0;
  * runtime.setHook((info) => {
- *   metrics.increment("panics");
+ *   panics++;
  *   previous(info);
  * });
  *
+ * const main = (): number => panic({ message: "no port", cause: null });
  * const result = mapErr(runtime.catchUnwind(main), (payload) =>
  *   payload instanceof Panic ? payload.message : "unknown failure",
  * );
+ *
+ * assertEquals(result, Err("no port"));
+ * assertEquals([panics, log], [1, ["reported"]]);
  * ```
  */
 export function definePanicRuntime(): PanicRuntime {
@@ -261,12 +290,26 @@ export function definePanicRuntime(): PanicRuntime {
  * @returns True if a boundary threw `payload` because its hook threw
  *
  * @example
- * ```ts ignore
- * const result = outer.catchUnwind(() => inner.catchUnwind(work));
- * const payload = unwrapErr(result);
- * if (isPanicHookFailure(payload)) {
- *   console.error("hook failed on", payload.cause.payload);
- * }
+ * ```ts
+ * import { definePanicRuntime, isPanicHookFailure, panic } from "@sekhmet/panic";
+ * import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+ * import { assert, assertEquals } from "@std/assert";
+ *
+ * const outer = definePanicRuntime();
+ * outer.setHook(() => {}); // keep the example quiet
+ * const inner = definePanicRuntime();
+ * inner.setHook(() => {
+ *   throw new Error("reporter offline");
+ * });
+ *
+ * const payload = unwrapErr(
+ *   outer.catchUnwind(() =>
+ *     inner.catchUnwind(() => panic({ message: "bad state", cause: null })),
+ *   ),
+ * );
+ *
+ * assert(isPanicHookFailure(payload));
+ * assertEquals(String(payload.cause.thrown), "Error: reporter offline");
  * ```
  */
 export function isPanicHookFailure(

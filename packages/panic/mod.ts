@@ -4,11 +4,17 @@
  * recovery (`catchUnwind`), with no global state.
  *
  * @example
- * ```ts ignore
+ * ```ts
  * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { Ok } from "@sekhmet/enum/result/mini/core";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const main = (): number => 42;
  *
  * const runtime = definePanicRuntime();
  * const result = runtime.catchUnwind(main);
+ *
+ * assertEquals(result, Ok(42));
  * ```
  *
  * @module

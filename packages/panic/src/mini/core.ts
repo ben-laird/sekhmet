@@ -39,8 +39,15 @@ interface PanicParams<T> {
  * @returns Never - always throws
  *
  * @example
- * ```ts ignore
- * panicWithoutCause({ message: "Unexpected state reached" });
+ * ```ts
+ * import { Panic, panicWithoutCause } from "@sekhmet/panic/mini/core";
+ * import { assertThrows } from "@std/assert";
+ *
+ * const thrown = assertThrows(
+ *   () => panicWithoutCause({ message: "Unexpected state reached" }),
+ *   Panic,
+ * );
+ * thrown.cause; // null
  * ```
  */
 export function panicWithoutCause(source: PanicSourceBase): never {
@@ -55,12 +62,20 @@ export function panicWithoutCause(source: PanicSourceBase): never {
  * @returns Never - always throws
  *
  * @example
- * ```ts ignore
- * panic({
- *   name: "ValidationError",
- *   message: "Invalid input provided",
- *   cause: { field: "email", reason: "invalid format" },
- * });
+ * ```ts
+ * import { Panic, panic } from "@sekhmet/panic/mini/core";
+ * import { assertEquals, assertThrows } from "@std/assert";
+ *
+ * const thrown = assertThrows(
+ *   () =>
+ *     panic({
+ *       name: "ValidationError",
+ *       message: "Invalid input provided",
+ *       cause: { field: "email", reason: "invalid format" },
+ *     }),
+ *   Panic,
+ * );
+ * assertEquals(thrown.name, "Panic (ValidationError)");
  * ```
  */
 export function panic<T>(source: PanicSource<T>): never {
@@ -71,26 +86,35 @@ export function panic<T>(source: PanicSource<T>): never {
  * A structured error type for unrecoverable errors.
  *
  * Panic extends Error and provides additional metadata including a unique ID,
- * timestamp, and typed cause. Use Panic for errors that should not be caught
- * and recovered from in normal program flow.
+ * timestamp, and typed cause. Use Panic for broken invariants, not expected
+ * failures (return a `Result` for those). Recover from one only at a panic
+ * runtime's boundary.
  *
  * @template T The type of the underlying cause
  *
  * @example
- * ```ts ignore
- * try {
- *   throw new Panic({
- *     name: "DatabaseError",
- *     message: "Connection lost",
- *     cause: { host: "localhost", port: 5432 },
- *   });
- * } catch (err) {
- *   if (err instanceof Panic) {
- *     console.log(err.id); // UUID
- *     console.log(err.timestamp); // Date
- *     console.log(err.cause); // { host: "localhost", port: 5432 }
- *   }
- * }
+ * ```ts
+ * import { definePanicRuntime, Panic } from "@sekhmet/panic";
+ * import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+ * import { assert, assertEquals } from "@std/assert";
+ *
+ * const runtime = definePanicRuntime();
+ * runtime.setHook(() => {}); // keep the example quiet
+ *
+ * const payload = unwrapErr(
+ *   runtime.catchUnwind(() => {
+ *     throw new Panic({
+ *       name: "DatabaseError",
+ *       message: "Connection lost",
+ *       cause: { host: "localhost", port: 5432 },
+ *     });
+ *   }),
+ * );
+ *
+ * assert(payload instanceof Panic);
+ * assertEquals(payload.cause, { host: "localhost", port: 5432 });
+ * payload.id; // a v4 UUID
+ * payload.timestamp; // when it was constructed
  * ```
  */
 export class Panic<T> extends Error {
@@ -149,15 +173,21 @@ export class Panic<T> extends Error {
 	 * @returns True if the predicate matches, narrowing the Panic type
 	 *
 	 * @example
-	 * ```ts ignore
-	 * const panic = new Panic({
+	 * ```ts
+	 * import { Panic } from "@sekhmet/panic/mini/core";
+	 * import { assert, assertEquals } from "@std/assert";
+	 *
+	 * type Cause = { type: "network"; code: number } | { type: "disk" };
+	 * const isNetwork = (c: Cause): c is { type: "network"; code: number } =>
+	 *   c.type === "network";
+	 *
+	 * const subject = new Panic<Cause>({
 	 *   message: "Error",
 	 *   cause: { type: "network", code: 500 },
 	 * });
 	 *
-	 * if (panic.check((c): c is { type: "network"; code: number } => c.type === "network")) {
-	 *   console.log(panic.cause.code); // 500
-	 * }
+	 * assert(subject.check(isNetwork));
+	 * assertEquals(subject.cause.code, 500);
 	 * ```
 	 */
 	check<S extends T>(predicate: (cause: T) => cause is S): this is Panic<S> {

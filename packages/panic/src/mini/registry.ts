@@ -27,25 +27,32 @@ interface PanicMetadataRegistryParams<M, P> {
  * @template P The type of Panic (defaults to Panic<unknown>)
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import {
+ *   definePanicRuntime,
+ *   Panic,
+ *   panic,
+ *   PanicMetadataRegistry,
+ * } from "@sekhmet/panic";
+ * import { assertEquals } from "@std/assert";
+ *
  * interface PanicMeta {
- *   handledAt: Date;
  *   handler: string;
  * }
  *
- * const registry = new PanicMetadataRegistry<PanicMeta>((panic) => ({
- *   handledAt: new Date(),
- *   handler: "errorBoundary",
+ * const registry = new PanicMetadataRegistry<PanicMeta>(() => ({
+ *   handler: "main",
  * }));
  *
- * try {
- *   // ... code that might panic
- * } catch (err) {
- *   if (err instanceof Panic) {
- *     const meta = registry.getOrInsert(err);
- *     console.log(`Handled at: ${meta.handledAt}`);
- *   }
- * }
+ * // Record every panic this runtime reports
+ * const runtime = definePanicRuntime();
+ * runtime.setHook(({ payload }) => {
+ *   if (payload instanceof Panic) registry.getOrInsert(payload);
+ * });
+ *
+ * runtime.catchUnwind(() => panic({ message: "bad state", cause: null }));
+ *
+ * assertEquals([...registry].map(([, meta]) => meta), [{ handler: "main" }]);
  * ```
  */
 export class PanicMetadataRegistry<
