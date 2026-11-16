@@ -4,6 +4,7 @@
 	"publish": false,
 
 	"exports": {
+		"./link": "./link.ts",
 		"./notebook": "./notebook.ts"
 	},
 
