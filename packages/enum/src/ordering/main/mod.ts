@@ -30,6 +30,7 @@
  */
 
 import { getStructParams, struct } from "@sekhmet/primordials/struct";
+import type { Enum, Isolate } from "@/src/core/mini/core.ts";
 import * as mini from "../mini/mod.ts";
 
 export type { OrderingVariants } from "../mini/mod.ts";
@@ -196,114 +197,198 @@ export class Ordering extends mini.Ordering {
 	/**
 	 * Returns true if the ordering indicates "less than".
 	 *
+	 * Narrows to the Less variant, so a later `match` needs only the Less arm,
+	 * while the value stays an `Ordering`.
+	 *
 	 * @returns true if self is Less, false otherwise
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 * import { match } from "@sekhmet/enum/core/mini";
+	 * import { Equal, Greater, Less, type Ordering } from "@sekhmet/enum/ordering";
 	 *
 	 * assertEquals(Less().isLt(), true);
 	 * assertEquals(Equal().isLt(), false);
 	 * assertEquals(Greater().isLt(), false);
+	 *
+	 * const ordering: Ordering = Less();
+	 * if (ordering.isLt()) {
+	 *   // the variant: ordering is Less, so no Equal or Greater arm is needed
+	 *   assertEquals(match(ordering)({ Less: () => "less" }), "less");
+	 *   // still an Ordering
+	 *   const same: Ordering = ordering;
+	 *   assertEquals(same, Less());
+	 * }
 	 * ```
 	 * @see {@link mini.isLt}
 	 */
-	isLt(): boolean {
+	isLt(): this is Enum<Isolate<mini.OrderingVariants, "Less">> & Ordering {
 		return mini.isLt(this);
 	}
 
 	/**
 	 * Returns true if the ordering indicates "greater than".
 	 *
+	 * Narrows to the Greater variant, so a later `match` needs only the Greater
+	 * arm, while the value stays an `Ordering`.
+	 *
 	 * @returns true if self is Greater, false otherwise
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 * import { match } from "@sekhmet/enum/core/mini";
+	 * import { Equal, Greater, Less, type Ordering } from "@sekhmet/enum/ordering";
 	 *
 	 * assertEquals(Less().isGt(), false);
 	 * assertEquals(Equal().isGt(), false);
 	 * assertEquals(Greater().isGt(), true);
+	 *
+	 * const ordering: Ordering = Greater();
+	 * if (ordering.isGt()) {
+	 *   // the variant: ordering is Greater, so no Less or Equal arm is needed
+	 *   assertEquals(match(ordering)({ Greater: () => "greater" }), "greater");
+	 *   // still an Ordering
+	 *   const same: Ordering = ordering;
+	 *   assertEquals(same, Greater());
+	 * }
 	 * ```
 	 * @see {@link mini.isGt}
 	 */
-	isGt(): boolean {
+	isGt(): this is Enum<Isolate<mini.OrderingVariants, "Greater">> & Ordering {
 		return mini.isGt(this);
 	}
 
 	/**
 	 * Returns true if the ordering indicates "equal".
 	 *
+	 * Narrows to the Equal variant, so a later `match` needs only the Equal arm,
+	 * while the value stays an `Ordering`.
+	 *
 	 * @returns true if self is Equal, false otherwise
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 * import { match } from "@sekhmet/enum/core/mini";
+	 * import { Equal, Greater, Less, type Ordering } from "@sekhmet/enum/ordering";
 	 *
 	 * assertEquals(Less().isEq(), false);
 	 * assertEquals(Equal().isEq(), true);
 	 * assertEquals(Greater().isEq(), false);
+	 *
+	 * const ordering: Ordering = Equal();
+	 * if (ordering.isEq()) {
+	 *   // the variant: ordering is Equal, so no Less or Greater arm is needed
+	 *   assertEquals(match(ordering)({ Equal: () => "equal" }), "equal");
+	 *   // still an Ordering
+	 *   const same: Ordering = ordering;
+	 *   assertEquals(same, Equal());
+	 * }
 	 * ```
 	 * @see {@link mini.isEq}
 	 */
-	isEq(): boolean {
+	isEq(): this is Enum<Isolate<mini.OrderingVariants, "Equal">> & Ordering {
 		return mini.isEq(this);
 	}
 
 	/**
 	 * Returns true if the ordering indicates "not equal" (either less or greater).
 	 *
+	 * Narrows to the Less and Greater variants, so a later `match` needs only
+	 * those two arms, while the value stays an `Ordering`.
+	 *
 	 * @returns true if self is Less or Greater, false if Equal
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 * import { match } from "@sekhmet/enum/core/mini";
+	 * import { Equal, Greater, Less, type Ordering } from "@sekhmet/enum/ordering";
 	 *
 	 * assertEquals(Less().isNe(), true);
 	 * assertEquals(Equal().isNe(), false);
 	 * assertEquals(Greater().isNe(), true);
+	 *
+	 * const ordering: Ordering = Greater();
+	 * if (ordering.isNe()) {
+	 *   // the variants: ordering is Less or Greater, so no Equal arm is needed
+	 *   const sign = match(ordering)({ Less: () => -1, Greater: () => 1 });
+	 *   assertEquals(sign, 1);
+	 *   // still an Ordering
+	 *   const same: Ordering = ordering;
+	 *   assertEquals(same, Greater());
+	 * }
 	 * ```
 	 * @see {@link mini.isNe}
 	 */
-	isNe(): boolean {
+	isNe(): this is Enum<Isolate<mini.OrderingVariants, "Less" | "Greater">> &
+		Ordering {
 		return mini.isNe(this);
 	}
 
 	/**
 	 * Returns true if the ordering indicates "less than or equal".
 	 *
+	 * Narrows to the Less and Equal variants, so a later `match` needs only those
+	 * two arms, while the value stays an `Ordering`.
+	 *
 	 * @returns true if self is Less or Equal, false if Greater
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 * import { match } from "@sekhmet/enum/core/mini";
+	 * import { Equal, Greater, Less, type Ordering } from "@sekhmet/enum/ordering";
 	 *
 	 * assertEquals(Less().isLe(), true);
 	 * assertEquals(Equal().isLe(), true);
 	 * assertEquals(Greater().isLe(), false);
+	 *
+	 * const ordering: Ordering = Less();
+	 * if (ordering.isLe()) {
+	 *   // the variants: ordering is Less or Equal, so no Greater arm is needed
+	 *   const strict = match(ordering)({ Less: () => true, Equal: () => false });
+	 *   assertEquals(strict, true);
+	 *   // still an Ordering
+	 *   const same: Ordering = ordering;
+	 *   assertEquals(same, Less());
+	 * }
 	 * ```
 	 * @see {@link mini.isLe}
 	 */
-	isLe(): boolean {
+	isLe(): this is Enum<Isolate<mini.OrderingVariants, "Less" | "Equal">> &
+		Ordering {
 		return mini.isLe(this);
 	}
 
 	/**
 	 * Returns true if the ordering indicates "greater than or equal".
 	 *
+	 * Narrows to the Greater and Equal variants, so a later `match` needs only
+	 * those two arms, while the value stays an `Ordering`.
+	 *
 	 * @returns true if self is Greater or Equal, false if Less
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Equal, Greater, Less } from "@sekhmet/enum/ordering";
+	 * import { match } from "@sekhmet/enum/core/mini";
+	 * import { Equal, Greater, Less, type Ordering } from "@sekhmet/enum/ordering";
 	 *
 	 * assertEquals(Less().isGe(), false);
 	 * assertEquals(Equal().isGe(), true);
 	 * assertEquals(Greater().isGe(), true);
+	 *
+	 * const ordering: Ordering = Equal();
+	 * if (ordering.isGe()) {
+	 *   // the variants: ordering is Greater or Equal, so no Less arm is needed
+	 *   const strict = match(ordering)({ Greater: () => true, Equal: () => false });
+	 *   assertEquals(strict, false);
+	 *   // still an Ordering
+	 *   const same: Ordering = ordering;
+	 *   assertEquals(same, Equal());
+	 * }
 	 * ```
 	 * @see {@link mini.isGe}
 	 */
-	isGe(): boolean {
+	isGe(): this is Enum<Isolate<mini.OrderingVariants, "Greater" | "Equal">> &
+		Ordering {
 		return mini.isGe(this);
 	}
 }
