@@ -49,6 +49,22 @@ export interface BorrowedMethod {
 	readonly name: string;
 	/** The field of the function's options object that the receiver fills. */
 	readonly field?: string;
+	/**
+	 * The method's own docs, in place of the function's: for when the
+	 * function's prose or examples talk about parameters the method doesn't
+	 * take (`array`'s `item` and length bounds for `.array()`).
+	 */
+	readonly doc?: MethodDoc;
+}
+
+/** A borrowed method's own docs, written for the method form. */
+export interface MethodDoc {
+	/** The description. */
+	readonly description: string;
+	/** What the method returns (its `@returns`). */
+	readonly returns: string;
+	/** A runnable example in method form (its `@example`, doc-tested). */
+	readonly example: string;
 }
 
 /**
@@ -131,6 +147,62 @@ const SCHEMA_MAPPERS: readonly (string | undefined)[] = [
 	"map",
 	"mapErr",
 ];
+
+/** `Schema.array()`'s docs: composites' `array` documents `item` and its bounds. */
+const ARRAY_METHOD_DOC: MethodDoc = {
+	description: [
+		"A schema for arrays whose every element this schema accepts. Every",
+		"element is parsed, and every failing element is reported at its index;",
+		"a non-array fails with an `InvalidType` issue at the root. For length",
+		"bounds, use `array({ item, minItems, maxItems })`.",
+	].join("\n"),
+	returns: "A schema for arrays of this schema's values",
+	example: [
+		'import { assertEquals } from "@std/assert";',
+		'import { unwrap } from "@sekhmet/enum/result/mini";',
+		'import { string } from "@sekhmet/schema/primitives";',
+		"",
+		"const tags = string().array();",
+		"",
+		'assertEquals(unwrap(tags.parseSync(["a", "b"])), ["a", "b"]);',
+	].join("\n"),
+};
+
+/** `Schema.optional()`'s docs, written for the receiver. */
+const OPTIONAL_METHOD_DOC: MethodDoc = {
+	description: [
+		"A schema that also accepts `undefined`, passing it through without",
+		"parsing it with this schema. In an `object`, a field made optional may",
+		"be missing, and becomes an optional property.",
+	].join("\n"),
+	returns: "A schema for this schema's values or `undefined`",
+	example: [
+		'import { assertEquals } from "@std/assert";',
+		'import { unwrap } from "@sekhmet/enum/result/mini";',
+		'import { object } from "@sekhmet/schema/composites";',
+		'import { string } from "@sekhmet/schema/primitives";',
+		"",
+		"const user = object({ shape: { nickname: string().optional() } });",
+		"",
+		"assertEquals(unwrap(user.parseSync({})), {});",
+	].join("\n"),
+};
+
+/** `Schema.nullable()`'s docs, written for the receiver. */
+const NULLABLE_METHOD_DOC: MethodDoc = {
+	description: [
+		"A schema that also accepts `null`, passing it through without parsing",
+		"it with this schema.",
+	].join("\n"),
+	returns: "A schema for this schema's values or `null`",
+	example: [
+		'import { assertEquals } from "@std/assert";',
+		'import { unwrap } from "@sekhmet/enum/result/mini";',
+		'import { string } from "@sekhmet/schema/primitives";',
+		"",
+		"assertEquals(unwrap(string().nullable().parseSync(null)), null);",
+	].join("\n"),
+};
 
 /** Every generated main entrypoint. */
 export const FEATURES: readonly Feature[] = [
@@ -322,9 +394,9 @@ export const FEATURES: readonly Feature[] = [
 				mini: "packages/schema/src/composites/mini/mod.ts",
 				namespace: "composites",
 				methods: [
-					{ name: "array", field: "item" },
-					{ name: "optional" },
-					{ name: "nullable" },
+					{ name: "array", field: "item", doc: ARRAY_METHOD_DOC },
+					{ name: "optional", doc: OPTIONAL_METHOD_DOC },
+					{ name: "nullable", doc: NULLABLE_METHOD_DOC },
 				],
 			},
 		],

@@ -1091,6 +1091,50 @@ Deno.test("generateMain rewrites borrowed methods' examples to method form", () 
 	assert(!output.includes('from "@pkg/shelf/mini"'));
 });
 
+Deno.test("generateMain gives a borrowed method its configured docs", () => {
+	// Given: a borrow of stack with docs written for the method
+	const feature: Feature = {
+		...FEATURE,
+		borrows: [
+			{
+				...SHELF,
+				methods: [
+					{ name: "wrap" },
+					{
+						name: "stack",
+						field: "item",
+						doc: {
+							description: "Stacks this box.",
+							returns: "A box of this box's values",
+							example: "full(1).stack();",
+						},
+					},
+				],
+			},
+		],
+	};
+
+	// When: generating
+	const result = generateMain({
+		feature,
+		symbols: [BOX_CLASS],
+		sources: SOURCES,
+		miniUrl: MINI_URL,
+		outputUrl: OUTPUT_URL,
+		borrowed: [{ borrow: SHELF, url: SHELF_URL, symbols: SHELF_SYMBOLS }],
+	});
+
+	// Then: the method's docs are the configured ones, not the function's
+	assert(result.ok);
+	const output = result.value;
+	assertStringIncludes(output, "Stacks this box.");
+	assertStringIncludes(output, "@returns A box of this box's values");
+	assertStringIncludes(output, "full(1).stack();");
+	assertStringIncludes(output, "@see {@link shelf.stack}");
+	assert(!output.includes("Stacks a box."));
+	assert(!output.includes("const pile ="));
+});
+
 Deno.test("generateMain rejects borrows it can't resolve or attach", async (t) => {
 	// Given: a box feature that also has its own wrap method
 	const ownWrap = fn(

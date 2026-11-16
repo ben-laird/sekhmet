@@ -22,6 +22,7 @@ import {
 	type ClassFeature,
 	type Feature,
 	isClassFeature,
+	type MethodDoc,
 } from "./config.ts";
 import {
 	type Conversion,
@@ -427,6 +428,19 @@ function methodDoc({
 	module: Module;
 }): JsDoc {
 	const see: JsDocTag = { kind: "see", doc: `{@link ${receiver.callee}}` };
+	if (receiver.doc !== undefined) {
+		const { description, returns, example } = receiver.doc;
+
+		return {
+			doc: description,
+			tags: [
+				{ kind: "return", doc: returns },
+				{ kind: "example", doc: `\`\`\`ts\n${example}\n\`\`\`` },
+				see,
+			],
+		};
+	}
+
 	const source = mainExamples({
 		jsDoc: jsDoc ?? fallbackDoc(name),
 		module,
@@ -452,6 +466,8 @@ interface Receiver {
 	readonly barrel: Barrel | undefined;
 	/** The options field the receiver fills, or `undefined` to pass it first. */
 	readonly field: string | undefined;
+	/** The method's own docs, replacing the function's, if configured. */
+	readonly doc: MethodDoc | undefined;
 }
 
 interface MethodHead {
@@ -752,6 +768,7 @@ function ownReceiver(name: string): Receiver {
 		callee: `mini.${name}`,
 		barrel: undefined,
 		field: undefined,
+		doc: undefined,
 	};
 }
 
@@ -1202,7 +1219,7 @@ function borrowedMethods({
 			names: new Set(found.symbols.map((symbol) => symbol.name)),
 		};
 
-		for (const { name, field } of borrow.methods) {
+		for (const { name, field, doc } of borrow.methods) {
 			const symbol = found.symbols.find((candidate) => candidate.name === name);
 			const signatures = symbol === undefined ? [] : signaturesOf(symbol);
 			if (symbol === undefined || signatures.length === 0) {
@@ -1253,6 +1270,7 @@ function borrowedMethods({
 					callee: `${borrow.namespace}.${name}`,
 					barrel,
 					field,
+					doc,
 				},
 			});
 		}

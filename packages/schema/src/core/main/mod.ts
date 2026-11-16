@@ -318,43 +318,21 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	}
 
 	/**
-	 * Creates a schema for arrays whose every element `item` accepts. Every
-	 * element is parsed, and every failing element is reported at its index.
-	 * A non-array input fails with an `InvalidType` issue at the root.
+	 * A schema for arrays whose every element this schema accepts. Every
+	 * element is parsed, and every failing element is reported at its index;
+	 * a non-array fails with an `InvalidType` issue at the root. For length
+	 * bounds, use `array({ item, minItems, maxItems })`.
 	 *
-	 * `minItems` and `maxItems` bound the length (JSON Schema's names, apart
-	 * from the string length options). A length out of bounds is reported at
-	 * the root, after any failing elements, so both are seen at once.
-	 *
-	 * The input is `unknown` when `item` accepts anything, and otherwise an
-	 * array of `item`'s input.
-	 *
-	 * @returns A schema for arrays of `item`
+	 * @returns A schema for arrays of this schema's values
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Err, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
-	 * import { entries, Schema } from "@sekhmet/schema/core";
+	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import { string } from "@sekhmet/schema/primitives";
 	 *
-	 * const positive = new Schema((input: unknown) =>
-	 * 	typeof input === "number" && input > 0 ? Ok(input) : Err("not positive"),
-	 * );
-	 * const found = unwrapErr(await positive.array().parseAsync([1, -2, 3, 0]));
+	 * const tags = string().array();
 	 *
-	 * assertEquals(entries(found).map(({ path }) => path), [[1], [3]]);
-	 * ```
-	 * @example
-	 * ```ts
-	 * import { assertEquals } from "@std/assert";
-	 * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
-	 * import { array } from "@sekhmet/schema/composites";
-	 * import { entries, formatIssue, Schema } from "@sekhmet/schema/core";
-	 *
-	 * const anything = new Schema((input: unknown) => Ok(input));
-	 * const pair = array({ item: anything, minItems: 1, maxItems: 2 });
-	 * const [{ error }] = entries(unwrapErr(await pair.parseAsync([1, 2, 3])));
-	 *
-	 * assertEquals(formatIssue(error), "Too big: expected array to have <= 2 items");
+	 * assertEquals(unwrap(tags.parseSync(["a", "b"])), ["a", "b"]);
 	 * ```
 	 * @see {@link composites.array}
 	 */
@@ -367,20 +345,19 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	}
 
 	/**
-	 * Makes a schema also accept `undefined`, which it passes through without
-	 * running `self`. In an `object`, a field built with `optional` may be
-	 * missing, and becomes an optional property.
+	 * A schema that also accepts `undefined`, passing it through without
+	 * parsing it with this schema. In an `object`, a field made optional may
+	 * be missing, and becomes an optional property.
 	 *
-	 * @returns A schema for `self`'s values or `undefined`
+	 * @returns A schema for this schema's values or `undefined`
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
+	 * import { unwrap } from "@sekhmet/enum/result/mini";
 	 * import { object } from "@sekhmet/schema/composites";
-	 * import { Schema } from "@sekhmet/schema/core";
+	 * import { string } from "@sekhmet/schema/primitives";
 	 *
-	 * const text = new Schema((input: unknown) => Ok(String(input)));
-	 * const user = object({ shape: { nickname: text.optional() } });
+	 * const user = object({ shape: { nickname: string().optional() } });
 	 *
 	 * assertEquals(unwrap(user.parseSync({})), {});
 	 * ```
@@ -391,19 +368,17 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	}
 
 	/**
-	 * Makes a schema also accept `null`, which it passes through without
-	 * running `self`.
+	 * A schema that also accepts `null`, passing it through without parsing
+	 * it with this schema.
 	 *
-	 * @returns A schema for `self`'s values or `null`
+	 * @returns A schema for this schema's values or `null`
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
-	 * import { Schema } from "@sekhmet/schema/core";
+	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import { string } from "@sekhmet/schema/primitives";
 	 *
-	 * const text = new Schema((input: unknown) => Ok(String(input)));
-	 *
-	 * assertEquals(unwrap(text.nullable().parseSync(null)), null);
+	 * assertEquals(unwrap(string().nullable().parseSync(null)), null);
 	 * ```
 	 * @see {@link composites.nullable}
 	 */
