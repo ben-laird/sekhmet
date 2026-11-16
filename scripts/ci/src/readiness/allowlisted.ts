@@ -58,6 +58,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 		'PanicRuntime["catchUnwind"]',
 		"Result",
 	),
+	privateTypeRef("schema/src/core/mini/issues.ts", "Issues", "Struct"),
 	privateTypeRef(
 		"schema/src/core/mini/potential.ts",
 		"PotentialVariants",
