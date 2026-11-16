@@ -4,6 +4,7 @@ import { executeStep, gateStep, shouldShowOutput } from "./step.ts";
 import { ranResult } from "./testing.ts";
 import type {
 	AccumulatedOutputs,
+	StepCommand,
 	StepContext,
 	StepResult,
 	StepStatus,
@@ -11,10 +12,8 @@ import type {
 } from "./types.ts";
 
 // Helper to create a mock command that succeeds
-function createMockCommand(success = true): Deno.Command {
-	return new Deno.Command("echo", {
-		args: success ? ["success"] : ["failure"],
-	});
+function createMockCommand(success = true): StepCommand {
+	return { program: "echo", args: success ? ["success"] : ["failure"] };
 }
 
 // Helper to build a context from completed step statuses
@@ -319,7 +318,7 @@ Deno.test("executeStep returns passed status for successful command", async () =
 	// Given: a step with a successful command
 	const step: WorkflowStep = {
 		name: "Test",
-		command: new Deno.Command("echo", { args: ["success"] }),
+		command: { program: "echo", args: ["success"] },
 	};
 	const completedSteps = new Map<string, StepResult>();
 	const accumulatedOutputs: AccumulatedOutputs = {
@@ -345,9 +344,7 @@ Deno.test("executeStep returns failed status for failing command", async () => {
 	// Given: a step with a failing command
 	const step: WorkflowStep = {
 		name: "Test",
-		command: new Deno.Command("sh", {
-			args: ["-c", "exit 1"],
-		}),
+		command: { program: "sh", args: ["-c", "exit 1"] },
 	};
 	const completedSteps = new Map<string, StepResult>();
 	const accumulatedOutputs: AccumulatedOutputs = {
@@ -374,9 +371,7 @@ Deno.test("executeStep sets ARTIFACTS_DIR environment variable", async () => {
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
 	const step: WorkflowStep = {
 		name: "Test",
-		command: new Deno.Command("sh", {
-			args: ["-c", "echo $ARTIFACTS_DIR"],
-		}),
+		command: { program: "sh", args: ["-c", "echo $ARTIFACTS_DIR"] },
 	};
 	const completedSteps = new Map<string, StepResult>();
 	const accumulatedOutputs: AccumulatedOutputs = {
@@ -405,36 +400,40 @@ Deno.test("executeStep sets ARTIFACTS_DIR environment variable", async () => {
 	}
 });
 
-Deno.test("executeStep restores environment after execution", async () => {
-	// Given: a step and an original environment variable
+Deno.test("executeStep gives the command the accumulated env without changing the process env", async () => {
+	// Given: a process env var that an earlier step's output overrides
 	const originalValue = Deno.env.get("TEST_VAR");
 	Deno.env.set("TEST_VAR", "original");
-
 	const step: WorkflowStep = {
 		name: "Test",
-		command: new Deno.Command("echo", { args: ["test"] }),
+		command: { program: "sh", args: ["-c", 'printf "%s" "$TEST_VAR"'] },
 	};
 	const accumulatedOutputs: AccumulatedOutputs = {
 		env: new Map([["TEST_VAR", "modified"]]),
 		context: new Map(),
 	};
 
-	// When: executing the step
-	await executeStep({
-		step,
-		completedSteps: new Map(),
-		accumulatedOutputs,
-		artifactsDir: "/tmp",
-	});
+	try {
+		// When: executing the step
+		const result = await executeStep({
+			step,
+			completedSteps: new Map(),
+			accumulatedOutputs,
+			artifactsDir: "/tmp",
+		});
 
-	// Then: environment should be restored
-	assertEquals(Deno.env.get("TEST_VAR"), "original");
-
-	// Cleanup
-	if (originalValue === undefined) {
-		Deno.env.delete("TEST_VAR");
-	} else {
-		Deno.env.set("TEST_VAR", originalValue);
+		// Then: the command saw the override, and the process env never changed
+		assertEquals(
+			new TextDecoder().decode(ranResult(result).output?.stdout),
+			"modified",
+		);
+		assertEquals(Deno.env.get("TEST_VAR"), "original");
+	} finally {
+		if (originalValue === undefined) {
+			Deno.env.delete("TEST_VAR");
+		} else {
+			Deno.env.set("TEST_VAR", originalValue);
+		}
 	}
 });
 
@@ -442,7 +441,7 @@ Deno.test("executeStep captures outputs when captureOutputs is defined", async (
 	// Given: a step with captureOutputs function
 	const step: WorkflowStep = {
 		name: "Test",
-		command: new Deno.Command("echo", { args: ["test"] }),
+		command: { program: "echo", args: ["test"] },
 		captureOutputs: (_output) => ({
 			env: { TEST_ENV: "value" },
 			context: { testData: 42 },
@@ -465,4 +464,52 @@ Deno.test("executeStep captures outputs when captureOutputs is defined", async (
 	// Then: outputs should be captured
 	assertEquals(ranResult(result).outputs?.env?.TEST_ENV, "value");
 	assertEquals(ranResult(result).outputs?.context?.testData, 42);
+});
+
+Deno.test("executeStep gives parallel steps their own env without touching the process env", async () => {
+	// Given: two steps run in parallel, each with its own accumulated env var;
+	// the first is still running when the second starts
+	const before = Deno.env.get("ONLY_FIRST");
+	const first = executeStep({
+		step: {
+			name: "First",
+			command: {
+				program: "sh",
+				args: ["-c", 'sleep 0.2; printf "%s|%s" "$ONLY_FIRST" "$ONLY_SECOND"'],
+			},
+		},
+		completedSteps: new Map(),
+		accumulatedOutputs: {
+			env: new Map([["ONLY_FIRST", "first"]]),
+			context: new Map(),
+		},
+		artifactsDir: "/tmp/first",
+	});
+	const second = executeStep({
+		step: {
+			name: "Second",
+			command: {
+				program: "sh",
+				args: ["-c", 'printf "%s|%s" "$ONLY_FIRST" "$ONLY_SECOND"'],
+			},
+		},
+		completedSteps: new Map(),
+		accumulatedOutputs: {
+			env: new Map([["ONLY_SECOND", "second"]]),
+			context: new Map(),
+		},
+		artifactsDir: "/tmp/second",
+	});
+
+	// When: both finish
+	const [firstResult, secondResult] = await Promise.all([first, second]);
+
+	// Then: each saw only its own var, and the process env is unchanged
+	const decoder = new TextDecoder();
+	assertEquals(decoder.decode(ranResult(firstResult).output?.stdout), "first|");
+	assertEquals(
+		decoder.decode(ranResult(secondResult).output?.stdout),
+		"|second",
+	);
+	assertEquals(Deno.env.get("ONLY_FIRST"), before);
 });

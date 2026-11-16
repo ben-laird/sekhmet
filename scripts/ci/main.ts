@@ -1,5 +1,11 @@
 // deno-coverage-ignore-file
-import { runWorkflow, type WorkflowStep } from "@/mod.ts";
+import { fromFileUrl } from "@std/path";
+import {
+	runWorkflow,
+	type StepCommand,
+	type StepOutputs,
+	type WorkflowStep,
+} from "@/mod.ts";
 
 /**
  * Exit codes for CI workflow failures.
@@ -22,6 +28,10 @@ export const EXIT_CODES = {
 	DENO_CHECK_FAILED: 7,
 	/** Exit code when removing local coverage data fails */
 	CLEANUP_FAILED: 8,
+	/** Exit code when the publish-readiness checks fail */
+	PUBLISH_READINESS_FAILED: 9,
+	/** Exit code when the coverage summary cannot be built */
+	COVERAGE_SUMMARY_FAILED: 10,
 } as const;
 
 /**
@@ -48,8 +58,9 @@ export function biomeCiCommand({
 	paths = [],
 }: {
 	paths?: string[];
-} = {}): Deno.Command {
-	return new Deno.Command("deno", {
+} = {}): StepCommand {
+	return {
+		program: "deno",
 		args: [
 			"run",
 			"--no-prompt",
@@ -59,12 +70,40 @@ export function biomeCiCommand({
 			"ci",
 			...paths,
 		],
-	});
+	};
+}
+
+/**
+ * A publish-readiness run (see `readiness.ts`):
+ * - `doc-lint`: `deno doc --lint` per workspace member over its export set,
+ *   which is what JSR documents
+ * - `static`: README/LICENSE, exports, imports, `publish.exclude`,
+ *   Given/When/Then and README/JSDoc specifier checks
+ *
+ * Known failures are allowlisted in `src/readiness/allowlisted.ts`.
+ *
+ * @param mode - Which checks to run
+ * @returns The command to run
+ */
+export function readinessCommand(mode: "doc-lint" | "static"): StepCommand {
+	return {
+		program: "deno",
+		args: [
+			"run",
+			"--no-prompt",
+			"--allow-read",
+			"--allow-env",
+			"--allow-run=deno",
+			fromFileUrl(new URL("./readiness.ts", import.meta.url)),
+			mode,
+		],
+	};
 }
 
 /**
  * The CI workflow's steps for an environment:
- * - Parallel linting (Deno lint, Biome check, documentation lint, JSR dry run)
+ * - Parallel linting (Deno lint, Biome check, per-package documentation lint,
+ *   publish readiness, JSR dry run)
  * - Type checking
  * - Testing with coverage
  * - Coverage reporting
@@ -79,13 +118,13 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 			name: "Deno Lint",
 			exitCode: EXIT_CODES.DENO_LINT_FAILED,
 
-			command: new Deno.Command("deno", { args: ["lint"] }),
+			command: { program: "deno", args: ["lint"] },
 		},
 		{
 			name: "Deno Check",
 			exitCode: EXIT_CODES.DENO_CHECK_FAILED,
 
-			command: new Deno.Command("deno", { args: ["check"] }),
+			command: { program: "deno", args: ["check"] },
 		},
 		{
 			name: "Biome Check",
@@ -95,27 +134,27 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 		},
 		{
 			name: "Documentation Lint",
+			showOutput: (status) => isCI || status === "failed",
 			exitCode: EXIT_CODES.DOC_LINT_FAILED,
 
-			command: new Deno.Command("deno", {
-				args: ["doc", "--lint", "./**/*.ts"],
-			}),
+			command: readinessCommand("doc-lint"),
 		},
+		{
+			name: "Publish Readiness",
+			showOutput: (status) => isCI || status === "failed",
+			exitCode: EXIT_CODES.PUBLISH_READINESS_FAILED,
+
+			command: readinessCommand("static"),
+		},
+		// `dv validate` (#5) joins here once the .dv/ release config lands (#6)
 		{
 			name: "JSR Publish Dry Run",
 			exitCode: EXIT_CODES.JSR_DRY_RUN_FAILED,
 
-			command: new Deno.Command("deno", {
-				args: (() => {
-					const args = ["publish", "--dry-run"];
-
-					if (isAI) {
-						args.push("--allow-dirty");
-					}
-
-					return args;
-				})(),
-			}),
+			command: {
+				program: "deno",
+				args: ["publish", "--dry-run", ...(isAI ? ["--allow-dirty"] : [])],
+			},
 		},
 
 		// Run tests (blocked if lint fails)
@@ -125,7 +164,8 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 			showOutput: (status) => isCI || status === "failed",
 			exitCode: EXIT_CODES.TESTS_FAILED,
 
-			command: new Deno.Command("deno", {
+			command: {
+				program: "deno",
 				args: [
 					"test",
 					"--doc",
@@ -139,7 +179,7 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 					// Drop profiles left by an earlier run whose cleanup did not run
 					"--clean",
 				],
-			}),
+			},
 		},
 
 		// Show coverage report (blocked if tests failed)
@@ -150,7 +190,20 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 			showOutput: true,
 			exitCode: EXIT_CODES.COVERAGE_FAILED,
 
-			command: new Deno.Command("deno", { args: ["coverage", "--detailed"] }),
+			command: { program: "deno", args: ["coverage", "--detailed"] },
+		},
+
+		// Coverage table on the GitHub job summary, or totals in the AI JSON;
+		// reads the coverage/lcov.info that Deno Test wrote
+		{
+			name: "Coverage Summary",
+			dependsOn: ["Deno Test"],
+			condition: () => isCI || isAI,
+			showOutput: (status) => isCI || status === "failed",
+			exitCode: EXIT_CODES.COVERAGE_SUMMARY_FAILED,
+
+			command: coverageSummaryCommand(isCI ? "github" : "json"),
+			...(isCI ? {} : { captureOutputs: coverageOutputs }),
 		},
 
 		// Local cleanup (runs even if tests failed); CI keeps the coverage data
@@ -158,10 +211,50 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 	];
 }
 
+/**
+ * The coverage summary over `coverage/lcov.info` (see `coverage-summary.ts`):
+ * `github` appends a markdown table to the job summary, `json` prints the
+ * totals for {@linkcode coverageOutputs}.
+ *
+ * @param format - Where the summary goes
+ * @returns The command to run
+ */
+export function coverageSummaryCommand(format: "github" | "json"): StepCommand {
+	return {
+		program: "deno",
+		args: [
+			"run",
+			"--no-prompt",
+			"--allow-read",
+			"--allow-write",
+			"--allow-env",
+			fromFileUrl(new URL("./coverage-summary.ts", import.meta.url)),
+			format,
+		],
+	};
+}
+
+/**
+ * Captures the JSON totals that `coverage-summary.ts json` prints as the
+ * step's `coverage` output, which the AI JSON carries. Output that is not
+ * JSON is captured as `coverageError` instead.
+ *
+ * @param output - The coverage summary command's output
+ * @returns The step outputs
+ */
+export function coverageOutputs(output: Deno.CommandOutput): StepOutputs {
+	const stdout = new TextDecoder().decode(output.stdout);
+	try {
+		return { context: { coverage: JSON.parse(stdout) } };
+	} catch {
+		return { context: { coverageError: `not JSON: ${stdout.slice(0, 200)}` } };
+	}
+}
+
 function cleanupStep(): WorkflowStep {
 	return {
 		name: "Cleanup coverage data",
-		dependsOn: ["Show coverage report"],
+		dependsOn: ["Show coverage report", "Coverage Summary"],
 		continueOnError: true,
 		condition: "always",
 		exitCode: EXIT_CODES.CLEANUP_FAILED,
@@ -182,8 +275,8 @@ export function coverageCleanupCommand({
 	dir = "coverage",
 }: {
 	dir?: string;
-} = {}): Deno.Command {
-	return new Deno.Command("rm", { args: ["-rf", dir] });
+} = {}): StepCommand {
+	return { program: "rm", args: ["-rf", dir] };
 }
 
 /**

@@ -1,5 +1,12 @@
 import { assertEquals } from "@std/assert";
 
 Deno.test("Lab test", () => {
-	assertEquals(1 + 1, 2);
+	// Given: two numbers
+	const [a, b] = [1, 1];
+
+	// When: adding them
+	const sum = a + b;
+
+	// Then: the sum is their total
+	assertEquals(sum, 2);
 });
