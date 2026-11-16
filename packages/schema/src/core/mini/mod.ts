@@ -9,6 +9,20 @@
  */
 
 export {
+	concat,
+	entries,
+	type Flatten,
+	fromError,
+	Issues,
+	isIssues,
+	type Located,
+	locate,
+	type NonEmpty,
+	prefix,
+	toIssues,
+} from "./issues.ts";
+
+export {
 	Async,
 	from,
 	type MaybePromise,
