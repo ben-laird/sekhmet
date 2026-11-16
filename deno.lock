@@ -1358,6 +1358,11 @@
           "npm:zod@^4.1.0"
         ]
       },
+      "scripts/playground": {
+        "dependencies": [
+          "npm:zod@^4.1.0"
+        ]
+      },
       "scripts/release": {
         "dependencies": [
           "npm:zod@^4.1.0"
