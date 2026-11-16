@@ -36,7 +36,17 @@ export const EXIT_CODES = {
 	GENERATED_MAIN_STALE: 11,
 	/** Exit code when `dv validate` rejects the dv config or a Record */
 	DV_VALIDATE_FAILED: 12,
+	/** Exit code when tests outlive {@linkcode TEST_TIMEOUT_MS} and are killed */
+	TESTS_TIMED_OUT: 13,
 } as const;
+
+/**
+ * How long "Deno Test" may run before its process tree is killed: 5 minutes.
+ * The whole suite takes 4–13 s locally, so this leaves over 20x headroom for
+ * a slow or cold CI runner, yet fails a hang within a sixth of the release
+ * job's 30-minute budget instead of eating all of it.
+ */
+export const TEST_TIMEOUT_MS: number = 5 * 60 * 1000;
 
 /**
  * The environment the CI workflow adapts to.
@@ -191,6 +201,7 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 			dependsOn: ["Deno Lint"],
 			showOutput: (status) => isCI || status === "failed",
 			exitCode: EXIT_CODES.TESTS_FAILED,
+			timeout: { ms: TEST_TIMEOUT_MS, exitCode: EXIT_CODES.TESTS_TIMED_OUT },
 
 			command: {
 				program: "deno",
