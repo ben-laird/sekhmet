@@ -14,8 +14,9 @@ happened that cannot happen unless the program is wrong.
    boundary recovers and hands you a `Result`.
 2. **No global state.** There is no default runtime and no module-level hook.
    You create a runtime and run your program inside it.
-3. **Reported once.** Each payload is reported by the innermost boundary that
-   catches it, however many boundaries or runtimes it passes through.
+3. **Reported once per runtime.** Each runtime reports a payload at its
+   innermost boundary that catches it, and never again, however many of its
+   boundaries the payload passes through.
 
 ## Installation
 
@@ -68,12 +69,15 @@ synchronous throw from the function you pass.
 
 Two differences follow from having no global state:
 
-- **The hook runs at the boundary, not at the throw.** Rust calls the hook when
-  `panic!` runs. Here the innermost `catchUnwind` that catches the unwind
-  reports it, and marks the payload so no other boundary reports it again.
-  Payloads that cannot carry that mark (primitives, and frozen or otherwise
-  non-extensible objects) are reported by every boundary that catches them, so
-  throw `Panic`s.
+- **The hook runs at the boundary, not at the throw, once per runtime.** Rust
+  calls its one global hook when `panic!` runs. Here each runtime keeps a
+  private record of the object payloads it has reported or resumed: its
+  innermost `catchUnwind` that catches an unwind reports it, and no other
+  boundary of that runtime reports it again. Every other runtime the payload
+  passes through, such as a library's own runtime, reports it once through its
+  own hook; one runtime can never silence another. Payloads are never mutated.
+  Primitives (strings, `undefined` and so on) can't be recorded, so every
+  boundary that catches one reports it: throw `Panic`s.
 - **A throwing hook does not abort.** Rust aborts on a panic while panicking.
   Here the boundary gives up recovering and throws a `Panic (PanicHook)` whose
   cause holds the original payload and what the hook threw; an outer boundary

@@ -52,11 +52,14 @@ export interface PanicHookFailure {
  * Every runtime is independent; a hook set on one never sees another's
  * unwinds.
  *
- * The hook runs at the innermost boundary that catches an unwind, and each
- * payload is reported at most once across every boundary and runtime, with
- * one exception: a payload that cannot carry a mark (a primitive such as a
- * string or `undefined`, or a frozen, sealed or otherwise non-extensible
- * object) is reported by every boundary that catches it.
+ * Reporting is per runtime: the innermost boundary of a runtime that catches
+ * an object payload reports it, and that runtime never reports it again. Each
+ * other runtime the payload passes through reports it once through its own
+ * hook. Payloads are never mutated; the record lives in the runtime.
+ *
+ * A primitive payload (a string, `undefined` and so on) cannot be recorded
+ * without leaking or silencing a later, equal throw, so every boundary that
+ * catches one reports it, even after {@linkcode PanicRuntime.resumeUnwind}.
  */
 export interface PanicRuntime {
 	/**
@@ -105,8 +108,9 @@ export interface PanicRuntime {
 	/**
 	 * Throws `payload` unchanged without reporting it, like Rust's
 	 * `resume_unwind`. Use it to pass a caught payload on to an outer
-	 * boundary, which will not report it again (unless the payload cannot
-	 * carry a mark).
+	 * boundary. No boundary of this runtime reports an object payload it
+	 * resumed; another runtime's boundary still reports it once. A primitive
+	 * payload is reported by every boundary that catches it.
 	 *
 	 * @param payload The payload to re-throw, usually an `Err` from a boundary
 	 * @returns Never; it always throws
@@ -173,9 +177,17 @@ export const defaultPanicHook: PanicHook = ({ payload, stack }) => {
  */
 export function definePanicRuntime(): PanicRuntime {
 	let hook: PanicHook = defaultPanicHook;
+	// Object payloads this runtime has reported or resumed; adding a Proxy runs no trap
+	const reported = new WeakSet<object>();
+
+	const markReported = (payload: unknown): void => {
+		if (isObjectLike(payload)) {
+			reported.add(payload);
+		}
+	};
 
 	const report = (payload: unknown): void => {
-		if (isReported(payload)) {
+		if (isObjectLike(payload) && reported.has(payload)) {
 			return;
 		}
 		markReported(payload);
@@ -211,6 +223,7 @@ export function definePanicRuntime(): PanicRuntime {
 			}
 		},
 		resumeUnwind: (payload: unknown): never => {
+			markReported(payload);
 			throw payload;
 		},
 		setHook: (next: PanicHook): void => {
@@ -224,24 +237,10 @@ export function definePanicRuntime(): PanicRuntime {
 	};
 }
 
-/** Marks a payload as reported. A constant identity, never mutated. */
-const REPORTED: unique symbol = Symbol("@sekhmet/panic/reported");
-
 function isObjectLike(value: unknown): value is object {
 	return (
 		(typeof value === "object" && value !== null) || typeof value === "function"
 	);
-}
-
-function isReported(payload: unknown): boolean {
-	return isObjectLike(payload) && Object.hasOwn(payload, REPORTED);
-}
-
-function markReported(payload: unknown): void {
-	if (isObjectLike(payload)) {
-		// Fails (returns false) on a non-extensible object, which stays unmarked
-		Reflect.defineProperty(payload, REPORTED, { value: true });
-	}
 }
 
 function stackOf(payload: unknown): string | undefined {

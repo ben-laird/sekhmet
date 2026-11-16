@@ -121,23 +121,77 @@ Deno.test("Nested boundaries report a payload only at the innermost", () => {
 	assertStrictEquals(unwrapErr(outer), payload);
 });
 
-Deno.test("Nested runtimes report a payload only once", () => {
+Deno.test("Every runtime a payload passes through reports it once", () => {
 	// Given: an outer and an inner runtime, each with a recording hook
 	const outer = recordingRuntime();
 	const inner = recordingRuntime();
 	const payload = new Error("crosses runtimes");
 
-	// When: the inner runtime catches it and the outer one re-catches it
+	// When: the inner runtime catches it twice and the outer one twice
 	outer.runtime.catchUnwind(() => {
-		inner.runtime.catchUnwind(() => {
+		outer.runtime.catchUnwind(() => {
+			inner.runtime.catchUnwind(() => {
+				inner.runtime.catchUnwind(() => {
+					throw payload;
+				});
+				throw payload;
+			});
 			throw payload;
 		});
 		throw payload;
 	});
 
-	// Then: only the inner (innermost) runtime reported it
+	// Then: each runtime's hook saw it exactly once
 	assertEquals(inner.reports.length, 1);
-	assertEquals(outer.reports.length, 0);
+	assertEquals(outer.reports.length, 1);
+});
+
+Deno.test("Reporting never mutates the payload", () => {
+	// Given: a runtime and an Error payload
+	const { runtime } = recordingRuntime();
+	const payload = new Error("untouched");
+	const keysBefore = Reflect.ownKeys(payload);
+
+	// When: the runtime catches and reports it
+	runtime.catchUnwind(() => {
+		throw payload;
+	});
+
+	// Then: the payload has exactly the own keys it had before
+	assertEquals(Reflect.ownKeys(payload), keysBefore);
+});
+
+Deno.test("A frozen object payload is reported once per runtime", () => {
+	// Given: a runtime and a frozen payload
+	const { runtime, reports } = recordingRuntime();
+	const payload = Object.freeze(new Error("frozen"));
+
+	// When: an inner boundary catches it and an outer one re-catches it
+	runtime.catchUnwind(() => {
+		runtime.catchUnwind(() => {
+			throw payload;
+		});
+		throw payload;
+	});
+
+	// Then: the hook ran once
+	assertEquals(reports.length, 1);
+});
+
+Deno.test("Nested catchUnwindAsync boundaries report a payload once", async () => {
+	// Given: a runtime with a recording hook and a Panic
+	const { runtime, reports } = recordingRuntime();
+	const payload = boom();
+
+	// When: an inner async boundary catches it and an outer one re-catches it
+	const outer = await runtime.catchUnwindAsync(async () => {
+		await runtime.catchUnwindAsync(() => Promise.reject(payload));
+		throw payload;
+	});
+
+	// Then: the hook ran once and the outer boundary holds the payload
+	assertEquals(reports.length, 1);
+	assertStrictEquals(unwrapErr(outer), payload);
 });
 
 Deno.test("resumeUnwind() hands the outer boundary the same payload without re-reporting", () => {
@@ -171,11 +225,34 @@ Deno.test("resumeUnwind() throws the payload unchanged and never reports", () =>
 	assertEquals(reports, []);
 });
 
-Deno.test("Payloads that cannot carry a mark are reported at every boundary", async (t) => {
+Deno.test("resumeUnwind() of a fresh payload is never reported by its own runtime", () => {
+	// Given: a runtime with a recording hook
+	const { runtime, reports } = recordingRuntime();
+
+	// When: a boundary of that runtime catches a payload it never saw
+	runtime.catchUnwind(() => runtime.resumeUnwind(new Error("fresh")));
+
+	// Then: the hook never ran
+	assertEquals(reports, []);
+});
+
+Deno.test("resumeUnwind() into another runtime is reported there once", () => {
+	// Given: runtimes A and B, each with a recording hook
+	const a = recordingRuntime();
+	const b = recordingRuntime();
+
+	// When: A resumes a payload into B's boundary
+	b.runtime.catchUnwind(() => a.runtime.resumeUnwind(new Error("handed off")));
+
+	// Then: B, which never saw it, reports it; A does not
+	assertEquals(a.reports, []);
+	assertEquals(b.reports.length, 1);
+});
+
+Deno.test("Primitive payloads are reported at every boundary that catches them", async (t) => {
 	const payloads: [kind: string, payload: unknown][] = [
 		["string", "plain string"],
 		["undefined", undefined],
-		["frozen object", Object.freeze(new Error("frozen"))],
 	];
 
 	for (const [kind, payload] of payloads) {
@@ -277,6 +354,33 @@ Deno.test("A throwing hook panics out of the boundary", async (t) => {
 		assertInstanceOf(thrown, Panic);
 		assertEquals(thrown.name, "Panic (PanicHook)");
 		assertEquals(thrown.cause, { payload, thrown: hookError });
+	});
+
+	await t.step("the original payload stays reported in that runtime", () => {
+		// Given: a runtime whose hook throws once, then records
+		const runtime = definePanicRuntime();
+		runtime.setHook(() => {
+			throw new Error("hook broke");
+		});
+		const payload = boom();
+		assertThrows(() =>
+			runtime.catchUnwind(() => {
+				throw payload;
+			}),
+		);
+		const reports: PanicHookInfo[] = [];
+		runtime.setHook((info) => {
+			reports.push(info);
+		});
+
+		// When: the same runtime catches the original payload again
+		const result = runtime.catchUnwind(() => {
+			throw payload;
+		});
+
+		// Then: it is recovered without being reported a second time
+		assertStrictEquals(unwrapErr(result), payload);
+		assertEquals(reports, []);
 	});
 
 	await t.step("an outer boundary reports and catches it", () => {

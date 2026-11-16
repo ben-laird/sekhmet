@@ -69,14 +69,22 @@ const result = mapErr(
 Pass a promise-returning function to `catchUnwindAsync`, not `catchUnwind`;
 `catchUnwind` would return the promise itself as an `Ok` value.
 
-## Reported once
+## Reported once per runtime
 
-The hook runs at the **innermost boundary that catches** an unwind. That
-boundary marks the payload as reported, and every other boundary, in this
-runtime or any other, skips the hook for a marked payload.
+Each runtime holds a private record (a `WeakSet`) of the object payloads it
+has reported. The hook runs at the runtime's **innermost boundary that
+catches** an unwind; that boundary records the payload, and every other
+boundary of the same runtime skips the hook for it. The payload itself is
+never touched.
+
+The record belongs to the runtime, so reporting is per runtime. A payload that
+passes through a library's runtime and then yours is reported once by each,
+through each runtime's own hook. A library can never silence your hook, and
+two copies of this package simply act as two runtimes.
 
 To pass a caught payload on to an outer boundary, use `resumeUnwind`. It
-re-throws the payload unchanged and never reports it:
+re-throws the payload unchanged, never reports it, and records it, so no
+boundary of the same runtime reports it afterwards:
 
 ```ts ignore
 const inner = runtime.catchUnwind(step);
@@ -85,17 +93,18 @@ if (isErr(inner) && !recoverable(unwrapErr(inner))) {
 }
 ```
 
-The mark lives on the payload, so only objects that can take a new property
-carry it. Primitives (strings, numbers, `undefined` and so on) and frozen,
-sealed or otherwise non-extensible objects cannot, and are reported by every
-boundary that catches them. Throw a `Panic` (or another `Error`) to get the
-once-only guarantee.
+Primitives (strings, numbers, `undefined` and so on) can't go in a `WeakSet`.
+Recording them in a `Set` instead would leak, and worse, would silence every
+later throw of an equal value, which is a different unwind. So every boundary
+that catches a primitive reports it, even after `resumeUnwind`: a duplicate
+report is safer than a lost one. Throw a `Panic` (or another `Error`) to get
+the once-only guarantee.
 
 ## When the hook throws
 
 Rust aborts the process when a panic hook panics. JavaScript has no portable
 abort, so the boundary instead stops recovering: it throws a new `Panic` named
-`Panic (PanicHook)`, whose cause is `{ payload, thrown }`. The original payload
-is marked as reported. An outer boundary then reports and catches the
+`Panic (PanicHook)`, whose cause is `{ payload, thrown }`. The runtime still
+records the original payload as reported. An outer boundary then reports and catches the
 `Panic (PanicHook)` like any other unwind; with no outer boundary, the host
 reports it as an uncaught error.
