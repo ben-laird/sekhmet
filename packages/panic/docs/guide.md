@@ -66,8 +66,10 @@ const result = mapErr(
 );
 ```
 
-Pass a promise-returning function to `catchUnwindAsync`, not `catchUnwind`;
-`catchUnwind` would return the promise itself as an `Ok` value.
+`catchUnwindAsync` accepts any `PromiseLike`, so thenables work too. Passing a
+promise-returning function to `catchUnwind` is a type error naming
+`useCatchUnwindAsyncForPromises`: that boundary would return the promise
+itself as an `Ok` value and miss its rejection.
 
 ## Reported once per runtime
 

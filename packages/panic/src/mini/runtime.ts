@@ -74,11 +74,18 @@ export interface PanicRuntime {
 	 * mirrors Rust aborting on a panic while panicking, without killing the
 	 * host; an outer boundary reports and catches it as a new unwind.
 	 *
-	 * Use {@linkcode PanicRuntime.catchUnwindAsync} for async work: a promise
-	 * returned here is just an `Ok` value.
+	 * Async work belongs in {@linkcode PanicRuntime.catchUnwindAsync}: passing
+	 * a function that returns a `PromiseLike` here is a type error ("Arguments
+	 * for the rest parameter 'useCatchUnwindAsyncForPromises' were not
+	 * provided"), since this boundary would return the promise as an `Ok` and
+	 * miss its rejection. The check is type-only and costs nothing at runtime.
+	 * It rejects a return type that is wholly `PromiseLike`; `any` and `never`
+	 * pass.
 	 *
 	 * @template T The return type of `fn`
-	 * @param fn The work to run
+	 * @param fn The synchronous work to run
+	 * @param useCatchUnwindAsyncForPromises Never passed; it exists only to
+	 *   reject promise-returning `fn`s
 	 * @returns `Ok` of the return value, or `Err` of the thrown payload
 	 *
 	 * @example
@@ -86,7 +93,16 @@ export interface PanicRuntime {
 	 * const result = runtime.catchUnwind(() => JSON.parse(text));
 	 * ```
 	 */
-	readonly catchUnwind: <T>(fn: () => T) => Result<T, unknown>;
+	readonly catchUnwind: <T>(
+		fn: () => T,
+		...useCatchUnwindAsyncForPromises: 0 extends 1 & T
+			? []
+			: [T] extends [never]
+				? []
+				: [T] extends [PromiseLike<unknown>]
+					? [useCatchUnwindAsyncForPromises: never]
+					: []
+	) => Result<T, unknown>;
 	/**
 	 * The async form of {@linkcode PanicRuntime.catchUnwind}: it catches a
 	 * rejection of the returned promise or thenable, a `then` that throws, and
@@ -202,7 +218,8 @@ export function definePanicRuntime(): PanicRuntime {
 	};
 
 	return {
-		catchUnwind: <T>(fn: () => T): Result<T, unknown> => {
+		// The guard rest is type-only: never passed, so never read
+		catchUnwind: (fn, ..._useCatchUnwindAsyncForPromises) => {
 			try {
 				return Ok(fn());
 			} catch (payload: unknown) {

@@ -88,6 +88,28 @@ Deno.test("catchUnwind() turns every throw into Err of the same payload", async 
 	}
 });
 
+Deno.test("catchUnwind() rejects promise-returning functions at the type level", () => {
+	// Given: a runtime
+	const { runtime } = recordingRuntime();
+
+	// When: passing async work to the sync boundary
+	// Then: each call is a type error pointing at catchUnwindAsync
+	// @ts-expect-error: a Promise is async work; use catchUnwindAsync
+	runtime.catchUnwind(() => Promise.resolve(1));
+	// @ts-expect-error: a thenable is async work; use catchUnwindAsync
+	runtime.catchUnwind(() => thenable<number>((resolve) => resolve(1)));
+
+	// When: passing functions that return any, or never return
+	const parsed = runtime.catchUnwind(() => JSON.parse("1"));
+	const diverged = runtime.catchUnwind(() =>
+		panic({ message: "m", cause: null }),
+	);
+
+	// Then: both type-check and behave as usual
+	assertEquals(parsed, Ok(1));
+	assert(isErr(diverged));
+});
+
 Deno.test("catchUnwind() reports the payload and its stack to the hook once", () => {
 	// Given: a runtime with a recording hook and a Panic
 	const { runtime, reports } = recordingRuntime();
