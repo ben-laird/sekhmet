@@ -46,11 +46,17 @@ deno task fmt
 `CI_AI=true deno task ci` to verify your work passes all checks before
 considering the task complete.
 
-**AI Mode (`CI_AI=true`)**: Always use the `CI_AI=true` environment variable
-when running CI as an AI agent. This mode:
+**Commit gate**: with the hooks on (`deno task hooks`), `.githooks/pre-commit`
+refuses a commit whose staged tree has no green `deno task ci` run
+(markdown-only commits are exempt unless they touch a code block
+`deno test --doc` runs). Stage first, run the gate, then commit;
+never bypass it with `--no-verify`. See CONTRIBUTING.md, "Commit gate".
 
-- Allows dirty worktree (JSR publish dry-run won't fail on uncommitted changes)
-- Outputs structured JSON for programmatic parsing
+**AI Mode (`CI_AI=true`)**: Always use the `CI_AI=true` environment variable
+when running CI as an AI agent. This mode outputs structured JSON for
+programmatic parsing. Every local run (AI or not) allows a dirty worktree: the
+JSR publish dry run passes `--allow-dirty`, so staged changes can be gated
+before they are committed; only CI (`CI=true`) requires a clean tree.
 
 **Handling CI Failures**: If CI fails:
 

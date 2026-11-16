@@ -1,0 +1,6 @@
+#!/bin/sh
+# Commit gate: refuses a commit whose staged tree has no green `deno task ci`
+# run, unless it changes markdown only (scripts/ci/commit-gate.ts).
+# Turn it on once per clone with `deno task hooks`.
+exec deno run --quiet --no-prompt --allow-run=git --allow-read \
+	"$(git rev-parse --show-toplevel)/scripts/ci/commit-gate.ts" "$@"

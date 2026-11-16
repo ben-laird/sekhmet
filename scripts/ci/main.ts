@@ -7,6 +7,17 @@ import {
 	type StepTimeout,
 	type WorkflowStep,
 } from "@/mod.ts";
+import {
+	greenMarkerPath,
+	hooksPath,
+	stagedSnapshot,
+	writeGreenMarker,
+} from "@/src/git.ts";
+import {
+	type GreenRunDecision,
+	greenRunDecision,
+	hooksWarning,
+} from "@/src/green-run.ts";
 
 /**
  * Exit codes for CI workflow failures.
@@ -183,6 +194,21 @@ export function dvValidateCommand(): StepCommand {
 }
 
 /**
+ * The JSR publish dry run. A local run allows a dirty tree: the commit gate
+ * runs it on staged, uncommitted changes, which a clean-tree dry run always
+ * refuses. CI checks out a clean commit, so it keeps the clean-tree check.
+ *
+ * @param options.isCI - Running in a CI service
+ * @returns The command to run
+ */
+export function jsrDryRunCommand({ isCI }: { isCI: boolean }): StepCommand {
+	return {
+		program: "deno",
+		args: ["publish", "--dry-run", ...(isCI ? [] : ["--allow-dirty"])],
+	};
+}
+
+/**
  * The CI workflow's steps for a run:
  * - Parallel linting (Deno lint, Biome check, per-package documentation lint,
  *   publish readiness, generated-main freshness, `dv validate`, JSR dry run)
@@ -248,10 +274,7 @@ export function ciSteps({ isCI, isAI, coverageDir }: CIRun): WorkflowStep[] {
 			name: "JSR Publish Dry Run",
 			exitCode: EXIT_CODES.JSR_DRY_RUN_FAILED,
 
-			command: {
-				program: "deno",
-				args: ["publish", "--dry-run", ...(isAI ? ["--allow-dirty"] : [])],
-			},
+			command: jsrDryRunCommand({ isCI }),
 		},
 
 		// Run tests (blocked if lint fails)
@@ -393,17 +416,49 @@ export function coverageCleanupCommand({ dir }: { dir: string }): StepCommand {
 
 /**
  * Main entry point for the CI workflow. Reads the environment, picks this
- * run's coverage directory and runs {@linkcode ciSteps}.
+ * run's coverage directory, runs {@linkcode ciSteps}, records a green run
+ * for the staged tree when the run earns one (see `src/green-run.ts`) and
+ * exits with the workflow's exit code.
  */
 export async function main(): Promise<void> {
 	const isCI = Deno.env.get("CI") === "true";
-	await runWorkflow(
+	const warning = isCI ? undefined : hooksWarning(await hooksPath());
+	if (warning !== undefined) console.error(warning);
+	const before = await stagedSnapshot();
+	const result = await runWorkflow(
 		ciSteps({
 			isCI,
 			isAI: Deno.env.get("CI_AI") === "true",
 			coverageDir: await coverageDirFor({ isCI }),
 		}),
 	);
+	const after = await stagedSnapshot();
+	console.error(
+		await recordGreenRun(
+			greenRunDecision({ steps: result.steps, before, after }),
+		),
+	);
+	Deno.exit(result.exitCode);
+}
+
+/**
+ * Carries out a {@linkcode GreenRunDecision}: writes the green marker that
+ * the commit gate's `pre-commit` hook reads, or leaves it alone.
+ *
+ * @param decision - Whether to record the run
+ * @returns The one line to print about it
+ */
+async function recordGreenRun(decision: GreenRunDecision): Promise<string> {
+	if (decision.kind === "skip") {
+		return `No green run recorded: ${decision.reason}.`;
+	}
+	const path = await greenMarkerPath();
+	const written = path.ok
+		? await writeGreenMarker({ path: path.value, tree: decision.tree })
+		: path;
+	return written.ok
+		? `Recorded a green run for staged tree ${decision.tree}.`
+		: `No green run recorded: ${written.error}.`;
 }
 
 if (import.meta.main) {
