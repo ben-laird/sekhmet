@@ -21,6 +21,14 @@ import {
  * @template I The input type
  * @template O The output type
  * @template E The error type
+ *
+ * @example
+ * ```ts
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import type { Parser } from "@sekhmet/schema/core/mini";
+ *
+ * const length: Parser<string, number, never> = (input) => Ok(input.length);
+ * ```
  */
 export type Parser<I, O, E> = (input: I) => MaybePromise<Result<O, E>>;
 
@@ -33,6 +41,19 @@ export type Parser<I, O, E> = (input: I) => MaybePromise<Result<O, E>>;
  * @template I The input type
  * @template O The output type
  * @template E The error type
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const even = new Schema((input: number) =>
+ * 	input % 2 === 0 ? Ok(input) : Err("odd"),
+ * );
+ *
+ * assertEquals(unwrap(parseSync(even, 4)), 4);
+ * ```
  */
 export class Schema<I, O, E> extends Struct<Parser<I, O, E>> {}
 
@@ -130,6 +151,20 @@ export type ErrorOf<S extends AnySchema> =
  * @param self The schema to use for parsing
  * @param input The input to parse
  * @returns A Potential containing the parse result
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unionKinds } from "@sekhmet/enum/core/mini/exit";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import { parse, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const now = new Schema((input: string) => Ok(input));
+ * const later = new Schema((input: string) => Promise.resolve(Ok(input)));
+ *
+ * assertEquals(unionKinds(parse(now, "a")), "Sync");
+ * assertEquals(unionKinds(parse(later, "a")), "Async");
+ * ```
  */
 export function parse<I, O, E>(
 	self: Schema<I, O, E>,
@@ -142,6 +177,15 @@ export function parse<I, O, E>(
  * Error variants that can occur during synchronous parsing.
  *
  * @template E The underlying parse error type
+ *
+ * @example
+ * ```ts
+ * import { assertType, type IsExact } from "@std/testing/types";
+ * import type { ParseSyncErrorVariants } from "@sekhmet/schema/core/mini";
+ *
+ * type Variants = ParseSyncErrorVariants<string>;
+ * assertType<IsExact<Variants, [kind: "UnexpectedAsyncParse"] | [kind: "ParseError", error: string]>>(true);
+ * ```
  */
 export type ParseSyncErrorVariants<E> = Split<{
 	UnexpectedAsyncParse: [];
@@ -155,6 +199,19 @@ export type ParseSyncErrorVariants<E> = Split<{
  * or a wrapped parse error from the schema.
  *
  * @template E The underlying parse error type
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { match } from "@sekhmet/enum/core/mini/exit";
+ * import { ParseError } from "@sekhmet/schema/core/mini";
+ *
+ * const message = match(ParseError("odd"))({
+ * 	UnexpectedAsyncParse: () => "the schema is async",
+ * 	ParseError: (error) => `rejected: ${error}`,
+ * });
+ * assertEquals(message, "rejected: odd");
+ * ```
  */
 export class ParseSyncError<E> extends Enum<ParseSyncErrorVariants<E>> {}
 
@@ -166,6 +223,15 @@ export class ParseSyncError<E> extends Enum<ParseSyncErrorVariants<E>> {}
  *
  * @template E The underlying parse error type
  * @returns A ParseSyncError variant
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unionKinds } from "@sekhmet/enum/core/mini/exit";
+ * import { UnexpectedAsyncParse } from "@sekhmet/schema/core/mini";
+ *
+ * assertEquals(unionKinds(UnexpectedAsyncParse()), "UnexpectedAsyncParse");
+ * ```
  */
 export function UnexpectedAsyncParse<E>(): ParseSyncError<E> {
 	return new ParseSyncError("UnexpectedAsyncParse");
@@ -177,6 +243,15 @@ export function UnexpectedAsyncParse<E>(): ParseSyncError<E> {
  * @template E The parse error type
  * @param error The error to wrap
  * @returns A ParseSyncError variant
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { union } from "@sekhmet/enum/core/mini/exit";
+ * import { ParseError } from "@sekhmet/schema/core/mini";
+ *
+ * assertEquals(union(ParseError("odd")), "odd");
+ * ```
  */
 export function ParseError<E>(error: E): ParseSyncError<E> {
 	return new ParseSyncError("ParseError", error);
@@ -194,6 +269,20 @@ export function ParseError<E>(error: E): ParseSyncError<E> {
  * @param self The schema to use for parsing
  * @param input The input to parse
  * @returns A Result that is either the output or a ParseSyncError
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unionKinds } from "@sekhmet/enum/core/mini/exit";
+ * import { Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const now = new Schema((input: string) => Ok(input));
+ * const later = new Schema((input: string) => Promise.resolve(Ok(input)));
+ *
+ * assertEquals(unwrap(parseSync(now, "a")), "a");
+ * assertEquals(unionKinds(unwrapErr(parseSync(later, "a"))), "UnexpectedAsyncParse");
+ * ```
  */
 export function parseSync<I, O, E>(
 	self: Schema<I, O, E>,
@@ -217,6 +306,17 @@ export function parseSync<I, O, E>(
  * @param self The schema to use for parsing
  * @param input The input to parse
  * @returns A Promise of the parse result
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseAsync, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const later = new Schema((input: string) => Promise.resolve(Ok(input)));
+ *
+ * assertEquals(unwrap(await parseAsync(later, "a")), "a");
+ * ```
  */
 export function parseAsync<I, O, E>(
 	self: Schema<I, O, E>,
@@ -241,6 +341,18 @@ export function parseAsync<I, O, E>(
  * @param self The schema to map
  * @param mapping The transformation function
  * @returns A new schema with transformed output
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { map, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const text = new Schema((input: string) => Ok(input));
+ * const length = map(text, (value) => value.length);
+ *
+ * assertEquals(unwrap(parseSync(length, "four")), 4);
+ * ```
  */
 export function map<I, O, E, P>(
 	self: Schema<I, O, E>,
@@ -270,6 +382,19 @@ export function map<I, O, E, P>(
  * @param self The schema to map
  * @param mapping The error transformation function
  * @returns A new schema with transformed errors
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { union } from "@sekhmet/enum/core/mini/exit";
+ * import { Err, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { mapErr, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const reject = new Schema((_input: string) => Err(404));
+ * const described = mapErr(reject, (code) => `error ${code}`);
+ *
+ * assertEquals(union(unwrapErr(parseSync(described, "a"))), "error 404");
+ * ```
  */
 export function mapErr<I, O, E, F>(
 	self: Schema<I, O, E>,
@@ -299,6 +424,20 @@ export function mapErr<I, O, E, F>(
  * @param self The first schema
  * @param nextSchema The second schema to apply to successful results
  * @returns A new schema representing the pipeline
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync, pipe, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const digits = new Schema((input: string) =>
+ * 	/^\d+$/.test(input) ? Ok(input) : Err("not digits"),
+ * );
+ * const integer = new Schema((input: string) => Ok(Number(input)));
+ *
+ * assertEquals(unwrap(parseSync(pipe(digits, integer), "42")), 42);
+ * ```
  */
 export function pipe<I, O, E, P>(
 	self: Schema<I, O, E>,
@@ -333,6 +472,19 @@ export function pipe<I, O, E, P>(
  * @param error The error to return if the filter fails
  * @param filtering The type guard predicate
  * @returns A new schema with filtered output
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { union } from "@sekhmet/enum/core/mini/exit";
+ * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { filter, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const integer = new Schema((input: number) => Ok<number, string>(input));
+ * const positive = filter(integer, "not positive", (n): n is number => n > 0);
+ *
+ * assertEquals(union(unwrapErr(parseSync(positive, -1))), "not positive");
+ * ```
  */
 export function filter<I, O, E, P extends O>(
 	self: Schema<I, O, E>,

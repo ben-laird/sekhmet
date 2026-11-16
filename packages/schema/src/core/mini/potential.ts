@@ -5,6 +5,15 @@ import { match } from "@sekhmet/enum/core/mini/exit";
  * Represents a value that may be available synchronously or asynchronously.
  *
  * @template T The type of the contained value
+ *
+ * @example
+ * ```ts
+ * import { assertType, type IsExact } from "@std/testing/types";
+ * import type { PotentialVariants } from "@sekhmet/schema/core/mini";
+ *
+ * type Variants = PotentialVariants<number>;
+ * assertType<IsExact<Variants, [kind: "Sync", value: number] | [kind: "Async", promise: Promise<number>]>>(true);
+ * ```
  */
 export type PotentialVariants<T> = Split<{
 	Sync: [value: T];
@@ -18,6 +27,19 @@ export type PotentialVariants<T> = Split<{
  * and values that require asynchronous resolution.
  *
  * @template T The type of the contained value
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { match } from "@sekhmet/enum/core/mini/exit";
+ * import { Sync } from "@sekhmet/schema/core/mini";
+ *
+ * const timing = match(Sync(1))({
+ * 	Sync: () => "now",
+ * 	Async: () => "later",
+ * });
+ * assertEquals(timing, "now");
+ * ```
  */
 export class Potential<T> extends Enum<PotentialVariants<T>> {}
 
@@ -27,6 +49,15 @@ export class Potential<T> extends Enum<PotentialVariants<T>> {}
  * @template T The type of the value
  * @param value The synchronous value to wrap
  * @returns A Potential wrapping the synchronous value
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { union } from "@sekhmet/enum/core/mini/exit";
+ * import { Sync } from "@sekhmet/schema/core/mini";
+ *
+ * assertEquals(union(Sync(42)), 42);
+ * ```
  */
 export function Sync<T>(value: T): Potential<T> {
 	return new Potential<T>("Sync", value);
@@ -38,6 +69,15 @@ export function Sync<T>(value: T): Potential<T> {
  * @template T The type of the promised value
  * @param promise The promise to wrap
  * @returns A Potential wrapping the promise
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { union } from "@sekhmet/enum/core/mini/exit";
+ * import { Async } from "@sekhmet/schema/core/mini";
+ *
+ * assertEquals(await union(Async(Promise.resolve(42))), 42);
+ * ```
  */
 export function Async<T>(promise: Promise<T>): Potential<T> {
 	return new Potential<T>("Async", promise);
@@ -47,6 +87,14 @@ export function Async<T>(promise: Promise<T>): Potential<T> {
  * A value, or a promise-like (any thenable) of that value.
  *
  * @template T The type of the value
+ *
+ * @example
+ * ```ts
+ * import type { MaybePromise } from "@sekhmet/schema/core/mini";
+ *
+ * const now: MaybePromise<number> = 1;
+ * const later: MaybePromise<number> = Promise.resolve(1);
+ * ```
  */
 export type MaybePromise<T> = T | PromiseLike<T>;
 
@@ -109,6 +157,19 @@ export function from<T>(value: MaybePromise<T>): Potential<T> {
  * @param self The Potential to map
  * @param mapping The transformation function
  * @returns A new Potential with the transformed value
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { union, unionKinds } from "@sekhmet/enum/core/mini/exit";
+ * import { mapPotential, Sync } from "@sekhmet/schema/core/mini";
+ *
+ * const doubled = mapPotential(Sync(21), (n) => n * 2);
+ * assertEquals(union(doubled), 42);
+ *
+ * const fetched = mapPotential(Sync(21), (n) => Promise.resolve(n * 2));
+ * assertEquals(unionKinds(fetched), "Async");
+ * ```
  */
 export function map<T, U>(
 	self: Potential<T>,
