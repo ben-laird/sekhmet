@@ -241,7 +241,8 @@ export function null_(): Schema<unknown, null, SchemaIssue> {
  *
  * The checks run on the (coerced) number in this order, and the first that
  * fails is reported: `NaN`/`±Infinity`, `int`, `safe`, `min`, `max`,
- * `multipleOf`.
+ * `multipleOf`. An allowed `NaN` skips every other check, and an allowed
+ * `±Infinity` meets only `min` and `max`.
  *
  * @param options - Coercion and checks
  * @returns A schema that validates numeric inputs

@@ -67,7 +67,7 @@ export function boolean(
 	const mode = options?.coerce ?? false;
 
 	return new Schema((input): Result<boolean, SchemaIssue> => {
-		const value = coerceBoolean(input, mode);
+		const value = coerceBoolean({ input, mode });
 
 		return value === undefined
 			? Err(InvalidType({ input, expected: "boolean" }))

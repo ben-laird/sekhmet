@@ -294,6 +294,11 @@ gone; their logic is internal.
   `int`, `safe`, `min`, `max`, `multipleOf`; for `string`, `minLength`,
   `maxLength`, `format`, `regex`. A check of a value after a `map` is a
   `filter` (checks were once `self`-first and applied after a `map` too).
+- **Allowed means accepted** (owner decision, 2026-11-16): with `nan: true`,
+  `NaN` passes without any other check, since none means anything for it.
+  With `infinite: true`, `±Infinity` still meets `min` and `max`, which
+  compare it meaningfully (`Infinity` fails `max: 10` and passes `min: 0`),
+  but skips `int`, `safe` and `multipleOf`. Finite numbers meet every check.
 - **`bigint` and `date` gained bounds** (`date` compares times), as the
   issues' `"bigint"` and `"date"` origins already anticipated; neither
   coerces.
@@ -322,13 +327,20 @@ to write them.
 
 ### Single-object parameters
 
-The rest of the public API follows the single-object rule, except `self`-first
-functions whose main form is a method (`map`, `mapErr`, `pipe`, `filter`,
-`parse*`, the modifiers), which keep the repo's receiver-first mini
-convention:
+The rest of the public API follows the single-object rule. Only the receiver
+is exempt: a `self`-first function whose main form is a method keeps `self`
+positional, and takes at most one other parameter, so its method takes one
+argument (`map(self, mapping)` is `.map(mapping)`):
 
+- `filter(self, { error, predicate })` is `.filter({ error, predicate })`. It
+  took `(self, error, filtering)` until a review of #28 caught that the
+  method then took two positional arguments.
 - `Issues` construction: `issues(entries)`, `prefix({ issues, path })`,
   `concat(list)` (see [`Issues<E>`](#issuese-located-collected-errors)).
 - `toStandard({ schema, toIssue? })`.
+- Internal helpers follow the rule too (`coerceNumber({ input, mode })`,
+  `unknownKeyIssues({ input, keys })`). A type guard can't narrow a
+  destructured property, so the literal guards are curried instead
+  (`sameAs(value)(input)`, `oneOf(values)(input)`).
 - Left receiver-first: `mapPotential(potential, mapping)`, `Potential`'s map,
   as the enum package's own `map(self, f)` is.

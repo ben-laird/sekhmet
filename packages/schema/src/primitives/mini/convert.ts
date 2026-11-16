@@ -77,11 +77,16 @@ function strictBoolean(input: unknown): boolean | undefined {
 	}
 }
 
+/** An input to convert, and the coercion mode to convert it under. */
+export interface Coercion {
+	/** The input. */
+	readonly input: unknown;
+	/** How a value of another type is treated. */
+	readonly mode: CoerceMode;
+}
+
 /** Converts an input to a number under a coercion mode. */
-export function coerceNumber(
-	input: unknown,
-	mode: CoerceMode,
-): number | undefined {
+export function coerceNumber({ input, mode }: Coercion): number | undefined {
 	if (typeof input === "number") return input;
 	if (mode === "native") return attempt(() => Number(input));
 
@@ -89,10 +94,7 @@ export function coerceNumber(
 }
 
 /** Converts an input to a string under a coercion mode. */
-export function coerceString(
-	input: unknown,
-	mode: CoerceMode,
-): string | undefined {
+export function coerceString({ input, mode }: Coercion): string | undefined {
 	if (typeof input === "string") return input;
 	if (mode === "native") return attempt(() => String(input));
 
@@ -100,10 +102,7 @@ export function coerceString(
 }
 
 /** Converts an input to a boolean under a coercion mode. */
-export function coerceBoolean(
-	input: unknown,
-	mode: CoerceMode,
-): boolean | undefined {
+export function coerceBoolean({ input, mode }: Coercion): boolean | undefined {
 	if (typeof input === "boolean") return input;
 	if (mode === "native") return Boolean(input);
 

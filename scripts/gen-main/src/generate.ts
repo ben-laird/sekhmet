@@ -22,6 +22,7 @@ import {
 	type ClassFeature,
 	type Feature,
 	isClassFeature,
+	type MethodDoc,
 } from "./config.ts";
 import {
 	type Conversion,
@@ -426,6 +427,20 @@ function methodDoc({
 	receiver: Receiver;
 	module: Module;
 }): JsDoc {
+	const see: JsDocTag = { kind: "see", doc: `{@link ${receiver.callee}}` };
+	if (receiver.doc !== undefined) {
+		const { description, returns, example } = receiver.doc;
+
+		return {
+			doc: description,
+			tags: [
+				{ kind: "return", doc: returns },
+				{ kind: "example", doc: `\`\`\`ts\n${example}\n\`\`\`` },
+				see,
+			],
+		};
+	}
+
 	const source = mainExamples({
 		jsDoc: jsDoc ?? fallbackDoc(name),
 		module,
@@ -436,10 +451,7 @@ function methodDoc({
 			!(tag.kind === "template" && dropTemplates.has(tag.name)),
 	);
 
-	return {
-		doc: source.doc,
-		tags: [...tags, { kind: "see", doc: `{@link ${receiver.callee}}` }],
-	};
+	return { doc: source.doc, tags: [...tags, see] };
 }
 
 /**
@@ -454,6 +466,8 @@ interface Receiver {
 	readonly barrel: Barrel | undefined;
 	/** The options field the receiver fills, or `undefined` to pass it first. */
 	readonly field: string | undefined;
+	/** The method's own docs, replacing the function's, if configured. */
+	readonly doc: MethodDoc | undefined;
 }
 
 interface MethodHead {
@@ -750,7 +764,12 @@ function overloadImplementation({
 
 /** The receiver of a method made from the feature's own `self`-first function. */
 function ownReceiver(name: string): Receiver {
-	return { callee: `mini.${name}`, barrel: undefined, field: undefined };
+	return {
+		callee: `mini.${name}`,
+		barrel: undefined,
+		field: undefined,
+		doc: undefined,
+	};
 }
 
 function renderMethod({
@@ -1127,6 +1146,37 @@ function primaryOf({
 	return ok({ feature, declaration });
 }
 
+/**
+ * Whether an options parameter's type declares `field`: it must name an
+ * interface of the barrel (which passes the primary's type arguments) whose
+ * own properties include it.
+ */
+function declaresField({
+	type,
+	field,
+	symbols,
+}: {
+	type: TypeNode | undefined;
+	field: string;
+	symbols: readonly DocSymbol[];
+}): boolean {
+	if (type?.kind !== "ref" || type.resolution.kind === "typeParam") {
+		return false;
+	}
+
+	const name = originalName({ name: type.name, resolution: type.resolution });
+
+	return (
+		symbols
+			.find((symbol) => symbol.name === name)
+			?.declarations.some(
+				(declaration) =>
+					declaration.kind === "other" &&
+					(declaration.properties ?? []).includes(field),
+			) ?? false
+	);
+}
+
 /** A borrowed function and how the method made from it reaches it. */
 interface BorrowedFunction {
 	readonly symbol: DocSymbol;
@@ -1169,7 +1219,7 @@ function borrowedMethods({
 			names: new Set(found.symbols.map((symbol) => symbol.name)),
 		};
 
-		for (const { name, field } of borrow.methods) {
+		for (const { name, field, doc } of borrow.methods) {
 			const symbol = found.symbols.find((candidate) => candidate.name === name);
 			const signatures = symbol === undefined ? [] : signaturesOf(symbol);
 			if (symbol === undefined || signatures.length === 0) {
@@ -1196,10 +1246,32 @@ function borrowedMethods({
 					message: `a borrowed function must take \`self: ${feature.primary}\` first, or name the options field it fills`,
 				});
 			}
+			if (field !== undefined) {
+				const missing = signatures.find(
+					(sig) =>
+						!declaresField({
+							type: sig.params[0]?.type,
+							field,
+							symbols: found.symbols,
+						}),
+				);
+				if (missing !== undefined) {
+					return failure({
+						feature,
+						symbol: name,
+						message: `the borrows entry for ${name} (${borrow.entrypoint}) fills \`${field}\`, which ${name}'s options type doesn't declare`,
+					});
+				}
+			}
 
 			methods.push({
 				symbol,
-				receiver: { callee: `${borrow.namespace}.${name}`, barrel, field },
+				receiver: {
+					callee: `${borrow.namespace}.${name}`,
+					barrel,
+					field,
+					doc,
+				},
 			});
 		}
 	}

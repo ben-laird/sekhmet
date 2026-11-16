@@ -138,7 +138,7 @@ export function string(
 
 	return leaf({
 		read: (input) => {
-			const value = coerceString(input, mode);
+			const value = coerceString({ input, mode });
 
 			return value === undefined
 				? Err(InvalidType({ input, expected: "string" }))

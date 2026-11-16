@@ -13,13 +13,14 @@ export type Literal =
 	| undefined;
 
 /**
- * Whether `input` is `value` under SameValueZero, the equality of
+ * A guard for `value` under SameValueZero, the equality of
  * `Array.prototype.includes`: `NaN` matches `NaN`, and `0` matches `-0`.
+ * Curried, so each call takes one parameter and the guard narrows `input`.
  */
-function isLiteral<T extends Literal>(input: unknown, value: T): input is T {
+function sameAs<T extends Literal>(value: T): (input: unknown) => input is T {
 	const allowed: readonly unknown[] = [value];
 
-	return allowed.includes(input);
+	return (input): input is T => allowed.includes(input);
 }
 
 /**
@@ -49,9 +50,11 @@ function isLiteral<T extends Literal>(input: unknown, value: T): input is T {
 export function literal<const T extends Literal>(
 	value: T,
 ): Schema<unknown, T, SchemaIssue> {
+	const isValue = sameAs(value);
+
 	return new Schema(
 		(input): Result<T, SchemaIssue> =>
-			isLiteral(input, value)
+			isValue(input)
 				? Ok(input)
 				: Err(InvalidValue({ input, expected: [value] })),
 	);

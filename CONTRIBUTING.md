@@ -368,6 +368,8 @@ takes `self` first, like any method's, or names the `field` of its single
 options object that the receiver fills (`array({ item })` becomes
 `.array()`, a method with no arguments). The generated module imports the
 barrel as a namespace, and borrowed examples are rewritten to method form.
+When the function's prose talks about parameters the method doesn't take, a
+borrow can give the method its own `doc` (description, returns, example).
 
 ### Infrastructure Code Conventions
 

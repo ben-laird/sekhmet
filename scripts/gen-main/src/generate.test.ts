@@ -980,6 +980,38 @@ const LABEL: DocSymbol = {
 	declarations: [{ kind: "other", typeOnly: true }],
 };
 
+/** `interface StackOptions<A> { item: Box<A> }`. */
+const STACK_OPTIONS: DocSymbol = {
+	name: "StackOptions",
+	declarations: [{ kind: "other", typeOnly: true, properties: ["item"] }],
+};
+
+/** The shelf barrel's symbols. */
+const SHELF_SYMBOLS: readonly DocSymbol[] = [WRAP, STACK, LABEL, STACK_OPTIONS];
+
+/** `stack`'s options parameter, `StackOptions<...args>`. */
+const stackOptions = (...args: TypeNode[]): Param =>
+	param("options", {
+		kind: "ref",
+		name: "StackOptions",
+		args,
+		resolution: { kind: "local" },
+	});
+
+/** A `stack` signature, varying only what a case needs. */
+const stackSignature = ({
+	typeParams = ["A"],
+	params = [stackOptions(typeParam("A"))],
+}: {
+	typeParams?: string[];
+	params?: Param[];
+}): FunctionDeclaration =>
+	signature({
+		typeParams,
+		params,
+		returnType: named("Box", [{ kind: "array", element: typeParam("A") }]),
+	});
+
 function borrowing({
 	borrowed,
 	symbols = [],
@@ -1004,7 +1036,7 @@ function borrowing({
 
 Deno.test("generateMain makes a borrowed self-first function a method", () => {
 	// Given: a feature borrowing wrap(self: Box<A>, label) from the shelf barrel
-	const borrowed = [WRAP, STACK, LABEL];
+	const borrowed = SHELF_SYMBOLS;
 
 	// When: generating
 	const result = borrowing({ borrowed });
@@ -1027,7 +1059,7 @@ Deno.test("generateMain makes a borrowed self-first function a method", () => {
 
 Deno.test("generateMain fills a borrowed function's options field with this", () => {
 	// Given: a feature borrowing stack({ item }) from the shelf barrel
-	const borrowed = [WRAP, STACK, LABEL];
+	const borrowed = SHELF_SYMBOLS;
 
 	// When: generating
 	const result = borrowing({ borrowed });
@@ -1045,7 +1077,7 @@ Deno.test("generateMain fills a borrowed function's options field with this", ()
 
 Deno.test("generateMain rewrites borrowed methods' examples to method form", () => {
 	// Given: borrowed functions whose examples call them as functions
-	const borrowed = [WRAP, STACK, LABEL];
+	const borrowed = SHELF_SYMBOLS;
 
 	// When: generating
 	const result = borrowing({ borrowed });
@@ -1057,6 +1089,50 @@ Deno.test("generateMain rewrites borrowed methods' examples to method form", () 
 	assertStringIncludes(output, "const pile = full(1).stack();");
 	assertStringIncludes(output, 'import { full } from "@pkg/box";');
 	assert(!output.includes('from "@pkg/shelf/mini"'));
+});
+
+Deno.test("generateMain gives a borrowed method its configured docs", () => {
+	// Given: a borrow of stack with docs written for the method
+	const feature: Feature = {
+		...FEATURE,
+		borrows: [
+			{
+				...SHELF,
+				methods: [
+					{ name: "wrap" },
+					{
+						name: "stack",
+						field: "item",
+						doc: {
+							description: "Stacks this box.",
+							returns: "A box of this box's values",
+							example: "full(1).stack();",
+						},
+					},
+				],
+			},
+		],
+	};
+
+	// When: generating
+	const result = generateMain({
+		feature,
+		symbols: [BOX_CLASS],
+		sources: SOURCES,
+		miniUrl: MINI_URL,
+		outputUrl: OUTPUT_URL,
+		borrowed: [{ borrow: SHELF, url: SHELF_URL, symbols: SHELF_SYMBOLS }],
+	});
+
+	// Then: the method's docs are the configured ones, not the function's
+	assert(result.ok);
+	const output = result.value;
+	assertStringIncludes(output, "Stacks this box.");
+	assertStringIncludes(output, "@returns A box of this box's values");
+	assertStringIncludes(output, "full(1).stack();");
+	assertStringIncludes(output, "@see {@link shelf.stack}");
+	assert(!output.includes("Stacks a box."));
+	assert(!output.includes("const pile ="));
 });
 
 Deno.test("generateMain rejects borrows it can't resolve or attach", async (t) => {
@@ -1106,29 +1182,104 @@ Deno.test("generateMain rejects borrows it can't resolve or attach", async (t) =
 		},
 		{
 			name: "the function isn't exported",
-			borrowed: [STACK],
+			borrowed: [STACK, STACK_OPTIONS],
 			message: "@pkg/shelf/mini must export the function wrap",
 			symbol: "wrap",
 		},
 		{
 			name: "it clashes with an own method",
-			borrowed: [WRAP, STACK],
+			borrowed: SHELF_SYMBOLS,
 			symbols: [ownWrap],
 			message: "wrap is already a method of Box",
 			symbol: "wrap",
 		},
 		{
 			name: "it doesn't take self first",
-			borrowed: [loose, STACK],
+			borrowed: [loose, STACK, STACK_OPTIONS],
 			message:
 				"a borrowed function must take `self: Box` first, or name the options field it fills",
 			symbol: "wrap",
 		},
 		{
 			name: "a field method has type parameters it can't infer",
-			borrowed: [WRAP, generic],
+			borrowed: [WRAP, generic, STACK_OPTIONS],
 			message:
 				"a method filling `item` takes no arguments, so it can't infer B",
+			symbol: "stack",
+		},
+		{
+			name: "a field method's function takes more than the options object",
+			borrowed: [
+				WRAP,
+				STACK_OPTIONS,
+				fn(
+					"stack",
+					stackSignature({
+						params: [
+							stackOptions(typeParam("A")),
+							param("extra", keyword("string")),
+						],
+					}),
+				),
+			],
+			message: "a method filling `item` must take one options object",
+			symbol: "stack",
+		},
+		{
+			name: "a field method's function is overloaded",
+			borrowed: [
+				WRAP,
+				STACK_OPTIONS,
+				fn("stack", stackSignature({}), stackSignature({})),
+			],
+			message: "an overloaded function can't fill `item`",
+			symbol: "stack",
+		},
+		{
+			name: "the options type doesn't pass every type argument",
+			borrowed: [
+				WRAP,
+				STACK_OPTIONS,
+				fn("stack", stackSignature({ params: [stackOptions()] })),
+			],
+			message: "`options` must pass all 1 of Box's type parameters",
+			symbol: "stack",
+		},
+		{
+			name: "the options type's type arguments aren't distinct type parameters",
+			borrowed: [
+				WRAP,
+				STACK_OPTIONS,
+				fn(
+					"stack",
+					stackSignature({ params: [stackOptions(keyword("string"))] }),
+				),
+			],
+			message:
+				"`options`'s type arguments must be distinct type parameters of stack",
+			symbol: "stack",
+		},
+		{
+			name: "the options interface doesn't declare the field",
+			borrowed: [
+				WRAP,
+				STACK,
+				{
+					name: "StackOptions",
+					declarations: [
+						{ kind: "other", typeOnly: true, properties: ["items"] },
+					],
+				},
+			],
+			message:
+				"the borrows entry for stack (@pkg/shelf) fills `item`, which stack's options type doesn't declare",
+			symbol: "stack",
+		},
+		{
+			name: "the options type isn't an interface of the barrel",
+			borrowed: [WRAP, STACK],
+			message:
+				"the borrows entry for stack (@pkg/shelf) fills `item`, which stack's options type doesn't declare",
 			symbol: "stack",
 		},
 	];

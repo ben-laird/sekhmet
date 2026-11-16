@@ -266,7 +266,10 @@ Deno.test("filter accepts values that pass the predicate", () => {
 	const isPositive = (n: number): n is number => n > 0;
 
 	// When: filtering with the predicate
-	const filtered = filter(schema, new TypeError(), isPositive);
+	const filtered = filter(schema, {
+		error: new TypeError(),
+		predicate: isPositive,
+	});
 	const result = parseSync(filtered, 10);
 
 	// Then: the value should pass through
@@ -285,7 +288,10 @@ Deno.test("filter rejects values that fail the predicate", () => {
 	const isPositive = (n: number): n is number => n > 0;
 
 	// When: filtering with the predicate on a negative value
-	const filtered = filter(schema, new TypeError(), isPositive);
+	const filtered = filter(schema, {
+		error: new TypeError(),
+		predicate: isPositive,
+	});
 	const result = parseSync(filtered, -10);
 
 	// Then: the error should be returned
