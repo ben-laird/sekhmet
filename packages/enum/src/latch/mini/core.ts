@@ -55,6 +55,7 @@ type Variants<A, I> = Split<{
 	Active: [activeValue: A];
 	Inactive: [inactiveValue: I];
 }>;
+
 export type { Variants as LatchVariants };
 
 /**

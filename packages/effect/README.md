@@ -74,7 +74,10 @@ const runtime = new Runtime({
 
 const results: unknown[] = [];
 join(
-	fork(runtime, map(Success(1), (n) => n + 1)),
+	fork(
+		runtime,
+		map(Success(1), (n) => n + 1),
+	),
 	(result) => results.push(result),
 );
 

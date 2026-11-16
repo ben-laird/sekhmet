@@ -79,7 +79,9 @@ const fromDisk = (key: string): Result<string, string> =>
 	Ok(`${key} from disk`);
 
 assertEquals(
-	fromCache("a").orElse(() => fromDisk("a")).unwrap(),
+	fromCache("a")
+		.orElse(() => fromDisk("a"))
+		.unwrap(),
 	"a from disk",
 );
 assertEquals(
@@ -162,10 +164,13 @@ tasks.sort((x, y) =>
 	compareBy(x, y, (t) => t.priority)
 		.reverse()
 		.andThen(compareByString(x, y, (t) => t.title))
-		.toNumber()
+		.toNumber(),
 );
 
-assertEquals(tasks.map((t) => t.title), ["c", "a", "b"]);
+assertEquals(
+	tasks.map((t) => t.title),
+	["c", "a", "b"],
+);
 ```
 
 ## Model a connection with a `Latch`

@@ -48,7 +48,7 @@ function fromPromise<T>(start: () => Promise<T>): Effect<void, T, unknown> {
 				(value) => resolve(Ready(Ok(value))),
 				(reason: unknown) => resolve(Ready(Err(Failed(reason)))),
 			);
-		})
+		}),
 	);
 }
 
@@ -58,7 +58,7 @@ const runtime = new Runtime({
 });
 const run = <T>(effect: Effect<void, T, unknown>) =>
 	new Promise<FiberResult<T, unknown>>((resolve) =>
-		fork(runtime, effect).join(resolve)
+		fork(runtime, effect).join(resolve),
 	);
 
 assertEquals(
@@ -95,7 +95,7 @@ const sleep = (ms: number) =>
 				timersCleared++;
 				clearTimeout(timer);
 			};
-		})
+		}),
 	);
 
 const runtime = new Runtime({
@@ -105,7 +105,7 @@ const runtime = new Runtime({
 
 const fiber = fork(runtime, sleep(10_000));
 const result = new Promise<FiberResult<string, never>>((resolve) =>
-	fiber.join(resolve)
+	fiber.join(resolve),
 );
 setTimeout(() => fiber.cancel(), 5);
 
@@ -133,7 +133,7 @@ const after = <T>(ms: number, value: T) =>
 		Async((resolve) => {
 			const timer = setTimeout(() => resolve(Ready(Ok(value))), ms);
 			return () => clearTimeout(timer);
-		})
+		}),
 	);
 
 const runtime = new Runtime({
@@ -142,7 +142,7 @@ const runtime = new Runtime({
 });
 const run = <T>(effect: Effect<void, T, string>) =>
 	new Promise<FiberResult<T, string>>((resolve) =>
-		fork(runtime, effect).join(resolve)
+		fork(runtime, effect).join(resolve),
 	);
 
 assertEquals(
@@ -176,7 +176,7 @@ interface Deps {
 }
 
 const timestamp = new Effect<Deps, string, never>((deps) =>
-	Ready(Ok(new Date(deps.now()).toISOString()))
+	Ready(Ok(new Date(deps.now()).toISOString())),
 );
 
 const testRuntime = new Runtime<Deps>({

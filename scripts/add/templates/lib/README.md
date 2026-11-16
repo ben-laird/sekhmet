@@ -84,9 +84,13 @@ Deno.test("common assertions", async () => {
 	assertExists(value);
 
 	// Errors
-	assertThrows(() => {
-		throw new Error("expected message");
-	}, Error, "expected message");
+	assertThrows(
+		() => {
+			throw new Error("expected message");
+		},
+		Error,
+		"expected message",
+	);
 
 	await assertRejects(async () => {
 		throw new Error("async error");
@@ -121,10 +125,7 @@ export function identity<T>(value: T): T {
 	return value;
 }
 
-export function mapArray<T, U>(
-	array: T[],
-	fn: (item: T) => U,
-): U[] {
+export function mapArray<T, U>(array: T[], fn: (item: T) => U): U[] {
 	return array.map(fn);
 }
 ```

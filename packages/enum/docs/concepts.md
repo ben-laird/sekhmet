@@ -116,9 +116,11 @@ import { assertEquals } from "@std/assert";
 import { Enum, type Split } from "@sekhmet/enum/core";
 import { match } from "@sekhmet/enum/core/mini";
 
-type Load = Split<
-	{ Loading: []; Loaded: [rows: number]; Failed: [error: Error] }
->;
+type Load = Split<{
+	Loading: [];
+	Loaded: [rows: number];
+	Failed: [error: Error];
+}>;
 
 const render = (load: Enum<Load>): string =>
 	match(load)({

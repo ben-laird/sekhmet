@@ -62,7 +62,10 @@ const main = Some(21)
 
 // Mini: functions
 const mini = unwrapOr(
-	filter(map(MiniSome(21), (n) => n * 2), (n) => n > 40),
+	filter(
+		map(MiniSome(21), (n) => n * 2),
+		(n) => n > 40,
+	),
 	0,
 );
 
@@ -84,9 +87,16 @@ function findUser(id: number): Option<{ name: string }> {
 	return id === 1 ? Some({ name: "Ada" }) : None();
 }
 
-assertEquals(findUser(1).map((user) => user.name).unwrapOr("anonymous"), "Ada");
 assertEquals(
-	findUser(2).map((user) => user.name).unwrapOr("anonymous"),
+	findUser(1)
+		.map((user) => user.name)
+		.unwrapOr("anonymous"),
+	"Ada",
+);
+assertEquals(
+	findUser(2)
+		.map((user) => user.name)
+		.unwrapOr("anonymous"),
 	"anonymous",
 );
 ```
@@ -106,7 +116,9 @@ function parsePort(text: string): Result<number, string> {
 
 assertEquals(parsePort("8080").unwrapOr(80), 8080);
 assertEquals(
-	parsePort("http").mapErr((e) => e.toUpperCase()).unwrapErr(),
+	parsePort("http")
+		.mapErr((e) => e.toUpperCase())
+		.unwrapErr(),
 	"INVALID PORT: HTTP",
 );
 ```
@@ -123,11 +135,15 @@ const people = [
 ];
 
 people.sort((a, b) =>
-	compareNumbers(a.age, b.age).andThen(compareStrings(a.name, b.name))
-		.toNumber()
+	compareNumbers(a.age, b.age)
+		.andThen(compareStrings(a.name, b.name))
+		.toNumber(),
 );
 
-assertEquals(people.map((p) => p.name), ["Al", "Bea"]);
+assertEquals(
+	people.map((p) => p.name),
+	["Al", "Bea"],
+);
 ```
 
 ## Latch
@@ -150,7 +166,12 @@ assertEquals(connection.isActive(), false);
 import { assertEquals } from "@std/assert";
 import { Pending, Ready } from "@sekhmet/enum/poll";
 
-assertEquals(Ready(1).map((n) => n + 1).isReady(), true);
+assertEquals(
+	Ready(1)
+		.map((n) => n + 1)
+		.isReady(),
+	true,
+);
 assertEquals(Pending<number>().isPending(), true);
 ```
 

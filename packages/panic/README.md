@@ -62,15 +62,15 @@ synchronous throw from the function you pass.
 
 ## Rust mapping
 
-| Rust (`std::panic`) | `@sekhmet/panic`                                    |
-| ------------------- | --------------------------------------------------- |
-| `panic!`            | `panic(source)` / `panicWithoutCause(source)`       |
-| `set_hook`          | `runtime.setHook(hook)`                             |
-| `take_hook`         | `runtime.takeHook()` (restores `defaultPanicHook`)  |
-| `PanicHookInfo`     | `PanicHookInfo` (`payload`, `stack`)                |
-| `catch_unwind`      | `runtime.catchUnwind(fn)` / `catchUnwindAsync(fn)`  |
-| `resume_unwind`     | `runtime.resumeUnwind(payload)`                     |
-| `Box<dyn Any>`      | `unknown`                                           |
+| Rust (`std::panic`) | `@sekhmet/panic`                                   |
+| ------------------- | -------------------------------------------------- |
+| `panic!`            | `panic(source)` / `panicWithoutCause(source)`      |
+| `set_hook`          | `runtime.setHook(hook)`                            |
+| `take_hook`         | `runtime.takeHook()` (restores `defaultPanicHook`) |
+| `PanicHookInfo`     | `PanicHookInfo` (`payload`, `stack`)               |
+| `catch_unwind`      | `runtime.catchUnwind(fn)` / `catchUnwindAsync(fn)` |
+| `resume_unwind`     | `runtime.resumeUnwind(payload)`                    |
+| `Box<dyn Any>`      | `unknown`                                          |
 
 Two differences follow from having no global state:
 

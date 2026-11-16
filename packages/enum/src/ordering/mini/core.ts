@@ -63,6 +63,7 @@ export function Greater(): Ordering {
  * - `Greater`: Left value is greater than right value
  */
 type Variants = Split<{ Less: []; Equal: []; Greater: [] }>;
+
 export type { Variants as OrderingVariants };
 
 /**
