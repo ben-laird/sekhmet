@@ -22,6 +22,15 @@
 import { getStructParams } from "@sekhmet/primordials/struct";
 import * as mini from "../mini/mod.ts";
 
+export type {
+	EffectErrorVariants,
+	EffectFn,
+	EffectOutput,
+	EffectResult,
+	ResultArms,
+} from "../mini/mod.ts";
+export { EffectError, ExceptionOccurred, Failed } from "../mini/mod.ts";
+
 /**
  * Converts a mini Effect into a main Effect using the memento pattern.
  * Extracts the underlying `EffectFn` via `getStructParams` and wraps it
@@ -181,4 +190,28 @@ export class Effect<I, T, E> extends mini.Effect<I, T, E> {
 	zip<U>(other: mini.Effect<I, U, E>): Effect<I, [left: T, right: U], E> {
 		return fromMini(mini.zip(this, other));
 	}
+}
+
+/**
+ * Creates a main effect that immediately succeeds with the given value.
+ *
+ * @template T - Success value type
+ * @param value - The success value
+ * @returns A main effect that produces the success value
+ * @see {@link mini.Success}
+ */
+export function Success<T>(value: T): Effect<void, T, never> {
+	return fromMini(mini.Success(value));
+}
+
+/**
+ * Creates a main effect that immediately fails with the given typed error.
+ *
+ * @template E - Error type
+ * @param error - The error value
+ * @returns A main effect that produces the error
+ * @see {@link mini.Failure}
+ */
+export function Failure<E>(error: E): Effect<void, never, E> {
+	return fromMini(mini.Failure(error));
 }

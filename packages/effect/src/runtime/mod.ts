@@ -4,5 +4,11 @@
  * @module
  */
 
-export type { FiberConfig, RuntimeParams } from "./runtime.ts";
+export type {
+	ExecutionContext,
+	ExecutionContextParams,
+	FiberConfig,
+	RuntimeConfig,
+	RuntimeParams,
+} from "./runtime.ts";
 export { Runtime } from "./runtime.ts";
