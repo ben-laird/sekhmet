@@ -1,0 +1,20 @@
+# dv configuration. See https://dv.dev/schema/v1.yaml for the schema.
+#
+# Every published package lives under packages/. scripts/* (and the
+# scripts/add templates) are workspace tooling marked `"publish": false`;
+# they sit outside this match, and the plugin skips any member marked
+# `"publish": false` as a second line of defence.
+#
+# scripts/dv-plugin serves every op: it edits deno.json surgically (keeping
+# tabs and blank-line groups), derives publish order from the packages'
+# real `@sekhmet/*` imports, and runs `deno publish` per package (JSR auth
+# via GitHub OIDC in CI). See CONTRIBUTING.md § Releasing.
+
+discovery:
+  plugins:
+    - match: "packages/*"
+      use:
+        run: deno run --quiet --allow-all ./scripts/dv-plugin/main.ts
+
+tagging:
+  format: "{package}@{version}"
