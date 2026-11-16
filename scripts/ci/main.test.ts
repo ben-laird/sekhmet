@@ -2,8 +2,11 @@ import { assertEquals, assertExists } from "@std/assert";
 import { exists } from "@std/fs/exists";
 import {
 	biomeCiCommand,
+	CI_COVERAGE_DIR,
+	type CIRun,
 	ciSteps,
 	coverageCleanupCommand,
+	coverageDirFor,
 	coverageOutputs,
 	coverageSummaryCommand,
 	dvValidateCommand,
@@ -16,10 +19,12 @@ import {
 } from "./main.ts";
 import { spawnCommand } from "./mod.ts";
 
-const ENVIRONMENTS = [
-	{ isCI: false, isAI: false },
-	{ isCI: false, isAI: true },
-	{ isCI: true, isAI: false },
+const LOCAL_COVERAGE_DIR = "/tmp/sekhmet-ci-coverage-test";
+
+const RUNS: CIRun[] = [
+	{ isCI: false, isAI: false, coverageDir: LOCAL_COVERAGE_DIR },
+	{ isCI: false, isAI: true, coverageDir: LOCAL_COVERAGE_DIR },
+	{ isCI: true, isAI: false, coverageDir: CI_COVERAGE_DIR },
 ];
 
 Deno.test("EXIT_CODES are defined with unique values", () => {
@@ -47,9 +52,9 @@ Deno.test("EXIT_CODES are defined with unique values", () => {
 });
 
 Deno.test("ciSteps gives every step its own failure code, and no timeout code is a failure code", () => {
-	for (const environment of ENVIRONMENTS) {
-		// Given: the CI steps for an environment
-		const steps = ciSteps(environment);
+	for (const run of RUNS) {
+		// Given: the CI steps for a run
+		const steps = ciSteps(run);
 
 		// When: collecting each step's failure code and its timeout's code
 		const codes = steps.map((step) => step.exitCode);
@@ -61,7 +66,7 @@ Deno.test("ciSteps gives every step its own failure code, and no timeout code is
 		assertEquals(
 			codes.filter((code) => code === undefined).length,
 			0,
-			`steps without an exit code in ${JSON.stringify(environment)}`,
+			`steps without an exit code in ${JSON.stringify(run)}`,
 		);
 		assertEquals(new Set(codes).size, codes.length);
 		// Then: steps may share a timeout code, but none is also a failure code
@@ -73,9 +78,9 @@ Deno.test("ciSteps gives every step its own failure code, and no timeout code is
 });
 
 Deno.test("ciSteps times out every step but Deno Test after the shared 10 minutes", () => {
-	for (const environment of ENVIRONMENTS) {
-		// Given: the CI steps for an environment
-		const steps = ciSteps(environment);
+	for (const run of RUNS) {
+		// Given: the CI steps for a run
+		const steps = ciSteps(run);
 
 		// When: collecting the timeouts of every step but Deno Test
 		const others = steps.filter((step) => step.name !== "Deno Test");
@@ -93,9 +98,9 @@ Deno.test("ciSteps times out every step but Deno Test after the shared 10 minute
 });
 
 Deno.test("ciSteps kills Deno Test after its timeout in every environment", () => {
-	for (const environment of ENVIRONMENTS) {
-		// Given: the CI steps for an environment
-		const steps = ciSteps(environment);
+	for (const run of RUNS) {
+		// Given: the CI steps for a run
+		const steps = ciSteps(run);
 
 		// When: finding the test step
 		const testStep = steps.find((step) => step.name === "Deno Test");
@@ -110,15 +115,15 @@ Deno.test("ciSteps kills Deno Test after its timeout in every environment", () =
 });
 
 Deno.test("ciSteps validates dv Records with the pinned dv in every environment", () => {
-	for (const environment of ENVIRONMENTS) {
-		// Given: the CI steps for an environment
-		const steps = ciSteps(environment);
+	for (const run of RUNS) {
+		// Given: the CI steps for a run
+		const steps = ciSteps(run);
 
 		// When: finding the dv step
 		const dvStep = steps.find((step) => step.name === "dv Validate");
 
 		// Then: it runs `dv validate` through the frozen `deno task dv` launcher
-		assertExists(dvStep, `no dv step in ${JSON.stringify(environment)}`);
+		assertExists(dvStep, `no dv step in ${JSON.stringify(run)}`);
 		assertEquals(dvStep.exitCode, EXIT_CODES.DV_VALIDATE_FAILED);
 		assertEquals(dvStep.command, dvValidateCommand());
 		assertEquals(dvValidateCommand(), {
@@ -155,8 +160,12 @@ Deno.test("biomeCiCommand fails on a badly formatted file and passes on a clean 
 
 Deno.test("ciSteps cleans up coverage data locally even after a failure, and keeps it in CI", () => {
 	// Given: the local and CI step lists
-	const local = ciSteps({ isCI: false, isAI: true });
-	const ci = ciSteps({ isCI: true, isAI: false });
+	const local = ciSteps({
+		isCI: false,
+		isAI: true,
+		coverageDir: LOCAL_COVERAGE_DIR,
+	});
+	const ci = ciSteps({ isCI: true, isAI: false, coverageDir: CI_COVERAGE_DIR });
 
 	// When: finding the cleanup step
 	const localCleanup = local.find(
@@ -164,13 +173,79 @@ Deno.test("ciSteps cleans up coverage data locally even after a failure, and kee
 	);
 	const ciCleanup = ci.find((step) => step.name === "Cleanup coverage data");
 
-	// Then: locally it always runs after the report and summary; CI omits it
+	// Then: locally it always runs after the report and summary, removing this
+	// run's coverage directory; CI omits it
 	assertEquals(localCleanup?.condition, "always");
 	assertEquals(localCleanup?.dependsOn, [
 		"Show coverage report",
 		"Coverage Summary",
 	]);
+	assertEquals(
+		localCleanup?.command,
+		coverageCleanupCommand({ dir: LOCAL_COVERAGE_DIR }),
+	);
 	assertEquals(ciCleanup, undefined);
+});
+
+Deno.test("coverageDirFor gives two local runs distinct directories, and CI the uploaded one", async () => {
+	// Given: two local gate runs in one checkout, and a CI run
+	const made: string[] = [];
+	const makeTempDir = async () => {
+		const dir = await Deno.makeTempDir({ prefix: "ci-coverage-dir-" });
+		made.push(dir);
+		return dir;
+	};
+
+	try {
+		// When: each picks its coverage directory
+		const first = await coverageDirFor({ isCI: false });
+		const second = await coverageDirFor({ isCI: false });
+		const ci = await coverageDirFor({ isCI: true, makeTempDir });
+		made.push(first, second);
+
+		// Then: the local runs never share one, so neither's `--clean` deletes
+		// the other's (#18); CI keeps the path ci.yml uploads, making no temp dir
+		assertEquals(first === second, false);
+		assertEquals(await exists(first), true);
+		assertEquals(await exists(second), true);
+		assertEquals(ci, "coverage");
+		assertEquals(made.length, 2);
+	} finally {
+		for (const dir of made) await Deno.remove(dir, { recursive: true });
+	}
+});
+
+Deno.test("ciSteps threads the run's coverage directory through every coverage step", () => {
+	for (const run of RUNS) {
+		// Given: the CI steps for a run
+		const steps = ciSteps(run);
+		const command = (name: string) =>
+			steps.find((step) => step.name === name)?.command;
+
+		// When: reading the test, report, summary and cleanup commands
+		const test = command("Deno Test");
+		const report = command("Show coverage report");
+		const summary = command("Coverage Summary");
+		const cleanup = command("Cleanup coverage data");
+
+		// Then: each writes, reads or removes the run's directory, and no other
+		assertEquals(
+			test?.args?.filter((arg) => arg.startsWith("--coverage")),
+			[`--coverage=${run.coverageDir}`],
+		);
+		assertEquals(report?.args, ["coverage", "--detailed", run.coverageDir]);
+		assertEquals(
+			summary,
+			coverageSummaryCommand({
+				format: run.isCI ? "github" : "json",
+				coverageDir: run.coverageDir,
+			}),
+		);
+		assertEquals(
+			cleanup,
+			run.isCI ? undefined : coverageCleanupCommand({ dir: run.coverageDir }),
+		);
+	}
 });
 
 Deno.test("coverageCleanupCommand removes a populated coverage directory", async () => {
@@ -348,7 +423,10 @@ Deno.test("coverageSummaryCommand appends a package table to the GitHub job summ
 		`${root}/coverage/lcov.info`,
 		`SF:${root}/packages/a/mod.ts\nFNF:0\nFNH:0\nBRF:0\nBRH:0\nLH:1\nLF:2\nend_of_record\n`,
 	);
-	const command = coverageSummaryCommand("github");
+	const command = coverageSummaryCommand({
+		format: "github",
+		coverageDir: CI_COVERAGE_DIR,
+	});
 
 	try {
 		// When: summarizing coverage for GitHub
@@ -378,7 +456,10 @@ Deno.test("coverageSummaryCommand appends a package table to the GitHub job summ
 Deno.test("coverageSummaryCommand fails when there is no LCOV report", async () => {
 	// Given: a fixture repo where no tests ran with coverage
 	const root = await fixtureRepo({ broken: false });
-	const command = coverageSummaryCommand("json");
+	const command = coverageSummaryCommand({
+		format: "json",
+		coverageDir: CI_COVERAGE_DIR,
+	});
 
 	try {
 		// When: summarizing coverage
@@ -399,6 +480,36 @@ Deno.test("coverageSummaryCommand fails when there is no LCOV report", async () 
 		);
 	} finally {
 		await Deno.remove(root, { recursive: true });
+	}
+});
+
+Deno.test("coverageSummaryCommand reads the LCOV report from a run's own coverage directory outside the repo", async () => {
+	// Given: a fixture repo, and an LCOV report in a temp coverage directory
+	// outside it, as a local run writes
+	const root = await fixtureRepo({ broken: false });
+	const coverageDir = await Deno.makeTempDir({ prefix: "ci-coverage-run-" });
+	await Deno.writeTextFile(
+		`${coverageDir}/lcov.info`,
+		`SF:${root}/packages/a/mod.ts\nFNF:0\nFNH:0\nBRF:0\nBRH:0\nLH:1\nLF:2\nend_of_record\n`,
+	);
+	const command = coverageSummaryCommand({ format: "json", coverageDir });
+
+	try {
+		// When: summarizing coverage as JSON
+		const output = await spawnCommand({
+			command: {
+				...command,
+				args: [...(command.args ?? []), "--root", root],
+			},
+		}).output();
+
+		// Then: it read that report, not the repo's coverage/
+		assertEquals(output.success, true);
+		const totals = coverageOutputs(output).context?.["coverage"];
+		assertEquals(JSON.stringify(totals).includes('"covered":1'), true);
+	} finally {
+		await Deno.remove(root, { recursive: true });
+		await Deno.remove(coverageDir, { recursive: true });
 	}
 });
 

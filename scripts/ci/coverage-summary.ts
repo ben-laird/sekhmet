@@ -11,15 +11,18 @@ import { renderCoverageMarkdown } from "@/src/coverage/markdown.ts";
 import { readWorkspace } from "@/src/readiness/readiness.ts";
 import { readWorkspaceFiles } from "@/src/workspace-files.ts";
 
-/** Where `deno test --coverage` writes its LCOV report. */
-export const LCOV_PATH = "coverage/lcov.info";
+/** The coverage directory `deno test --coverage` writes by default. */
+export const DEFAULT_COVERAGE_DIR = "coverage";
 
 /**
  * The coverage summary runner, the I/O edge around `src/coverage/`. It reads
- * the LCOV report that `deno test --coverage` wrote and summarizes it per
- * workspace package.
+ * the LCOV report (`lcov.info`) that `deno test --coverage=<dir>` wrote and
+ * summarizes it per workspace package.
  *
- * Usage: `coverage-summary.ts <github|json> [--root <dir>]`
+ * Usage: `coverage-summary.ts <github|json> [--root <dir>] [--coverage-dir <dir>]`
+ *
+ * `--coverage-dir` defaults to {@linkcode DEFAULT_COVERAGE_DIR}; a relative
+ * one resolves against the root.
  *
  * - `github`: appends a markdown table to the job summary
  *   (`$GITHUB_STEP_SUMMARY`) and prints the totals line
@@ -30,25 +33,29 @@ export async function main(args: string[]): Promise<number> {
 	const {
 		_: [format],
 		root: rootArg = Deno.cwd(),
+		"coverage-dir": coverageDir = DEFAULT_COVERAGE_DIR,
 	} = parseArgs(args, {
-		string: ["root"],
+		string: ["root", "coverage-dir"],
 	});
 	if (format !== "github" && format !== "json") {
-		console.error("Usage: coverage-summary.ts <github|json> [--root <dir>]");
+		console.error(
+			"Usage: coverage-summary.ts <github|json> [--root <dir>] [--coverage-dir <dir>]",
+		);
 		return 2;
 	}
 	const root = resolve(rootArg);
+	const lcovPath = join(coverageDir, "lcov.info");
 
-	const lcov = await readText(join(root, LCOV_PATH));
+	const lcov = await readText(resolve(root, lcovPath));
 	if (lcov === undefined) {
 		console.error(
-			`${LCOV_PATH} not found: Deno Test writes it when run with --coverage`,
+			`${lcovPath} not found: Deno Test writes it when run with --coverage`,
 		);
 		return 1;
 	}
 	const parsed = parseLcov({ text: lcov, repoRoot: root });
 	if (!parsed.ok) {
-		console.error(`${LCOV_PATH}: ${describeLcovError(parsed.error)}`);
+		console.error(`${lcovPath}: ${describeLcovError(parsed.error)}`);
 		return 1;
 	}
 
