@@ -1,4 +1,11 @@
 /**
+ * The `Panic` type and the `panic` functions that throw it. A panic means a
+ * broken invariant; recover from one at a panic runtime's boundary.
+ *
+ * @module
+ */
+
+/**
  * Base interface for panic sources without a typed cause.
  */
 export interface PanicSourceBase {

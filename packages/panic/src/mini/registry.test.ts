@@ -153,3 +153,21 @@ Deno.test("PanicMetadataRegistry iterates [id, metadata] pairs in insertion orde
 	assertEquals(viaEntries, expected);
 	assertEquals(viaIterator, expected);
 });
+
+Deno.test("PanicMetadataRegistry.getOrInsert() keeps undefined metadata", () => {
+	// Given: a factory that returns undefined and counts invocations
+	let calls = 0;
+	const registry = new PanicMetadataRegistry(() => {
+		calls++;
+		return undefined;
+	});
+	const p = makePanic("m");
+
+	// When: calling getOrInsert twice
+	registry.getOrInsert(p);
+	registry.getOrInsert(p);
+
+	// Then: the stored undefined counts as registered, so the factory ran once
+	assert(registry.has(p));
+	assertEquals(calls, 1);
+});
