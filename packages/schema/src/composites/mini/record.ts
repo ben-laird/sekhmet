@@ -1,5 +1,6 @@
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Flatten, Issues } from "@/src/core/mini/issues.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 import {
 	type Child,
@@ -146,5 +147,6 @@ export function record(options: {
 					),
 			});
 		},
+		node: new SchemaNode("Record", { key, value }),
 	});
 }

@@ -4,6 +4,7 @@ import {
 	InvalidValue,
 	type SchemaIssue,
 } from "@/src/core/mini/issue.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 import { STRINGBOOL_FALSY, STRINGBOOL_TRUTHY, wordReader } from "./words.ts";
 
@@ -90,5 +91,9 @@ export function stringbool(
 
 			return Ok(value);
 		},
+		node: new SchemaNode("Leaf", {
+			type: "stringbool",
+			options: options ?? {},
+		}),
 	});
 }

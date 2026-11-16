@@ -7,6 +7,7 @@ import {
 	locate,
 	toIssues,
 } from "@/src/core/mini/issues.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { map as mapPotential } from "@/src/core/mini/potential.ts";
 import {
 	type ErrorOf,
@@ -218,5 +219,6 @@ export function discriminatedUnion(declaration: {
 				),
 			);
 		},
+		node: new SchemaNode("DiscriminatedUnion", { key, options }),
 	});
 }

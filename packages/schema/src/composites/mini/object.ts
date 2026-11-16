@@ -1,5 +1,6 @@
 import { type SchemaIssue, UnknownKey } from "@/src/core/mini/issue.ts";
 import { type Flatten, type Issues, issues } from "@/src/core/mini/issues.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import {
 	type AnySchema,
 	type ErrorOf,
@@ -443,5 +444,9 @@ export function object(options: {
 				},
 			});
 		},
+		node: new SchemaNode("Object", {
+			shape,
+			unknownKeys: options.unknownKeys,
+		}),
 	});
 }

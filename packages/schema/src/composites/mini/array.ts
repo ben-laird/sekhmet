@@ -4,6 +4,7 @@ import {
 	fromError,
 	type Issues,
 } from "@/src/core/mini/issues.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 import {
 	type Child,
@@ -162,5 +163,6 @@ export function array(options: {
 				build: (outputs) => outputs.map(([, output]) => output),
 			});
 		},
+		node: new SchemaNode("Array", { item, minItems, maxItems }),
 	});
 }

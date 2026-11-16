@@ -4,6 +4,7 @@ import {
 	fromError,
 	type Issues,
 } from "@/src/core/mini/issues.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import {
 	type AnySchema,
 	type ErrorOf,
@@ -151,5 +152,6 @@ export function tuple(
 				build: (outputs) => outputs.map(([, output]) => output),
 			});
 		},
+		node: new SchemaNode("Tuple", { items }),
 	});
 }

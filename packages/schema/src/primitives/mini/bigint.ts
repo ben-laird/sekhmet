@@ -108,6 +108,7 @@ export function bigint(
 	options?: BigintSchemaOptions,
 ): Schema<unknown, bigint, SchemaIssue> {
 	return leaf({
+		details: { type: "bigint", options: options ?? {} },
 		read: (input) => {
 			if (typeof input === "bigint") return Ok(input);
 

@@ -202,6 +202,7 @@ function numberSchema(
 	const mode = options.coerce ?? false;
 
 	return leaf({
+		details: { type: "number", options },
 		read: (input) => {
 			const value = coerceNumber({ input, mode });
 

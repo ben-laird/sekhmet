@@ -2,6 +2,7 @@ import { match, union as unionValue } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { InvalidUnion, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { fromError, type Issues, toIssues } from "@/src/core/mini/issues.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { map as mapPotential } from "@/src/core/mini/potential.ts";
 import {
 	type AnySchema,
@@ -76,7 +77,7 @@ export function union<const T extends readonly [AnySchema, ...AnySchema[]]>(
 	options: T,
 ): Schema<UnionInput<T>, Output<T[number]>, Issues<SchemaIssue>>;
 export function union(
-	options: readonly Child[],
+	options: readonly [Child, ...Child[]],
 ): Schema<unknown, unknown, Issues<unknown>> {
 	return new Schema({
 		parse: (input: unknown): Parsed => {
@@ -102,5 +103,6 @@ export function union(
 
 			return attempt(0, []);
 		},
+		node: new SchemaNode("Union", { options }),
 	});
 }

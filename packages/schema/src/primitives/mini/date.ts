@@ -91,6 +91,7 @@ export function date(
 	options?: DateSchemaOptions,
 ): Schema<unknown, Date, SchemaIssue> {
 	return leaf({
+		details: { type: "date", options: options ?? {} },
 		read: (input) => {
 			if (input instanceof Date && !Number.isNaN(input.getTime())) {
 				return Ok(input);

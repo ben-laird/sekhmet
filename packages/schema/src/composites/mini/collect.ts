@@ -12,6 +12,7 @@
  */
 
 import { match, union } from "@sekhmet/enum/core/mini/exit";
+import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
@@ -21,6 +22,7 @@ import {
 	type Issues,
 	locate,
 } from "@/src/core/mini/issues.ts";
+import { nodeOf, SchemaNode } from "@/src/core/mini/node.ts";
 import {
 	Async,
 	type MaybePromise,
@@ -39,54 +41,44 @@ export type Parsed = MaybePromise<Result<unknown, Issues<unknown>>>;
 /** What an erased child's parser returns. */
 export type ChildParsed = MaybePromise<Result<unknown, unknown>>;
 
-/** A value modifier that lets a schema accept one more value. */
-type Modifier = "optional" | "nullable";
-
 /**
- * The schema each modifier's result wraps, keyed by its parser (which a
- * main schema shares with its mini form), so `object` can see past them.
+ * `nullable`'s erased implementation: `null` passes, anything else is
+ * parsed by `inner`. Recorded as a `Nullable` node over `inner`.
+ *
+ * Typed as an overload over the erased implementation, as the composites
+ * are: `withoutOptional` reads `inner` back from a node, where it is any
+ * schema, and runs it as a {@linkcode Child}.
  */
-const WRAPPED: WeakMap<object, { modifier: Modifier; inner: Child }> =
-	new WeakMap();
-
-/** A modifier's schema, recorded as wrapping `inner`. */
-export function wrap({
-	modifier,
-	inner,
-	parser,
-}: {
-	modifier: Modifier;
-	inner: Child;
-	parser: (input: unknown) => ChildParsed;
-}): Child {
-	WRAPPED.set(parser, { modifier, inner });
-
-	return new Schema({ parse: parser });
-}
-
-/** `nullable`'s erased implementation: `null` passes, anything else is parsed. */
+export function acceptNull<I, O, E>(inner: Schema<I, O, E>): Child;
 export function acceptNull(inner: Child): Child {
 	const parser = getStructParams(inner).parse;
 
-	return wrap({
-		modifier: "nullable",
-		inner,
-		parser: (input): ChildParsed => (input === null ? Ok(null) : parser(input)),
+	return new Schema({
+		parse: (input): ChildParsed => (input === null ? Ok(null) : parser(input)),
+		node: new SchemaNode("Nullable", { inner }),
 	});
 }
 
 /**
  * A schema without its `optional` modifiers, through any `nullable` ones:
  * what a missing required key is parsed with, so a value-optional field
- * still reports its inner schema's issue for a missing key.
+ * still reports its inner schema's issue for a missing key. It reads the
+ * `Optional` and `Nullable` nodes, and sees through nothing else (not
+ * `Readonly`, a transform or `lazy`).
+ *
+ * Typed as an overload over the erased implementation, as the composites
+ * are: a node holds its inner schema as any schema, and the object parses
+ * it with `undefined` as a {@linkcode Child}, as it did the field.
  */
+export function withoutOptional<I, O, E>(schema: Schema<I, O, E>): Child;
 export function withoutOptional(schema: Child): Child {
-	const wrapped = WRAPPED.get(getStructParams(schema).parse);
-	if (wrapped === undefined) return schema;
+	const node = nodeOf(schema);
+	if (isolate(node, "Optional")) return withoutOptional(union(node).inner);
+	if (isolate(node, "Nullable")) {
+		return acceptNull(withoutOptional(union(node).inner));
+	}
 
-	const inner = withoutOptional(wrapped.inner);
-
-	return wrapped.modifier === "optional" ? inner : acceptNull(inner);
+	return schema;
 }
 
 /** A child's parse result, found under `key`. */

@@ -1,7 +1,8 @@
 import { Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
-import { acceptNull, type Child, type ChildParsed, wrap } from "./collect.ts";
+import { acceptNull, type Child, type ChildParsed } from "./collect.ts";
 
 /**
  * Makes a schema's value optional: it also accepts `undefined`, which it
@@ -35,14 +36,13 @@ export function optional<I, O, E>(
 export function optional(self: Child): Child {
 	const parser = getStructParams(self).parse;
 
-	return wrap({
-		modifier: "optional",
-		inner: self,
-		parser: (input): ChildParsed => {
+	return new Schema({
+		parse: (input): ChildParsed => {
 			if (input === undefined) return Ok(undefined);
 
 			return parser(input);
 		},
+		node: new SchemaNode("Optional", { inner: self }),
 	});
 }
 
@@ -108,5 +108,6 @@ export function nullable(self: Child): Child {
 export function lazy<I, O, E>(getter: () => Schema<I, O, E>): Schema<I, O, E> {
 	return new Schema({
 		parse: (input) => getStructParams(getter()).parse(input),
+		node: new SchemaNode("Lazy", { getter }),
 	});
 }

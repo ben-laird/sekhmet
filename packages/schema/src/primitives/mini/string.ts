@@ -137,6 +137,7 @@ export function string(
 	};
 
 	return leaf({
+		details: { type: "string", options: options ?? {} },
 		read: (input) => {
 			const value = coerceString({ input, mode });
 

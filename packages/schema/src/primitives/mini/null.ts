@@ -1,5 +1,6 @@
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 
 /**
@@ -29,5 +30,6 @@ export function null_(): Schema<unknown, null, SchemaIssue> {
 
 			return Err(InvalidType({ input, expected: "null" }));
 		},
+		node: new SchemaNode("Leaf", { type: "null" }),
 	});
 }

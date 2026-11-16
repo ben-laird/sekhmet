@@ -1,5 +1,6 @@
 import { Err } from "@sekhmet/enum/result/mini";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 
 /**
@@ -22,5 +23,6 @@ import { Schema } from "@/src/core/mini/schema.ts";
 export function never(): Schema<unknown, never, SchemaIssue> {
 	return new Schema({
 		parse: (input) => Err(InvalidType({ input, expected: "never" })),
+		node: new SchemaNode("Leaf", { type: "never" }),
 	});
 }

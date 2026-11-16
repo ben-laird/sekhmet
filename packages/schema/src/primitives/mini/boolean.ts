@@ -1,5 +1,6 @@
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 import type { CoerceMode } from "./coerce.ts";
 import { coerceBoolean } from "./convert.ts";
@@ -76,5 +77,6 @@ export function boolean(
 
 			return Ok(value);
 		},
+		node: new SchemaNode("Leaf", { type: "boolean", options: options ?? {} }),
 	});
 }

@@ -8,6 +8,7 @@
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
+import { type LeafDetails, SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 
 /**
@@ -33,14 +34,16 @@ export function firstIssue<O>({
 }
 
 /**
- * A leaf schema: `read` turns the input into a value (or rejects it), then
+ * A leaf schema, recorded as a `Leaf` node of `details`: `read` turns the input into a value (or rejects it), then
  * each of `inspections` checks the value in order, and the first issue found
  * fails the parse.
  */
 export function leaf<O>({
+	details,
 	read,
 	inspections,
 }: {
+	details: LeafDetails;
 	read: (input: unknown) => Result<O, SchemaIssue>;
 	inspections: readonly Inspect<O>[];
 }): Schema<unknown, O, SchemaIssue> {
@@ -55,6 +58,7 @@ export function leaf<O>({
 				Err: (issue) => Err(issue),
 			});
 		},
+		node: new SchemaNode("Leaf", details),
 	});
 }
 
