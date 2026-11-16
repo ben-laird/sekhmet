@@ -459,18 +459,42 @@ export function pipe<I, O, E, P>(
 }
 
 /**
+ * How {@linkcode filter} checks an output: the type guard it must pass, and
+ * the error it fails with otherwise.
+ *
+ * @template O The output type
+ * @template E The error type
+ * @template P The filtered output type (a subtype of O)
+ *
+ * @example
+ * ```ts
+ * import type { FilterOptions } from "@sekhmet/schema/core/mini";
+ *
+ * const positive: FilterOptions<number, string, number> = {
+ * 	error: "not positive",
+ * 	predicate: (n): n is number => n > 0,
+ * };
+ * ```
+ */
+export interface FilterOptions<O, E, P extends O> {
+	/** The error a parse fails with when the output fails `predicate`. */
+	readonly error: E;
+	/** The type guard each output must pass. */
+	readonly predicate: (output: O) => output is P;
+}
+
+/**
  * Filters a schema's output using a type guard predicate.
  *
  * This creates a new schema that only succeeds if the original schema succeeds
- * AND the filtering predicate returns true. Failed filters return the provided error.
+ * AND the predicate returns true. A failed filter returns the given error.
  *
  * @template I The input type
  * @template O The original output type
  * @template E The error type
  * @template P The filtered output type (must be a subtype of O)
  * @param self The schema to filter
- * @param error The error to return if the filter fails
- * @param filtering The type guard predicate
+ * @param options The type guard predicate, and the error when it fails
  * @returns A new schema with filtered output
  *
  * @example
@@ -481,16 +505,20 @@ export function pipe<I, O, E, P>(
  * import { filter, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
  * const integer = new Schema((input: number) => Ok<number, string>(input));
- * const positive = filter(integer, "not positive", (n): n is number => n > 0);
+ * const positive = filter(integer, {
+ * 	error: "not positive",
+ * 	predicate: (n): n is number => n > 0,
+ * });
  *
  * assertEquals(union(unwrapErr(parseSync(positive, -1))), "not positive");
  * ```
  */
 export function filter<I, O, E, P extends O>(
 	self: Schema<I, O, E>,
-	error: E,
-	filtering: (output: O) => output is P,
+	options: FilterOptions<O, E, P>,
 ): Schema<I, P, E> {
+	const { error, predicate: filtering } = options;
+
 	return new Schema((input) => {
 		return match(parse(self, input))<MaybePromise<Result<P, E>>>({
 			Sync: (result) => handleResult(result),

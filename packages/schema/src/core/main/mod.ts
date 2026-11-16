@@ -34,6 +34,7 @@ export type {
 	AnySchema,
 	CustomDetails,
 	ErrorOf,
+	FilterOptions,
 	Flatten,
 	Infer,
 	Input,
@@ -131,11 +132,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * Filters a schema's output using a type guard predicate.
 	 *
 	 * This creates a new schema that only succeeds if the original schema succeeds
-	 * AND the filtering predicate returns true. Failed filters return the provided error.
+	 * AND the predicate returns true. A failed filter returns the given error.
 	 *
 	 * @template P - The filtered output type (must be a subtype of O)
-	 * @param error - The error to return if the filter fails
-	 * @param filtering - The type guard predicate
+	 * @param options - The type guard predicate, and the error when it fails
 	 * @returns A new schema with filtered output
 	 * @example
 	 * ```ts
@@ -145,17 +145,17 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
 	 * const integer = new Schema((input: number) => Ok<number, string>(input));
-	 * const positive = integer.filter("not positive", (n): n is number => n > 0);
+	 * const positive = integer.filter({
+	 * 	error: "not positive",
+	 * 	predicate: (n): n is number => n > 0,
+	 * });
 	 *
 	 * assertEquals(union(unwrapErr(positive.parseSync(-1))), "not positive");
 	 * ```
 	 * @see {@link mini.filter}
 	 */
-	filter<P extends O>(
-		error: E,
-		filtering: (output: O) => output is P,
-	): Schema<I, P, E> {
-		return Schema.fromMini(mini.filter(this, error, filtering));
+	filter<P extends O>(options: mini.FilterOptions<O, E, P>): Schema<I, P, E> {
+		return Schema.fromMini(mini.filter(this, options));
 	}
 
 	/**

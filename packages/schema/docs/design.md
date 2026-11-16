@@ -322,11 +322,14 @@ to write them.
 
 ### Single-object parameters
 
-The rest of the public API follows the single-object rule, except `self`-first
-functions whose main form is a method (`map`, `mapErr`, `pipe`, `filter`,
-`parse*`, the modifiers), which keep the repo's receiver-first mini
-convention:
+The rest of the public API follows the single-object rule. Only the receiver
+is exempt: a `self`-first function whose main form is a method keeps `self`
+positional, and takes at most one other parameter, so its method takes one
+argument (`map(self, mapping)` is `.map(mapping)`):
 
+- `filter(self, { error, predicate })` is `.filter({ error, predicate })`. It
+  took `(self, error, filtering)` until a review of #28 caught that the
+  method then took two positional arguments.
 - `Issues` construction: `issues(entries)`, `prefix({ issues, path })`,
   `concat(list)` (see [`Issues<E>`](#issuese-located-collected-errors)).
 - `toStandard({ schema, toIssue? })`.

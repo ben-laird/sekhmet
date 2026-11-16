@@ -65,6 +65,7 @@ export {
 export {
 	type AnySchema,
 	type ErrorOf,
+	type FilterOptions,
 	filter,
 	type Infer,
 	type Input,
