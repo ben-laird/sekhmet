@@ -249,6 +249,24 @@ Deno.test("scheduler state is Idle after async drain completes", async () => {
 	});
 });
 
+Deno.test("scheduler calls the scheduling function without a receiver", () => {
+	// Given: a scheduling function that records its `this`
+	const receivers: unknown[] = [];
+	const scheduler = new Scheduler({
+		schedule: function (this: unknown, runStep) {
+			receivers.push(this);
+			runStep();
+		},
+	});
+
+	// When: a task is enqueued
+	scheduler.run(() => {});
+
+	// Then: it was called as a plain function, as a host function like
+	// workerd's queueMicrotask requires
+	assertEquals(receivers, [undefined]);
+});
+
 Deno.test("scheduler is reusable after a turn fully drains", () => {
 	// Given: a synchronous scheduler that has already drained a batch
 	const results: string[] = [];

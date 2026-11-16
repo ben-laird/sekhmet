@@ -203,7 +203,10 @@ export class Scheduler {
 			stepsLastTurn: this.#stepsLastTurn,
 		};
 
-		this.#schedule(runStep, context);
+		// Called without a receiver: host functions such as workerd's
+		// queueMicrotask reject a `this` that is not the global object.
+		const schedule = this.#schedule;
+		schedule(runStep, context);
 	}
 
 	/**
