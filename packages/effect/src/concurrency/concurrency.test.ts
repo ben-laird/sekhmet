@@ -210,6 +210,17 @@ Deno.test("joinEffect() yields a pending fiber's success once it settles", () =>
 	assertEquals(joined(), Ok("done"));
 });
 
+Deno.test("joinEffect() yields an already-complete fiber's result", () => {
+	// Given: a fiber that has already completed
+	const target = forkSync(succeed("ready"), undefined);
+
+	// When: joining it as an effect
+	const joined = probe(forkSync(joinEffect(target), undefined));
+
+	// Then: the joining effect succeeds with the value
+	assertEquals(joined(), Ok("ready"));
+});
+
 Deno.test("joinEffect() turns the fiber's error into a typed failure", async (t) => {
 	await t.step("Failed", () => {
 		// Given: a fiber that will fail with a typed error

@@ -1,7 +1,7 @@
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
-import type { Effect } from "../effect/mini/effect.ts";
+import type { Effect, EffectOutput } from "../effect/mini/effect.ts";
 import { Fiber, FiberState, type Finalizer } from "../fiber/mini/fiber.ts";
 import {
 	Failed,
@@ -142,9 +142,22 @@ function step<I, T, E>(self: Fiber<I, T, E>): void {
 				},
 
 				Async: (asyncFn) => {
+					// The resolver is one-shot. A resolution arriving before asyncFn
+					// returns is held and applied once the step has been set up.
+					let resolved = false;
+					let settingUp = true;
+					let earlyOutput: EffectOutput<T, E> | undefined;
+
 					try {
-						// Suspend the fiber and set up async callback
 						const cancellation = asyncFn((continuation) => {
+							if (resolved) return;
+							resolved = true;
+
+							if (settingUp) {
+								earlyOutput = continuation;
+								return;
+							}
+
 							match(fiberState)({
 								Queued: () => {},
 								Running: () => {},
@@ -159,11 +172,19 @@ function step<I, T, E>(self: Fiber<I, T, E>): void {
 								Complete: () => {},
 							});
 						});
+						settingUp = false;
 
-						getStructParams(fiberState).variant = [
-							"Suspended",
-							{ cancellation, finalizers },
-						];
+						if (earlyOutput === undefined) {
+							getStructParams(fiberState).variant = [
+								"Suspended",
+								{ cancellation, finalizers },
+							];
+						} else {
+							getStructParams(fiberState).variant = [
+								"Running",
+								{ currentOutput: earlyOutput, finalizers },
+							];
+						}
 					} catch (exception: unknown) {
 						complete(self, Err(Panicked(exception)));
 					}

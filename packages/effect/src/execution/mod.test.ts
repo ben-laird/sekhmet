@@ -8,6 +8,7 @@ import { sync } from "@/src/scheduler/schedules.ts";
 import {
 	Async,
 	type Continuation,
+	Deferred,
 	Ready,
 } from "../continuation/continuation.ts";
 import {
@@ -803,4 +804,62 @@ Deno.test("a finalizer that cancels its completing fiber does not change the res
 	const late: FiberResult<number, never>[] = [];
 	join(fiber, (result) => late.push(result));
 	assertEquals(late, [Ok(1)]);
+});
+
+Deno.test("an async step that resolves synchronously completes the fiber", () => {
+	// Given: an Async step that resolves before returning
+	const runtime = new Runtime({
+		input: undefined,
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
+	});
+	const effect = new Effect<void, number, never>(() =>
+		Async((resolve) => {
+			resolve(Ready(Ok(7)));
+		}),
+	);
+
+	// When: running it
+	const seen: FiberResult<number, never>[] = [];
+	join(fork(runtime, effect), (result) => seen.push(result));
+
+	// Then: the fiber completes with the resolved value
+	assertEquals(seen, [Ok(7)]);
+});
+
+Deno.test("an async step's resolver is one-shot", () => {
+	// Given: a fiber that resumes from a first async step into a second one
+	const runtime = new Runtime({
+		input: undefined,
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
+	});
+	let first:
+		| ((c: Continuation<EffectResult<string, never>>) => void)
+		| undefined;
+	const effect = new Effect<void, string, never>(() =>
+		Async((resolve) => {
+			first = resolve;
+		}),
+	);
+	const fiber = fork(runtime, effect);
+	const seen: FiberResult<string, never>[] = [];
+	join(fiber, (result) => seen.push(result));
+	first?.(Deferred(() => Async(() => {})));
+
+	// When: the first step's resolver is called again
+	first?.(Ready(Ok("stale")));
+
+	// Then: the stale resolution is ignored and the fiber stays suspended
+	assertEquals(seen, []);
+	match(getStructParams(fiber).fiberState)({
+		Suspended: () => {},
+		Queued: () => {
+			throw new Error("Expected Suspended, got Queued");
+		},
+		Running: () => {
+			throw new Error("Expected Suspended, got Running");
+		},
+		Complete: () => {
+			throw new Error("Expected Suspended, got Complete");
+		},
+	});
 });
