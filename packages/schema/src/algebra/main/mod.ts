@@ -24,10 +24,48 @@
 
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Issues } from "@/src/core/mini/issues.ts";
+import type { Schema as MiniSchema } from "@/src/core/mini/schema.ts";
 import { Schema } from "../../core/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
-export type { OrOptions } from "../mini/mod.ts";
+export type { Branded, OrOptions } from "../mini/mod.ts";
+export { BRAND } from "../mini/mod.ts";
+
+/**
+ * Brands a schema's output `name`: its output type becomes
+ * `Branded<O, name>`, so parsing with it is the branded type's smart
+ * constructor. The output passes through unchanged at runtime; the brand is
+ * type-only. The name is a value, not a type argument, so the schema's own
+ * type parameters are still inferred.
+ *
+ * @template I - The input type
+ * @template O - The output type
+ * @template E - The error type
+ * @template B - The brand's name
+ * @param self - The schema to brand
+ * @param name - The brand's name
+ * @returns A schema whose output is branded `name`
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { brand, type Branded } from "@sekhmet/schema/algebra";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
+ *
+ * type UserId = Branded<string, "UserId">;
+ * const userId = brand(string({ format: "uuid" }), "UserId");
+ *
+ * const id: UserId = unwrap(parseSync(userId, "4f3c1f9e-8f0a-4b8e-9a59-0a1b2c3d4e5f"));
+ * assertEquals(id, "4f3c1f9e-8f0a-4b8e-9a59-0a1b2c3d4e5f");
+ * ```
+ */
+export function brand<I, O, E, const B extends string>(
+	self: MiniSchema<I, O, E>,
+	name: B,
+): Schema<I, mini.Branded<O, B>, E> {
+	return Schema.fromMini(mini.brand(self, name));
+}
 
 /**
  * Creates a schema that accepts what `left` or `right` accepts: sugar over
