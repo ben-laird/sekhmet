@@ -8,13 +8,7 @@ import {
 	type SchemaIssue,
 	TooSmall,
 } from "@/src/core/mini/issue.ts";
-import {
-	concat,
-	entries,
-	fromError,
-	type Issues,
-	prefix,
-} from "@/src/core/mini/issues.ts";
+import { entries, type Issues, issues } from "@/src/core/mini/issues.ts";
 import {
 	type ErrorOf,
 	type Output,
@@ -166,23 +160,18 @@ const tagged = new Schema((input: unknown) =>
 	Array.isArray(input) && input.length > 0
 		? Ok(input.length)
 		: Err(
-				concat(
-					prefix(fromError(InvalidType({ input, expected: "array" })), "tags"),
-					prefix(
-						prefix(
-							fromError(
-								TooSmall({
-									input,
-									origin: "array",
-									minimum: 1,
-									inclusive: true,
-								}),
-							),
-							0,
-						),
-						"tags",
-					),
-				),
+				issues([
+					{ path: ["tags"], error: InvalidType({ input, expected: "array" }) },
+					{
+						path: ["tags", 0],
+						error: TooSmall({
+							input,
+							origin: "array",
+							minimum: 1,
+							inclusive: true,
+						}),
+					},
+				]),
 			),
 );
 

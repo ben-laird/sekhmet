@@ -71,6 +71,7 @@ export {
 	Issues,
 	isIssues,
 	isSchemaIssue,
+	issues,
 	locate,
 	mapPotential,
 	NotMultipleOf,

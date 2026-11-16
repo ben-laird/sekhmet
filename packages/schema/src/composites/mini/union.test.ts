@@ -7,7 +7,7 @@ import {
 	entries,
 	fromError,
 	type Issues,
-	prefix,
+	issues,
 } from "@/src/core/mini/issues.ts";
 import {
 	type ErrorOf,
@@ -67,17 +67,17 @@ Deno.test("union fails with InvalidUnion carrying each option's issues", async (
 
 	// When: parsing a value neither accepts
 	const input = { n: "x" };
-	const issues = unwrapErr(await parseAsync(either, input));
+	const found = unwrapErr(await parseAsync(either, input));
 
 	// Then: one InvalidUnion at the root holds each option's issues in order
-	assertEquals(entries(issues), [
+	assertEquals(entries(found), [
 		{
 			path: [],
 			error: InvalidUnion({
 				input,
 				branches: [
 					fromError("not text"),
-					prefix(fromError("not a number"), "n"),
+					issues([{ path: ["n"], error: "not a number" }]),
 				],
 			}),
 		},

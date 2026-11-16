@@ -6,12 +6,7 @@ import {
 	type SchemaIssue,
 	TooSmall,
 } from "@/src/core/mini/issue.ts";
-import {
-	concat,
-	fromError,
-	type Issues,
-	prefix,
-} from "@/src/core/mini/issues.ts";
+import { type Issues, issues } from "@/src/core/mini/issues.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 import type { InferStandardInput, InferStandardOutput } from "./spec.ts";
 import { toStandard } from "./to-standard.ts";
@@ -84,19 +79,19 @@ Deno.test("toStandard returns a Promise when the parse is Async", async () => {
 
 Deno.test("toStandard reports one issue per Issues entry, with its path", () => {
 	// Given: a schema failing with Issues<SchemaIssue> at nested paths
-	const issues = concat(
-		prefix(fromError(InvalidType({ input: 1, expected: "string" })), "name"),
-		prefix(
-			prefix(
-				fromError(
-					TooSmall({ input: [], origin: "array", minimum: 1, inclusive: true }),
-				),
-				0,
-			),
-			"tags",
-		),
-	);
-	const standard = toStandard(new Schema((_: unknown) => Err(issues)));
+	const found = issues([
+		{ path: ["name"], error: InvalidType({ input: 1, expected: "string" }) },
+		{
+			path: ["tags", 0],
+			error: TooSmall({
+				input: [],
+				origin: "array",
+				minimum: 1,
+				inclusive: true,
+			}),
+		},
+	]);
+	const standard = toStandard(new Schema((_: unknown) => Err(found)));
 
 	// When: validating any value
 	const result = standard["~standard"].validate({});
@@ -118,7 +113,11 @@ Deno.test("toStandard keeps symbol path segments", () => {
 	const key = Symbol("key");
 	const standard = toStandard(
 		new Schema((input: unknown) =>
-			Err(prefix(fromError(InvalidType({ input, expected: "string" })), key)),
+			Err(
+				issues([
+					{ path: [key], error: InvalidType({ input, expected: "string" }) },
+				]),
+			),
 		),
 	);
 
@@ -154,7 +153,12 @@ Deno.test("toStandard converts other errors with toIssue", async (t) => {
 		// Given: Issues of custom errors, and a toIssue that adds a path
 		const standard = toStandard(
 			new Schema((_: unknown) =>
-				Err(concat(prefix(fromError("a"), "outer"), fromError("b"))),
+				Err(
+					issues([
+						{ path: ["outer"], error: "a" },
+						{ path: [], error: "b" },
+					]),
+				),
 			),
 			{
 				toIssue: (error) => ({

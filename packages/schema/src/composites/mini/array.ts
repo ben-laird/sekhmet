@@ -96,12 +96,12 @@ function checkLength<I, O extends readonly unknown[], E>(
 						return issue === undefined ? Ok(output) : Err(fromError(issue));
 					},
 					Err: (error) => {
-						const issues = toIssues(error);
+						const found = toIssues(error);
 						const issue = isArray(input)
 							? tooFar(input, input.length)
 							: undefined;
 						return Err(
-							issue === undefined ? issues : concat(issues, fromError(issue)),
+							issue === undefined ? found : concat([found, fromError(issue)]),
 						);
 					},
 				}),

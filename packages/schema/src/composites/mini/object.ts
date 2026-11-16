@@ -1,12 +1,6 @@
 import { getStructParams, type struct } from "@sekhmet/primordials/struct";
 import { type SchemaIssue, UnknownKey } from "@/src/core/mini/issue.ts";
-import {
-	concat,
-	type Flatten,
-	fromError,
-	type Issues,
-	prefix,
-} from "@/src/core/mini/issues.ts";
+import { type Flatten, type Issues, issues } from "@/src/core/mini/issues.ts";
 import {
 	type AnySchema,
 	type ErrorOf,
@@ -224,14 +218,12 @@ function unknownKeyIssues(
 	input: Readonly<Record<PropertyKey, unknown>>,
 	keys: readonly string[],
 ): Issues<SchemaIssue> | undefined {
-	return keys
-		.map((key) =>
-			prefix(fromError(UnknownKey({ key, input: input[key] })), key),
-		)
-		.reduce<Issues<SchemaIssue> | undefined>(
-			(issues, more) => (issues === undefined ? more : concat(issues, more)),
-			undefined,
-		);
+	const [first, ...rest] = keys.map((key) => ({
+		path: [key],
+		error: UnknownKey({ key, input: input[key] }),
+	}));
+
+	return first === undefined ? undefined : issues([first, ...rest]);
 }
 
 /** Builds an object parser from its declaration. */
