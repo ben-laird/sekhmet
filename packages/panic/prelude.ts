@@ -1,6 +1,7 @@
 /**
- * The everyday surface of `@sekhmet/panic`: throw a `Panic` with `panic`, and
- * run your program inside a runtime from `definePanicRuntime`.
+ * The panic primitives: the `Panic` type, and `panic` and
+ * `panicWithoutCause`, which throw it. The panic runtime lives in
+ * `@sekhmet/panic` and `@sekhmet/panic/mini/runtime`.
  *
  * @module
  */
@@ -12,9 +13,3 @@ export {
 	panic,
 	panicWithoutCause,
 } from "./src/mini/core.ts";
-export {
-	definePanicRuntime,
-	type PanicHook,
-	type PanicHookInfo,
-	type PanicRuntime,
-} from "./src/mini/runtime.ts";
