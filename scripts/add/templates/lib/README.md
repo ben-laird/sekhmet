@@ -8,6 +8,7 @@ A minimal library template with testing setup and common patterns.
 mod.ts       - Exported functions and types
 mod.test.ts  - Test suite
 deno.json    - Package configuration
+LICENSE.md   - MIT license
 ```
 
 ## Testing Patterns

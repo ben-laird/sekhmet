@@ -100,13 +100,18 @@ Before contributing:
 ```txt
 sekhmet/
 ├── packages/         # Framework packages
-│   ├── enum/         # Enum framework
-│   ├── primordials/  # Core primitives
-│   └── ...
+│   ├── effect/       # Effect system (effects, fibers, runtime, scheduler)
+│   ├── enum/         # Enum framework (core, option, result, latch, poll, ordering)
+│   ├── matrix/       # Cartesian-product test case generation
+│   ├── panic/        # Panic errors and panic hooks
+│   ├── primordials/  # Core primitives (Struct, Subtle, scoping helpers)
+│   └── vow/          # Synchronous promise-like values
 ├── scripts/          # Build and development scripts
-│   └── add/          # Package scaffolding tool
+│   ├── add/          # Package scaffolding tool (deno task add)
+│   └── ci/           # CI workflow runner (deno task ci)
 ├── deno.json         # Workspace configuration
 ├── biome.json        # Linter/formatter config
+├── LICENSE.md        # MIT license
 └── README.md
 ```
 
@@ -380,8 +385,13 @@ type(scope): description
 
 Use package names as scopes:
 
+- `@sekhmet/effect`
 - `@sekhmet/enum`
+- `@sekhmet/matrix`
+- `@sekhmet/panic`
 - `@sekhmet/primordials`
+- `@sekhmet/vow`
+- `@sekhmet/add`, `@sekhmet/ci` (scripts)
 - Or specific areas within packages
 
 ### Examples

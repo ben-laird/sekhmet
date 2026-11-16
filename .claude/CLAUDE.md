@@ -72,6 +72,26 @@ This is a **Deno workspace monorepo** for the Sekhmet TypeScript framework
 collection. The workspace is defined in the root `deno.json` with packages under
 `packages/` and build tools under `scripts/`.
 
+Packages (`packages/`):
+
+- `@sekhmet/effect`: effect system (effects, fibers, continuations, runtime,
+  scheduler)
+- `@sekhmet/enum`: enum framework plus `option`, `result`, `latch`, `poll` and
+  `ordering` built on it
+- `@sekhmet/matrix`: `matrix()` builds the Cartesian product of value arrays for
+  parameterized tests
+- `@sekhmet/panic`: `Panic` error, `panic()`/`panicWithoutCause()`, panic hooks
+  and a metadata registry
+- `@sekhmet/primordials`: foundation primitives (`Struct`, `Subtle`, `block`,
+  `define`)
+- `@sekhmet/vow`: `Vow`, a synchronous promise-like value built on `Enum`
+
+Scripts (`scripts/`, unpublished):
+
+- `@sekhmet/add`: scaffolds a new workspace from `scripts/add/templates/`
+  (`deno task add`)
+- `@sekhmet/ci`: runs lint, type check, JSR dry run and tests (`deno task ci`)
+
 ### Core Design Principles
 
 1. **Primitive-driven development**: Start with simple primitives that compose
@@ -196,7 +216,9 @@ fix(@sekhmet/primordials): correct Struct type inference
 
 **Types**: `feat`, `fix`, `test`, `refactor`, `docs`, `chore`, `perf`
 
-**Scopes**: Use package names like `@sekhmet/enum`, `@sekhmet/primordials`
+**Scopes**: Use package names: `@sekhmet/effect`, `@sekhmet/enum`,
+`@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/vow`,
+and `@sekhmet/add`, `@sekhmet/ci` for scripts
 
 ## Infrastructure Code Conventions
 
