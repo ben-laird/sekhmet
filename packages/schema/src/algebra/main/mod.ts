@@ -79,12 +79,12 @@ export function brand<I, O, E, const B extends string>(
  * Creates a schema that accepts what `left` or `right` accepts: sugar over
  * `union([left, right])`. `left` is tried first, and `right` only when it
  * fails; when both fail, the schema fails with one `InvalidUnion` issue at
- * the root, carrying each branch's issues in order.
+ * the root, carrying each branch's issues in order. Both sides get the same
+ * input, so the input type is the intersection of theirs, as for `union`.
  *
- * Chains flatten: a union on either side contributes its own options, so
- * `or({ left: or({ left: a, right: b }), right: c })` tries and fails
- * exactly like `union([a, b, c])`. Both sides get the same input, so the
- * input type is the intersection of theirs, as for `union`.
+ * Chains nest: `or({ left: or({ left: a, right: b }), right: c })` is
+ * `union([union([a, b]), c])`, so its `InvalidUnion` holds the inner
+ * union's as its first branch.
  *
  * @template I - The left schema's input type
  * @template O - The left schema's output type

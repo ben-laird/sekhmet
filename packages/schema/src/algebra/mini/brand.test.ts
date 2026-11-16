@@ -12,7 +12,6 @@ import {
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { BRAND, type Branded, brand } from "./brand.ts";
-import { brandsOf } from "./registry.ts";
 
 /** Whether a `From` is assignable to a `To`. */
 type Assignable<From, To> = [From] extends [To] ? true : false;
@@ -59,14 +58,16 @@ Deno.test("brand keeps the parse's Potential", () => {
 	assertEquals(unionKinds(parse(brand(text, "Now"), "a")), "Sync");
 });
 
-Deno.test("brand records each brand, innermost first", () => {
-	// Given: a schema branded twice, and one never branded
+Deno.test("brand is type-only: the schema is returned as is", () => {
+	// Given: a schema
+	// When: branding it, twice
 	const twice = brand(brand(text, "A"), "B");
 
-	// When: reading their brands
-	// Then: both brands are recorded in order, and the plain schema has none
-	assertEquals(brandsOf(twice), ["A", "B"]);
-	assertEquals(brandsOf(text), []);
+	// Then: it is the same schema at runtime; only its type changed
+	assertStrictEquals(twice, text);
+	assertType<IsExact<Output<typeof twice>, Branded<Branded<string, "A">, "B">>>(
+		true,
+	);
 });
 
 Deno.test("brand types: only the output is branded", () => {

@@ -72,38 +72,18 @@ Deno.test("or fails exactly like the union of its sides", async () => {
 	assertEquals(found, expected);
 });
 
-Deno.test("or flattens chains on either side into one union", async () => {
-	// Given: chains nested to the left, to the right, and a flat union
-	const leftNested = or({
-		left: or({ left: text, right: count }),
-		right: flag,
-	});
-	const rightNested = or({
-		left: text,
-		right: or({ left: count, right: flag }),
-	});
-	const flat = union([text, count, flag]);
+Deno.test("or chains nest: each or is one union of two", async () => {
+	// Given: a chain of two ors, and the nested unions it stands for
+	const chain = or({ left: or({ left: text, right: count }), right: flag });
+	const nested = union([union([text, count]), flag]);
 
-	// When: each rejects the same value
-	const expected = unwrapErr(await parseAsync(flat, null));
+	// When: the chain accepts a value of the last side, and rejects another
+	const parsed = unwrap(parseSync(chain, true));
+	const found = unwrapErr(await parseAsync(chain, null));
 
-	// Then: each fails exactly like the flat union, one branch per schema
-	assertEquals(unwrapErr(await parseAsync(leftNested, null)), expected);
-	assertEquals(unwrapErr(await parseAsync(rightNested, null)), expected);
-});
-
-Deno.test("or extends a union built with union", async () => {
-	// Given: a union of two schemas, then or'd with a third
-	const extended = or({ left: union([text, count]), right: flag });
-
-	// When: it rejects a value
-	const found = unwrapErr(await parseAsync(extended, null));
-
-	// Then: it fails like the three-option union
-	assertEquals(
-		found,
-		unwrapErr(await parseAsync(union([text, count, flag]), null)),
-	);
+	// Then: it accepts what any side accepts, and fails like the nesting
+	assertEquals(parsed, true);
+	assertEquals(found, unwrapErr(await parseAsync(nested, null)));
 });
 
 Deno.test("or stays Sync when both sides are, and is Async otherwise", () => {

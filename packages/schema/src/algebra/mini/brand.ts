@@ -1,7 +1,5 @@
-import { getStructParams } from "@sekhmet/primordials/struct";
-import type { Child, ChildParsed } from "@/src/composites/mini/collect.ts";
-import { Schema } from "@/src/core/mini/schema.ts";
-import { recordBrand } from "./registry.ts";
+import type { Child } from "@/src/composites/mini/collect.ts";
+import type { Schema } from "@/src/core/mini/schema.ts";
 
 /**
  * The key of the type-only brand {@linkcode Branded} adds. No value ever
@@ -76,12 +74,6 @@ export function brand<I, O, E, const B extends string>(
 	self: Schema<I, O, E>,
 	name: B,
 ): Schema<I, Branded<O, B>, E>;
-export function brand(self: Child, name: string): Child {
-	const parser = getStructParams(self);
-	const branded = (input: unknown): ChildParsed => {
-		return parser(input);
-	};
-	recordBrand({ parser: branded, name, inner: self });
-
-	return new Schema(branded);
+export function brand(self: Child, _name: string): Child {
+	return self;
 }

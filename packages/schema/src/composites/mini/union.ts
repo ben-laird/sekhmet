@@ -8,9 +8,9 @@ import {
 	type Input,
 	type Output,
 	parse,
-	type Schema,
+	Schema,
 } from "@/src/core/mini/schema.ts";
-import { type Child, type Parsed, recordUnion } from "./collect.ts";
+import type { Child, Parsed } from "./collect.ts";
 
 /**
  * The input a union schema accepts: every option is tried with the same
@@ -72,9 +72,9 @@ export function union<const T extends readonly [AnySchema, ...AnySchema[]]>(
 	options: T,
 ): Schema<UnionInput<T>, Output<T[number]>, Issues<SchemaIssue>>;
 export function union(
-	options: readonly [Child, ...Child[]],
+	options: readonly Child[],
 ): Schema<unknown, unknown, Issues<unknown>> {
-	const parser = (input: unknown): Parsed => {
+	return new Schema((input: unknown): Parsed => {
 		const attempt = (
 			index: number,
 			failures: readonly Issues<unknown>[],
@@ -95,7 +95,5 @@ export function union(
 		};
 
 		return attempt(0, []);
-	};
-
-	return recordUnion({ options, parser });
+	});
 }
