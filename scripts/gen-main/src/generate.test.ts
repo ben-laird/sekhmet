@@ -534,6 +534,50 @@ Deno.test("generateMain rewrites examples and drops self docs", () => {
 	assertEquals(output.includes("The value type"), false);
 });
 
+Deno.test("generateMain points example imports at the main entrypoint", () => {
+	// Given: a method and a constructor whose examples import from mini
+	const example = (code: string): JsDoc => ({
+		doc: "",
+		tags: [{ kind: "example", doc: `\`\`\`ts\n${code}\n\`\`\`` }],
+	});
+	const get = fn(
+		"get",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: typeParam("T"),
+			jsDoc: example(
+				'import { Full, get } from "@pkg/box/mini";\n\nget(Full(1));',
+			),
+		}),
+	);
+	const full = fn(
+		"Full",
+		signature({
+			typeParams: ["T"],
+			params: [param("value", typeParam("T"))],
+			returnType: named("Box", [typeParam("T")]),
+			jsDoc: example(
+				'import { Full, get } from "@pkg/box/mini/core";\n\nget(Full(1));',
+			),
+		}),
+	);
+
+	// When: generating
+	const output = source([get, full]);
+
+	// Then: both import from main, drop the method's import and call it as a method
+	assertStringIncludes(
+		output,
+		'\t * import { Full } from "@pkg/box";\n\t *\n\t * Full(1).get();',
+	);
+	assertStringIncludes(
+		output,
+		' * import { Full } from "@pkg/box";\n *\n * Full(1).get();\n',
+	);
+	assertEquals(output.includes('from "@pkg/box/mini'), false);
+});
+
 Deno.test("generateMain rejects a method type parameter that shadows the class's", () => {
 	// Given: self typed Box<A> with an extra type parameter named T
 	const bad = fn(

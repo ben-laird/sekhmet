@@ -33,7 +33,7 @@ export type { ResultVariants } from "../mini/mod.ts";
  * @template E - The type of the error value
  * @example
  * ```ts ignore
- * import { Err, Ok, type Result } from "@sekhmet/enum/result/mini/core";
+ * import { Err, Ok, type Result } from "@sekhmet/enum/result";
  * import { match } from "@sekhmet/enum/core/mini/exit";
  *
  * function divide(a: number, b: number): Result<number, string> {
@@ -251,8 +251,7 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @returns true if the Result is Ok, false otherwise
 	 * @example
 	 * ```ts ignore
-	 * import { Ok, type Result } from "@sekhmet/enum/result/mini/core";
-	 * import { isOk } from "@sekhmet/enum/result/mini/predicates";
+	 * import { Ok, type Result } from "@sekhmet/enum/result";
 	 * import { match } from "@sekhmet/enum/core/mini/exit";
 	 *
 	 * const result = Ok(42);
@@ -281,8 +280,7 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @returns true if the Result is Ok and the predicate returns true, false otherwise
 	 * @example
 	 * ```ts ignore
-	 * import { Ok, type Result } from "@sekhmet/enum/result/mini/core";
-	 * import { isOkAnd } from "@sekhmet/enum/result/mini/predicates";
+	 * import { Ok, type Result } from "@sekhmet/enum/result";
 	 * import { match } from "@sekhmet/enum/core/mini/exit";
 	 *
 	 * const result = Ok(42);
@@ -320,8 +318,7 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @returns true if the Result is Err, false otherwise
 	 * @example
 	 * ```ts ignore
-	 * import { Err, type Result } from "@sekhmet/enum/result/mini/core";
-	 * import { isErr } from "@sekhmet/enum/result/mini/predicates";
+	 * import { Err, type Result } from "@sekhmet/enum/result";
 	 * import { match } from "@sekhmet/enum/core/mini/exit";
 	 *
 	 * const result = Err(new Error("Failed"));
@@ -349,8 +346,7 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @returns true if the Result is Err and the predicate returns true, false otherwise
 	 * @example
 	 * ```ts ignore
-	 * import { Err, type Result } from "@sekhmet/enum/result/mini/core";
-	 * import { isErrAnd } from "@sekhmet/enum/result/mini/predicates";
+	 * import { Err, type Result } from "@sekhmet/enum/result";
 	 * import { match } from "@sekhmet/enum/core/mini/exit";
 	 *
 	 * const result = Err(new Error("Not found"));

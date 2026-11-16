@@ -44,7 +44,7 @@ export type { LatchVariants } from "../mini/mod.ts";
  * @template I - The type of the inactive value
  * @example
  * ```ts ignore
- * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch/mini/core";
+ * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
  * import { match } from "@sekhmet/enum/core/mini/exit";
  *
  * const connection: Latch<Socket, Error> = Active(socket);

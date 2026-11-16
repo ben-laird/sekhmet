@@ -29,7 +29,7 @@ export type { OrderingVariants } from "../mini/mod.ts";
  *
  * @example
  * ```ts
- * import { andThen, compareNumbers, type Ordering, toNumber } from "@sekhmet/enum/ordering/mini";
+ * import { compareNumbers, type Ordering } from "@sekhmet/enum/ordering";
  * import { assertEquals } from "@std/assert";
  *
  * interface Point {
@@ -39,9 +39,9 @@ export type { OrderingVariants } from "../mini/mod.ts";
  *
  * // Compare by x, then by y if x is equal
  * const comparePoints = (a: Point, b: Point): Ordering =>
- *   andThen(compareNumbers(a.x, b.x), compareNumbers(a.y, b.y));
+ *   (compareNumbers(a.x, b.x)).andThen(compareNumbers(a.y, b.y));
  *
- * assertEquals(toNumber(comparePoints({ x: 1, y: 2 }, { x: 1, y: 3 })), -1);
+ * assertEquals((comparePoints({ x: 1, y: 2 }, { x: 1, y: 3 })).toNumber(), -1);
  * ```
  */
 export class Ordering extends mini.Ordering {

@@ -1,5 +1,72 @@
 import { assertEquals } from "@std/assert";
-import { toMethodForm } from "./example.ts";
+import { toMainImports, toMethodForm } from "./example.ts";
+
+const NONE: ReadonlySet<string> = new Set();
+
+Deno.test("toMainImports moves mini imports to main and drops methods", () => {
+	// Given: an example importing a constructor and a method from mini
+	const code =
+		'```ts\nimport { Some, map } from "@sekhmet/enum/option/mini";\n\nSome(1).map((x) => x);\n```';
+
+	// When: rewriting it for main, where map is a method
+	const rewritten = toMainImports({
+		code,
+		entrypoint: "@sekhmet/enum/option",
+		methods: new Set(["map"]),
+		omitted: NONE,
+	});
+
+	// Then: the constructor comes from main and map is no longer imported
+	assertEquals(
+		rewritten,
+		'```ts\nimport { Some } from "@sekhmet/enum/option";\n\nSome(1).map((x) => x);\n```',
+	);
+});
+
+Deno.test("toMainImports removes an import left empty", () => {
+	// Given: an example whose only import is the method itself, from a mini subpath
+	const code =
+		'```ts\nimport { unwrap } from "@sekhmet/enum/option/mini/unwrap";\n\nopt.unwrap();\n```';
+
+	// When: rewriting it for main
+	const rewritten = toMainImports({
+		code,
+		entrypoint: "@sekhmet/enum/option",
+		methods: new Set(["unwrap"]),
+		omitted: NONE,
+	});
+
+	// Then: the import and the blank line after the fence are gone
+	assertEquals(rewritten, "```ts\nopt.unwrap();\n```");
+});
+
+Deno.test("toMainImports keeps omitted names, other packages and type imports", () => {
+	// Given: an omitted name, an aliased name, a type import and another package's import
+	const code = [
+		'import { Failed, spawn as go } from "@sekhmet/effect/fiber/mini";',
+		'import type { Fiber } from "@sekhmet/effect/fiber/mini/fiber";',
+		'import { Ok } from "@sekhmet/enum/result/mini";',
+	].join("\n");
+
+	// When: rewriting it for the fiber main entrypoint
+	const rewritten = toMainImports({
+		code,
+		entrypoint: "@sekhmet/effect/fiber",
+		methods: NONE,
+		omitted: new Set(["Failed"]),
+	});
+
+	// Then: omitted names stay on mini, the rest move to main, other packages are untouched
+	assertEquals(
+		rewritten,
+		[
+			'import { spawn as go } from "@sekhmet/effect/fiber";',
+			'import { Failed } from "@sekhmet/effect/fiber/mini";',
+			'import type { Fiber } from "@sekhmet/effect/fiber";',
+			'import { Ok } from "@sekhmet/enum/result/mini";',
+		].join("\n"),
+	);
+});
 
 Deno.test("toMethodForm moves the first argument to the receiver", () => {
 	// Given: a call with a receiver and more arguments

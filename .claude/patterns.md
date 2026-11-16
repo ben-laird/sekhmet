@@ -357,8 +357,14 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   becomes `this is X`, `asserts self is X` becomes `asserts this is X`, and
   overloads are kept. Type parameters that `self`'s type fixes become the
   class's; the rest stay on the method (`filter<T, U extends T>` becomes
-  `filter<U extends T>`). JSDoc is copied without `@param self`, examples are
-  rewritten to method form, and `@see {@link mini.fn}` is added.
+  `filter<U extends T>`). JSDoc is copied without `@param self`, and
+  `@see {@link mini.fn}` is added.
+- **Examples.** Every example copied into main (methods, constructors, the
+  class) is rewritten for main: calls of any function that became a method
+  move to method form, and imports from `<entrypoint>/mini` (or a mini
+  subpath) move to `<entrypoint>`, dropping the names that are now methods.
+  So write mini examples against the mini entrypoint with explicit imports;
+  `deno test --doc` then checks both forms.
 - **Chaining.** A method whose mini return type is the primary type (at the
   top level) returns the main class. The result goes through the class's
   static `fromMini`, which returns the value unchanged when it already is a

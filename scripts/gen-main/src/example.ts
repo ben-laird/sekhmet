@@ -1,6 +1,7 @@
 /**
- * Rewrites JSDoc examples of a `self`-first function into method-call form:
- * `map(Some(10), f)` becomes `Some(10).map(f)`.
+ * Rewrites mini JSDoc examples for main: a `self`-first function's calls
+ * move into method-call form (`map(Some(10), f)` becomes `Some(10).map(f)`),
+ * and imports from the mini entrypoint move to the main one.
  *
  * @module
  */
@@ -137,4 +138,77 @@ export function toMethodForm({
 	}
 
 	return output + code.slice(cursor);
+}
+
+const NAMED_IMPORT =
+	/import\s+(type\s+)?\{([^}]*)\}\s*from\s*(["'])([^"']+)\3;?[ \t]*\n?/g;
+
+/** The name an import specifier binds from its module (`a as b` imports `a`). */
+function importedName(specifier: string): string {
+	const withoutType = specifier.replace(/^type\s+/, "");
+	return withoutType.split(/\s+as\s+/)[0]?.trim() ?? withoutType;
+}
+
+/**
+ * Rewrites the named imports of a JSDoc example from a feature's mini
+ * entrypoint (or one of its subpaths) to its main entrypoint. Names that
+ * became methods are dropped, since main calls them on the receiver; names
+ * main leaves out stay imported from mini. An import left empty is removed.
+ *
+ * @param options.code - The example code
+ * @param options.entrypoint - The main entrypoint (e.g. `@sekhmet/enum/option`)
+ * @param options.methods - Mini functions that are methods in main
+ * @param options.omitted - Mini exports main does not export
+ * @returns The rewritten code
+ */
+export function toMainImports({
+	code,
+	entrypoint,
+	methods,
+	omitted,
+}: {
+	code: string;
+	entrypoint: string;
+	methods: ReadonlySet<string>;
+	omitted: ReadonlySet<string>;
+}): string {
+	const mini = `${entrypoint}/mini`;
+
+	const rewritten = code.replace(
+		NAMED_IMPORT,
+		(
+			statement: string,
+			typeOnly: string | undefined,
+			list: string,
+			_quote: string,
+			from: string,
+		): string => {
+			if (from !== mini && !from.startsWith(`${mini}/`)) return statement;
+
+			const kept = list
+				.split(",")
+				.map((specifier) => specifier.trim())
+				.filter(
+					(specifier) =>
+						specifier !== "" && !methods.has(importedName(specifier)),
+				);
+			const isOmitted = (specifier: string): boolean =>
+				omitted.has(importedName(specifier));
+			const head = typeOnly === undefined ? "import" : "import type";
+			const render = (names: string[], specifier: string): string =>
+				names.length === 0
+					? ""
+					: `${head} { ${names.join(", ")} } from "${specifier}";\n`;
+
+			return (
+				render(
+					kept.filter((specifier) => !isOmitted(specifier)),
+					entrypoint,
+				) + render(kept.filter(isOmitted), from)
+			);
+		},
+	);
+
+	// A removed import can leave the fence opening on a blank line
+	return rewritten.replace(/^(```[^\n]*\n)\n+/gm, "$1");
 }
