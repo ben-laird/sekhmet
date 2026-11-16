@@ -183,6 +183,21 @@ export function dvValidateCommand(): StepCommand {
 }
 
 /**
+ * The JSR publish dry run. A local run allows a dirty tree: the commit gate
+ * runs it on staged, uncommitted changes, which a clean-tree dry run always
+ * refuses. CI checks out a clean commit, so it keeps the clean-tree check.
+ *
+ * @param options.isCI - Running in a CI service
+ * @returns The command to run
+ */
+export function jsrDryRunCommand({ isCI }: { isCI: boolean }): StepCommand {
+	return {
+		program: "deno",
+		args: ["publish", "--dry-run", ...(isCI ? [] : ["--allow-dirty"])],
+	};
+}
+
+/**
  * The CI workflow's steps for a run:
  * - Parallel linting (Deno lint, Biome check, per-package documentation lint,
  *   publish readiness, generated-main freshness, `dv validate`, JSR dry run)
@@ -248,10 +263,7 @@ export function ciSteps({ isCI, isAI, coverageDir }: CIRun): WorkflowStep[] {
 			name: "JSR Publish Dry Run",
 			exitCode: EXIT_CODES.JSR_DRY_RUN_FAILED,
 
-			command: {
-				program: "deno",
-				args: ["publish", "--dry-run", ...(isAI ? ["--allow-dirty"] : [])],
-			},
+			command: jsrDryRunCommand({ isCI }),
 		},
 
 		// Run tests (blocked if lint fails)

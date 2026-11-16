@@ -11,6 +11,7 @@ import {
 	coverageSummaryCommand,
 	dvValidateCommand,
 	EXIT_CODES,
+	jsrDryRunCommand,
 	main,
 	readinessCommand,
 	STEP_TIMEOUT,
@@ -286,6 +287,28 @@ Deno.test("coverageCleanupCommand succeeds when there is no coverage directory",
 	} finally {
 		await Deno.remove(root, { recursive: true });
 	}
+});
+
+Deno.test("the JSR dry run allows a dirty tree locally, so staged changes can be gated, but not in CI", () => {
+	// Given: the local and CI step lists
+	const local = ciSteps({
+		isCI: false,
+		isAI: false,
+		coverageDir: LOCAL_COVERAGE_DIR,
+	});
+	const ci = ciSteps({ isCI: true, isAI: false, coverageDir: CI_COVERAGE_DIR });
+	const dryRun = (steps: typeof local) =>
+		steps.find((step) => step.name === "JSR Publish Dry Run")?.command;
+
+	// When: reading each run's dry-run command
+	const localCommand = dryRun(local);
+	const ciCommand = dryRun(ci);
+
+	// Then: only the local run passes --allow-dirty
+	assertEquals(localCommand, jsrDryRunCommand({ isCI: false }));
+	assertEquals(localCommand?.args, ["publish", "--dry-run", "--allow-dirty"]);
+	assertEquals(ciCommand, jsrDryRunCommand({ isCI: true }));
+	assertEquals(ciCommand?.args, ["publish", "--dry-run"]);
 });
 
 Deno.test("main function exists and is callable", () => {

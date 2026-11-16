@@ -47,10 +47,10 @@ deno task fmt
 considering the task complete.
 
 **AI Mode (`CI_AI=true`)**: Always use the `CI_AI=true` environment variable
-when running CI as an AI agent. This mode:
-
-- Allows dirty worktree (JSR publish dry-run won't fail on uncommitted changes)
-- Outputs structured JSON for programmatic parsing
+when running CI as an AI agent. This mode outputs structured JSON for
+programmatic parsing. Every local run (AI or not) allows a dirty worktree: the
+JSR publish dry run passes `--allow-dirty`, so staged changes can be gated
+before they are committed; only CI (`CI=true`) requires a clean tree.
 
 **Handling CI Failures**: If CI fails:
 
