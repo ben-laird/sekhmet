@@ -92,7 +92,13 @@ Before contributing:
 2. The project uses Deno workspaces. All dependencies are managed through
    [deno.json](deno.json).
 
-3. Run CI checks to ensure everything works:
+3. Turn on the [commit gate](#commit-gate) for your clone:
+
+   ```bash
+   deno task hooks
+   ```
+
+4. Run CI checks to ensure everything works:
 
    ```bash
    deno task ci
@@ -429,6 +435,36 @@ test(@sekhmet/enum): add exit tests
 chore(@sekhmet/enum): add eliminate mini exports
 ```
 
+### Commit gate
+
+A git hook refuses a commit unless `deno task ci` passed on exactly the tree
+being committed. Turn it on once per clone (it covers every worktree of the
+clone, since they share `.git/config`):
+
+```bash
+deno task hooks   # git config core.hooksPath .githooks
+```
+
+`deno task ci` prints a one-line warning while it is off.
+
+- **Recording:** when every step passes, `deno task ci` records the staged
+  tree's id (`git write-tree`) in `$(git rev-parse --git-path ci-green)`, one
+  marker per worktree. The gate checks the working tree, not the index, so it
+  records only when the two hold the same files: no unstaged change to a
+  tracked file and no untracked, unignored file, both before the first step
+  and after the last. A failed, blocked or interrupted run records nothing.
+- **Checking:** `.githooks/pre-commit` refuses a commit whose staged tree is
+  not the recorded one. A commit that changes only `*.md` files (a rename
+  counts both its paths) is exempt.
+- **The workflow:** stage everything (`git add`), run `deno task ci`, then
+  commit. Any edit or `git add` after the run needs a new run.
+- **Merges:** `.githooks/pre-merge-commit` holds a merge commit to the same
+  rule. When `git merge --no-ff` is refused, the merge stays staged: run
+  `deno task ci`, then `git commit`. Or start with `git merge --no-commit`.
+  A fast-forward makes no commit, so nothing is checked.
+- **Escape hatch:** `git commit --no-verify` skips the hook. It is for human
+  emergencies only; agents must never use it.
+
 ## Pull Request Process
 
 1. **Create a feature branch**:
@@ -442,13 +478,15 @@ chore(@sekhmet/enum): add eliminate mini exports
    - Add tests for new functionality
    - Update documentation if needed
 
-3. **Run checks**:
+3. **Stage your changes, then run checks** on exactly what is staged:
 
    ```bash
+   git add <paths>
    deno task ci
    ```
 
-4. **Commit your changes** using conventional commits
+4. **Commit your changes** using conventional commits; the
+   [commit gate](#commit-gate) refuses a commit without a green run
 
 5. **Push and create a PR**:
    - Provide a clear description of changes
