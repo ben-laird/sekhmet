@@ -1,10 +1,16 @@
 import { match } from "@sekhmet/enum/core/mini/exit";
-import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertExists } from "@std/assert";
+import { assertType, type IsExact } from "@std/testing/types";
 import {
+	type AnySchema,
+	type ErrorOf,
 	filter,
+	type Infer,
+	type Input,
 	map,
 	mapErr,
+	type Output,
 	parse,
 	parseAsync,
 	parseSync,
@@ -296,4 +302,34 @@ Deno.test("filter rejects values that fail the predicate", () => {
 		}),
 		true,
 	);
+});
+
+Deno.test("Input, Output, Infer and ErrorOf extract a schema's types", () => {
+	// Given: a schema from strings to numbers failing with RangeError
+	const schema = new Schema(
+		(input: string): Result<number, RangeError> => Ok(input.length),
+	);
+	type S = typeof schema;
+
+	// When: extracting its type parameters
+	// Then: each helper names the matching one
+	assertType<IsExact<Input<S>, string>>(true);
+	assertType<IsExact<Output<S>, number>>(true);
+	assertType<IsExact<Infer<S>, number>>(true);
+	assertType<IsExact<ErrorOf<S>, RangeError>>(true);
+});
+
+Deno.test("AnySchema accepts every schema", () => {
+	// Given: schemas with unrelated input, output and error types
+	const schemas = [
+		new Schema((input: string) => Ok(input.length)),
+		new Schema((input: unknown) => Err(new TypeError(String(input)))),
+		map(new Schema((input: number) => Ok(input)), (n) => [n]),
+	];
+
+	// When: treating them as AnySchema
+	const any: AnySchema[] = schemas;
+
+	// Then: all of them are accepted
+	assertEquals(any.length, 3);
 });

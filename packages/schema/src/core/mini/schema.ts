@@ -37,6 +37,88 @@ export type Parser<I, O, E> = (input: I) => MaybePromise<Result<O, E>>;
 export class Schema<I, O, E> extends Struct<Parser<I, O, E>> {}
 
 /**
+ * Any schema: every `Schema<I, O, E>` is assignable to it. Use it to
+ * constrain a type parameter that takes a schema, such as a composite's
+ * children.
+ *
+ * @example
+ * ```ts
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import { type AnySchema, Schema } from "@sekhmet/schema/core/mini/schema";
+ *
+ * const schemas: AnySchema[] = [
+ * 	new Schema((input: string) => Ok(input.length)),
+ * 	new Schema((input: unknown) => Ok(input)),
+ * ];
+ * ```
+ */
+export type AnySchema = Schema<never, unknown, unknown>;
+
+/**
+ * The input type a schema accepts.
+ *
+ * @template S The schema
+ *
+ * @example
+ * ```ts
+ * import { assertType, type IsExact } from "@std/testing/types";
+ * import type { Input, Schema } from "@sekhmet/schema/core/mini/schema";
+ *
+ * assertType<IsExact<Input<Schema<string, number, Error>>, string>>(true);
+ * ```
+ */
+export type Input<S extends AnySchema> =
+	S extends Schema<infer I, infer _O, infer _E> ? I : never;
+
+/**
+ * The output type a schema produces on success.
+ *
+ * @template S The schema
+ *
+ * @example
+ * ```ts
+ * import { assertType, type IsExact } from "@std/testing/types";
+ * import type { Output, Schema } from "@sekhmet/schema/core/mini/schema";
+ *
+ * assertType<IsExact<Output<Schema<string, number, Error>>, number>>(true);
+ * ```
+ */
+export type Output<S extends AnySchema> =
+	S extends Schema<infer _I, infer O, infer _E> ? O : never;
+
+/**
+ * The type a schema infers for a valid value: an alias of
+ * {@linkcode Output}.
+ *
+ * @template S The schema
+ *
+ * @example
+ * ```ts
+ * import { assertType, type IsExact } from "@std/testing/types";
+ * import type { Infer, Schema } from "@sekhmet/schema/core/mini/schema";
+ *
+ * assertType<IsExact<Infer<Schema<string, number, Error>>, number>>(true);
+ * ```
+ */
+export type Infer<S extends AnySchema> = Output<S>;
+
+/**
+ * The error type a schema fails with.
+ *
+ * @template S The schema
+ *
+ * @example
+ * ```ts
+ * import { assertType, type IsExact } from "@std/testing/types";
+ * import type { ErrorOf, Schema } from "@sekhmet/schema/core/mini/schema";
+ *
+ * assertType<IsExact<ErrorOf<Schema<string, number, Error>>, Error>>(true);
+ * ```
+ */
+export type ErrorOf<S extends AnySchema> =
+	S extends Schema<infer _I, infer _O, infer E> ? E : never;
+
+/**
  * Parses input using a schema, returning a Potential result.
  *
  * This function handles both synchronous and asynchronous parsing,

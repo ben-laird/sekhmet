@@ -62,9 +62,14 @@ export {
 } from "./potential.ts";
 
 export {
+	type AnySchema,
+	type ErrorOf,
 	filter,
+	type Infer,
+	type Input,
 	map as mapSchema,
 	mapErr,
+	type Output,
 	ParseError,
 	type Parser,
 	type ParseSyncError,
