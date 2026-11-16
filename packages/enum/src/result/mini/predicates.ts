@@ -112,6 +112,7 @@ export function isErr<T, E>(self: Result<T, E>): self is Result<never, E> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
+ * import { match } from "@sekhmet/enum/core/mini";
  * import { Err, type Result, isErrAnd } from "@sekhmet/enum/result/mini";
  *
  * const result = Err(new Error("Not found"));
@@ -120,12 +121,18 @@ export function isErr<T, E>(self: Result<T, E>): self is Result<never, E> {
  * // With type guard
  * type NetworkError = { code: number };
  * const result2: Result<string, Error | NetworkError> = Err({ code: 404 });
- * assertEquals(isErrAnd(result2, (e): e is NetworkError => "code" in e), true);
+ * if (isErrAnd(result2, (e): e is NetworkError => "code" in e)) {
+ *   const code = match(result2)({
+ *     Ok: () => 0,
+ *     Err: (e) => e.code, // TypeScript knows e is NetworkError
+ *   });
+ *   assertEquals(code, 404);
+ * }
  * ```
  */
 export function isErrAnd<T, E, F extends E>(
 	self: Result<T, E>,
 	predicate: ((value: E) => value is F) | ((value: E) => boolean),
-): self is Result<never, E> {
+): self is Result<never, F> {
 	return isolateAnd(self, "Err", predicate);
 }
