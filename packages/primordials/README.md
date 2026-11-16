@@ -1,55 +1,93 @@
-# Primordials
+# @sekhmet/primordials
 
-The Primordials library contains the constructs that make up the foundation of
-Sekhmet.
+The small building blocks the other Sekhmet packages are made of:
 
-## Features
+- `@sekhmet/primordials/struct`: `Struct`, a base class that keeps its data
+  behind a symbol, and `getStructParams` to read it.
+- `@sekhmet/primordials/subtle`: `Subtle`, which hides a creator function
+  behind `useSubtle`.
+- `@sekhmet/primordials/scoping`: `block` and `define`, two expression
+  helpers.
 
-1. **Simple.** Only a few fundamental constructs are needed.
-2. **Tested.** Extensively tested, both here and throughout Sekhmet.
+You rarely need this package directly unless you build your own Sekhmet-style
+types; the other packages depend on it for you.
 
-## Installation
+## Install
 
-Note that you will often not need to install Sekhmet Primordials, because
-they're usually only used internally by other packages. This likely does not
-apply if you're building a Sekhmet library of your own though.
+The package is published on [JSR](https://jsr.io/@sekhmet/primordials).
 
-Install with your favorite JSR-compatible or NPM-compatible package manager.
-
-### NPM
-
-```bash
-npm install @sekhmet/primordials
-```
-
-### Yarn
-
-```bash
-yarn add @sekhmet/primordials
-```
-
-### PNPM
-
-```bash
-pnpm add @sekhmet/primordials
-```
-
-### Deno
-
-```bash
+```sh
 deno add jsr:@sekhmet/primordials
 ```
 
-Then simply import the module you'd like to use.
+For Node.js, Bun and other npm-compatible runtimes, install through JSR's npm
+compatibility layer:
 
-```ts
-import { getStructParams, Struct } from "@sekhmet/primordials/struct";
-import { Subtle, useSubtle } from "@sekhmet/primordials/subtle";
+```sh
+npx jsr add @sekhmet/primordials      # npm
+pnpm dlx jsr add @sekhmet/primordials # pnpm
+yarn dlx jsr add @sekhmet/primordials # yarn
+bunx jsr add @sekhmet/primordials     # bun
 ```
 
-## Usage
+The package has no root export: import `struct`, `subtle` or `scoping`.
 
-See [`struct.test.ts`](./struct.test.ts) for an example of how to use the
-`Struct` class, and [`subtle.test.ts`](./subtle.test.ts) for an example of how
-to use the `Subtle` class. There are also many examples throughout Sekhmet of
-how to use these two classes, feel free to take a look at those as well.
+## Struct
+
+```ts
+import { assertEquals } from "@std/assert";
+import { getStructParams, Struct } from "@sekhmet/primordials/struct";
+
+class Counter extends Struct<{ count: number }> {
+	increment(): number {
+		return ++getStructParams(this).count;
+	}
+}
+
+const counter = new Counter({ count: 0 });
+counter.increment();
+
+assertEquals(getStructParams(counter).count, 1);
+```
+
+## Subtle
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Subtle, useSubtle } from "@sekhmet/primordials/subtle";
+
+const connect = new Subtle({ create: (url: string) => ({ url, open: true }) });
+
+assertEquals(useSubtle(connect, "wss://example.test"), { url: "wss://example.test", open: true });
+```
+
+## Scoping
+
+```ts
+import { assertEquals } from "@std/assert";
+import { block, define } from "@sekhmet/primordials/scoping";
+
+// block: a statement block used as an expression
+const label = block(() => {
+	const hour = 14;
+	return hour < 12 ? "morning" : "afternoon";
+});
+
+// define: an inline value checked against a type
+interface Config {
+	port: number;
+}
+const config = define<Config>({ port: 8080 });
+
+assertEquals([label, config.port], ["afternoon", 8080]);
+```
+
+## Learn more
+
+- Guide: [concepts](docs/concepts.md), also on the
+  [docs site](https://ben-laird.github.io/sekhmet/primordials/).
+- API reference: [jsr.io/@sekhmet/primordials](https://jsr.io/@sekhmet/primordials).
+
+## License
+
+MIT. See [LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/primordials/LICENSE.md).
