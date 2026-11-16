@@ -2,14 +2,14 @@ import { assertEquals, assertRejects } from "@std/assert";
 import { exists } from "@std/fs/exists";
 import { executeStepGraph } from "./graph.ts";
 import { ranResult } from "./testing.ts";
-import type { WorkflowStep } from "./types.ts";
+import type { StepCommand, WorkflowStep } from "./types.ts";
 
 Deno.test("executeStepGraph executes single step successfully", async () => {
 	// Given: a single successful step
 	const steps: WorkflowStep[] = [
 		{
 			name: "Build",
-			command: new Deno.Command("echo", { args: ["building"] }),
+			command: { program: "echo", args: ["building"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -33,15 +33,15 @@ Deno.test("executeStepGraph executes multiple independent steps in parallel", as
 	const steps: WorkflowStep[] = [
 		{
 			name: "Lint",
-			command: new Deno.Command("echo", { args: ["linting"] }),
+			command: { program: "echo", args: ["linting"] },
 		},
 		{
 			name: "Format",
-			command: new Deno.Command("echo", { args: ["formatting"] }),
+			command: { program: "echo", args: ["formatting"] },
 		},
 		{
 			name: "TypeCheck",
-			command: new Deno.Command("echo", { args: ["type checking"] }),
+			command: { program: "echo", args: ["type checking"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -65,12 +65,12 @@ Deno.test("executeStepGraph respects dependencies", async () => {
 	const steps: WorkflowStep[] = [
 		{
 			name: "Build",
-			command: new Deno.Command("echo", { args: ["build"] }),
+			command: { program: "echo", args: ["build"] },
 		},
 		{
 			name: "Test",
 			dependsOn: ["Build"],
-			command: new Deno.Command("echo", { args: ["test"] }),
+			command: { program: "echo", args: ["test"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -94,16 +94,16 @@ Deno.test("executeStepGraph handles multiple dependencies", async () => {
 	const steps: WorkflowStep[] = [
 		{
 			name: "Lint",
-			command: new Deno.Command("echo", { args: ["lint"] }),
+			command: { program: "echo", args: ["lint"] },
 		},
 		{
 			name: "TypeCheck",
-			command: new Deno.Command("echo", { args: ["typecheck"] }),
+			command: { program: "echo", args: ["typecheck"] },
 		},
 		{
 			name: "Build",
 			dependsOn: ["Lint", "TypeCheck"],
-			command: new Deno.Command("echo", { args: ["build"] }),
+			command: { program: "echo", args: ["build"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -127,11 +127,11 @@ Deno.test("executeStepGraph throws error for duplicate step names", async () => 
 	const steps: WorkflowStep[] = [
 		{
 			name: "Build",
-			command: new Deno.Command("echo", { args: ["build1"] }),
+			command: { program: "echo", args: ["build1"] },
 		},
 		{
 			name: "Build",
-			command: new Deno.Command("echo", { args: ["build2"] }),
+			command: { program: "echo", args: ["build2"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -154,7 +154,7 @@ Deno.test("executeStepGraph throws error for missing dependency", async () => {
 		{
 			name: "Test",
 			dependsOn: ["Build"],
-			command: new Deno.Command("echo", { args: ["test"] }),
+			command: { program: "echo", args: ["test"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -171,12 +171,50 @@ Deno.test("executeStepGraph throws error for missing dependency", async () => {
 	}
 });
 
+Deno.test("executeStepGraph throws error for a dependency cycle without running any step", async () => {
+	// Given: A depends on C, C on B, and B on A
+	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
+	const marker = `${artifactsDir}/ran`;
+	const steps: WorkflowStep[] = [
+		{ name: "Free", command: { program: "touch", args: [marker] } },
+		{
+			name: "A",
+			dependsOn: ["C"],
+			command: { program: "echo", args: ["a"] },
+		},
+		{
+			name: "B",
+			dependsOn: ["A"],
+			command: { program: "echo", args: ["b"] },
+		},
+		{
+			name: "C",
+			dependsOn: ["B"],
+			command: { program: "echo", args: ["c"] },
+		},
+	];
+
+	try {
+		// When/Then: executing the step graph throws, naming the cycle
+		await assertRejects(
+			async () => await executeStepGraph(steps, artifactsDir),
+			Error,
+			'Dependency cycle: "A" -> "C" -> "B" -> "A"',
+		);
+
+		// Then: the graph was rejected before any step ran
+		assertEquals(await exists(marker), false);
+	} finally {
+		await Deno.remove(artifactsDir, { recursive: true });
+	}
+});
+
 Deno.test("executeStepGraph accumulates environment outputs", async () => {
 	// Given: steps that produce environment outputs
 	const steps: WorkflowStep[] = [
 		{
 			name: "SetupEnv",
-			command: new Deno.Command("echo", { args: ["setup"] }),
+			command: { program: "echo", args: ["setup"] },
 			captureOutputs: () => ({
 				env: { NODE_ENV: "production" },
 			}),
@@ -184,9 +222,7 @@ Deno.test("executeStepGraph accumulates environment outputs", async () => {
 		{
 			name: "Build",
 			dependsOn: ["SetupEnv"],
-			command: new Deno.Command("sh", {
-				args: ["-c", "echo $NODE_ENV"],
-			}),
+			command: { program: "sh", args: ["-c", "echo $NODE_ENV"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -209,7 +245,7 @@ Deno.test("executeStepGraph accumulates context outputs", async () => {
 	const steps: WorkflowStep[] = [
 		{
 			name: "SetupContext",
-			command: new Deno.Command("echo", { args: ["setup"] }),
+			command: { program: "echo", args: ["setup"] },
 			captureOutputs: () => ({
 				context: { version: "1.2.3", buildNumber: 42 },
 			}),
@@ -217,7 +253,7 @@ Deno.test("executeStepGraph accumulates context outputs", async () => {
 		{
 			name: "UseContext",
 			dependsOn: ["SetupContext"],
-			command: new Deno.Command("echo", { args: ["use"] }),
+			command: { program: "echo", args: ["use"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -241,27 +277,27 @@ Deno.test("executeStepGraph handles complex dependency chain", async () => {
 	const steps: WorkflowStep[] = [
 		{
 			name: "Install",
-			command: new Deno.Command("echo", { args: ["install"] }),
+			command: { program: "echo", args: ["install"] },
 		},
 		{
 			name: "Lint",
 			dependsOn: ["Install"],
-			command: new Deno.Command("echo", { args: ["lint"] }),
+			command: { program: "echo", args: ["lint"] },
 		},
 		{
 			name: "TypeCheck",
 			dependsOn: ["Install"],
-			command: new Deno.Command("echo", { args: ["typecheck"] }),
+			command: { program: "echo", args: ["typecheck"] },
 		},
 		{
 			name: "Build",
 			dependsOn: ["Lint", "TypeCheck"],
-			command: new Deno.Command("echo", { args: ["build"] }),
+			command: { program: "echo", args: ["build"] },
 		},
 		{
 			name: "Test",
 			dependsOn: ["Build"],
-			command: new Deno.Command("echo", { args: ["test"] }),
+			command: { program: "echo", args: ["test"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -288,12 +324,12 @@ Deno.test("executeStepGraph handles failed steps", async () => {
 	const steps: WorkflowStep[] = [
 		{
 			name: "Build",
-			command: new Deno.Command("sh", { args: ["-c", "exit 1"] }),
+			command: { program: "sh", args: ["-c", "exit 1"] },
 		},
 		{
 			name: "Test",
 			dependsOn: ["Build"],
-			command: new Deno.Command("echo", { args: ["test"] }),
+			command: { program: "echo", args: ["test"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -324,19 +360,19 @@ Deno.test("executeStepGraph blocks a function-condition dependent of a failed st
 	const steps: WorkflowStep[] = [
 		{
 			name: "Deno Test",
-			command: new Deno.Command("sh", { args: ["-c", "exit 1"] }),
+			command: { program: "sh", args: ["-c", "exit 1"] },
 		},
 		{
 			name: "Show coverage report",
 			dependsOn: ["Deno Test"],
 			condition: () => true,
-			command: new Deno.Command("touch", { args: [reportMarker] }),
+			command: { program: "touch", args: [reportMarker] },
 		},
 		{
 			name: "Cleanup coverage data",
 			dependsOn: ["Show coverage report"],
 			condition: "always",
-			command: new Deno.Command("touch", { args: [cleanupMarker] }),
+			command: { program: "touch", args: [cleanupMarker] },
 		},
 	];
 
@@ -364,16 +400,16 @@ Deno.test("executeStepGraph blocks a function-condition dependent of a failed st
 Deno.test("executeStepGraph propagates blocking through a chain of dependents", async () => {
 	// Given: A fails, B depends on A, C depends on B
 	const steps: WorkflowStep[] = [
-		{ name: "A", command: new Deno.Command("sh", { args: ["-c", "exit 1"] }) },
+		{ name: "A", command: { program: "sh", args: ["-c", "exit 1"] } },
 		{
 			name: "B",
 			dependsOn: ["A"],
-			command: new Deno.Command("echo", { args: ["b"] }),
+			command: { program: "echo", args: ["b"] },
 		},
 		{
 			name: "C",
 			dependsOn: ["B"],
-			command: new Deno.Command("echo", { args: ["c"] }),
+			command: { program: "echo", args: ["c"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -404,12 +440,12 @@ Deno.test("executeStepGraph runs a dependent of a skipped step", async () => {
 		{
 			name: "Optional",
 			condition: () => false,
-			command: new Deno.Command("echo", { args: ["optional"] }),
+			command: { program: "echo", args: ["optional"] },
 		},
 		{
 			name: "After",
 			dependsOn: ["Optional"],
-			command: new Deno.Command("echo", { args: ["after"] }),
+			command: { program: "echo", args: ["after"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -448,22 +484,22 @@ Deno.test("executeStepGraph handles diamond dependency (multiple dependents on s
 	const steps: WorkflowStep[] = [
 		{
 			name: "StepA",
-			command: new Deno.Command("echo", { args: ["a"] }),
+			command: { program: "echo", args: ["a"] },
 		},
 		{
 			name: "StepB",
 			dependsOn: ["StepA"],
-			command: new Deno.Command("echo", { args: ["b"] }),
+			command: { program: "echo", args: ["b"] },
 		},
 		{
 			name: "StepC",
 			dependsOn: ["StepA"],
-			command: new Deno.Command("echo", { args: ["c"] }),
+			command: { program: "echo", args: ["c"] },
 		},
 		{
 			name: "StepD",
 			dependsOn: ["StepB", "StepC"],
-			command: new Deno.Command("echo", { args: ["d"] }),
+			command: { program: "echo", args: ["d"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -490,44 +526,42 @@ Deno.test("executeStepGraph handles deeply nested diamond dependencies", async (
 	const steps: WorkflowStep[] = [
 		{
 			name: "Root",
-			command: new Deno.Command("sh", {
-				args: ["-c", "sleep 0.01 && echo root"],
-			}),
+			command: { program: "sh", args: ["-c", "sleep 0.01 && echo root"] },
 		},
 		{
 			name: "L1-A",
 			dependsOn: ["Root"],
-			command: new Deno.Command("echo", { args: ["l1a"] }),
+			command: { program: "echo", args: ["l1a"] },
 		},
 		{
 			name: "L1-B",
 			dependsOn: ["Root"],
-			command: new Deno.Command("echo", { args: ["l1b"] }),
+			command: { program: "echo", args: ["l1b"] },
 		},
 		{
 			name: "L1-C",
 			dependsOn: ["Root"],
-			command: new Deno.Command("echo", { args: ["l1c"] }),
+			command: { program: "echo", args: ["l1c"] },
 		},
 		{
 			name: "L2-A",
 			dependsOn: ["L1-A", "L1-B"],
-			command: new Deno.Command("echo", { args: ["l2a"] }),
+			command: { program: "echo", args: ["l2a"] },
 		},
 		{
 			name: "L2-B",
 			dependsOn: ["L1-B", "L1-C"],
-			command: new Deno.Command("echo", { args: ["l2b"] }),
+			command: { program: "echo", args: ["l2b"] },
 		},
 		{
 			name: "L2-C",
 			dependsOn: ["L1-A", "L1-C"],
-			command: new Deno.Command("echo", { args: ["l2c"] }),
+			command: { program: "echo", args: ["l2c"] },
 		},
 		{
 			name: "Final",
 			dependsOn: ["L2-A", "L2-B", "L2-C"],
-			command: new Deno.Command("echo", { args: ["final"] }),
+			command: { program: "echo", args: ["final"] },
 		},
 	];
 	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
@@ -550,6 +584,95 @@ Deno.test("executeStepGraph handles deeply nested diamond dependencies", async (
 		assertEquals(results.get("L2-B")?.status, "passed");
 		assertEquals(results.get("L2-C")?.status, "passed");
 		assertEquals(results.get("Final")?.status, "passed");
+	} finally {
+		await Deno.remove(artifactsDir, { recursive: true });
+	}
+});
+
+Deno.test("executeStepGraph runs each step exactly once, however many dependents reach it", async () => {
+	// Given: a chain Root -> Middle -> Leaf where every step logs each run
+	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
+	const log = `${artifactsDir}/runs.log`;
+	const logRun = (name: string): StepCommand => ({
+		program: "sh",
+		args: ["-c", `echo ${name} >> "${log}"`],
+	});
+	const steps: WorkflowStep[] = [
+		{ name: "Root", command: logRun("Root") },
+		{ name: "Middle", dependsOn: ["Root"], command: logRun("Middle") },
+		{ name: "Leaf", dependsOn: ["Middle"], command: logRun("Leaf") },
+	];
+
+	try {
+		// When: executing the step graph
+		await executeStepGraph(steps, artifactsDir);
+
+		// Then: each command ran once, in dependency order
+		const runs = (await Deno.readTextFile(log)).trim().split("\n");
+		assertEquals(runs, ["Root", "Middle", "Leaf"]);
+	} finally {
+		await Deno.remove(artifactsDir, { recursive: true });
+	}
+});
+
+Deno.test("executeStepGraph judges a dependent on its dependency's final status, not an unrelated failure", async () => {
+	// Given: the CI shape: an unrelated step that fails fast, a slow test step
+	// that passes but fails if run twice (mkdir lock), a function-condition
+	// report on it, and an always-run cleanup after the report
+	const artifactsDir = await Deno.makeTempDir({ prefix: "test-artifacts-" });
+	const log = `${artifactsDir}/events.log`;
+	const lock = `${artifactsDir}/test-lock`;
+	const logged = (name: string, body = "true"): StepCommand => ({
+		program: "sh",
+		args: [
+			"-c",
+			`echo "${name}:start" >> "${log}" && ${body} && echo "${name}:end" >> "${log}"`,
+		],
+	});
+	const steps: WorkflowStep[] = [
+		{ name: "Biome Check", command: logged("Biome Check", "exit 1") },
+		{
+			name: "Deno Test",
+			command: logged("Deno Test", `mkdir "${lock}" && sleep 0.3`),
+		},
+		{
+			name: "Show coverage report",
+			dependsOn: ["Deno Test"],
+			condition: () => true,
+			command: logged("Show coverage report"),
+		},
+		{
+			name: "Cleanup coverage data",
+			dependsOn: ["Show coverage report"],
+			condition: "always",
+			command: logged("Cleanup coverage data"),
+		},
+	];
+
+	try {
+		// When: executing the step graph
+		const results = await executeStepGraph(steps, artifactsDir);
+
+		// Then: the unrelated failure is recorded but blocks nothing
+		assertEquals(results.get("Biome Check")?.status, "failed");
+		assertEquals(results.get("Deno Test")?.status, "passed");
+		assertEquals(results.get("Show coverage report")?.status, "passed");
+		assertEquals(results.get("Cleanup coverage data")?.status, "passed");
+
+		// Then: the test step ran once, and each dependent started only after
+		// its dependency finished
+		const events = (await Deno.readTextFile(log)).trim().split("\n");
+		const at = (event: string): number => {
+			const index = events.indexOf(event);
+			assertEquals(index >= 0, true, `missing ${event} in ${events}`);
+			return index;
+		};
+		assertEquals(events.filter((e) => e === "Deno Test:start").length, 1);
+		assertEquals(at("Deno Test:end") < at("Show coverage report:start"), true);
+		assertEquals(
+			at("Show coverage report:end") < at("Cleanup coverage data:start"),
+			true,
+		);
 	} finally {
 		await Deno.remove(artifactsDir, { recursive: true });
 	}

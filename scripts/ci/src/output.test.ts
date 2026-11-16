@@ -7,7 +7,7 @@ import {
 } from "./output.ts";
 import type { StepResult, WorkflowStep } from "./types.ts";
 
-const command = new Deno.Command("true");
+const command = { program: "true" };
 
 // The CI shape after "Deno Test" fails: the report is blocked, cleanup runs
 const steps: WorkflowStep[] = [
@@ -174,4 +174,36 @@ Deno.test("formatAIOutput reports blocked and skipped steps, per-step exit codes
 			{ name: "Optional", status: "skipped" },
 		],
 	});
+});
+
+Deno.test("formatAIOutput carries a step's captured context as structured outputs, even when its stdout is hidden", () => {
+	// Given: a passed step with hidden output that captured coverage totals
+	const summaryStep: WorkflowStep = {
+		name: "Coverage Summary",
+		showOutput: false,
+		command,
+	};
+	const coverage = { total: { lines: { covered: 9, total: 10 } } };
+	const summaryResults = new Map<string, StepResult>([
+		[
+			"Coverage Summary",
+			{
+				name: "Coverage Summary",
+				status: "passed",
+				outputs: { context: { coverage } },
+			},
+		],
+	]);
+
+	// When: formatting for AI agents
+	const output = formatAIOutput(
+		[summaryStep],
+		summaryResults,
+		new TextDecoder(),
+	);
+
+	// Then: the totals are JSON in the step's outputs, not a string in stdout
+	assertEquals(output.steps, [
+		{ name: "Coverage Summary", status: "passed", outputs: { coverage } },
+	]);
 });

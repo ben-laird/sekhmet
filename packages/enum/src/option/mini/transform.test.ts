@@ -87,10 +87,9 @@ Deno.test("inspect() does not call inspector on None", () => {
 	assertEquals(called, false);
 });
 
-Deno.test("inspectNone() calls inspector on Some (bug in implementation)", () => {
-	// Note: There appears to be a bug - inspectNone checks for "Some" instead of "None"
-	// Given: an Option with Some variant and a tracker variable
-	const option = Some(5);
+Deno.test("inspectNone() calls inspector on None", () => {
+	// Given: an Option with None variant and a tracker variable
+	const option = None<number>();
 	let called = false;
 
 	// When: calling inspectNone() with an inspector function
@@ -98,8 +97,23 @@ Deno.test("inspectNone() calls inspector on Some (bug in implementation)", () =>
 		called = true;
 	});
 
-	// Then: the inspector is called (indicating the bug)
+	// Then: the inspector is called
 	assertEquals(called, true);
+});
+
+Deno.test("inspectNone() does not call inspector on Some", () => {
+	// Given: an Option with Some variant and a tracker variable
+	const option = Some(5);
+	let called = false;
+
+	// When: calling inspectNone() with an inspector function
+	const subject = TestSubject.inspectNone(option, () => {
+		called = true;
+	});
+
+	// Then: the inspector is not called and the Option is returned unchanged
+	assertEquals(called, false);
+	assertEquals(subject, option);
 });
 
 Deno.test("inspectNone() returns original Option", () => {

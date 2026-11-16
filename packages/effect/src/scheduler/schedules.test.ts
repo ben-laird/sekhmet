@@ -366,6 +366,7 @@ Deno.test("batched() uses macrotask when last turn ran below threshold", async (
 	// But since the queue drains in one turn, schedule() is only called once (for the
 	// first turn) with stepsLastTurn=0 → microtask. A second call only happens if the
 	// budget is exhausted. Here we directly verify the scheduling logic.
+	// When: a seed task schedules one nested task and the queue drains
 	scheduler.run(() => {
 		scheduler.run(() => {
 			ran = true;
@@ -374,5 +375,7 @@ Deno.test("batched() uses macrotask when last turn ran below threshold", async (
 
 	// The first turn uses microtask (stepsLastTurn=0). After flushing microtasks all work is done.
 	await new Promise<void>((resolve) => setTimeout(resolve, 10));
+
+	// Then: the nested task ran
 	assertEquals(ran, true);
 });

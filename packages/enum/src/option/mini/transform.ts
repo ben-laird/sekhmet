@@ -77,9 +77,7 @@ export function inspectNone<T>(
 	self: Option<T>,
 	inspector: () => void,
 ): Option<T> {
-	const variant = self;
-
-	if (isolate(variant, "Some")) {
+	if (isolate(self, "None")) {
 		inspector();
 	}
 

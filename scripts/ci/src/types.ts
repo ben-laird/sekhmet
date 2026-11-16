@@ -81,14 +81,28 @@ export interface StepOutputs {
 }
 
 /**
+ * A command a step runs, as data. The runner builds the `Deno.Command` when the
+ * step runs, adding `ARTIFACTS_DIR` and earlier steps' `env` outputs to that
+ * process alone, so parallel steps never share or mutate the process env.
+ */
+export interface StepCommand {
+	/** The program to run, e.g. `"deno"` */
+	program: string;
+	/** Arguments passed to the program */
+	args?: readonly string[];
+	/** Working directory (defaults to the runner's) */
+	cwd?: string;
+}
+
+/**
  * Configuration for a single step in a workflow.
  * Each step executes a command and can depend on other steps.
  */
 export interface WorkflowStep {
 	/** Unique name identifying this step in the workflow */
 	name: string;
-	/** Deno command to execute for this step */
-	command: Deno.Command;
+	/** Command to execute for this step; the runner spawns it with the step's env */
+	command: StepCommand;
 
 	/** Condition determining when this step should execute (defaults to "success") */
 	condition?: StepCondition;

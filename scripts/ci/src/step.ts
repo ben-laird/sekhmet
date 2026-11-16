@@ -1,15 +1,17 @@
 import { createStepContext } from "./context.ts";
 import type {
+	StepCommand,
 	StepContext,
 	StepExecution,
-	StepOutputs,
 	StepResult,
 	StepStatus,
 	WorkflowStep,
 } from "./types.ts";
 
 /**
- * Executes a single workflow step with environment variable injection.
+ * Executes a single workflow step. Its process gets `ARTIFACTS_DIR` and the
+ * accumulated `env` outputs (see {@linkcode stepEnv}); the runner's env is
+ * never mutated, so parallel steps cannot race on it.
  */
 export async function executeStep({
 	step,
@@ -37,48 +39,53 @@ export async function executeStep({
 		}
 	}
 
-	// Set environment variables for this step
-	// Note: We modify the global env temporarily since Deno.Command captures it at creation
-	const originalEnv: Record<string, string | undefined> = {};
+	const output = await spawnCommand({
+		command: step.command,
+		env: stepEnv({ artifactsDir, accumulatedEnv: accumulatedOutputs.env }),
+	}).output();
 
-	// Set ARTIFACTS_DIR
-	originalEnv.ARTIFACTS_DIR = Deno.env.get("ARTIFACTS_DIR");
-	Deno.env.set("ARTIFACTS_DIR", artifactsDir);
+	return {
+		name: step.name,
+		status: output.success ? "passed" : "failed",
+		output,
+		outputs: step.captureOutputs?.(output, context),
+	};
+}
 
-	// Set accumulated env outputs
-	for (const [key, value] of accumulatedOutputs.env.entries()) {
-		originalEnv[key] = Deno.env.get(key);
-		Deno.env.set(key, value);
-	}
+/**
+ * The env a step's process gets on top of the inherited process env: earlier
+ * steps' `env` outputs, then `ARTIFACTS_DIR`.
+ */
+export function stepEnv({
+	artifactsDir,
+	accumulatedEnv,
+}: {
+	artifactsDir: string;
+	accumulatedEnv: ReadonlyMap<string, string>;
+}): Record<string, string> {
+	return { ...Object.fromEntries(accumulatedEnv), ARTIFACTS_DIR: artifactsDir };
+}
 
-	try {
-		// Execute command with modified environment
-		const output = await step.command.output();
-
-		const status: StepStatus = output.success ? "passed" : "failed";
-
-		// Capture outputs if configured
-		let outputs: StepOutputs | undefined;
-		if (step.captureOutputs) {
-			outputs = step.captureOutputs(output, context);
-		}
-
-		return {
-			name: step.name,
-			status,
-			output,
-			outputs,
-		};
-	} finally {
-		// Restore original environment
-		for (const [key, value] of Object.entries(originalEnv)) {
-			if (value === undefined) {
-				Deno.env.delete(key);
-			} else {
-				Deno.env.set(key, value);
-			}
-		}
-	}
+/**
+ * Builds the `Deno.Command` for a {@linkcode StepCommand}. `env` is added to
+ * the spawned process only; the runner's own env is never touched.
+ *
+ * @param options.command - The command to build
+ * @param options.env - Extra env vars for the process (default: none)
+ * @returns The command, ready to spawn
+ */
+export function spawnCommand({
+	command,
+	env = {},
+}: {
+	command: StepCommand;
+	env?: Record<string, string>;
+}): Deno.Command {
+	return new Deno.Command(command.program, {
+		args: [...(command.args ?? [])],
+		env,
+		...(command.cwd === undefined ? {} : { cwd: command.cwd }),
+	});
 }
 
 /**

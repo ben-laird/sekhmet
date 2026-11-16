@@ -18,18 +18,23 @@ import {
 } from "./effect.ts";
 
 /**
- * Internal helper: wraps a computation in a try-catch that converts exceptions to ExceptionOccurred.
+ * Internal helper: runs a step, converting a thrown exception to a Ready ExceptionOccurred.
+ */
+function attempt<T, E>(step: () => EffectOutput<T, E>): EffectOutput<T, E> {
+	try {
+		return step();
+	} catch (exception: unknown) {
+		return Ready(Err(ExceptionOccurred(exception)));
+	}
+}
+
+/**
+ * Internal helper: defers a computation, converting a thrown exception to ExceptionOccurred.
  */
 function safeDeferred<T, E>(
 	compute: () => EffectOutput<T, E>,
 ): EffectOutput<T, E> {
-	return Deferred(() => {
-		try {
-			return compute();
-		} catch (exception: unknown) {
-			return Ready(Err(ExceptionOccurred(exception)));
-		}
-	});
+	return Deferred(() => attempt(compute));
 }
 
 /**
@@ -44,20 +49,34 @@ function transformEffect<I, T, E, U, F>(
 		ctx: ExecutionContext,
 	) => EffectOutput<U, F>,
 ): Effect<I, U, F> {
+	// Exceptions thrown by `self` at any step become an ExceptionOccurred result
+	// that `handleReady` sees, rather than bypassing it.
 	return new Effect((input, ctx) => {
-		return safeDeferred(() => loop(getStructParams(self)(input, ctx)));
+		return safeDeferred(() =>
+			loop(attempt(() => getStructParams(self)(input, ctx))),
+		);
 
 		function loop(output: EffectOutput<T, E>): EffectOutput<U, F> {
 			return match(output)({
 				Ready: (result) => handleReady(result, input, ctx),
 				Async: (continuationFn) => {
 					return Async((resolve) => {
-						return continuationFn((continuation) => {
-							resolve(loop(continuation));
-						});
+						let resolved = false;
+						try {
+							return continuationFn((continuation) => {
+								resolved = true;
+								resolve(loop(continuation));
+							});
+						} catch (exception: unknown) {
+							// A throw after resolving is a bug in the effect: rethrow so the
+							// fiber panics, exactly as it would for the unwrapped effect.
+							if (resolved) throw exception;
+							resolve(loop(Ready(Err(ExceptionOccurred(exception)))));
+						}
 					});
 				},
-				Deferred: (continuationFn) => Deferred(() => loop(continuationFn())),
+				Deferred: (continuationFn) =>
+					Deferred(() => loop(attempt(continuationFn))),
 			});
 		}
 	});
@@ -117,7 +136,14 @@ export function mapOr<I, T, E, U>(
 	return transformEffect(self, (result) => {
 		return match(result)({
 			Ok: (value) => safeDeferred(() => Ready(Ok(mapping(value)))),
-			Err: () => Ready(Ok(defaultValue)),
+			Err: (effectError) => {
+				return match(effectError)({
+					Failed: () => Ready(Ok(defaultValue)),
+					ExceptionOccurred: (exception) => {
+						return Ready(Err(ExceptionOccurred(exception)));
+					},
+				});
+			},
 		});
 	});
 }

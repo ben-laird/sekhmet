@@ -28,9 +28,15 @@ deno test packages/enum/src/core/mini/eliminate.test.ts
 CI_AI=true deno task ci
 
 # This runs ALL quality checks:
-# - Format and lint with Biome
+# - Format and lint with Biome, and deno lint
 # - Type checking
-# - All tests
+# - Documentation lint per package, over its export set
+# - Publish readiness: README/LICENSE, exports, no external imports,
+#   tests excluded from publish, Given/When/Then comments, README/JSDoc
+#   import specifiers (known failures: scripts/ci/src/readiness/allowlisted.ts)
+# - JSR publish dry run
+# - All tests, with coverage (CI: a per-package table on the GitHub job
+#   summary; AI mode: totals in the "Coverage Summary" step outputs)
 
 # For manual formatting only:
 deno run npm:@biomejs/biome check --write .
@@ -90,7 +96,7 @@ Scripts (`scripts/`, unpublished):
 
 - `@sekhmet/add`: scaffolds a new workspace from `scripts/add/templates/`
   (`deno task add`)
-- `@sekhmet/ci`: runs lint, type check, JSR dry run and tests (`deno task ci`)
+- `@sekhmet/ci`: runs lint, type check, doc lint, publish readiness, JSR dry run and tests (`deno task ci`)
 
 ### Core Design Principles
 
@@ -261,7 +267,8 @@ When adding new functionality to a package, first decide the structure (see
 1. **Add to `mini/` first**: Create the individual export in
    `src/feature/mini/function.ts`
 2. **Export from `mini/mod.ts`**: Re-export from the mini barrel file
-3. **Export from `main/mod.ts`**: Re-export in the main barrel file
+3. **Regenerate main**: Run `deno task gen:main` (main is generated from mini;
+   never edit a generated `main/mod.ts`) and commit it with the mini change
 4. **Update package `deno.json`**: Add explicit export path if it's a new mini
    entry point
 5. **Write tests**: Place `function.test.ts` next to `function.ts`
@@ -327,6 +334,8 @@ Deno.test("feature does something", () => {
 - **Then**: Describe the expected result or behavior
 - Use these comments even in simple tests for consistency
 - Multiple When-Then pairs are acceptable for complex scenarios
+- `deno task ci` enforces them on every `Deno.test` and `t.step`; a marker
+  covers its block and the steps nested in it (see CONTRIBUTING.md)
 
 ## Additional Resources
 

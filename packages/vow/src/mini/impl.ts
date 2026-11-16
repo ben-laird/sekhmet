@@ -1,5 +1,6 @@
 import { match, union } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini/core";
 import { type Resolver, Vow } from "./core.ts";
 
 /**
@@ -74,26 +75,34 @@ export function resolved<T>(value: T): Vow<T> {
 /**
  * Creates a Vow from a Promise, bridging async and sync worlds.
  *
- * The returned Vow will remain in the Pending state until the Promise
- * resolves, at which point the Vow will be resolved with the same value.
+ * A Promise can fail and a Vow cannot, so the failure is carried in the
+ * value: the returned Vow stays Pending until the Promise settles, then
+ * resolves with `Ok(value)` on fulfilment or `Err(reason)` on rejection.
+ * The rejection is always handled, so it never surfaces as unhandled.
  *
- * @template T The type of the resolved value
+ * @template T The type of the fulfilled value
  * @param promise The Promise to convert into a Vow
- * @returns A Vow that resolves when the Promise resolves
+ * @returns A Vow that resolves with the Promise's outcome as a Result
  *
  * @example
  * ```ts ignore
  * const promise = fetch("/api/data").then((r) => r.json());
  * const vow = fromPromise(promise);
  *
- * map(vow, (data) => {
- *   console.log("Received:", data);
+ * map(vow, (result) => {
+ *   match(result)({
+ *     Ok: (data) => console.log("Received:", data),
+ *     Err: (reason) => console.error("Failed:", reason),
+ *   });
  * });
  * ```
  */
-export function fromPromise<T>(promise: Promise<T>): Vow<T> {
-	return new Vow<T>((resolve) => {
-		promise.then(resolve);
+export function fromPromise<T>(promise: Promise<T>): Vow<Result<T, unknown>> {
+	return new Vow<Result<T, unknown>>((resolve) => {
+		promise.then(
+			(value) => resolve(Ok(value)),
+			(reason: unknown) => resolve(Err(reason)),
+		);
 	});
 }
 
