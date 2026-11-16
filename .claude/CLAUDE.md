@@ -102,10 +102,8 @@ Scripts (`scripts/`, unpublished):
   every package's `README.md` and `docs/*.md` into a sidebar per package
   (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
   `.github/workflows/docs.yml`)
-- `@sekhmet/playground`: `deno task play` opens a REPL with every package's
-  features discovered from `packages/*/deno.json` and imported as globals;
-  `deno task play:notebook` starts a Jupyter notebook in the gitignored
-  `playground/` (see CONTRIBUTING.md, "Playground")
+- `@sekhmet/playground`: `deno task play:notebook` starts a Jupyter notebook
+  in the gitignored `playground/` (see CONTRIBUTING.md, "Playground")
 
 ### Core Design Principles
 

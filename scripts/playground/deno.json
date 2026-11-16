@@ -4,10 +4,7 @@
 	"publish": false,
 
 	"exports": {
-		"./repl": "./repl.ts",
-		"./notebook": "./notebook.ts",
-
-		"./lib": "./mod.ts"
+		"./notebook": "./notebook.ts"
 	},
 
 	"imports": {

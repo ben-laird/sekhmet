@@ -119,20 +119,6 @@ exclude it in `deno.json` (`lint.exclude`, `test.exclude`), and the
 publish-readiness scans skip it. `deno.json`'s `lint.exclude` also turns off
 Deno's lint diagnostics for it in the editor; Biome's lint still runs there.
 
-- **`deno task play`** opens `deno repl` with every package's public features
-  imported as globals and prints a table of what loaded. It reads each
-  `packages/*/deno.json` at startup, so packages that exist only on your branch
-  show up too. A package with a root export is one namespace named after the
-  package (`effect`, `vow`); one without exposes each main (method-chaining)
-  feature (`option`, `result`); `mini` entrypoints are skipped, and a name two
-  packages share is qualified (`enumCore`). A feature that fails to import is
-  listed as a warning and the REPL still opens.
-
-  ```ts ignore
-  > option.Some(2).map((n) => n * 21).unwrap()
-  42
-  ```
-
 - **`deno task play:notebook`** copies a starter notebook to
   `playground/start.ipynb` (it never overwrites yours). Open it in VS Code with
   the Jupyter extension and pick the Deno kernel; if the kernel isn't listed,

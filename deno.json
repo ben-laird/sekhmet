@@ -43,10 +43,6 @@
 			"description": "Build the static docs site into scripts/docs-site/.vitepress/dist",
 			"command": "deno task docs:assemble && cd scripts/docs-site && deno run --no-prompt -A npm:vitepress@1.6.4 build"
 		},
-		"play": {
-			"description": "Open a REPL with every package's public features imported as globals",
-			"command": "deno repl --allow-read --eval 'await import(\"@sekhmet/playground/repl\")'"
-		},
 		"play:notebook": {
 			"description": "Create playground/start.ipynb from the starter notebook (never overwrites)",
 			"command": "deno run --no-prompt --allow-read --allow-write=playground @sekhmet/playground/notebook"
