@@ -237,12 +237,9 @@ export function locate<E>(located: {
 	key: PropertyKey;
 	error: E;
 }): Issues<Flatten<E>>;
-export function locate({
-	key,
-	error,
-}: {
+export function locate(located: {
 	key: PropertyKey;
 	error: unknown;
 }): Issues<unknown> {
-	return prefix(toIssues(error), key);
+	return prefix(toIssues(located.error), located.key);
 }

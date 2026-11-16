@@ -242,14 +242,13 @@ export class SchemaIssue extends Enum<SchemaIssueVariants> {}
  * );
  * ```
  */
-export function InvalidType({
-	input,
-	expected,
-}: Omit<InvalidTypeDetails, "received">): SchemaIssue {
+export function InvalidType(
+	details: Omit<InvalidTypeDetails, "received">,
+): SchemaIssue {
 	return new SchemaIssue("InvalidType", {
-		input,
-		expected,
-		received: typeName(input),
+		input: details.input,
+		expected: details.expected,
+		received: typeName(details.input),
 	});
 }
 

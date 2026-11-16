@@ -73,9 +73,11 @@ export interface NumberSchemaOptions {
  * parseSync(schema, true); // Ok(1)
  * ```
  */
-export function number({
-	coerce = false,
-}: NumberSchemaOptions = {}): Schema<unknown, number, TypeError> {
+export function number(
+	options?: NumberSchemaOptions,
+): Schema<unknown, number, TypeError> {
+	const coerce = options?.coerce ?? false;
+
 	return new Schema((input) => {
 		if (typeof input !== "number") {
 			if (coerce) {

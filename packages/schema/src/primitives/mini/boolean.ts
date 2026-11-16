@@ -45,9 +45,11 @@ export interface BooleanSchemaOptions {
  * parseSync(schema, 1); // Ok(true)
  * ```
  */
-export function boolean({
-	coerce = false,
-}: BooleanSchemaOptions = {}): Schema<unknown, boolean, TypeError> {
+export function boolean(
+	options?: BooleanSchemaOptions,
+): Schema<unknown, boolean, TypeError> {
+	const coerce = options?.coerce ?? false;
+
 	return new Schema((input) => {
 		if (typeof input !== "boolean") {
 			if (coerce) {
