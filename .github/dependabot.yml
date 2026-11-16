@@ -1,0 +1,15 @@
+# Keeps GitHub Actions current, including the SHA pins in release.yml
+# (Dependabot rewrites the SHA and its `# vX.Y.Z` comment together).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - "/"
+      - "/.github/actions/*"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore(ci)

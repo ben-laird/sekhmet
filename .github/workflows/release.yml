@@ -44,12 +44,14 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      # Third-party actions are SHA-pinned in this job, which holds write and
+      # OIDC permissions; .github/dependabot.yml proposes the bumps.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      - uses: denoland/setup-deno@v2
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: v2.9.8
           cache: true
@@ -71,4 +73,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           FORCE: ${{ inputs.force && '--force' || '' }}
-        run: deno run --allow-all scripts/release/main.ts $FORCE
+        run: deno run --frozen --allow-all scripts/release/main.ts $FORCE
