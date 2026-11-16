@@ -1,7 +1,6 @@
 {
 	"exclude": [
 		".claude/worktrees/",
-		"playground/",
 		"scripts/docs-site/content/",
 		"scripts/docs-site/.vitepress/cache/",
 		"scripts/docs-site/.vitepress/dist/"
@@ -87,6 +86,14 @@
 
 	"fmt": {
 		"useTabs": true
+	},
+
+	"lint": {
+		"exclude": ["playground/"]
+	},
+
+	"test": {
+		"exclude": ["playground/"]
 	},
 
 	"compilerOptions": {
