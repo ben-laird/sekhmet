@@ -1,6 +1,5 @@
 import { assertEquals, assertFalse, unreachable } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
-import type { Enum } from "@/src/core/mini/core.ts";
 import { match, union } from "@/src/core/mini/exit.ts";
 import { Pending, type Poll, Ready } from "@/src/poll/mini/core.ts";
 import * as TestSubject from "@/src/poll/mini/impl.ts";
@@ -27,46 +26,85 @@ Deno.test("isReady() identifies Ready", () => {
 	assertEquals(TestSubject.isReady(Pending()), false);
 });
 
-Deno.test("isReady() narrows to the Ready variant", async (t) => {
-	await t.step("the guarded poll is Ready", () => {
+Deno.test("isReady() narrows to the Ready variant and keeps T", async (t) => {
+	await t.step("a match after the guard needs only the Ready arm", () => {
 		// Given: a Poll typed as either variant
 		const poll: Poll<number> = Ready(42);
 
 		// When: guarding it with isReady()
 		if (TestSubject.isReady(poll)) {
-			// Then: it narrows to Ready, so its value is a number
-			assertType<IsExact<typeof poll, Enum<[kind: "Ready", value: number]>>>(
-				true,
-			);
-			const value: number = union(poll);
+			// Then: only the Ready arm is required
+			const value = match(poll)({ Ready: (n) => n });
 			assertEquals(value, 42);
 		} else {
 			unreachable();
 		}
 	});
 
-	await t.step("an unguarded poll may be Pending", () => {
+	await t.step("an unguarded match needs the Pending arm too", () => {
 		// Given: a Poll typed as either variant
 		const poll: Poll<number> = Ready(42);
 
-		// When: reading its value without the guard
-		// @ts-expect-error: a Pending poll holds no value
-		const value: number = union(poll);
+		// When: matching it with only a Ready arm
+		// @ts-expect-error: the Pending arm is missing
+		const value = match(poll)({ Ready: (n: number) => n });
 
-		// Then: the assignment is rejected at compile time
+		// Then: the match is rejected at compile time
 		assertEquals(value, 42);
+	});
+
+	await t.step("the guarded poll is still a Poll<T>", () => {
+		// Given: a Poll typed as either variant
+		const poll: Poll<number> = Ready(42);
+
+		// When: guarding it with isReady()
+		if (TestSubject.isReady(poll)) {
+			// Then: it is still assignable to Poll<number>
+			const same: Poll<number> = poll;
+			assertEquals(same, Ready(42));
+		} else {
+			unreachable();
+		}
+	});
+
+	await t.step("the guarded payload is exactly T", () => {
+		// Given: a Poll typed as either variant
+		const poll: Poll<number> = Ready(42);
+
+		// When: guarding it with isReady() and reading its value
+		if (TestSubject.isReady(poll)) {
+			const value = union(poll);
+
+			// Then: the value is a number, not number | undefined
+			assertType<IsExact<typeof value, number>>(true);
+			assertEquals(value, 42);
+		} else {
+			unreachable();
+		}
+	});
+
+	await t.step("the else-branch is not narrowed", () => {
+		// Given: a Poll typed as either variant
+		const poll: Poll<number> = Pending();
+
+		// When: the guard fails
+		if (TestSubject.isReady(poll)) {
+			unreachable();
+		} else {
+			// Then: the poll keeps its declared type
+			assertType<IsExact<typeof poll, Poll<number>>>(true);
+		}
 	});
 });
 
-Deno.test("isPending() narrows to the Pending variant", async (t) => {
-	await t.step("the guarded poll is Pending", () => {
+Deno.test("isPending() narrows to the Pending variant and to Poll<never>", async (t) => {
+	await t.step("a match after the guard needs only the Pending arm", () => {
 		// Given: a Poll typed as either variant
 		const poll: Poll<number> = Pending();
 
 		// When: guarding it with isPending()
 		if (TestSubject.isPending(poll)) {
-			// Then: it narrows to Pending, so matching needs only a Pending arm
-			assertType<IsExact<typeof poll, Enum<[kind: "Pending"]>>>(true);
+			// Then: only the Pending arm is required
 			const label = match(poll)({ Pending: () => "pending" });
 			assertEquals(label, "pending");
 		} else {
@@ -74,7 +112,7 @@ Deno.test("isPending() narrows to the Pending variant", async (t) => {
 		}
 	});
 
-	await t.step("an unguarded poll needs a Ready arm too", () => {
+	await t.step("an unguarded match needs the Ready arm too", () => {
 		// Given: a Poll typed as either variant
 		const poll: Poll<number> = Pending();
 
@@ -84,6 +122,33 @@ Deno.test("isPending() narrows to the Pending variant", async (t) => {
 
 		// Then: the match is rejected at compile time
 		assertEquals(label, "pending");
+	});
+
+	await t.step("the guarded poll is a Poll of any type", () => {
+		// Given: a Poll typed as either variant
+		const poll: Poll<number> = Pending();
+
+		// When: guarding it with isPending()
+		if (TestSubject.isPending(poll)) {
+			// Then: it is assignable to a Poll of an unrelated type
+			const other: Poll<string> = poll;
+			assertEquals(other, Pending());
+		} else {
+			unreachable();
+		}
+	});
+
+	await t.step("the else-branch is not narrowed", () => {
+		// Given: a Poll typed as either variant
+		const poll: Poll<number> = Ready(42);
+
+		// When: the guard fails
+		if (TestSubject.isPending(poll)) {
+			unreachable();
+		} else {
+			// Then: the poll keeps its declared type
+			assertType<IsExact<typeof poll, Poll<number>>>(true);
+		}
 	});
 });
 
