@@ -8,6 +8,7 @@ A minimal CLI application template with common patterns and examples.
 main.ts    - Entry point with async main() function
 mod.ts     - Reusable library functions
 deno.json  - Package configuration
+LICENSE.md - MIT license
 ```
 
 ## Common Patterns
