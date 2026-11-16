@@ -1,8 +1,10 @@
 # @sekhmet/schema
 
-`@sekhmet/schema` validates and transforms values. A `Schema<I, O, E>` wraps a
+`@sekhmet/schema` validates and transforms values. A `Schema<I, O, E>` holds a
 parser from an input `I` to a `Result<O, E>`, so the input, the output and the
-error are all typed. A parse is a `Potential`: `Sync` when it finished at once,
+error are all typed; it also carries what it is, as a `SchemaNode`, and typed
+annotations (see [Schemas describe themselves](#schemas-describe-themselves)).
+Build one by hand with `new Schema({ parse })`. A parse is a `Potential`: `Sync` when it finished at once,
 `Async` when it returned a promise, so callers can tell the two apart
 (`parseSync` reports an async schema as `UnexpectedAsyncParse`).
 
@@ -23,8 +25,8 @@ Each feature has two forms:
   shape modifiers `.array()`, `.optional()` and `.nullable()`, the transforms
   `.map`, `.mapErr`, `.pipe` and `.filter`, the Result-style transforms
   `.andThen`, `.orElse`, `.inspect`, `.inspectErr` and `.preprocess`,
-  `.parse`, `.parseSync` and `.parseAsync`, and the [algebra](#algebra)
-  behind `.with`. It is generated from mini by `deno task gen:main`.
+  `.parse`, `.parseSync` and `.parseAsync`, `.annotate`, and the
+  [algebra](#algebra) behind `.with`. It is generated from mini by `deno task gen:main`.
 - **Mini** (`@sekhmet/schema/core/mini`, `@sekhmet/schema/primitives/mini`,
   `@sekhmet/schema/composites/mini`, `@sekhmet/schema/standard/mini`,
   `@sekhmet/schema/algebra/mini`):
@@ -178,7 +180,9 @@ assertEquals(isErr(person.parseSync({ name: "Ada" })), true); // middle is missi
 `Schema` they sit behind `.with`, and each returns a main `Schema`:
 
 - `.with.or(right)` (mini `or({ left, right })`) tries this schema, then
-  `right`: a `union` of the two.
+  `right`: a `union` of the two. Chains flatten: `a.with.or(b).with.or(c)`
+  and `union([a, b]).with.or(c)` are both `union([a, b, c])`; a union with
+  annotations stays one branch.
 - `.with.brand("UserId")` (mini `brand(self, "UserId")`) brands the output
   type `Branded<O, "UserId">`, so only a parsed value has it. The brand is
   type-only: nothing changes at runtime.
@@ -236,6 +240,65 @@ assertEquals(isErr(patch.parseSync({ name: undefined })), true);
 There is no `and`: a shape spread, options, `filter` or `andThen` covers each
 use of an intersection.
 
+## Schemas describe themselves
+
+Every schema carries what it is as data, its `SchemaNode`, read with
+`nodeOf(schema)` and walked with `children(node)`. A built-in schema records
+its kind with its options as passed (`string({ minLength: 1 })` is a `Leaf`
+of `{ type: "string", options: { minLength: 1 } }`), a composite its
+children, and a transform its step and the schema it transforms (never the
+callback). A schema built with `new Schema({ parse })` alone is `Opaque`; a
+schema from outside the package can describe itself with a kind of its own
+(`nodeKind`, `custom`, `customData`).
+
+Schemas also carry typed annotations. Define a key with `annotationKey<T>`,
+call it to annotate (`.annotate([label("Name")])`), and read it back with
+`annotation({ schema, key })`, an `Option<T>`. A later annotation for a key
+wins; every other operation starts with none, and lookup falls back through
+`.optional()`, `.nullable()` and `.with.readonly()` only. `description` and
+`title` are the well-known keys. A form generator reads its labels from an
+object's shape:
+
+```ts
+import { assertEquals } from "@std/assert";
+import { union } from "@sekhmet/enum/core/mini/exit";
+import { isolate } from "@sekhmet/enum/core/mini/isolate";
+import { unwrapOr } from "@sekhmet/enum/option/mini";
+import { object } from "@sekhmet/schema/composites";
+import {
+	annotation,
+	annotationKey,
+	description,
+	nodeOf,
+} from "@sekhmet/schema/core";
+import { string } from "@sekhmet/schema/primitives";
+
+const label = annotationKey<string>({ name: "label" });
+const signUp = object({
+	shape: {
+		name: string({ minLength: 1 }).annotate([label("Full name")]),
+		email: string({ format: "email" }).annotate([
+			label("Email"),
+			description("Where we send your receipt"),
+		]),
+		referrer: string()
+			.annotate([label("Who sent you?")])
+			.optional(),
+	},
+});
+
+const node = nodeOf(signUp);
+const labels: string[] = [];
+if (isolate(node, "Object")) {
+	for (const [key, entry] of Object.entries(union(node).shape)) {
+		const schema = "schema" in entry ? entry.schema : entry;
+		labels.push(unwrapOr(annotation({ schema, key: label }), key));
+	}
+}
+
+assertEquals(labels, ["Full name", "Email", "Who sent you?"]);
+```
+
 ## Standard Schema
 
 `@sekhmet/schema/standard` bridges to [Standard Schema](https://standardschema.dev)
@@ -279,4 +342,4 @@ core feature's mini functions, and the adapter lives in its own feature.
 
 [docs/design.md](./docs/design.md) records the accepted design: the error model
 (`SchemaIssue`, `Issues`), the primitives, the declarative composites, the
-Standard Schema adapter and the algebra.
+Standard Schema adapter, the algebra, and how schemas describe themselves.
