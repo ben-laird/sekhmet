@@ -104,8 +104,21 @@ export class Effect<I, T, E> extends Struct<EffectFn<I, T, E>> {}
  * @returns An effect that produces the success value
  *
  * @example
- * ```ts ignore
- * const effect = Success(42);
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Success } from "@sekhmet/effect/effect/mini";
+ * import { fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const results: unknown[] = [];
+ * join(fork(runtime, Success(42)), (result) => results.push(result));
+ * assertEquals(results, [Ok(42)]);
  * ```
  */
 export function Success<T>(value: T): Effect<void, T, never> {
@@ -120,8 +133,21 @@ export function Success<T>(value: T): Effect<void, T, never> {
  * @returns An effect that produces the error
  *
  * @example
- * ```ts ignore
- * const effect = Failure("something went wrong");
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Failure } from "@sekhmet/effect/effect/mini";
+ * import { Failed, fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Err } from "@sekhmet/enum/result/mini";
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const results: unknown[] = [];
+ * join(fork(runtime, Failure("something went wrong")), (result) => results.push(result));
+ * assertEquals(results, [Err(Failed("something went wrong"))]);
  * ```
  */
 export function Failure<E>(error: E): Effect<void, never, E> {

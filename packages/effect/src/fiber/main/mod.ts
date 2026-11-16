@@ -57,8 +57,25 @@ export class Fiber<I, T, E> extends mini.Fiber<I, T, E> {
 	 *
 	 * @returns An effect that resolves with the fiber's result
 	 * @example
-	 * ```ts ignore
-	 * const awaited = fiber.joinEffect();
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Success, map } from "@sekhmet/effect/effect/mini";
+	 * import { fork } from "@sekhmet/effect/fiber";
+	 * import { Runtime } from "@sekhmet/effect/runtime";
+	 * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+	 * import { Ok } from "@sekhmet/enum/result/mini";
+	 *
+	 * const runtime = new Runtime({
+	 *   input: undefined,
+	 *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+	 * });
+	 * const fiber = fork(runtime, Success(4));
+	 * // An effect that waits for the fiber and continues with its value
+	 * const awaited = map(fiber.joinEffect(), (n) => n * 10);
+	 *
+	 * const results: unknown[] = [];
+	 * (fork(runtime, awaited)).join((result) => results.push(result));
+	 * assertEquals(results, [Ok(40)]);
 	 * ```
 	 * @see {@link mini.joinEffect}
 	 */
@@ -70,8 +87,36 @@ export class Fiber<I, T, E> extends mini.Fiber<I, T, E> {
 	 * Cancels a running fiber, stopping its execution and calling any cleanup functions.
 	 *
 	 * @example
-	 * ```ts ignore
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Async } from "@sekhmet/effect/continuation";
+	 * import { Effect } from "@sekhmet/effect/effect/mini";
+	 * import { fork } from "@sekhmet/effect/fiber";
+	 * import { Cancelled } from "@sekhmet/effect/fiber/mini";
+	 * import { Runtime } from "@sekhmet/effect/runtime";
+	 * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+	 * import { Err } from "@sekhmet/enum/result/mini";
+	 *
+	 * let cleanedUp = false;
+	 * // Suspends on async work that never resolves on its own
+	 * const forever = new Effect<void, number, never>(() =>
+	 *   Async(() => () => {
+	 *     cleanedUp = true;
+	 *   })
+	 * );
+	 *
+	 * const runtime = new Runtime({
+	 *   input: undefined,
+	 *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+	 * });
+	 * const fiber = fork(runtime, forever);
+	 * const results: unknown[] = [];
+	 * fiber.join((result) => results.push(result));
+	 *
 	 * fiber.cancel();
+	 *
+	 * assertEquals(cleanedUp, true);
+	 * assertEquals(results, [Err(Cancelled())]);
 	 * ```
 	 * @see {@link mini.cancel}
 	 */
@@ -101,9 +146,23 @@ export class Fiber<I, T, E> extends mini.Fiber<I, T, E> {
  * @param effect - The effect to execute
  * @returns A new fiber running the effect
  * @example
- * ```ts ignore
- * const runtime = new Runtime({ input: undefined });
- * const fiber = fork(runtime, myEffect);
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Success } from "@sekhmet/effect/effect/mini";
+ * import { fork } from "@sekhmet/effect/fiber";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const fiber = fork(runtime, Success(42));
+ *
+ * const results: unknown[] = [];
+ * fiber.join((result) => results.push(result));
+ * assertEquals(results, [Ok(42)]);
  * ```
  */
 export function fork<I, T, E>(

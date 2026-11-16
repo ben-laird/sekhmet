@@ -1,3 +1,12 @@
+/**
+ * Fiber execution: {@linkcode fork} starts an effect on a new fiber within a
+ * {@linkcode Runtime}, and the fiber is driven step by step on the runtime's
+ * scheduler. Import `fork` from `@sekhmet/effect/fiber` (main) or
+ * `@sekhmet/effect/fiber/mini`; this entrypoint holds the mini `fork` alone.
+ *
+ * @module
+ */
+
 import { match, unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
@@ -24,9 +33,23 @@ const DEFAULT_STEP_BUDGET = 1024;
  * @returns A new fiber running the effect
  *
  * @example
- * ```ts ignore
- * const runtime = new Runtime({ input: undefined });
- * const fiber = fork(runtime, myEffect);
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Success } from "@sekhmet/effect/effect/mini";
+ * import { fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const fiber = fork(runtime, Success(42));
+ *
+ * const results: unknown[] = [];
+ * join(fiber, (result) => results.push(result));
+ * assertEquals(results, [Ok(42)]);
  * ```
  */
 export function fork<I, T, E>(

@@ -94,8 +94,23 @@ function transformEffect<I, T, E, U, F>(
  * @returns A new effect with the mapped success value
  *
  * @example
- * ```ts ignore
- * const doubled = map(Success(5), x => x * 2);
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Success, map } from "@sekhmet/effect/effect/mini";
+ * import { fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const doubled = map(Success(5), (x) => x * 2);
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const results: unknown[] = [];
+ * join(fork(runtime, doubled), (result) => results.push(result));
+ * assertEquals(results, [Ok(10)]);
  * ```
  */
 export function map<I, T, E, U>(
@@ -124,8 +139,23 @@ export function map<I, T, E, U>(
  * @returns A new effect that always succeeds
  *
  * @example
- * ```ts ignore
- * const safe = mapOr(effect, 0, x => x * 2);
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Failure, mapOr } from "@sekhmet/effect/effect/mini";
+ * import { fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const safe = mapOr(Failure<number>(404), 0, (x: number) => x * 2);
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const results: unknown[] = [];
+ * join(fork(runtime, safe), (result) => results.push(result));
+ * assertEquals(results, [Ok(0)]);
  * ```
  */
 export function mapOr<I, T, E, U>(
@@ -180,11 +210,26 @@ export interface ResultArms<T, E, U> {
  * @returns A new effect that always succeeds
  *
  * @example
- * ```ts ignore
- * const result = mapOrElse(effect, {
- *   Ok: value => `success: ${value}`,
- *   Err: error => `failed: ${error}`,
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Failure, mapOrElse } from "@sekhmet/effect/effect/mini";
+ * import { fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const message = mapOrElse(Failure("timeout"), {
+ *   Ok: (value: number) => `success: ${value}`,
+ *   Err: (error) => `failed: ${error}`,
  * });
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const results: unknown[] = [];
+ * join(fork(runtime, message), (result) => results.push(result));
+ * assertEquals(results, [Ok("failed: timeout")]);
  * ```
  */
 export function mapOrElse<I, T, E, U>(
@@ -218,8 +263,23 @@ export function mapOrElse<I, T, E, U>(
  * @returns A new effect with the mapped error value
  *
  * @example
- * ```ts ignore
- * const withErrorCode = mapError(effect, err => ({ code: 500, message: err }));
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Failure, mapError } from "@sekhmet/effect/effect/mini";
+ * import { Failed, fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Err } from "@sekhmet/enum/result/mini";
+ *
+ * const withCode = mapError(Failure("boom"), (message) => ({ code: 500, message }));
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const results: unknown[] = [];
+ * join(fork(runtime, withCode), (result) => results.push(result));
+ * assertEquals(results, [Err(Failed({ code: 500, message: "boom" }))]);
  * ```
  */
 export function mapError<I, T, E, F>(
@@ -253,8 +313,22 @@ export function mapError<I, T, E, F>(
  * @returns The original effect, unchanged
  *
  * @example
- * ```ts ignore
- * const logged = inspect(effect, value => console.log("got:", value));
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Success, inspect } from "@sekhmet/effect/effect/mini";
+ * import { fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ *
+ * const seen: number[] = [];
+ * const logged = inspect(Success(7), (value) => seen.push(value));
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * fork(runtime, logged);
+ * assertEquals(seen, [7]);
  * ```
  */
 export function inspect<I, T, E>(
@@ -288,8 +362,22 @@ export function inspect<I, T, E>(
  * @returns The original effect, unchanged
  *
  * @example
- * ```ts ignore
- * const logged = inspectError(effect, error => console.error("error:", error));
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Failure, inspectError } from "@sekhmet/effect/effect/mini";
+ * import { fork } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ *
+ * const seen: string[] = [];
+ * const logged = inspectError(Failure("boom"), (error) => seen.push(error));
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * fork(runtime, logged);
+ * assertEquals(seen, ["boom"]);
  * ```
  */
 export function inspectError<I, T, E>(
@@ -330,8 +418,26 @@ export function inspectError<I, T, E>(
  * @returns The original effect, unchanged
  *
  * @example
- * ```ts ignore
- * const logged = inspectException(effect, ex => console.error("exception:", ex));
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Success, inspectException, map } from "@sekhmet/effect/effect/mini";
+ * import { fork } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ *
+ * const seen: unknown[] = [];
+ * const boom = new Error("boom");
+ * const throwing = map(Success(1), (): number => {
+ *   throw boom;
+ * });
+ * const logged = inspectException(throwing, (exception) => seen.push(exception));
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * fork(runtime, logged);
+ * assertEquals(seen, [boom]);
  * ```
  */
 export function inspectException<I, T, E>(
@@ -369,8 +475,26 @@ export function inspectException<I, T, E>(
  * @returns A new effect combining both operations
  *
  * @example
- * ```ts ignore
- * const parseAndDouble = and(parseNumber, doubleEffect);
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Effect, and } from "@sekhmet/effect/effect/mini";
+ * import { Ready } from "@sekhmet/effect/continuation";
+ * import { fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const parse = new Effect<string, number, never>((text) => Ready(Ok(Number(text))));
+ * const double = new Effect<number, number, never>((n) => Ready(Ok(n * 2)));
+ * const parseAndDouble = and(parse, double);
+ *
+ * const runtime = new Runtime({
+ *   input: "21",
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const results: unknown[] = [];
+ * join(fork(runtime, parseAndDouble), (result) => results.push(result));
+ * assertEquals(results, [Ok(42)]);
  * ```
  */
 export function and<I, T, E, U>(
@@ -398,8 +522,25 @@ export function and<I, T, E, U>(
  * @returns A new effect combining both operations
  *
  * @example
- * ```ts ignore
- * const chained = andThen(getUser, user => getUserPosts(user.id));
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Success, andThen } from "@sekhmet/effect/effect/mini";
+ * import { fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const getUser = Success({ id: 1, name: "Ada" });
+ * const getPosts = (userId: number) => Success([`post by ${userId}`]);
+ * const posts = andThen(getUser, (user) => getPosts(user.id));
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const results: unknown[] = [];
+ * join(fork(runtime, posts), (result) => results.push(result));
+ * assertEquals(results, [Ok(["post by 1"])]);
  * ```
  */
 export function andThen<I, T, E, U>(
@@ -431,8 +572,29 @@ export function andThen<I, T, E, U>(
  * @returns A new effect that tries the primary and falls back on error
  *
  * @example
- * ```ts ignore
- * const withFallback = or(fetchFromCache, fetchFromNetwork);
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Effect, Failure, or } from "@sekhmet/effect/effect/mini";
+ * import { Ready } from "@sekhmet/effect/continuation";
+ * import { fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const fromCache: Effect<void, string, string> = Failure("miss");
+ * // The fallback receives the first effect's error as its input
+ * const fromNetwork = new Effect<string, string, never>((reason) =>
+ *   Ready(Ok(`fetched after ${reason}`))
+ * );
+ * const withFallback = or(fromCache, fromNetwork);
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const results: unknown[] = [];
+ * join(fork(runtime, withFallback), (result) => results.push(result));
+ * assertEquals(results, [Ok("fetched after miss")]);
  * ```
  */
 export function or<I, T, E, F>(
@@ -471,8 +633,28 @@ export function or<I, T, E, F>(
  * @returns A new effect that tries the primary and falls back on error
  *
  * @example
- * ```ts ignore
- * const withRetry = orElse(fetchData, error => retryWithBackoff(error.retryAfter));
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { type Effect, Failure, Success, orElse } from "@sekhmet/effect/effect/mini";
+ * import { fork, join } from "@sekhmet/effect/fiber/mini";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const fetchData: Effect<void, string, { retryAfter: number }> = Failure({
+ *   retryAfter: 30,
+ * });
+ * const withFallback = orElse(fetchData, (error) =>
+ *   Success(`retry in ${error.retryAfter}s`)
+ * );
+ *
+ * const runtime = new Runtime({
+ *   input: undefined,
+ *   config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ * const results: unknown[] = [];
+ * join(fork(runtime, withFallback), (result) => results.push(result));
+ * assertEquals(results, [Ok("retry in 30s")]);
  * ```
  */
 export function orElse<I, T, E, F>(

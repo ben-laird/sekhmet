@@ -43,17 +43,23 @@ export interface ScheduleContext {
  * scheduler's current state, and is responsible for calling `runStep`.
  *
  * @example Synchronous (immediate):
- * ```ts ignore
+ * ```ts
+ * import type { ScheduleFn } from "@sekhmet/effect/scheduler";
+ *
  * const syncSchedule: ScheduleFn = (runStep) => runStep();
  * ```
  *
  * @example Microtask queue:
- * ```ts ignore
+ * ```ts
+ * import type { ScheduleFn } from "@sekhmet/effect/scheduler";
+ *
  * const microtaskSchedule: ScheduleFn = (runStep) => queueMicrotask(runStep);
  * ```
  *
  * @example Dynamic — microtask when busy, macrotask when idle:
- * ```ts ignore
+ * ```ts
+ * import type { ScheduleFn } from "@sekhmet/effect/scheduler";
+ *
  * const adaptiveSchedule: ScheduleFn = (runStep, { queueDepth }) => {
  *   if (queueDepth > 10) {
  *     queueMicrotask(runStep);
@@ -112,17 +118,27 @@ export class SchedulerState extends Enum<SchedulerStateVariants> {}
  * re-scheduling and looping rather than recursing.
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Scheduler } from "@sekhmet/effect/scheduler";
+ *
  * const scheduler = new Scheduler({
- *   schedule: (runStep, { queueDepth, turnIndex }) => {
- *     // Use context to make dynamic scheduling decisions
- *     queueDepth > 50 ? queueMicrotask(runStep) : setTimeout(runStep, 0);
+ *   // Use the context to make dynamic scheduling decisions
+ *   schedule: (runStep, { queueDepth }) => {
+ *     if (queueDepth > 50) queueMicrotask(runStep);
+ *     else setTimeout(runStep, 0);
  *   },
  *   stepBudget: 128,
  * });
  *
- * scheduler.run(() => console.log("task 1"));
- * scheduler.run(() => console.log("task 2"));
+ * const ran: string[] = [];
+ * scheduler.run(() => ran.push("task 1"));
+ * scheduler.run(() => ran.push("task 2"));
+ *
+ * // Nothing runs until the scheduling function dispatches the turn
+ * assertEquals(ran, []);
+ * await new Promise((resolve) => setTimeout(resolve, 0));
+ * assertEquals(ran, ["task 1", "task 2"]);
  * ```
  */
 export class Scheduler {

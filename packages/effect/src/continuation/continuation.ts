@@ -67,7 +67,10 @@ export class Continuation<T> extends Enum<ContinuationVariants<T>> {}
  * @returns A Ready continuation
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Ready } from "@sekhmet/effect/continuation";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
  * const cont = Ready(Ok(42));
  * ```
  */
@@ -83,7 +86,12 @@ export function Ready<T>(value: T): Continuation<T> {
  * @returns An Async continuation
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Async, Ready } from "@sekhmet/effect/continuation";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * // Nothing runs until a fiber steps the continuation; the returned
+ * // function is the cleanup a cancelled fiber calls
  * const cont = Async((resolve) => {
  *   const timer = setTimeout(() => resolve(Ready(Ok("done"))), 100);
  *   return () => clearTimeout(timer);
@@ -102,7 +110,10 @@ export function Async<T>(fn: AsyncContinuation<T>): Continuation<T> {
  * @returns A Deferred continuation
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { Deferred, Ready } from "@sekhmet/effect/continuation";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
  * const cont = Deferred(() => Ready(Ok(42)));
  * ```
  */
