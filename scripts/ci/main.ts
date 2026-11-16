@@ -130,7 +130,7 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 			showOutput: (status) => isCI || status === "failed",
 			exitCode: EXIT_CODES.DOC_LINT_FAILED,
 
-			command: { program: "deno", args: ["doc", "--lint", "./**/*.ts"] },
+			command: readinessCommand("doc-lint"),
 		},
 		{
 			name: "Publish Readiness",

@@ -30,7 +30,7 @@ CI_AI=true deno task ci
 # This runs ALL quality checks:
 # - Format and lint with Biome, and deno lint
 # - Type checking
-# - Documentation lint
+# - Documentation lint per package, over its export set
 # - Publish readiness: README/LICENSE, exports, no external imports,
 #   tests excluded from publish, Given/When/Then comments, README/JSDoc
 #   import specifiers (known failures: scripts/ci/src/readiness/allowlisted.ts)
