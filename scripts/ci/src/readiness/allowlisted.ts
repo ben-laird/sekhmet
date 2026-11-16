@@ -91,6 +91,6 @@ function privateTypeRef(
 		check: "doc-lint",
 		file: `packages/${file}`,
 		message: `private-type-ref: public type '${publicType}' references private type '${privateType}'`,
-		until: "#5",
+		until: "#11",
 	};
 }
