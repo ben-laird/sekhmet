@@ -7,7 +7,7 @@
 	},
 	"files": {
 		"ignoreUnknown": true,
-		"includes": ["**", "!coverage"]
+		"includes": ["**", "!coverage", "!.claude/worktrees", "!.claude/settings.local.json"]
 	},
 	"formatter": {
 		"enabled": true,

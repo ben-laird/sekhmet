@@ -226,3 +226,5 @@ $RECYCLE.BIN/
 
 # Built Visual Studio Code Extensions
 *.vsix
+# Agent worktrees (git worktree checkouts of this repo)
+.claude/worktrees/
