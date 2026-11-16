@@ -1,6 +1,7 @@
-import { match } from "@sekhmet/enum/core/mini/exit";
+import { match, unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
+import type { Cancellation } from "../continuation/continuation.ts";
 import type { Effect, EffectOutput } from "../effect/mini/effect.ts";
 import { Fiber, FiberState, type Finalizer } from "../fiber/mini/fiber.ts";
 import {
@@ -111,10 +112,13 @@ function step<I, T, E>(self: Fiber<I, T, E>): void {
 					runtime.createContext(),
 				);
 
-				getStructParams(fiberState).variant = [
-					"Running",
-					{ currentOutput, finalizers },
-				];
+				// The effect may have cancelled this fiber; never overwrite Complete.
+				if (unionKinds(fiberState) === "Queued") {
+					getStructParams(fiberState).variant = [
+						"Running",
+						{ currentOutput, finalizers },
+					];
+				}
 			} catch (exception: unknown) {
 				complete(self, Err(Panicked(exception)));
 			}
@@ -174,7 +178,10 @@ function step<I, T, E>(self: Fiber<I, T, E>): void {
 						});
 						settingUp = false;
 
-						if (earlyOutput === undefined) {
+						if (unionKinds(fiberState) !== "Running") {
+							// Cancelled during setup, before cancel could see the cleanup.
+							if (earlyOutput === undefined) releaseCancelled(cancellation);
+						} else if (earlyOutput === undefined) {
 							getStructParams(fiberState).variant = [
 								"Suspended",
 								{ cancellation, finalizers },
@@ -192,11 +199,16 @@ function step<I, T, E>(self: Fiber<I, T, E>): void {
 
 				Deferred: (fn) => {
 					try {
-						// Unwrap one level and store the next continuation
-						getStructParams(fiberState).variant = [
-							"Running",
-							{ currentOutput: fn(), finalizers },
-						];
+						// Unwrap one level and store the next continuation, unless the
+						// step cancelled this fiber.
+						const currentOutput = fn();
+
+						if (unionKinds(fiberState) === "Running") {
+							getStructParams(fiberState).variant = [
+								"Running",
+								{ currentOutput, finalizers },
+							];
+						}
 					} catch (exception: unknown) {
 						complete(self, Err(Panicked(exception)));
 					}
@@ -207,6 +219,18 @@ function step<I, T, E>(self: Fiber<I, T, E>): void {
 		Suspended: () => {},
 		Complete: () => {},
 	});
+}
+
+/**
+ * Runs the cleanup of async work whose fiber was cancelled while the work was
+ * being set up, logging a throwing cleanup as cancel() does.
+ */
+function releaseCancelled(cancellation: Cancellation): void {
+	try {
+		cancellation?.();
+	} catch (err: unknown) {
+		console.error("Fiber cancellation cleanup threw:", err);
+	}
 }
 
 function complete<I, T, E>(

@@ -3,7 +3,8 @@ import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
 import { stub } from "@std/testing/mock";
-import type { FiberResult } from "@/src/fiber/mini/fiber-error.ts";
+import type { Fiber } from "@/src/fiber/mini/fiber.ts";
+import { Cancelled, type FiberResult } from "@/src/fiber/mini/fiber-error.ts";
 import { Scheduler } from "@/src/scheduler/scheduler.ts";
 import { sync } from "@/src/scheduler/schedules.ts";
 import {
@@ -906,5 +907,119 @@ Deno.test("an async step's resolver is one-shot", () => {
 		Complete: () => {
 			throw new Error("Expected Suspended, got Complete");
 		},
+	});
+});
+
+// --- a fiber cancelled while it is stepping stays cancelled ---
+
+/**
+ * Forks an effect built from its own fiber, on a parked scheduler, and runs
+ * it to quiescence. Joiners record every notification.
+ */
+function forkSelfAware<T>(
+	build: (self: () => Fiber<void, T, never>) => Effect<void, T, never>,
+): { fiber: Fiber<void, T, never>; seen: FiberResult<T, never>[] } {
+	const turns: (() => void)[] = [];
+	const runtime = new Runtime<void>({
+		input: undefined,
+		config: {
+			scheduler: new Scheduler({
+				schedule: (runStep) => {
+					turns.push(runStep);
+				},
+			}),
+		},
+	});
+	let fiber: Fiber<void, T, never> | undefined;
+	const self = (): Fiber<void, T, never> => {
+		if (fiber === undefined) throw new Error("fiber not forked yet");
+		return fiber;
+	};
+	const forked = fork(runtime, build(self));
+	fiber = forked;
+	const seen: FiberResult<T, never>[] = [];
+	join(forked, (result) => seen.push(result));
+	for (let turn = turns.shift(); turn; turn = turns.shift()) turn();
+	return { fiber: forked, seen };
+}
+
+Deno.test("a fiber cancelled while stepping is not overwritten by the step", async (t) => {
+	await t.step("Queued: cancelled while the effect starts", () => {
+		// Given: an effect that cancels its own fiber, then returns a success
+		// When: running it
+		const { fiber, seen } = forkSelfAware(
+			(self) =>
+				new Effect(() => {
+					cancel(self());
+					return Ready(Ok(1));
+				}),
+		);
+
+		// Then: joiners saw only the cancellation, and it is the final result
+		assertEquals(seen, [Err(Cancelled<never>())]);
+		assertEquals(getStructParams(getStructParams(fiber).fiberState).variant, [
+			"Complete",
+			Err(Cancelled<never>()),
+		]);
+	});
+
+	await t.step("Deferred: cancelled inside a deferred step", () => {
+		// Given: a deferred step that cancels its own fiber, then returns a success
+		// When: running it
+		const { seen } = forkSelfAware(
+			(self) =>
+				new Effect(() =>
+					Deferred(() => {
+						cancel(self());
+						return Ready(Ok(1));
+					}),
+				),
+		);
+
+		// Then: joiners saw only the cancellation
+		assertEquals(seen, [Err(Cancelled<never>())]);
+	});
+
+	await t.step("Async: cancelled then resolved during setup", () => {
+		// Given: an async setup that cancels its own fiber, then resolves
+		// When: running it
+		const { seen } = forkSelfAware(
+			(self) =>
+				new Effect(() =>
+					Async((resolve) => {
+						cancel(self());
+						resolve(Ready(Ok(1)));
+					}),
+				),
+		);
+
+		// Then: joiners saw only the cancellation
+		assertEquals(seen, [Err(Cancelled<never>())]);
+	});
+
+	await t.step("Async: cancelled during setup releases the async work", () => {
+		// Given: an async setup that cancels its own fiber and returns a cleanup
+		let cleanups = 0;
+
+		// When: running it
+		const { fiber, seen } = forkSelfAware(
+			(self) =>
+				new Effect(() =>
+					Async(() => {
+						cancel(self());
+						return () => {
+							cleanups++;
+						};
+					}),
+				),
+		);
+
+		// Then: it stays cancelled, and the cleanup ran since cancel could not
+		assertEquals(seen, [Err(Cancelled<never>())]);
+		assertEquals(getStructParams(getStructParams(fiber).fiberState).variant, [
+			"Complete",
+			Err(Cancelled<never>()),
+		]);
+		assertEquals(cleanups, 1);
 	});
 });
