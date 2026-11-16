@@ -1,4 +1,4 @@
-import { Result } from "@sekhmet/enum/result";
+import { Ok as MainOk, Result } from "@sekhmet/enum/result";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertInstanceOf } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
@@ -45,16 +45,21 @@ Deno.test("Schema has exactly the modifier, transform and parsing methods", () =
 	// When: listing its own methods
 	// Then: they are the shape modifiers, the transforms and the parsers, only
 	assertEquals(methods, [
+		"andThen",
 		"array",
 		"filter",
+		"inspect",
+		"inspectErr",
 		"map",
 		"mapErr",
 		"nullable",
 		"optional",
+		"orElse",
 		"parse",
 		"parseAsync",
 		"parseSync",
 		"pipe",
+		"preprocess",
 	]);
 });
 
@@ -119,4 +124,48 @@ Deno.test("the modifiers' types: arrays, optional values and nullable values", (
 	assertType<
 		IsExact<Input<ReturnType<typeof digits.array>>, readonly string[]>
 	>(true);
+});
+
+Deno.test("the Result-style transforms chain as methods and take main Results", async () => {
+	// Given: digits trimmed first, halved if even, logged, and recovered to -1
+	const seen: number[] = [];
+	const halved = digits
+		.preprocess((input: string) => input.trim())
+		.andThen((n) => {
+			if (n % 2 === 0) {
+				return MainOk<number, "odd">(n / 2);
+			}
+
+			return Err<number, "odd">("odd");
+		})
+		.inspect((n) => {
+			seen.push(n);
+		})
+		.inspectErr(() => {
+			seen.push(0);
+		})
+		.orElse((error) => {
+			if (error === "odd") {
+				return Promise.resolve(Ok(-1));
+			}
+
+			return Promise.resolve(Err(error));
+		});
+	// {}
+
+	// When: parsing an even, an odd and a non-digit input, in order
+	const results = [
+		await halved.parseAsync(" 42 "),
+		await halved.parseAsync("7"),
+		await halved.parseAsync("x"),
+	];
+
+	// Then: each method ran in the chain's order and returned a main Schema
+	// with the chain's types
+	assertEquals(results, [Ok(21), Ok(-1), Err("not digits")]);
+	assertEquals(seen, [21, 0, 0]);
+	assertType<IsExact<Input<typeof halved>, string>>(true);
+	assertType<IsExact<Output<typeof halved>, number>>(true);
+	assertType<IsExact<ErrorOf<typeof halved>, string>>(true);
+	assertInstanceOf(halved, Schema);
 });

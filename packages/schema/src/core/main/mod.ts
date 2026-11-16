@@ -129,6 +129,43 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	}
 
 	/**
+	 * Chains a fallible transform onto a schema's output, like Result's
+	 * `andThen`: convert or validate in code.
+	 *
+	 * On success, the output goes to `next`, whose `Result` becomes the parse's;
+	 * a failure passes through without calling it. `next` may return enum's main
+	 * or mini `Result`, or a promise of one, which makes the parse `Async` (and
+	 * `parseSync` then reports `UnexpectedAsyncParse`). A `next` that throws
+	 * panics: the throw is not caught, as with {@linkcode map}.
+	 *
+	 * @template P - The new output type
+	 * @template F - The error type `next` may add
+	 * @param next - The fallible transform for each successful output: a
+	 * {@linkcode Parser} from the output
+	 * @returns A new schema whose output is `next`'s, failing with either error
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { union } from "@sekhmet/enum/core/mini/exit";
+	 * import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+	 * import { Schema } from "@sekhmet/schema/core";
+	 *
+	 * const text = new Schema((input: string) => Ok(input));
+	 * const integer = text.andThen((value) => {
+	 * 	const parsed = Number.parseInt(value, 10);
+	 * 	return Number.isNaN(parsed) ? Err("not an integer") : Ok(parsed);
+	 * });
+	 *
+	 * assertEquals(unwrap(integer.parseSync("42")), 42);
+	 * assertEquals(union(unwrapErr(integer.parseSync("x"))), "not an integer");
+	 * ```
+	 * @see {@link mini.andThen}
+	 */
+	andThen<P, F>(next: mini.Parser<O, P, F>): Schema<I, P, E | F> {
+		return Schema.fromMini(mini.andThen(this, next));
+	}
+
+	/**
 	 * Filters a schema's output using a type guard predicate.
 	 *
 	 * This creates a new schema that only succeeds if the original schema succeeds
@@ -156,6 +193,68 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 */
 	filter<P extends O>(options: mini.FilterOptions<O, E, P>): Schema<I, P, E> {
 		return Schema.fromMini(mini.filter(this, options));
+	}
+
+	/**
+	 * Taps a schema's successful outputs for a side effect (logging, metrics),
+	 * like Result's `inspect`; the result passes through unchanged.
+	 *
+	 * `inspector` runs once per successful parse, after the output is known
+	 * (when an `Async` parse resolves), and never on failure. An `inspector`
+	 * that throws panics: the throw is not caught.
+	 *
+	 * @param inspector - The side effect for each successful output
+	 * @returns A new schema with the same results as `self`
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Ok } from "@sekhmet/enum/result/mini";
+	 * import { Schema } from "@sekhmet/schema/core";
+	 *
+	 * const seen: string[] = [];
+	 * const text = new Schema((input: string) => Ok(input));
+	 * const logged = text.inspect((value) => {
+	 * 	seen.push(value);
+	 * });
+	 *
+	 * logged.parseSync("a");
+	 * assertEquals(seen, ["a"]);
+	 * ```
+	 * @see {@link mini.inspect}
+	 */
+	inspect(inspector: (output: O) => void): Schema<I, O, E> {
+		return Schema.fromMini(mini.inspect(this, inspector));
+	}
+
+	/**
+	 * Taps a schema's errors for a side effect (logging, metrics), like Result's
+	 * `inspectErr`; the result passes through unchanged.
+	 *
+	 * `inspector` runs once per failed parse, after the error is known (when an
+	 * `Async` parse resolves), and never on success. An `inspector` that throws
+	 * panics: the throw is not caught.
+	 *
+	 * @param inspector - The side effect for each error
+	 * @returns A new schema with the same results as `self`
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err } from "@sekhmet/enum/result/mini";
+	 * import { Schema } from "@sekhmet/schema/core";
+	 *
+	 * const seen: string[] = [];
+	 * const reject = new Schema((_input: string) => Err("rejected"));
+	 * const logged = reject.inspectErr((error) => {
+	 * 	seen.push(error);
+	 * });
+	 *
+	 * logged.parseSync("a");
+	 * assertEquals(seen, ["rejected"]);
+	 * ```
+	 * @see {@link mini.inspectErr}
+	 */
+	inspectErr(inspector: (error: E) => void): Schema<I, O, E> {
+		return Schema.fromMini(mini.inspectErr(this, inspector));
 	}
 
 	/**
@@ -209,6 +308,44 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 */
 	mapErr<F>(mapping: (error: E) => F): Schema<I, O, F> {
 		return Schema.fromMini(mini.mapErr(this, mapping));
+	}
+
+	/**
+	 * Recovers from a schema's failure, like Result's `orElse`: fall back to
+	 * another value, or retry another way.
+	 *
+	 * On failure, the error goes to `recover`, whose `Result` becomes the parse's;
+	 * a success passes through without calling it. `recover` may return enum's
+	 * main or mini `Result`, or a promise of one, which makes the parse `Async`
+	 * (and `parseSync` then reports `UnexpectedAsyncParse`). A `recover` that
+	 * throws panics: the throw is not caught, as with {@linkcode mapErr}.
+	 *
+	 * @template F - The error type after recovery
+	 * @param recover - The fallback for each error: a {@linkcode Parser} from
+	 * the error
+	 * @returns A new schema that fails only with `recover`'s error
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+	 * import { Schema } from "@sekhmet/schema/core";
+	 *
+	 * const port = new Schema((input: string) => {
+	 * 	if (/^\d+$/.test(input)) {
+	 * 		return Ok<number, string>(Number(input));
+	 * 	}
+	 *
+	 * 	return Err<number, string>("not a port");
+	 * });
+	 * const withDefault = port.orElse(() => Ok(8080));
+	 *
+	 * assertEquals(unwrap(withDefault.parseSync("3000")), 3000);
+	 * assertEquals(unwrap(withDefault.parseSync("")), 8080);
+	 * ```
+	 * @see {@link mini.orElse}
+	 */
+	orElse<F>(recover: mini.Parser<E, O, F>): Schema<I, O, F> {
+		return Schema.fromMini(mini.orElse(this, recover));
 	}
 
 	/**
@@ -315,6 +452,42 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 */
 	pipe<P>(nextSchema: mini.Schema<O, P, E>): Schema<I, P, E> {
 		return Schema.fromMini(mini.pipe(this, nextSchema));
+	}
+
+	/**
+	 * Transforms the input before a schema parses it: the dual of
+	 * {@linkcode map}, like Zod's `z.preprocess`.
+	 *
+	 * `prepare` turns each input into the one `self` parses; it cannot fail
+	 * (fail in `self`, or use {@linkcode andThen} after it). A promise from
+	 * `prepare` makes the parse `Async` (and `parseSync` then reports
+	 * `UnexpectedAsyncParse`). A `prepare` that throws panics: the throw is not
+	 * caught, as with {@linkcode map}.
+	 *
+	 * @template J - The new input type
+	 * @param prepare - The transform from the new input to `self`'s input
+	 * @returns A new schema that accepts `prepare`'s input
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+	 * import { Schema } from "@sekhmet/schema/core";
+	 *
+	 * const digits = new Schema((input: string) => {
+	 * 	if (/^\d+$/.test(input)) {
+	 * 		return Ok<number, string>(Number(input));
+	 * 	}
+	 *
+	 * 	return Err<number, string>("not digits");
+	 * });
+	 * const trimmed = digits.preprocess((input: string) => input.trim());
+	 *
+	 * assertEquals(unwrap(trimmed.parseSync(" 42 ")), 42);
+	 * ```
+	 * @see {@link mini.preprocess}
+	 */
+	preprocess<J>(prepare: (input: J) => mini.MaybePromise<I>): Schema<J, O, E> {
+		return Schema.fromMini(mini.preprocess(this, prepare));
 	}
 
 	/**

@@ -64,14 +64,18 @@ export {
 
 export {
 	type AnySchema,
+	andThen,
 	type ErrorOf,
 	type FilterOptions,
 	filter,
 	type Infer,
 	type Input,
+	inspect,
+	inspectErr,
 	map,
 	mapErr,
 	type Output,
+	orElse,
 	ParseError,
 	type Parser,
 	ParseSyncError,
@@ -80,6 +84,7 @@ export {
 	parseAsync,
 	parseSync,
 	pipe,
+	preprocess,
 	Schema,
 	UnexpectedAsyncParse,
 } from "./schema.ts";
