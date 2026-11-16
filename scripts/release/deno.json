@@ -1,0 +1,17 @@
+{
+	"name": "@sekhmet/release",
+	"version": "0.1.0",
+	"publish": false,
+
+	"exports": {
+		".": "./main.ts",
+
+		"./lib": "./mod.ts"
+	},
+
+	"imports": {
+		"@/": "./",
+
+		"zod": "npm:zod@^4.1.0"
+	}
+}

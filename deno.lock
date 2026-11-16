@@ -193,6 +193,11 @@
           "jsr:@std/jsonc@^1.0.2",
           "npm:zod@^4.1.0"
         ]
+      },
+      "scripts/release": {
+        "dependencies": [
+          "npm:zod@^4.1.0"
+        ]
       }
     }
   }
