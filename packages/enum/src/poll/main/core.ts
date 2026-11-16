@@ -31,11 +31,9 @@ export function Pending<T = never>(): Poll<T> {
 }
 
 /**
- * Wraps a mini version of a Poll with the "kitchen sink" version of a Poll
- * @param miniPoll - The mini Poll to wrap
- * @returns A wrapped Poll with a convenient method-based interface
+ * Wraps a mini Poll in the main Poll so method calls can keep chaining.
  */
-export function fromMini<T>(miniPoll: mini.Poll<T>): Poll<T> {
+function fromMini<T>(miniPoll: mini.Poll<T>): Poll<T> {
 	return match(miniPoll)({
 		Pending,
 		Ready,
