@@ -1,0 +1,68 @@
+# Release on merge to main. Every push runs scripts/release/main.ts:
+#
+#   1. dv status        capture what is pending before Records are consumed
+#   2. dv version       bump manifests, write CHANGELOGs, commit (if Records)
+#   3. git push         put the chore(release) commit on main
+#   4. dv release       tag, publish each package to JSR in dependency order,
+#                       push the tags
+#   5. gh release       one GitHub Release per tag that reached JSR
+#
+# With nothing pending and nothing untagged the run is a quick no-op.
+# JSR auth is GitHub OIDC (id-token: write); every @sekhmet package is linked
+# to this repository on jsr.io, so no token is stored.
+#
+# GITHUB_TOKEN pushes the bump commit and tags. That works because main has
+# no branch protection; protecting main later needs a bypass-capable token.
+# Pushes made with GITHUB_TOKEN do not trigger workflows, so the bump commit
+# cannot re-trigger this one; the `if:` guard covers other pushers too.
+
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Re-run publishing for already-tagged versions (recovery after a failed publish)
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # startsWith, not contains: a squash merge can mention the prefix in its body.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.8
+          cache: true
+
+      # Keep in step with dv-validate.yml.
+      - uses: ./.github/actions/setup-dv
+        with:
+          version: 0.11.0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force && '--force' || '' }}
+        run: deno run --allow-all scripts/release/main.ts $FORCE
