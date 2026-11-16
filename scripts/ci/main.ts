@@ -136,6 +136,8 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 					"--allow-write",
 					"--allow-run",
 					"--coverage",
+					// Drop profiles left by an earlier run whose cleanup did not run
+					"--clean",
 				],
 			}),
 		},
@@ -164,8 +166,24 @@ function cleanupStep(): WorkflowStep {
 		condition: "always",
 		exitCode: EXIT_CODES.CLEANUP_FAILED,
 
-		command: new Deno.Command("rm", { args: ["-r", "coverage"] }),
+		command: coverageCleanupCommand(),
 	};
+}
+
+/**
+ * Removes the coverage directory: the profiles and the lcov/HTML reports
+ * that `deno test --coverage` writes. Succeeds when the directory is absent,
+ * as when a lint failure blocked the tests.
+ *
+ * @param options.dir - The coverage directory (default: `coverage`)
+ * @returns The command to run
+ */
+export function coverageCleanupCommand({
+	dir = "coverage",
+}: {
+	dir?: string;
+} = {}): Deno.Command {
+	return new Deno.Command("rm", { args: ["-rf", dir] });
 }
 
 /**
