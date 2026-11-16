@@ -35,6 +35,34 @@ export interface CIEnvironment {
 }
 
 /**
+ * The Biome CI check, over the whole project or the given paths.
+ *
+ * The npm launcher needs `--allow-env` (reads `BIOME_BINARY`) and
+ * `--allow-run` (spawns the native binary). Without `--allow-run` it prints
+ * nothing and exits 0, so the check silently passes.
+ *
+ * @param options.paths - Files or directories to check (default: the project)
+ * @returns The command to run
+ */
+export function biomeCiCommand({
+	paths = [],
+}: {
+	paths?: string[];
+} = {}): Deno.Command {
+	return new Deno.Command("deno", {
+		args: [
+			"run",
+			"--no-prompt",
+			"--allow-env",
+			"--allow-run",
+			"@biomejs/biome",
+			"ci",
+			...paths,
+		],
+	});
+}
+
+/**
  * The CI workflow's steps for an environment:
  * - Parallel linting (Deno lint, Biome check, documentation lint, JSR dry run)
  * - Type checking
@@ -63,9 +91,7 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 			name: "Biome Check",
 			exitCode: EXIT_CODES.BIOME_CHECK_FAILED,
 
-			command: new Deno.Command("deno", {
-				args: ["run", "--no-prompt", "--allow-env", "@biomejs/biome", "ci"],
-			}),
+			command: biomeCiCommand(),
 		},
 		{
 			name: "Documentation Lint",

@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { ciSteps, EXIT_CODES, main } from "./main.ts";
+import { biomeCiCommand, ciSteps, EXIT_CODES, main } from "./main.ts";
 
 const ENVIRONMENTS = [
 	{ isCI: false, isAI: false },
@@ -39,6 +39,27 @@ Deno.test("ciSteps gives every step its own exit code", () => {
 			`steps without an exit code in ${JSON.stringify(environment)}`,
 		);
 		assertEquals(new Set(codes).size, steps.length);
+	}
+});
+
+Deno.test("biomeCiCommand fails on a badly formatted file and passes on a clean one", async () => {
+	// Given: a badly formatted file and a clean one outside the project
+	const dir = await Deno.makeTempDir({ prefix: "ci-biome-" });
+	const bad = `${dir}/bad.ts`;
+	const good = `${dir}/good.ts`;
+	await Deno.writeTextFile(bad, "const  x = 1;\nexport { x };\n");
+	await Deno.writeTextFile(good, "export const x = 1;\n");
+
+	try {
+		// When: running the CI step's Biome command on each
+		const badOutput = await biomeCiCommand({ paths: [bad] }).output();
+		const goodOutput = await biomeCiCommand({ paths: [good] }).output();
+
+		// Then: the bad file fails the check (no silent exit 0); the clean one passes
+		assertEquals(badOutput.success, false);
+		assertEquals(goodOutput.success, true);
+	} finally {
+		await Deno.remove(dir, { recursive: true });
 	}
 });
 
