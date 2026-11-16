@@ -1,4 +1,5 @@
 import { assertEquals } from "@std/assert";
+import { createStepContext } from "./context.ts";
 import { executeStep, shouldRunStep, shouldShowOutput } from "./step.ts";
 import type {
 	AccumulatedOutputs,
@@ -7,7 +8,6 @@ import type {
 	StepStatus,
 	WorkflowStep,
 } from "./types.ts";
-import { createStepContext } from "./context.ts";
 
 // Helper to create a mock command that succeeds
 function createMockCommand(success = true): Deno.Command {
@@ -15,7 +15,6 @@ function createMockCommand(success = true): Deno.Command {
 		args: success ? ["success"] : ["failure"],
 	});
 }
-
 
 Deno.test("shouldRunStep returns true for success condition with all passed", () => {
 	// Given: a step with success condition and all dependencies passed

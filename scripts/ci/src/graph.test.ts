@@ -2,7 +2,6 @@ import { assertEquals, assertRejects } from "@std/assert";
 import { executeStepGraph } from "./graph.ts";
 import type { WorkflowStep } from "./types.ts";
 
-
 Deno.test("executeStepGraph executes single step successfully", async () => {
 	// Given: a single successful step
 	const steps: WorkflowStep[] = [
