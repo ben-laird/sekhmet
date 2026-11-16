@@ -7,6 +7,7 @@
 		".": "./mod.ts",
 		"./core": "./src/core/main/mod.ts",
 		"./core/mini": "./src/core/mini/mod.ts",
+		"./core/mini/issue": "./src/core/mini/issue.ts",
 		"./core/mini/issues": "./src/core/mini/issues.ts",
 		"./core/mini/potential": "./src/core/mini/potential.ts",
 		"./core/mini/schema": "./src/core/mini/schema.ts",

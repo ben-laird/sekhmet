@@ -9,6 +9,35 @@
  */
 
 export {
+	Custom,
+	type CustomDetails,
+	formatIssue,
+	InvalidFormat,
+	type InvalidFormatDetails,
+	InvalidType,
+	type InvalidTypeDetails,
+	InvalidUnion,
+	type InvalidUnionDetails,
+	InvalidValue,
+	type InvalidValueDetails,
+	isSchemaIssue,
+	type LimitOf,
+	NotMultipleOf,
+	type NotMultipleOfDetails,
+	type Origin,
+	SchemaIssue,
+	type SchemaIssueVariants,
+	TooBig,
+	type TooBigDetails,
+	TooSmall,
+	type TooSmallDetails,
+	type TypeName,
+	typeName,
+	UnknownKey,
+	type UnknownKeyDetails,
+} from "./issue.ts";
+
+export {
 	concat,
 	entries,
 	type Flatten,
