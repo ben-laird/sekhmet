@@ -15,6 +15,7 @@
 		"./primitives/mini": "./src/primitives/mini/mod.ts",
 		"./primitives/mini/string": "./src/primitives/mini/string.ts",
 		"./primitives/mini/number": "./src/primitives/mini/number.ts",
+		"./primitives/mini/number-checks": "./src/primitives/mini/number-checks.ts",
 		"./primitives/mini/boolean": "./src/primitives/mini/boolean.ts"
 	},
 

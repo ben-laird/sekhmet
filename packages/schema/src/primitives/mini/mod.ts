@@ -14,4 +14,12 @@ export {
 	number,
 	type Range,
 } from "./number.ts";
+export {
+	int,
+	type LimitOptions,
+	max,
+	min,
+	multipleOf,
+	safe,
+} from "./number-checks.ts";
 export { type StringSchemaOptions, string } from "./string.ts";

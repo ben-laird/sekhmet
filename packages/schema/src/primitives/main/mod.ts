@@ -22,12 +22,14 @@
  */
 
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
+import type { Schema as MiniSchema } from "@/src/core/mini/schema.ts";
 import { Schema } from "../../core/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
 export type {
 	BooleanSchemaOptions,
 	Bound,
+	LimitOptions,
 	NumberSchemaOptions,
 	Range,
 	StringSchemaOptions,
@@ -71,35 +73,196 @@ export function boolean(
 /**
  * Creates a schema that validates and optionally coerces numeric values.
  *
- * By default, this schema only accepts number inputs and fails with an `InvalidType` issue
- * for non-number values. With `coerce: true`, it will convert any input to
- * a number using the Number() function.
+ * It is strict by default: it accepts only finite numbers (`-0` included),
+ * failing with an `InvalidType` issue otherwise. `nan: true` and
+ * `infinite: true` allow `NaN` and `±Infinity`, and `range` bounds the
+ * value. Chain {@linkcode int}, {@linkcode safe}, {@linkcode multipleOf},
+ * {@linkcode min} and {@linkcode max} for further checks.
  *
  * @param options - Configuration options
  * @returns A schema that validates numeric inputs
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
  * const schema = number();
- * parseSync(schema, 42); // Ok(42)
- * parseSync(schema, "123"); // Err(InvalidType)
+ *
+ * assertEquals(unwrap(parseSync(schema, 42)), 42);
+ * assertEquals(isErr(parseSync(schema, Number.NaN)), true);
+ * assertEquals(isErr(parseSync(schema, "42")), true);
  * ```
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
- * const schema = number({ coerce: true });
- * parseSync(schema, "123"); // Ok(123)
- * parseSync(schema, true); // Ok(1)
+ * const ratio = number({
+ * 	range: { min: [0, "inclusive"], max: [1, "non-inclusive"] },
+ * });
+ *
+ * assertEquals(isOk(parseSync(ratio, 0)), true);
+ * assertEquals(isErr(parseSync(ratio, 1)), true);
  * ```
  */
 export function number(
 	options?: mini.NumberSchemaOptions,
 ): Schema<unknown, number, SchemaIssue> {
 	return Schema.fromMini(mini.number(options));
+}
+
+/**
+ * Checks that a number is an integer; anything else fails with an
+ * `InvalidType` issue expecting `"integer"`.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The number schema to check
+ * @returns A schema that also rejects non-integers
+ * @example
+ * ```ts
+ * import { assert } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { int, number } from "@sekhmet/schema/primitives";
+ *
+ * const count = int(number());
+ *
+ * assert(isOk(parseSync(count, 3)));
+ * assert(isErr(parseSync(count, 3.5)));
+ * ```
+ */
+export function int<I, E>(
+	self: MiniSchema<I, number, E>,
+): Schema<I, number, E | SchemaIssue> {
+	return Schema.fromMini(mini.int(self));
+}
+
+/**
+ * Checks that a number is at most `maximum` (or below it, with
+ * `inclusive: false`), failing with a `TooBig` issue.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The number schema to check
+ * @param maximum - The upper bound
+ * @param options - Whether the bound is inclusive (the default)
+ * @returns A schema that also rejects values above the bound
+ * @example
+ * ```ts
+ * import { assert } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { max, number } from "@sekhmet/schema/primitives";
+ *
+ * const percent = max(number(), 100);
+ *
+ * assert(isOk(parseSync(percent, 100)));
+ * assert(isErr(parseSync(percent, 101)));
+ * ```
+ */
+export function max<I, E>(
+	self: MiniSchema<I, number, E>,
+	maximum: number,
+	options?: mini.LimitOptions,
+): Schema<I, number, E | SchemaIssue> {
+	return Schema.fromMini(mini.max(self, maximum, options));
+}
+
+/**
+ * Checks that a number is at least `minimum` (or above it, with
+ * `inclusive: false`), failing with a `TooSmall` issue.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The number schema to check
+ * @param minimum - The lower bound
+ * @param options - Whether the bound is inclusive (the default)
+ * @returns A schema that also rejects values below the bound
+ * @example
+ * ```ts
+ * import { assert } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { min, number } from "@sekhmet/schema/primitives";
+ *
+ * const positive = min(number(), 0, { inclusive: false });
+ *
+ * assert(isOk(parseSync(positive, 0.5)));
+ * assert(isErr(parseSync(positive, 0)));
+ * ```
+ */
+export function min<I, E>(
+	self: MiniSchema<I, number, E>,
+	minimum: number,
+	options?: mini.LimitOptions,
+): Schema<I, number, E | SchemaIssue> {
+	return Schema.fromMini(mini.min(self, minimum, options));
+}
+
+/**
+ * Checks that a number is a multiple of `divisor`, failing with a
+ * `NotMultipleOf` issue. Decimal divisors compare at the precision of their
+ * written form, so `0.3` is a multiple of `0.1` despite floating point.
+ *
+ * Panics with a `RangeError` when `divisor` is not a positive finite number.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The number schema to check
+ * @param divisor - The positive number the value must be a multiple of
+ * @returns A schema that also rejects non-multiples
+ * @example
+ * ```ts
+ * import { assert } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { multipleOf, number } from "@sekhmet/schema/primitives";
+ *
+ * const price = multipleOf(number(), 0.01);
+ *
+ * assert(isOk(parseSync(price, 19.99)));
+ * assert(isErr(parseSync(price, 19.999)));
+ * ```
+ */
+export function multipleOf<I, E>(
+	self: MiniSchema<I, number, E>,
+	divisor: number,
+): Schema<I, number, E | SchemaIssue> {
+	return Schema.fromMini(mini.multipleOf(self, divisor));
+}
+
+/**
+ * Checks that a number is a safe integer, one that a `number` represents
+ * exactly (`Number.MIN_SAFE_INTEGER` to `Number.MAX_SAFE_INTEGER`). A
+ * non-integer fails with `InvalidType`; an integer out of range with
+ * `TooSmall` or `TooBig`.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The number schema to check
+ * @returns A schema that also rejects unsafe integers
+ * @example
+ * ```ts
+ * import { assert } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { number, safe } from "@sekhmet/schema/primitives";
+ *
+ * const id = safe(number());
+ *
+ * assert(isOk(parseSync(id, 2 ** 53 - 1)));
+ * assert(isErr(parseSync(id, 2 ** 53)));
+ * ```
+ */
+export function safe<I, E>(
+	self: MiniSchema<I, number, E>,
+): Schema<I, number, E | SchemaIssue> {
+	return Schema.fromMini(mini.safe(self));
 }
 
 /**
