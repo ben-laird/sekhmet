@@ -365,6 +365,7 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
+	 * import { match } from "@sekhmet/enum/core/mini";
 	 * import { Err, type Result } from "@sekhmet/enum/result";
 	 *
 	 * const result = Err(new Error("Not found"));
@@ -373,13 +374,19 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 * // With type guard
 	 * type NetworkError = { code: number };
 	 * const result2: Result<string, Error | NetworkError> = Err({ code: 404 });
-	 * assertEquals(result2.isErrAnd((e): e is NetworkError => "code" in e), true);
+	 * if (result2.isErrAnd((e): e is NetworkError => "code" in e)) {
+	 *   const code = match(result2)({
+	 *     Ok: () => 0,
+	 *     Err: (e) => e.code, // TypeScript knows e is NetworkError
+	 *   });
+	 *   assertEquals(code, 404);
+	 * }
 	 * ```
 	 * @see {@link mini.isErrAnd}
 	 */
 	isErrAnd<F extends E>(
 		predicate: ((value: E) => value is F) | ((value: E) => boolean),
-	): this is Result<never, E> {
+	): this is Result<never, F> {
 		return mini.isErrAnd(this, predicate);
 	}
 

@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertFalse } from "@std/assert";
+import { assert, assertEquals, assertFalse, unreachable } from "@std/assert";
+import { assertType, type IsExact } from "@std/testing/types";
 import { Err, Ok, type Result } from "@/src/result/mini/core.ts";
 import * as TestSubject from "@/src/result/mini/predicates.ts";
 
@@ -117,5 +118,51 @@ Deno.test("isErrAnd() requires Err and a passing predicate", async (t) => {
 		// Then: false, and the predicate was not consulted
 		assertFalse(subject);
 		assertFalse(called);
+	});
+});
+
+Deno.test("isErrAnd() narrows to Err with the guarded error type", async (t) => {
+	type NetworkError = { code: number };
+	const isNetworkError = (e: Error | NetworkError): e is NetworkError =>
+		"code" in e;
+
+	await t.step("a type-guard predicate narrows the error type", () => {
+		// Given: a Result whose error is a union
+		const result: Result<string, Error | NetworkError> = Err({ code: 404 });
+
+		// When: guarding it with a type-guard predicate
+		if (TestSubject.isErrAnd(result, isNetworkError)) {
+			// Then: it narrows to an Err holding only NetworkError
+			assertType<IsExact<typeof result, Result<never, NetworkError>>>(true);
+			const narrowed: Result<never, NetworkError> = result;
+			assertEquals(narrowed, Err({ code: 404 }));
+		} else {
+			unreachable();
+		}
+	});
+
+	await t.step("without the guard the error type stays wide", () => {
+		// Given: the same Result, unguarded
+		const result: Result<string, Error | NetworkError> = Err({ code: 404 });
+
+		// When: assigning it to the narrowed type
+		// @ts-expect-error: an unguarded Result may be Ok or hold an Error
+		const narrowed: Result<never, NetworkError> = result;
+
+		// Then: the assignment is rejected at compile time
+		assertEquals(narrowed, result);
+	});
+
+	await t.step("a boolean predicate narrows only the variant", () => {
+		// Given: a Result with a non-union error
+		const result: Result<number, Error> = Err(new Error("Not found"));
+
+		// When: guarding it with a plain boolean predicate
+		if (TestSubject.isErrAnd(result, (e) => e.message === "Not found")) {
+			// Then: it narrows to Err, keeping the error type
+			assertType<IsExact<typeof result, Result<never, Error>>>(true);
+		} else {
+			unreachable();
+		}
 	});
 });

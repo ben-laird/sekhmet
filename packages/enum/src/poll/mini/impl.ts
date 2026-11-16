@@ -1,6 +1,7 @@
+import type { Enum, Isolate } from "@/src/core/mini/core.ts";
 import { match } from "@/src/core/mini/exit.ts";
 import { isolate } from "@/src/core/mini/isolate.ts";
-import { Pending, type Poll, Ready } from "./core.ts";
+import { Pending, type Poll, type PollVariants, Ready } from "./core.ts";
 
 /**
  * Maps a Poll<T> to Poll<U> by applying a function to the Ready value.
@@ -31,7 +32,7 @@ export function map<T, U>(self: Poll<T>, mapping: (value: T) => U): Poll<U> {
 /**
  * Type guard to check if a Poll is in the Ready state.
  *
- * This function narrows the type of the Poll to indicate it contains a Ready value.
+ * Narrows the Poll to its Ready variant, so its value can be read directly.
  *
  * @template T - The type of the value in the Poll
  * @param self - The Poll to check
@@ -40,20 +41,29 @@ export function map<T, U>(self: Poll<T>, mapping: (value: T) => U): Poll<U> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Pending, Ready, isReady } from "@sekhmet/enum/poll/mini";
+ * import { union } from "@sekhmet/enum/core/mini";
+ * import { Pending, type Poll, Ready, isReady } from "@sekhmet/enum/poll/mini";
  *
  * assertEquals(isReady(Ready(42)), true);
  * assertEquals(isReady(Pending()), false);
+ *
+ * const poll: Poll<number> = Ready(42);
+ * if (isReady(poll)) {
+ *   const value: number = union(poll); // TypeScript knows poll is Ready
+ *   assertEquals(value, 42);
+ * }
  * ```
  */
-export function isReady<T>(self: Poll<T>): self is Poll<T> {
+export function isReady<T>(
+	self: Poll<T>,
+): self is Enum<Isolate<PollVariants<T>, "Ready">> {
 	return isolate(self, "Ready");
 }
 
 /**
  * Type guard to check if a Poll is in the Pending state.
  *
- * This function narrows the type of the Poll to indicate it does not contain a value yet.
+ * Narrows the Poll to its Pending variant, which holds no value.
  *
  * @template T - The type of the value in the Poll
  * @param self - The Poll to check
@@ -62,12 +72,21 @@ export function isReady<T>(self: Poll<T>): self is Poll<T> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Pending, Ready, isPending } from "@sekhmet/enum/poll/mini";
+ * import { match } from "@sekhmet/enum/core/mini";
+ * import { Pending, type Poll, Ready, isPending } from "@sekhmet/enum/poll/mini";
  *
  * assertEquals(isPending(Pending()), true);
  * assertEquals(isPending(Ready(42)), false);
+ *
+ * const poll: Poll<number> = Pending();
+ * if (isPending(poll)) {
+ *   // TypeScript knows poll is Pending, so no Ready arm is needed
+ *   assertEquals(match(poll)({ Pending: () => "waiting" }), "waiting");
+ * }
  * ```
  */
-export function isPending<T>(self: Poll<T>): self is Poll<never> {
+export function isPending<T>(
+	self: Poll<T>,
+): self is Enum<Isolate<PollVariants<T>, "Pending">> {
 	return isolate(self, "Pending");
 }

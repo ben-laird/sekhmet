@@ -20,6 +20,7 @@
  */
 
 import { getStructParams, struct } from "@sekhmet/primordials/struct";
+import type { Enum, Isolate } from "@/src/core/mini/core.ts";
 import * as mini from "../mini/mod.ts";
 
 export type { PollVariants } from "../mini/mod.ts";
@@ -86,40 +87,54 @@ export class Poll<out T> extends mini.Poll<T> {
 	/**
 	 * Type guard to check if a Poll is in the Ready state.
 	 *
-	 * This function narrows the type of the Poll to indicate it contains a Ready value.
+	 * Narrows the Poll to its Ready variant, so its value can be read directly.
 	 *
 	 * @returns `true` if the Poll is Ready, `false` if Pending
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Pending, Ready } from "@sekhmet/enum/poll";
+	 * import { union } from "@sekhmet/enum/core/mini";
+	 * import { Pending, type Poll, Ready } from "@sekhmet/enum/poll";
 	 *
 	 * assertEquals(Ready(42).isReady(), true);
 	 * assertEquals(Pending().isReady(), false);
+	 *
+	 * const poll: Poll<number> = Ready(42);
+	 * if (poll.isReady()) {
+	 *   const value: number = union(poll); // TypeScript knows poll is Ready
+	 *   assertEquals(value, 42);
+	 * }
 	 * ```
 	 * @see {@link mini.isReady}
 	 */
-	isReady(): this is Poll<T> {
+	isReady(): this is Enum<Isolate<mini.PollVariants<T>, "Ready">> {
 		return mini.isReady(this);
 	}
 
 	/**
 	 * Type guard to check if a Poll is in the Pending state.
 	 *
-	 * This function narrows the type of the Poll to indicate it does not contain a value yet.
+	 * Narrows the Poll to its Pending variant, which holds no value.
 	 *
 	 * @returns `true` if the Poll is Pending, `false` if Ready
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Pending, Ready } from "@sekhmet/enum/poll";
+	 * import { match } from "@sekhmet/enum/core/mini";
+	 * import { Pending, type Poll, Ready } from "@sekhmet/enum/poll";
 	 *
 	 * assertEquals(Pending().isPending(), true);
 	 * assertEquals(Ready(42).isPending(), false);
+	 *
+	 * const poll: Poll<number> = Pending();
+	 * if (poll.isPending()) {
+	 *   // TypeScript knows poll is Pending, so no Ready arm is needed
+	 *   assertEquals(match(poll)({ Pending: () => "waiting" }), "waiting");
+	 * }
 	 * ```
 	 * @see {@link mini.isPending}
 	 */
-	isPending(): this is Poll<never> {
+	isPending(): this is Enum<Isolate<mini.PollVariants<T>, "Pending">> {
 		return mini.isPending(this);
 	}
 }
