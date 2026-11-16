@@ -158,20 +158,24 @@ export function biomeCiCommand({
 }
 
 /**
- * A gate tool run over the files git does not ignore (see `gate-files.ts`),
+ * A gate tool run over the paths git does not ignore (see `gate-files.ts`),
  * so gitignored scratch in `playground/` never fails the gate while the
- * editor's Biome and language server still cover it.
+ * editor and a hand-run `deno lint` or `deno test` still cover it.
  *
- * @param options.tool - `biome` for `biome ci`, `check` for `deno check`
+ * @param options.tool - `biome` for `biome ci`, or `check`, `lint` or `test`
+ *   for that `deno` subcommand
  * @param options.root - The git checkout to list (default: the working directory)
+ * @param options.args - Arguments for the tool, passed before the paths
  * @returns The command to run
  */
 export function gateFilesCommand({
 	tool,
 	root,
+	args = [],
 }: {
 	tool: GateTool;
 	root?: string;
+	args?: string[];
 }): StepCommand {
 	return {
 		program: "deno",
@@ -183,8 +187,37 @@ export function gateFilesCommand({
 			fromFileUrl(new URL("./gate-files.ts", import.meta.url)),
 			tool,
 			...(root === undefined ? [] : ["--root", root]),
+			...(args.length === 0 ? [] : ["--", ...args]),
 		],
 	};
+}
+
+/**
+ * The arguments Deno Test hands `deno test`, before the paths that
+ * {@linkcode gateFilesCommand} adds.
+ *
+ * @param options.coverageDir - Where to write coverage profiles and reports
+ * @returns The arguments
+ */
+export function denoTestArgs({
+	coverageDir,
+}: {
+	coverageDir: string;
+}): string[] {
+	return [
+		// Also type-checks and runs the code blocks in JSDoc and in every
+		// markdown file (READMEs, docs/), unless fenced as `ignore`
+		"--doc",
+		"--parallel",
+		"--no-prompt",
+		"--allow-env",
+		"--allow-read",
+		"--allow-write",
+		"--allow-run",
+		`--coverage=${coverageDir}`,
+		// Drop profiles left by an earlier run whose cleanup did not run
+		"--clean",
+	];
 }
 
 /**
@@ -260,7 +293,7 @@ export function ciSteps({ isCI, isAI, coverageDir }: CIRun): WorkflowStep[] {
 			name: "Deno Lint",
 			exitCode: EXIT_CODES.DENO_LINT_FAILED,
 
-			command: { program: "deno", args: ["lint"] },
+			command: gateFilesCommand({ tool: "lint" }),
 		},
 		{
 			name: "Deno Check",
@@ -317,24 +350,10 @@ export function ciSteps({ isCI, isAI, coverageDir }: CIRun): WorkflowStep[] {
 			exitCode: EXIT_CODES.TESTS_FAILED,
 			timeout: { ms: TEST_TIMEOUT_MS, exitCode: EXIT_CODES.TESTS_TIMED_OUT },
 
-			command: {
-				program: "deno",
-				args: [
-					"test",
-					// Also type-checks and runs the code blocks in JSDoc and in every
-					// markdown file (READMEs, docs/), unless fenced as `ignore`
-					"--doc",
-					"--parallel",
-					"--no-prompt",
-					"--allow-env",
-					"--allow-read",
-					"--allow-write",
-					"--allow-run",
-					`--coverage=${coverageDir}`,
-					// Drop profiles left by an earlier run whose cleanup did not run
-					"--clean",
-				],
-			},
+			command: gateFilesCommand({
+				tool: "test",
+				args: denoTestArgs({ coverageDir }),
+			}),
 		},
 
 		// Show coverage report (blocked if tests failed)

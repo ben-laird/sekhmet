@@ -92,14 +92,6 @@
 		"useTabs": true
 	},
 
-	"lint": {
-		"exclude": ["playground/"]
-	},
-
-	"test": {
-		"exclude": ["playground/"]
-	},
-
 	"compilerOptions": {
 		"strict": true,
 		"exactOptionalPropertyTypes": true,

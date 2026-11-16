@@ -54,10 +54,17 @@ export interface LinkedPackage {
 	readonly directory: string;
 }
 
-/** The keys of `playground/deno.json` that `play:link` owns. */
+/** What `play:link` writes into `playground/deno.json`. */
 export interface PlaygroundLink {
 	/** One `jsr:` import per package, which `links` overrides. */
 	readonly imports: Readonly<Record<string, string>>;
+	/**
+	 * The target root `deno.json`'s other imports (such as `@std/assert`),
+	 * relative paths rebased onto `playground/`, which a standalone
+	 * `playground/deno.json` would otherwise lose. An import the owner
+	 * already set keeps the owner's value.
+	 */
+	readonly rootImports: Readonly<Record<string, string>>;
 	/** Every package directory, relative to `playground/`. */
 	readonly links: readonly string[];
 	/** The target's root `compilerOptions`, when it has some. */
@@ -75,6 +82,13 @@ export type LinkState =
 			readonly links: readonly string[];
 	  };
 
+/**
+ * The `playground/deno.json` key where `play:link` records which root
+ * imports it wrote (`{ "imports": [names] }`), so a relink or `off` removes
+ * exactly those and never an import the owner added. Deno ignores it.
+ */
+export const OWNERSHIP_KEY = "playLink";
+
 const SCOPE = "@sekhmet/";
 const CHECKOUT_ALIASES: ReadonlySet<string> = new Set(["main", "checkout"]);
 const OFF_ALIASES: ReadonlySet<string> = new Set(["off", "unlink"]);
@@ -87,6 +101,10 @@ const PackageSchema = z.object({
 });
 
 const ImportsSchema = JsonObjectSchema.optional();
+
+const OwnershipSchema = z
+	.object({ imports: z.array(z.string()) })
+	.catch({ imports: [] });
 
 const LinksSchema = z
 	.array(z.unknown())
@@ -225,19 +243,22 @@ export function decodePackage({
  * Builds the keys that link the playground to a tree's packages.
  *
  * @param options - The packages, the tree root, the playground directory
- *   (both absolute) and the tree's root `compilerOptions`
- * @returns The `@sekhmet/*` imports, the links and the compiler options
+ *   (both absolute), and the tree's root `compilerOptions` and `imports`
+ * @returns The `@sekhmet/*` imports, the root imports, the links and the
+ *   compiler options
  */
 export function buildLink({
 	packages,
 	root,
 	playground,
 	compilerOptions,
+	imports: rootConfigImports,
 }: {
 	packages: readonly LinkedPackage[];
 	root: string;
 	playground: string;
 	compilerOptions: unknown;
+	imports: unknown;
 }): PlaygroundLink {
 	const sorted = [...packages].sort((a, b) => a.name.localeCompare(b.name));
 	const imports = Object.fromEntries(
@@ -246,17 +267,54 @@ export function buildLink({
 			version === undefined ? `jsr:${name}` : `jsr:${name}@^${version}`,
 		]),
 	);
+	const rootImports = Object.fromEntries(
+		Object.entries(
+			ImportsSchema.catch(undefined).parse(rootConfigImports) ?? {},
+		)
+			.filter(
+				(entry): entry is [string, string] =>
+					!entry[0].startsWith(SCOPE) && typeof entry[1] === "string",
+			)
+			.map(([name, specifier]) => [
+				name,
+				rebase({ specifier, root, playground }),
+			]),
+	);
 	const links = sorted.map(({ directory }) =>
 		relative(playground, resolve(root, "packages", directory)),
 	);
 	return compilerOptions === undefined
-		? { imports, links }
-		: { imports, links, compilerOptions };
+		? { imports, rootImports, links }
+		: { imports, rootImports, links, compilerOptions };
+}
+
+/** A root import's specifier as seen from `playground/`: relative paths move, the rest stay. */
+function rebase({
+	specifier,
+	root,
+	playground,
+}: {
+	specifier: string;
+	root: string;
+	playground: string;
+}): string {
+	if (!/^\.\.?(\/|$)/.test(specifier)) return specifier;
+	const path = relative(playground, resolve(root, specifier)) || ".";
+	const dotted =
+		path === "." || path === ".." || path.startsWith("../")
+			? path
+			: `./${path}`;
+	return specifier.endsWith("/") && !dotted.endsWith("/")
+		? `${dotted}/`
+		: dotted;
 }
 
 /**
- * Writes a link into an existing `playground/deno.json`, replacing the keys
- * `play:link` owns and keeping every other key and non-`@sekhmet/*` import.
+ * Writes a link into an existing `playground/deno.json`, replacing what
+ * `play:link` owns (the `@sekhmet/*` imports, the root imports it recorded
+ * under {@linkcode OWNERSHIP_KEY}, `links` and `compilerOptions`) and keeping
+ * every other key and import. A root import the owner already set keeps the
+ * owner's value and is not recorded as ours.
  *
  * @param options - The existing config (`{}` when there is none) and the link
  * @returns The merged config, or why the existing one cannot be merged
@@ -271,20 +329,33 @@ export function applyLink({
 	const kept = ownImports(config);
 	if (!kept.ok) return kept;
 
-	const { compilerOptions: _, ...rest } = config;
+	const written = Object.fromEntries(
+		Object.entries(link.rootImports).filter(
+			([name]) => !Object.hasOwn(kept.value, name),
+		),
+	);
+	const {
+		compilerOptions: _,
+		[OWNERSHIP_KEY]: __,
+		...rest
+	}: JsonObject = config;
 	const merged: Record<string, unknown> = {
 		...rest,
-		imports: { ...kept.value, ...link.imports },
+		imports: { ...kept.value, ...written, ...link.imports },
 		links: link.links,
 	};
 	if (link.compilerOptions !== undefined) {
 		merged.compilerOptions = link.compilerOptions;
 	}
+	const owned = Object.keys(written).sort();
+	if (owned.length > 0) merged[OWNERSHIP_KEY] = { imports: owned };
 	return { ok: true, value: merged };
 }
 
 /**
- * Removes what `play:link` owns from `playground/deno.json`.
+ * Removes what `play:link` owns from `playground/deno.json`: the
+ * `@sekhmet/*` imports, the root imports recorded under
+ * {@linkcode OWNERSHIP_KEY} (and the record), `links` and `compilerOptions`.
  *
  * @param config - The existing config
  * @returns The remaining config, `undefined` when nothing is left (delete the
@@ -294,7 +365,13 @@ export function removeLink(config: JsonObject): Result<JsonObject | undefined> {
 	const kept = ownImports(config);
 	if (!kept.ok) return kept;
 
-	const { imports: _, links: __, compilerOptions: ___, ...rest } = config;
+	const {
+		imports: _,
+		links: __,
+		compilerOptions: ___,
+		[OWNERSHIP_KEY]: ____,
+		...rest
+	}: JsonObject = config;
 	const remaining: Record<string, unknown> =
 		Object.keys(kept.value).length === 0
 			? rest
@@ -305,16 +382,18 @@ export function removeLink(config: JsonObject): Result<JsonObject | undefined> {
 	};
 }
 
+/** The owner's imports: all but `@sekhmet/*` and the root imports we recorded. */
 function ownImports(config: JsonObject): Result<Record<string, unknown>> {
 	const imports = ImportsSchema.safeParse(config.imports);
 	if (!imports.success) {
 		return { ok: false, error: "`imports` is not an object" };
 	}
+	const ours = new Set(OwnershipSchema.parse(config[OWNERSHIP_KEY]).imports);
 	return {
 		ok: true,
 		value: Object.fromEntries(
 			Object.entries(imports.data ?? {}).filter(
-				([name]) => !name.startsWith(SCOPE),
+				([name]) => !name.startsWith(SCOPE) && !ours.has(name),
 			),
 		),
 	};

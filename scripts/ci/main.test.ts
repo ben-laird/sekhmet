@@ -1,4 +1,4 @@
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
 import { exists } from "@std/fs/exists";
 import {
 	biomeCiCommand,
@@ -9,6 +9,7 @@ import {
 	coverageDirFor,
 	coverageOutputs,
 	coverageSummaryCommand,
+	denoTestArgs,
 	dvValidateCommand,
 	EXIT_CODES,
 	gateFilesCommand,
@@ -160,18 +161,75 @@ Deno.test("biomeCiCommand fails on a badly formatted file and passes on a clean 
 	}
 });
 
-Deno.test("ciSteps runs Biome and deno check over the files git does not ignore", () => {
+Deno.test("ciSteps runs Biome, deno check, lint and test over the paths git does not ignore", () => {
 	for (const run of RUNS) {
 		// Given: the CI steps for a run
 		const steps = ciSteps(run);
+		const command = (name: string) =>
+			steps.find((step) => step.name === name)?.command;
 
-		// When: finding the Biome and type-check steps
-		const biome = steps.find((step) => step.name === "Biome Check");
-		const check = steps.find((step) => step.name === "Deno Check");
+		// When: finding the Biome, type-check, lint and test steps
+		const biome = command("Biome Check");
+		const check = command("Deno Check");
+		const lint = command("Deno Lint");
+		const test = command("Deno Test");
 
-		// Then: both go through the git-listed file wrapper
-		assertEquals(biome?.command, gateFilesCommand({ tool: "biome" }));
-		assertEquals(check?.command, gateFilesCommand({ tool: "check" }));
+		// Then: all go through the git-listed path wrapper, the tests with the
+		// run's coverage directory
+		assertEquals(biome, gateFilesCommand({ tool: "biome" }));
+		assertEquals(check, gateFilesCommand({ tool: "check" }));
+		assertEquals(lint, gateFilesCommand({ tool: "lint" }));
+		assertEquals(
+			test,
+			gateFilesCommand({
+				tool: "test",
+				args: denoTestArgs({ coverageDir: run.coverageDir }),
+			}),
+		);
+	}
+});
+
+Deno.test("gateFilesCommand lints and tests a checkout but never its gitignored scratch", async () => {
+	// Given: a git repo with a passing tracked test, and a gitignored
+	// playground/ holding a failing test and a lint error
+	const dir = await Deno.makeTempDir({ prefix: "ci-gate-files-" });
+	const git = (...args: string[]) =>
+		new Deno.Command("git", { args, cwd: dir, stdin: "null" }).output();
+	const failing = 'Deno.test("fails", () => {\n\tthrow new Error("no");\n});\n';
+	const unlinted = "let unused = 1;\nexport {};\n";
+	await git("init", "--quiet");
+	await Deno.writeTextFile(`${dir}/.gitignore`, "/playground/\n");
+	await Deno.mkdir(`${dir}/src`);
+	await Deno.writeTextFile(
+		`${dir}/src/good.test.ts`,
+		'Deno.test("passes", () => {});\n',
+	);
+	await git("add", ".gitignore", "src/good.test.ts");
+	await Deno.mkdir(`${dir}/playground`);
+	await Deno.writeTextFile(`${dir}/playground/zz.test.ts`, failing);
+	await Deno.writeTextFile(`${dir}/playground/zz.ts`, unlinted);
+	const run = (tool: "lint" | "test") =>
+		spawnCommand({ command: gateFilesCommand({ tool, root: dir }) }).output();
+
+	try {
+		// When: linting and testing it
+		const [lint, test] = [await run("lint"), await run("test")];
+
+		// Then: the scratch never reaches either tool
+		assertEquals(lint.success, true, new TextDecoder().decode(lint.stderr));
+		assertEquals(test.success, true, new TextDecoder().decode(test.stderr));
+		assertStringIncludes(new TextDecoder().decode(test.stdout), "1 passed");
+
+		// When: the same files sit untracked where git does not ignore them
+		await Deno.writeTextFile(`${dir}/src/zz.test.ts`, failing);
+		await Deno.writeTextFile(`${dir}/src/zz.ts`, unlinted);
+		const [lintNew, testNew] = [await run("lint"), await run("test")];
+
+		// Then: both tools fail them, before they are ever staged
+		assertEquals(lintNew.success, false);
+		assertEquals(testNew.success, false);
+	} finally {
+		await Deno.remove(dir, { recursive: true });
 	}
 });
 
@@ -203,9 +261,11 @@ Deno.test("gateFilesCommand ignores gitignored scratch but fails other broken fi
 		await Deno.writeTextFile(`${dir}/new.ts`, broken);
 		const [biomeNew, checkNew] = [await run("biome"), await run("check")];
 
-		// Then: both tools fail it, before it is ever staged
+		// Then: both tools fail it, before it is ever staged, and their
+		// diagnostics reach the step's output
 		assertEquals(biomeNew.success, false);
 		assertEquals(checkNew.success, false);
+		assertStringIncludes(new TextDecoder().decode(checkNew.stderr), "TS2322");
 	} finally {
 		await Deno.remove(dir, { recursive: true });
 	}
