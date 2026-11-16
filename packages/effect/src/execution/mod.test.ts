@@ -930,13 +930,15 @@ function forkSelfAware<T>(
 			}),
 		},
 	});
-	let fiber: Fiber<void, T, never> | undefined;
+	const ref: { fiber: Fiber<void, T, never> | undefined } = {
+		fiber: undefined,
+	};
 	const self = (): Fiber<void, T, never> => {
-		if (fiber === undefined) throw new Error("fiber not forked yet");
-		return fiber;
+		if (ref.fiber === undefined) throw new Error("fiber not forked yet");
+		return ref.fiber;
 	};
 	const forked = fork(runtime, build(self));
-	fiber = forked;
+	ref.fiber = forked;
 	const seen: FiberResult<T, never>[] = [];
 	join(forked, (result) => seen.push(result));
 	for (let turn = turns.shift(); turn; turn = turns.shift()) turn();
