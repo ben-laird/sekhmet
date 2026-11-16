@@ -1,3 +1,10 @@
+/**
+ * Getting the value out of an option: `unwrap`/`expect` panic on `None`;
+ * `unwrapOr` takes a default.
+ *
+ * @module
+ */
+
 import { match, union } from "@/src/core/mini/exit.ts";
 import { assertIsolated } from "@/src/core/mini/isolate.ts";
 import type { Option } from "./core.ts";

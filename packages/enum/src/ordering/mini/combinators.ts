@@ -1,3 +1,10 @@
+/**
+ * Combining orderings: `reverse`, `andThen`/`andThenWith` for tie-breaking,
+ * and `toNumber` for sort callbacks.
+ *
+ * @module
+ */
+
 import { match } from "@/src/core/mini/exit.ts";
 import { Equal, Greater, Less, type Ordering } from "./core.ts";
 

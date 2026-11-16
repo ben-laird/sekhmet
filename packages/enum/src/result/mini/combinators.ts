@@ -1,3 +1,10 @@
+/**
+ * Combining results: `and`/`or` and their lazy forms, conversion to `Option`
+ * (`ok`, `err`) and iteration.
+ *
+ * @module
+ */
+
 import { match } from "@/src/core/mini/exit.ts";
 import { iterIsolated } from "@/src/core/mini/isolate.ts";
 import { None, type Option, Some } from "@/src/option/mini/core.ts";

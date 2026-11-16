@@ -1,3 +1,10 @@
+/**
+ * Getting a value out of a latch: `unwrap`/`expect` and their `Inactive`
+ * forms panic on the other state.
+ *
+ * @module
+ */
+
 import { union } from "@/src/core/mini/exit.ts";
 import { assertIsolated } from "@/src/core/mini/isolate.ts";
 import type { Latch } from "./core.ts";

@@ -1,3 +1,9 @@
+/**
+ * The `Poll` class and its `Ready` and `Pending` constructors.
+ *
+ * @module
+ */
+
 import { Enum, type Split } from "@/src/core/mini/core.ts";
 
 /**

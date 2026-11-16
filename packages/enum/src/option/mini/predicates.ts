@@ -1,3 +1,9 @@
+/**
+ * Testing an option: `isSome`, `isSomeAnd` and `isNone`.
+ *
+ * @module
+ */
+
 import { isolate, isolateAnd } from "@/src/core/mini/isolate.ts";
 import type { Option } from "./core.ts";
 

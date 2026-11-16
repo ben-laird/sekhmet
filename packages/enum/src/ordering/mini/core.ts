@@ -1,3 +1,9 @@
+/**
+ * The `Ordering` class and its `Less`, `Equal` and `Greater` constructors.
+ *
+ * @module
+ */
+
 import { Enum, type Split } from "@/src/core/mini/core.ts";
 
 /**

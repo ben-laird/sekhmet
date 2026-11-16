@@ -1,3 +1,10 @@
+/**
+ * Leaving an enum: read its kind ({@linkcode unionKinds}) or value
+ * ({@linkcode union}), or handle every variant with {@linkcode match}.
+ *
+ * @module
+ */
+
 import { getStructParams } from "@sekhmet/primordials/struct";
 import type { Enum, Isolate, Kinds, SomeVariant, Values } from "./core.ts";
 

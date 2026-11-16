@@ -1,3 +1,9 @@
+/**
+ * The `Option` class and its `Some` and `None` constructors.
+ *
+ * @module
+ */
+
 import { Enum, type Split } from "@/src/core/mini/core.ts";
 
 /**

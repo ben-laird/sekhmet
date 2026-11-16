@@ -1,3 +1,10 @@
+/**
+ * Combining latches: `and`/`or` and their lazy forms, plus `unwrapOr` and
+ * `unwrapOrElse`.
+ *
+ * @module
+ */
+
 import { match } from "@/src/core/mini/exit.ts";
 import { Active, Inactive, type Latch } from "./core.ts";
 

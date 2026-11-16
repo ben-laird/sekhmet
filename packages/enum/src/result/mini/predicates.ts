@@ -1,3 +1,9 @@
+/**
+ * Testing a result: `isOk`, `isOkAnd`, `isErr` and `isErrAnd`.
+ *
+ * @module
+ */
+
 import { isolate, isolateAnd } from "@/src/core/mini/isolate.ts";
 import type { Result } from "./core.ts";
 

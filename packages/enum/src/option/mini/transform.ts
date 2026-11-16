@@ -1,3 +1,10 @@
+/**
+ * Transforming an option's value: `map`, `mapOr`, `mapOrElse` and the
+ * `inspect` functions.
+ *
+ * @module
+ */
+
 import { match, union } from "@/src/core/mini/exit.ts";
 import { isolate } from "@/src/core/mini/isolate.ts";
 import { None, type Option, Some } from "./core.ts";

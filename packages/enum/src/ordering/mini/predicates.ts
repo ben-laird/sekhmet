@@ -1,3 +1,9 @@
+/**
+ * Testing an ordering: `isLt`, `isGt`, `isEq`, `isNe`, `isLe` and `isGe`.
+ *
+ * @module
+ */
+
 import { isolate } from "@/src/core/mini/isolate.ts";
 import type { Ordering } from "./core.ts";
 

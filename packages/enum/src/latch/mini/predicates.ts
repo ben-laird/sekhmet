@@ -1,3 +1,9 @@
+/**
+ * Testing a latch: `isActive`, `isActiveAnd`, `isInactive` and `isInactiveAnd`.
+ *
+ * @module
+ */
+
 import { isolate, isolateAnd } from "@/src/core/mini/isolate.ts";
 import type { Latch } from "./core.ts";
 

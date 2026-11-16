@@ -1,3 +1,9 @@
+/**
+ * Converting an option to a `Result`: `okOr` and `okOrElse`.
+ *
+ * @module
+ */
+
 import { match } from "@/src/core/mini/exit.ts";
 import { Err, Ok, type Result } from "@/src/result/mini/core.ts";
 import type { Option } from "./core.ts";

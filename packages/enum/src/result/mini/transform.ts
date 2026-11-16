@@ -1,3 +1,10 @@
+/**
+ * Transforming a result: `map`, `mapErr`, `mapOr`, `mapOrElse` and the
+ * `inspect` functions.
+ *
+ * @module
+ */
+
 import { match } from "@/src/core/mini/exit.ts";
 import { inspectIsolated } from "@/src/core/mini/isolate.ts";
 import { Err, Ok, type Result } from "./core.ts";

@@ -1,3 +1,9 @@
+/**
+ * The `Latch` class and its `Active` and `Inactive` constructors.
+ *
+ * @module
+ */
+
 import { Enum, type Split } from "@/src/core/mini/core.ts";
 
 /**

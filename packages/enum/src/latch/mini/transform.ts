@@ -1,3 +1,10 @@
+/**
+ * Transforming a latch: `map`, `mapInactive`, `mapOr`, `mapOrElse`, the
+ * `inspect` and `iter` functions, and conversion to `Option` and `Result`.
+ *
+ * @module
+ */
+
 import { match, union } from "@/src/core/mini/exit.ts";
 import { isolate } from "@/src/core/mini/isolate.ts";
 import { None, type Option, Some } from "@/src/option/mini/core.ts";

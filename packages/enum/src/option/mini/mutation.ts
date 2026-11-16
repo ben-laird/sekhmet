@@ -1,3 +1,10 @@
+/**
+ * Changing an option in place: `insert`, `getOrInsert`, `take`, `replace` and
+ * their variants. These mutate the option they are given.
+ *
+ * @module
+ */
+
 import { getStructParams } from "@sekhmet/primordials/struct";
 
 import { match } from "@/src/core/mini/exit.ts";

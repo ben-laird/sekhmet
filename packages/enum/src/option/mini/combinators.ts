@@ -1,3 +1,10 @@
+/**
+ * Combining options: `and`/`or` and their lazy forms, `filter`, `zip`,
+ * `flatten`, `transpose` and iteration.
+ *
+ * @module
+ */
+
 import { match, union } from "@/src/core/mini/exit.ts";
 import { isolate } from "@/src/core/mini/isolate.ts";
 import { Err, Ok, type Result } from "@/src/result/mini/core.ts";

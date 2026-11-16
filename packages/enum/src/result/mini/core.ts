@@ -1,3 +1,9 @@
+/**
+ * The `Result` class and its `Ok` and `Err` constructors.
+ *
+ * @module
+ */
+
 import { Enum, type Split } from "@/src/core/mini/core.ts";
 
 /**

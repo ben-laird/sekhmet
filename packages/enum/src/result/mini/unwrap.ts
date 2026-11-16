@@ -1,3 +1,10 @@
+/**
+ * Getting a value out of a result: `unwrap`/`expect` (and their `Err` forms)
+ * panic on the other variant; `unwrapOr` and `unwrapOrElse` take a fallback.
+ *
+ * @module
+ */
+
 import { match, union } from "@/src/core/mini/exit.ts";
 import { assertIsolated } from "@/src/core/mini/isolate.ts";
 import type { Result } from "./core.ts";

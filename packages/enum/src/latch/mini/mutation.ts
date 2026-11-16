@@ -1,3 +1,9 @@
+/**
+ * Switching a latch in place: the `activate*` and `deactivate*` functions.
+ *
+ * @module
+ */
+
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { match } from "@/src/core/mini/exit.ts";
 import type { Option } from "@/src/option/mini/core.ts";

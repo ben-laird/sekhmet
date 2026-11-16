@@ -1,3 +1,10 @@
+/**
+ * Comparators that produce an `Ordering`: `compareNumbers`, `compareStrings`,
+ * and the key-based `compareBy` and `compareByString`.
+ *
+ * @module
+ */
+
 import { Equal, Greater, Less, type Ordering } from "./core.ts";
 
 /**
