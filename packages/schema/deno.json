@@ -40,7 +40,10 @@
 		"./composites/mini/object": "./src/composites/mini/object.ts",
 		"./composites/mini/record": "./src/composites/mini/record.ts",
 		"./composites/mini/tuple": "./src/composites/mini/tuple.ts",
-		"./composites/mini/union": "./src/composites/mini/union.ts"
+		"./composites/mini/union": "./src/composites/mini/union.ts",
+		"./algebra": "./src/algebra/main/mod.ts",
+		"./algebra/mini": "./src/algebra/mini/mod.ts",
+		"./algebra/mini/or": "./src/algebra/mini/or.ts"
 	},
 
 	"imports": {

@@ -492,4 +492,26 @@ export const FEATURES: readonly Feature[] = [
 			"assertEquals(unwrap(user.parseSync(input)), input);",
 		].join("\n"),
 	},
+	{
+		entrypoint: "@sekhmet/schema/algebra",
+		mini: "packages/schema/src/algebra/mini/mod.ts",
+		output: "packages/schema/src/algebra/main/mod.ts",
+		wraps: [
+			{
+				type: "Schema",
+				from: "../../core/main/mod.ts",
+				mappers: SCHEMA_MAPPERS,
+			},
+		],
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { unwrap } from "@sekhmet/enum/result/mini";',
+			'import { or } from "@sekhmet/schema/algebra";',
+			'import { number, string } from "@sekhmet/schema/primitives";',
+			"",
+			"const id = or({ left: string(), right: number() }).map(String);",
+			"",
+			'assertEquals(unwrap(id.parseSync(7)), "7");',
+		].join("\n"),
+	},
 ];

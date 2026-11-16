@@ -89,6 +89,35 @@ export function withoutOptional(schema: Child): Child {
 	return wrapped.modifier === "optional" ? inner : acceptNull(inner);
 }
 
+/**
+ * The options each `union` tries, keyed by its parser (which a main schema
+ * shares with its mini form), so `or` can extend a union rather than nest it.
+ */
+const UNION_OPTIONS: WeakMap<object, readonly [Child, ...Child[]]> =
+	new WeakMap();
+
+/** A union's schema, recorded as trying `options` in order. */
+export function recordUnion({
+	options,
+	parser,
+}: {
+	options: readonly [Child, ...Child[]];
+	parser: (input: unknown) => Parsed;
+}): Schema<unknown, unknown, Issues<unknown>> {
+	UNION_OPTIONS.set(parser, [...options]);
+
+	return new Schema(parser);
+}
+
+/**
+ * The schemas a union of `schema` with others tries for it: a union's own
+ * options, in order, or `schema` alone. `or` builds its union from these,
+ * so `or(or(a, b), c)` tries what `union([a, b, c])` does.
+ */
+export function branchesOf(schema: Child): readonly [Child, ...Child[]] {
+	return UNION_OPTIONS.get(getStructParams(schema)) ?? [schema];
+}
+
 /** A child's parse result, found under `key`. */
 export interface Settled {
 	/** The key the child was found under. */
