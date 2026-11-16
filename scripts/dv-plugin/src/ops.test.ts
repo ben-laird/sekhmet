@@ -116,3 +116,32 @@ Deno.test("release reports a spawn failure as data with exit 0", async () => {
 	assertEquals(outcome.response.ok, false);
 	assertEquals(outcome.response.published, false);
 });
+
+Deno.test("release runs a plain deno publish in the package, so a dirty tree fails it", async () => {
+	// Given: a release where deno publish succeeds, recording what ran
+	const calls: { command: string; args: readonly string[]; cwd: string }[] = [];
+	const io: Io = {
+		...fakeIo({
+			env: {
+				DV_REPO_ROOT: "/repo",
+				DV_PACKAGE_NAME: "@sekhmet/enum",
+				DV_PACKAGE_PATH: "packages/enum",
+				DV_NEW_VERSION: "0.1.0",
+			},
+			files: new Map(),
+		}),
+		run: (call) => {
+			calls.push(call);
+			return Promise.resolve(Ok({ code: 0, stdout: "", stderr: "" }));
+		},
+	};
+
+	// When: releasing
+	const outcome = await runOp({ op: "release", io });
+
+	// Then: no --allow-dirty; dv's require-clean-tree guards the tree
+	assertEquals(calls, [
+		{ command: "deno", args: ["publish"], cwd: "/repo/packages/enum" },
+	]);
+	assertEquals(outcome.response.published, true);
+});

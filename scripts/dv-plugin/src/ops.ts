@@ -285,12 +285,11 @@ async function release(io: Io): OpResult {
 	const parsed = unwrap(environment);
 	const directory = packageDirectoryOf(parsed);
 
-	// Per-package publish: dv orders the calls via get-dependencies and records
-	// each outcome. --allow-dirty because dv's tags and lockfile refreshes may
-	// leave the tree dirty; OIDC auth is automatic under GitHub Actions.
+	// Per-package publish, ordered by get-dependencies; OIDC auth is automatic
+	// under GitHub Actions. No --allow-dirty: dv's require-clean-tree holds.
 	const run = await io.run({
 		command: "deno",
-		args: ["publish", "--allow-dirty"],
+		args: ["publish"],
 		cwd: directory,
 	});
 	const finished = isErr(run)
