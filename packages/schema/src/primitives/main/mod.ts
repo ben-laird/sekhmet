@@ -29,6 +29,7 @@ import * as mini from "../mini/mod.ts";
 export type {
 	BooleanSchemaOptions,
 	Bound,
+	CoerceMode,
 	LimitOptions,
 	NumberSchemaOptions,
 	Range,
@@ -40,30 +41,41 @@ export { STRINGBOOL_FALSY, STRINGBOOL_TRUTHY } from "../mini/mod.ts";
 /**
  * Creates a schema that validates and optionally coerces boolean values.
  *
- * By default, this schema only accepts boolean inputs and fails with an `InvalidType` issue
- * for non-boolean values. With `coerce: true`, it will convert any input to
- * a boolean using the Boolean() function.
+ * By default it accepts only booleans, failing with an `InvalidType` issue
+ * otherwise. `coerce: true` also accepts `0`/`1`, `0n`/`1n` and
+ * `stringbool`'s default words (so `"false"` is `false`); anything else,
+ * such as `"maybe"`, `2` or `null`, still fails. `coerce: "native"` uses
+ * `Boolean()`, so every value converts and `"false"` is `true`.
+ *
+ * To read strings from env vars, query params or forms, prefer
+ * `stringbool()`, which accepts only strings and takes its own word lists.
  *
  * @param options - Configuration options
  * @returns A schema that validates boolean inputs
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { boolean } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
- * const schema = boolean();
- * parseSync(schema, true); // Ok(true)
- * parseSync(schema, "true"); // Err(InvalidType)
+ * assertEquals(unwrap(parseSync(boolean(), true)), true);
+ * assertEquals(isErr(parseSync(boolean(), "true")), true);
  * ```
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { boolean } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
- * const schema = boolean({ coerce: true });
- * parseSync(schema, "true"); // Ok(true)
- * parseSync(schema, 0); // Ok(false)
- * parseSync(schema, 1); // Ok(true)
+ * const strict = boolean({ coerce: true });
+ * assertEquals(unwrap(parseSync(strict, "false")), false);
+ * assertEquals(unwrap(parseSync(strict, 1)), true);
+ * assertEquals(isErr(parseSync(strict, "maybe")), true);
+ *
+ * const native = boolean({ coerce: "native" });
+ * assertEquals(unwrap(parseSync(native, "false")), true);
  * ```
  */
 export function boolean(
@@ -80,6 +92,12 @@ export function boolean(
  * `infinite: true` allow `NaN` and `±Infinity`, and `range` bounds the
  * value. Chain {@linkcode int}, {@linkcode safe}, {@linkcode multipleOf},
  * {@linkcode min} and {@linkcode max} for further checks.
+ *
+ * `coerce: true` also accepts trimmed decimal or exponent strings
+ * (`" 12 "`, `"1e3"`), booleans as 1/0 and bigints in the safe-integer
+ * range, and rejects `""`, `"0x10"`, `null`, `undefined`, `[]` and `{}`.
+ * `coerce: "native"` uses `Number()` instead, whose result is still
+ * checked.
  *
  * @param options - Configuration options
  * @returns A schema that validates numeric inputs
@@ -109,6 +127,21 @@ export function boolean(
  *
  * assertEquals(isOk(parseSync(ratio, 0)), true);
  * assertEquals(isErr(parseSync(ratio, 1)), true);
+ * ```
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { number } from "@sekhmet/schema/primitives";
+ *
+ * const strict = number({ coerce: true });
+ * assertEquals(unwrap(parseSync(strict, " 1e3 ")), 1000);
+ * assertEquals(isErr(parseSync(strict, "")), true);
+ *
+ * const native = number({ coerce: "native" });
+ * assertEquals(unwrap(parseSync(native, "")), 0);
+ * assertEquals(isErr(parseSync(native, "abc")), true);
  * ```
  */
 export function number(
@@ -270,29 +303,37 @@ export function safe<I, E>(
 /**
  * Creates a schema that validates and optionally coerces string values.
  *
- * By default, this schema only accepts string inputs and fails with an `InvalidType` issue
- * for non-string values. With `coerce: true`, it will convert any input to
- * a string using the String() function.
+ * By default it accepts only strings, failing with an `InvalidType` issue
+ * otherwise. `coerce: true` also accepts finite numbers, bigints and
+ * booleans, as their `String()` form; `null`, `undefined`, `NaN`, objects
+ * and symbols still fail. `coerce: "native"` converts anything `String()`
+ * can.
  *
  * @param options - Configuration options
  * @returns A schema that validates string inputs
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
- * const schema = string();
- * parseSync(schema, "hello"); // Ok("hello")
- * parseSync(schema, 123); // Err(InvalidType)
+ * assertEquals(unwrap(parseSync(string(), "hello")), "hello");
+ * assertEquals(isErr(parseSync(string(), 123)), true);
  * ```
  * @example
  * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives";
- * import { parseSync } from "@sekhmet/schema/core/mini/schema";
  *
- * const schema = string({ coerce: true });
- * parseSync(schema, 123); // Ok("123")
- * parseSync(schema, true); // Ok("true")
+ * const strict = string({ coerce: true });
+ * assertEquals(unwrap(parseSync(strict, 123)), "123");
+ * assertEquals(isErr(parseSync(strict, null)), true);
+ *
+ * const native = string({ coerce: "native" });
+ * assertEquals(unwrap(parseSync(native, null)), "null");
  * ```
  */
 export function string(

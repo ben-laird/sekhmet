@@ -8,6 +8,7 @@
  */
 
 export { type BooleanSchemaOptions, boolean } from "./boolean.ts";
+export type { CoerceMode } from "./coerce.ts";
 export {
 	type Bound,
 	type NumberSchemaOptions,

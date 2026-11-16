@@ -6,6 +6,8 @@ import {
 	TooSmall,
 } from "@/src/core/mini/issue.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
+import type { CoerceMode } from "./coerce.ts";
+import { coerceNumber } from "./convert.ts";
 
 /**
  * Represents a numeric bound with inclusivity.
@@ -35,12 +37,15 @@ export interface Range {
  */
 export interface NumberSchemaOptions {
 	/**
-	 * If true, coerce non-number values to numbers using Number().
-	 * If false, non-number values fail with an `InvalidType` issue.
+	 * How a non-number is treated (see {@linkcode CoerceMode}): rejected
+	 * (`false`), strictly coerced (`true`: trimmed decimal or exponent
+	 * strings, booleans as 1/0, bigints in the safe-integer range), or
+	 * converted with `Number()` (`"native"`). A coerced value is still
+	 * checked, so `NaN` from `Number("abc")` fails unless `nan: true`.
 	 *
 	 * @default false
 	 */
-	coerce?: boolean;
+	coerce?: CoerceMode;
 
 	/**
 	 * Whether `NaN` is accepted. By default it fails with an `InvalidType`
@@ -115,6 +120,12 @@ function violation(
  * value. Chain {@linkcode int}, {@linkcode safe}, {@linkcode multipleOf},
  * {@linkcode min} and {@linkcode max} for further checks.
  *
+ * `coerce: true` also accepts trimmed decimal or exponent strings
+ * (`" 12 "`, `"1e3"`), booleans as 1/0 and bigints in the safe-integer
+ * range, and rejects `""`, `"0x10"`, `null`, `undefined`, `[]` and `{}`.
+ * `coerce: "native"` uses `Number()` instead, whose result is still
+ * checked.
+ *
  * @param options Configuration options
  * @returns A schema that validates numeric inputs
  *
@@ -146,18 +157,34 @@ function violation(
  * assertEquals(isOk(parseSync(ratio, 0)), true);
  * assertEquals(isErr(parseSync(ratio, 1)), true);
  * ```
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { number } from "@sekhmet/schema/primitives/mini";
+ *
+ * const strict = number({ coerce: true });
+ * assertEquals(unwrap(parseSync(strict, " 1e3 ")), 1000);
+ * assertEquals(isErr(parseSync(strict, "")), true);
+ *
+ * const native = number({ coerce: "native" });
+ * assertEquals(unwrap(parseSync(native, "")), 0);
+ * assertEquals(isErr(parseSync(native, "abc")), true);
+ * ```
  */
 export function number(
 	options?: NumberSchemaOptions,
 ): Schema<unknown, number, SchemaIssue> {
-	const coerce = options?.coerce ?? false;
+	const mode = options?.coerce ?? false;
 
 	return new Schema((input): Result<number, SchemaIssue> => {
-		if (typeof input !== "number" && !coerce) {
+		const value = coerceNumber(input, mode);
+		if (value === undefined) {
 			return Err(InvalidType({ input, expected: "number" }));
 		}
 
-		const value = typeof input === "number" ? input : Number(input);
 		const issue = violation(value, options);
 
 		return issue === undefined ? Ok(value) : Err(issue);
