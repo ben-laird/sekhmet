@@ -85,6 +85,11 @@ const RESULT: WrapTarget = {
 	from: "../../result/main/mod.ts",
 	mappers: ["map", "mapErr"],
 };
+const SCHEMA_MAPPERS: readonly (string | undefined)[] = [
+	undefined,
+	"map",
+	"mapErr",
+];
 
 /** Every generated main entrypoint. */
 export const FEATURES: readonly Feature[] = [
@@ -259,6 +264,47 @@ export const FEATURES: readonly Feature[] = [
 			");",
 			"",
 			"assertEquals(results, [Ok(42)]);",
+		].join("\n"),
+	},
+	{
+		entrypoint: "@sekhmet/schema/core",
+		mini: "packages/schema/src/core/mini/mod.ts",
+		output: "packages/schema/src/core/main/mod.ts",
+		primary: "Schema",
+		construct: "params",
+		mappers: SCHEMA_MAPPERS,
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";',
+			'import { Schema } from "@sekhmet/schema/core";',
+			"",
+			"const digits = new Schema((input: string) =>",
+			'\t/^\\d+$/.test(input) ? Ok(input) : Err("not digits"),',
+			");",
+			"const doubled = digits.map(Number).map((n) => n * 2);",
+			"",
+			'assertEquals(unwrap(doubled.parseSync("21")), 42);',
+		].join("\n"),
+	},
+	{
+		entrypoint: "@sekhmet/schema/primitives",
+		mini: "packages/schema/src/primitives/mini/mod.ts",
+		output: "packages/schema/src/primitives/main/mod.ts",
+		wraps: [
+			{
+				type: "Schema",
+				from: "../../core/main/mod.ts",
+				mappers: SCHEMA_MAPPERS,
+			},
+		],
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { unwrap } from "@sekhmet/enum/result/mini";',
+			'import { string } from "@sekhmet/schema/primitives";',
+			"",
+			"const length = string().map((text) => text.length);",
+			"",
+			'assertEquals(unwrap(length.parseSync("four")), 4);',
 		].join("\n"),
 	},
 ];
