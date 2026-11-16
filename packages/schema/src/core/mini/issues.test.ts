@@ -151,7 +151,7 @@ Deno.test("Flatten unwraps Issues and distributes over unions", () => {
 
 Deno.test("a composite of E1 and Issues<E2> children is Issues<E1 | E2>", () => {
 	// Given: one child failing with a bare error, one with Issues
-	const first: "required" = "required";
+	const first = "required" as const;
 	const second: Issues<404> = prefix(fromError(404 as const), "status");
 
 	// When: locating both under their keys and collecting them
