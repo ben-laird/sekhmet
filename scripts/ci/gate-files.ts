@@ -3,19 +3,26 @@ import { parseArgs } from "@std/cli";
 import { join } from "@std/path";
 import { biomeCiCommand } from "@/main.ts";
 import type { StepCommand } from "@/mod.ts";
-import { type GateTool, gateFiles } from "@/src/gate-files.ts";
+import {
+	GATE_TOOLS,
+	type GateTool,
+	gateFiles,
+	isGateTool,
+} from "@/src/gate-files.ts";
 
 /**
- * Runs a gate tool over the files git does not ignore, the I/O edge around
- * {@linkcode gateFiles}: asks git for the files, then runs `biome ci` or
- * `deno check` over exactly those, so gitignored scratch (`playground/`)
- * can never fail the gate. The tool runs in the working directory, so it
- * reads that directory's `deno.json` and `biome.json`.
+ * Runs a gate tool over the paths git does not ignore, the I/O edge around
+ * {@linkcode gateFiles}: asks git for the files, then runs `biome ci`,
+ * `deno check`, `deno lint` or `deno test` over exactly the paths
+ * `gateFiles` derives from them, so gitignored scratch (`playground/`) can
+ * never fail the gate. The tool runs in the working directory, so it reads
+ * that directory's `deno.json` and `biome.json`.
  *
- * Usage: `gate-files.ts <biome|check> [--root <dir>]`
+ * Usage: `gate-files.ts <biome|check|lint|test> [--root <dir>] [-- <tool args>]`
  *
  * `--root` lists another checkout (default: the working directory, the repo
  * root under `deno task ci`), handing the tool its paths joined to the root.
+ * Arguments after `--` go to the tool, before the paths.
  *
  * @param args - The command-line arguments
  * @returns The exit code: the tool's, or 1 when there is nothing to run
@@ -24,10 +31,11 @@ export async function main(args: string[]): Promise<number> {
 	const {
 		_: [tool],
 		root,
-	} = parseArgs(args, { string: ["root"] });
-	if (tool !== "biome" && tool !== "check") {
+		"--": toolArgs,
+	} = parseArgs(args, { string: ["root"], "--": true });
+	if (!isGateTool(tool)) {
 		console.error(
-			`usage: gate-files.ts <biome|check> [--root <dir>], got ${args.join(" ")}`,
+			`usage: gate-files.ts <${GATE_TOOLS.join("|")}> [--root <dir>] [-- <tool args>], got ${args.join(" ")}`,
 		);
 		return 1;
 	}
@@ -53,15 +61,16 @@ export async function main(args: string[]): Promise<number> {
 		console.error(files.error);
 		return 1;
 	}
-	const { program, args: toolArgs = [] } = toolCommand({
+	const { program, args: commandArgs = [] } = toolCommand({
 		tool,
+		args: toolArgs,
 		paths: files.paths.map((path) =>
 			root === undefined ? path : join(root, path),
 		),
 	});
 	// Inherit stdio: the tool's diagnostics are the step's output
 	const { code } = await new Deno.Command(program, {
-		args: [...toolArgs],
+		args: [...commandArgs],
 		stdin: "null",
 		stdout: "inherit",
 		stderr: "inherit",
@@ -71,14 +80,16 @@ export async function main(args: string[]): Promise<number> {
 
 function toolCommand({
 	tool,
+	args,
 	paths,
 }: {
 	tool: GateTool;
+	args: string[];
 	paths: string[];
 }): StepCommand {
 	return tool === "biome"
-		? biomeCiCommand({ paths })
-		: { program: "deno", args: ["check", ...paths] };
+		? biomeCiCommand({ paths: [...args, ...paths] })
+		: { program: "deno", args: [tool, ...args, ...paths] };
 }
 
 async function gitLsFiles({

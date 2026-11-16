@@ -109,21 +109,24 @@ Before contributing:
 `playground/` at the repository root is gitignored and never checked by
 `deno task ci`, so keep scratch scripts and notebooks there. Your editor still
 covers it: the Deno language server (hovers, completions, type errors) and
-Biome (formatting, lint, organize imports) both see the folder. Imports of
-`@sekhmet/*` resolve to the checked-out source, so you are always playing with
-the current branch (or, after `deno task play:link`, with a worktree's):
+Biome (formatting, lint, organize imports) and Deno's lint all see the folder.
+Imports of `@sekhmet/*` resolve to the checked-out source, so you are always
+playing with the current branch (or, after `deno task play:link`, with a
+worktree's):
 
 ```bash
 deno run playground/try.ts         # any script that imports @sekhmet/*
 deno check playground/try.ts       # type-check it
+deno lint playground/              # Deno's lint rules
 deno task fmt playground/          # format and lint-fix it with Biome
 ```
 
-The gate stays off it in three ways: Biome and `deno check` run over the files
-git does not ignore (`scripts/ci/gate-files.ts`), `deno lint` and `deno test`
-exclude it in `deno.json` (`lint.exclude`, `test.exclude`), and the
-publish-readiness scans skip it. `deno.json`'s `lint.exclude` also turns off
-Deno's lint diagnostics for it in the editor; Biome's lint still runs there.
+The gate stays off it in two ways: Biome, `deno check`, `deno lint` and
+`deno test` run over the paths git does not ignore
+(`scripts/ci/gate-files.ts`; `deno test` gets the top-level directories they
+live in, so its own discovery and the `deno.json` excludes still apply inside
+them), and the publish-readiness scans skip it. `deno.json` excludes nothing
+for it, so the commands above, and the editor, treat it like any other folder.
 
 - **`deno task play:notebook`** copies a starter notebook to
   `playground/start.ipynb` (it never overwrites yours). Open it in VS Code with
