@@ -20,5 +20,7 @@ import { Schema } from "@/src/core/mini/schema.ts";
  * ```
  */
 export function never(): Schema<unknown, never, SchemaIssue> {
-	return new Schema((input) => Err(InvalidType({ input, expected: "never" })));
+	return new Schema({
+		parse: (input) => Err(InvalidType({ input, expected: "never" })),
+	});
 }

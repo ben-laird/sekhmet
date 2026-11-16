@@ -20,18 +20,23 @@ import {
 import { nullable, optional } from "./modifiers.ts";
 import { object, type UnknownKeys } from "./object.ts";
 
-const text: Schema<unknown, string, "not text"> = new Schema((input) =>
-	typeof input === "string" ? Ok(input) : Err("not text"),
-);
-const count: Schema<unknown, number, "not a number"> = new Schema((input) =>
-	typeof input === "number" ? Ok(input) : Err("not a number"),
-);
-const laterCount: Schema<unknown, number, "not a number"> = new Schema(
-	(input) =>
-		Promise.resolve(
+const text: Schema<unknown, string, "not text"> = new Schema({
+	parse: (input) => {
+		return typeof input === "string" ? Ok(input) : Err("not text");
+	},
+});
+const count: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
+		return typeof input === "number" ? Ok(input) : Err("not a number");
+	},
+});
+const laterCount: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
+		return Promise.resolve(
 			typeof input === "number" ? Ok(input) : Err("not a number"),
-		),
-);
+		);
+	},
+});
 
 Deno.test("object parses each field and strips undeclared keys", () => {
 	// Given: an object schema with two fields
@@ -209,9 +214,11 @@ Deno.test("a missing required key is checked without its .optional(), through .n
 
 Deno.test("a required field whose own schema accepts undefined passes a missing key", () => {
 	// Given: a required field whose schema itself (not .optional()) accepts undefined
-	const anything: Schema<unknown, unknown, never> = new Schema((input) =>
-		Ok(input),
-	);
+	const anything: Schema<unknown, unknown, never> = new Schema({
+		parse: (input) => {
+			return Ok(input);
+		},
+	});
 	const box = object({ shape: { content: anything } });
 
 	// When: the key is missing
@@ -319,7 +326,7 @@ Deno.test("object infers its input, output and error types", () => {
 		},
 	});
 	const typed = object({
-		shape: { id: new Schema((input: string) => Ok(input.length)) },
+		shape: { id: new Schema({ parse: (input: string) => Ok(input.length) }) },
 	});
 	const loose = object({ shape: { name: text }, unknownKeys: "passthrough" });
 	const strict = object({ shape: { name: text }, unknownKeys: "strict" });
@@ -351,7 +358,7 @@ Deno.test("object infers its input, output and error types", () => {
 
 Deno.test("each field kind has exact input and output types", () => {
 	// Given: one field of each kind, with a typed input so the input type shows
-	const typedText = new Schema((input: string) => Ok(input));
+	const typedText = new Schema({ parse: (input: string) => Ok(input) });
 	const person = object({
 		shape: {
 			name: typedText,

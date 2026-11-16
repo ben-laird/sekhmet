@@ -20,12 +20,18 @@ import {
 import { discriminatedUnion } from "./discriminated-union.ts";
 import { object } from "./object.ts";
 
-const size: Schema<unknown, number, "not a size"> = new Schema((input) =>
-	typeof input === "number" ? Ok(input) : Err("not a size"),
-);
-const laterSize: Schema<unknown, number, "not a size"> = new Schema((input) =>
-	Promise.resolve(typeof input === "number" ? Ok(input) : Err("not a size")),
-);
+const size: Schema<unknown, number, "not a size"> = new Schema({
+	parse: (input) => {
+		return typeof input === "number" ? Ok(input) : Err("not a size");
+	},
+});
+const laterSize: Schema<unknown, number, "not a size"> = new Schema({
+	parse: (input) => {
+		return Promise.resolve(
+			typeof input === "number" ? Ok(input) : Err("not a size"),
+		);
+	},
+});
 const shape = discriminatedUnion({
 	key: "kind",
 	options: {

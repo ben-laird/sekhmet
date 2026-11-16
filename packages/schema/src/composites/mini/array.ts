@@ -46,7 +46,7 @@ export type ArrayInput<I> = unknown extends I ? unknown : readonly I[];
  * import { Schema } from "@sekhmet/schema/core/mini";
  *
  * const tags: ArrayOptions<unknown, unknown, never> = {
- * 	item: new Schema((input: unknown) => Ok(input)),
+ * 	item: new Schema({ parse: (input: unknown) => Ok(input) }),
  * 	minItems: 1,
  * };
  * ```
@@ -116,9 +116,11 @@ function lengthIssue({
  * import { array } from "@sekhmet/schema/composites/mini";
  * import { entries, parseAsync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const positive = new Schema((input: unknown) =>
- * 	typeof input === "number" && input > 0 ? Ok(input) : Err("not positive"),
- * );
+ * const positive = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" && input > 0 ? Ok(input) : Err("not positive");
+ * 	},
+ * });
  * const found = unwrapErr(await parseAsync(array({ item: positive }), [1, -2, 3, 0]));
  *
  * assertEquals(entries(found).map(({ path }) => path), [[1], [3]]);
@@ -131,7 +133,7 @@ function lengthIssue({
  * import { array } from "@sekhmet/schema/composites/mini";
  * import { entries, formatIssue, parseAsync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const anything = new Schema((input: unknown) => Ok(input));
+ * const anything = new Schema({ parse: (input: unknown) => Ok(input) });
  * const pair = array({ item: anything, minItems: 1, maxItems: 2 });
  * const [{ error }] = entries(unwrapErr(await parseAsync(pair, [1, 2, 3])));
  *
@@ -148,15 +150,17 @@ export function array(options: {
 }): Schema<unknown, unknown, Issues<unknown>> {
 	const { item, minItems, maxItems } = options;
 
-	return new Schema((input: unknown): Parsed => {
-		if (!isArray(input)) return invalidType({ input, expected: "array" });
+	return new Schema({
+		parse: (input: unknown): Parsed => {
+			if (!isArray(input)) return invalidType({ input, expected: "array" });
 
-		return compose({
-			pending: input.map((value, index) =>
-				run({ key: index, child: item, value }),
-			),
-			extra: lengthIssue({ input, minItems, maxItems }),
-			build: (outputs) => outputs.map(([, output]) => output),
-		});
+			return compose({
+				pending: input.map((value, index) =>
+					run({ key: index, child: item, value }),
+				),
+				extra: lengthIssue({ input, minItems, maxItems }),
+				build: (outputs) => outputs.map(([, output]) => output),
+			});
+		},
 	});
 }

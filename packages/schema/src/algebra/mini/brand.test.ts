@@ -16,14 +16,16 @@ import { BRAND, type Branded, brand } from "./brand.ts";
 /** Whether a `From` is assignable to a `To`. */
 type Assignable<From, To> = [From] extends [To] ? true : false;
 
-const text: Schema<unknown, string, "not text"> = new Schema((input) => {
-	return typeof input === "string" ? Ok(input) : Err("not text");
+const text: Schema<unknown, string, "not text"> = new Schema({
+	parse: (input) => {
+		return typeof input === "string" ? Ok(input) : Err("not text");
+	},
 });
 
 Deno.test("brand passes the output through unchanged", () => {
 	// Given: an object schema's output, and that schema branded
 	const value = { id: 1 };
-	const same = new Schema((input: unknown) => Ok(input));
+	const same = new Schema({ parse: (input: unknown) => Ok(input) });
 	const branded = brand(same, "Thing");
 
 	// When: parsing with the branded schema
@@ -48,7 +50,7 @@ Deno.test("brand keeps the schema's failures", async () => {
 Deno.test("brand keeps the parse's Potential", () => {
 	// Given: a branded async schema
 	const later = brand(
-		new Schema((input: string) => Promise.resolve(Ok(input))),
+		new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) }),
 		"Later",
 	);
 

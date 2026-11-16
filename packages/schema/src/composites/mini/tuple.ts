@@ -104,12 +104,16 @@ export type TupleError<T extends readonly AnySchema[]> = Issues<
  * import { tuple } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) =>
- * 	typeof input === "string" ? Ok(input) : Err("not text"),
- * );
- * const count = new Schema((input: unknown) =>
- * 	typeof input === "number" ? Ok(input) : Err("not a number"),
- * );
+ * const text = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "string" ? Ok(input) : Err("not text");
+ * 	},
+ * });
+ * const count = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" ? Ok(input) : Err("not a number");
+ * 	},
+ * });
  *
  * assertEquals(unwrap(parseSync(tuple([text, count]), ["apples", 3])), ["apples", 3]);
  * ```
@@ -120,25 +124,27 @@ export function tuple<const T extends readonly AnySchema[]>(
 export function tuple(
 	items: readonly Child[],
 ): Schema<unknown, unknown, Issues<unknown>> {
-	return new Schema((input: unknown): Parsed => {
-		if (!isArray(input)) return invalidType({ input, expected: "array" });
+	return new Schema({
+		parse: (input: unknown): Parsed => {
+			if (!isArray(input)) return invalidType({ input, expected: "array" });
 
-		return compose({
-			pending: items.map((child, index) =>
-				run({ key: index, child, value: input[index] }),
-			),
-			extra:
-				input.length > items.length
-					? fromError(
-							TooBig({
-								input,
-								origin: "array",
-								maximum: items.length,
-								inclusive: true,
-							}),
-						)
-					: undefined,
-			build: (outputs) => outputs.map(([, output]) => output),
-		});
+			return compose({
+				pending: items.map((child, index) =>
+					run({ key: index, child, value: input[index] }),
+				),
+				extra:
+					input.length > items.length
+						? fromError(
+								TooBig({
+									input,
+									origin: "array",
+									maximum: items.length,
+									inclusive: true,
+								}),
+							)
+						: undefined,
+				build: (outputs) => outputs.map(([, output]) => output),
+			});
+		},
 	});
 }

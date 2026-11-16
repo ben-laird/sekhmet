@@ -66,11 +66,13 @@ export function boolean(
 ): Schema<unknown, boolean, SchemaIssue> {
 	const mode = options?.coerce ?? false;
 
-	return new Schema((input): Result<boolean, SchemaIssue> => {
-		const value = coerceBoolean({ input, mode });
+	return new Schema({
+		parse: (input): Result<boolean, SchemaIssue> => {
+			const value = coerceBoolean({ input, mode });
 
-		return value === undefined
-			? Err(InvalidType({ input, expected: "boolean" }))
-			: Ok(value);
+			return value === undefined
+				? Err(InvalidType({ input, expected: "boolean" }))
+				: Ok(value);
+		},
 	});
 }

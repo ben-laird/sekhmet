@@ -21,5 +21,5 @@ import { Schema } from "@/src/core/mini/schema.ts";
  * ```
  */
 export function unknown(): Schema<unknown, unknown, never> {
-	return new Schema((input) => Ok(input));
+	return new Schema({ parse: (input) => Ok(input) });
 }

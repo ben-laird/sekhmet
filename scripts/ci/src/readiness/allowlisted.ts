@@ -75,6 +75,8 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	),
 	privateTypeRef("schema/src/core/mini/issue.ts", "SchemaIssue", "Enum"),
 	privateTypeRef("schema/src/core/mini/issues.ts", "Issues", "Struct"),
+	privateTypeRef("schema/src/core/mini/node.ts", "SchemaNode", "Enum"),
+	privateTypeRef("schema/src/core/mini/node.ts", "customData", "Option"),
 	privateTypeRef(
 		"schema/src/core/mini/potential.ts",
 		"PotentialVariants",

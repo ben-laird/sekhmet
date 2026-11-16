@@ -68,9 +68,11 @@ export interface ToStandardOptions<O, E> {
  * import { InvalidType, Schema } from "@sekhmet/schema/core/mini";
  * import { toStandard } from "@sekhmet/schema/standard/mini";
  *
- * const text = new Schema((input: unknown) =>
- * 	typeof input === "string" ? Ok(input) : Err(InvalidType({ input, expected: "string" })),
- * );
+ * const text = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "string" ? Ok(input) : Err(InvalidType({ input, expected: "string" }));
+ * 	},
+ * });
  * const standard = toStandard({ schema: text });
  *
  * assertEquals(standard["~standard"].validate("a"), { value: "a" });
@@ -99,9 +101,11 @@ export function toStandard<O>(
  * import { Schema } from "@sekhmet/schema/core/mini";
  * import { toStandard } from "@sekhmet/schema/standard/mini";
  *
- * const even = new Schema((input: unknown) =>
- * 	typeof input === "number" && input % 2 === 0 ? Ok(input) : Err({ code: "odd" }),
- * );
+ * const even = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" && input % 2 === 0 ? Ok(input) : Err({ code: "odd" });
+ * 	},
+ * });
  * const standard = toStandard({
  * 	schema: even,
  * 	toIssue: ({ code }) => `Rejected: ${code}`,

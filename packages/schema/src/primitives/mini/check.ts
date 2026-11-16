@@ -44,16 +44,17 @@ export function leaf<O>({
 	read: (input: unknown) => Result<O, SchemaIssue>;
 	inspections: readonly Inspect<O>[];
 }): Schema<unknown, O, SchemaIssue> {
-	return new Schema((input) =>
-		match(read(input))<Result<O, SchemaIssue>>({
-			Ok: (value) => {
-				const issue = firstIssue({ value, inspections });
+	return new Schema({
+		parse: (input) =>
+			match(read(input))<Result<O, SchemaIssue>>({
+				Ok: (value) => {
+					const issue = firstIssue({ value, inspections });
 
-				return issue === undefined ? Ok(value) : Err(issue);
-			},
-			Err: (issue) => Err(issue),
-		}),
-	);
+					return issue === undefined ? Ok(value) : Err(issue);
+				},
+				Err: (issue) => Err(issue),
+			}),
+	});
 }
 
 /** The inspection `inspect` builds from `option` when it is set; none otherwise. */

@@ -9,6 +9,11 @@
  */
 
 export {
+	type Annotation,
+	type AnnotationKey,
+	annotationKey,
+} from "./annotation.ts";
+export {
 	Custom,
 	type CustomDetails,
 	formatIssue,
@@ -36,7 +41,6 @@ export {
 	UnknownKey,
 	type UnknownKeyDetails,
 } from "./issue.ts";
-
 export {
 	concat,
 	entries,
@@ -52,6 +56,32 @@ export {
 	toIssues,
 } from "./issues.ts";
 
+export {
+	type ArrayDetails,
+	type CustomDataOptions,
+	type CustomNodeDetails,
+	type CustomOptions,
+	children,
+	custom,
+	customData,
+	type DiscriminatedUnionDetails,
+	type LazyDetails,
+	type LeafDetails,
+	type NodeKind,
+	nodeKind,
+	nodeOf,
+	type ObjectDetails,
+	Opaque,
+	type PipeDetails,
+	type RecordDetails,
+	SchemaNode,
+	type SchemaNodeVariants,
+	type TransformDetails,
+	type TransformStep,
+	type TupleDetails,
+	type UnionDetails,
+	type WrapperDetails,
+} from "./node.ts";
 export {
 	Async,
 	from,
@@ -86,5 +116,7 @@ export {
 	pipe,
 	preprocess,
 	Schema,
+	type SchemaInit,
+	type SchemaParams,
 	UnexpectedAsyncParse,
 } from "./schema.ts";

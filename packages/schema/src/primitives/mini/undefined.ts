@@ -23,10 +23,10 @@ import { Schema } from "@/src/core/mini/schema.ts";
  * ```
  */
 export function undefined_(): Schema<unknown, undefined, SchemaIssue> {
-	return new Schema(
-		(input): Result<undefined, SchemaIssue> =>
+	return new Schema({
+		parse: (input): Result<undefined, SchemaIssue> =>
 			input === undefined
 				? Ok(input)
 				: Err(InvalidType({ input, expected: "undefined" })),
-	);
+	});
 }

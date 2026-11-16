@@ -48,9 +48,10 @@ export function enumOf<const T extends readonly [Literal, ...Literal[]]>(
 ): Schema<unknown, T[number], SchemaIssue> {
 	const isAllowed = oneOf<T[number]>(values);
 
-	return new Schema((input: unknown) =>
-		isAllowed(input)
-			? Ok(input)
-			: Err(InvalidValue({ input, expected: values })),
-	);
+	return new Schema({
+		parse: (input: unknown) =>
+			isAllowed(input)
+				? Ok(input)
+				: Err(InvalidValue({ input, expected: values })),
+	});
 }

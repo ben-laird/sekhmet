@@ -67,8 +67,8 @@ export type RecordOutput<K extends PropertyKey, V> = string extends K
  * import { Schema } from "@sekhmet/schema/core/mini";
  *
  * const options: RecordOptions<string, never, unknown, unknown, never> = {
- * 	key: new Schema((input: string) => Ok(input)),
- * 	value: new Schema((input: unknown) => Ok(input)),
+ * 	key: new Schema({ parse: (input: string) => Ok(input) }),
+ * 	value: new Schema({ parse: (input: unknown) => Ok(input) }),
  * };
  * ```
  */
@@ -101,10 +101,12 @@ export interface RecordOptions<KO extends PropertyKey, KE, VI, VO, VE> {
  * import { record } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const name = new Schema((input: string) => Ok(input));
- * const score = new Schema((input: unknown) =>
- * 	typeof input === "number" ? Ok(input) : Err("not a score"),
- * );
+ * const name = new Schema({ parse: (input: string) => Ok(input) });
+ * const score = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" ? Ok(input) : Err("not a score");
+ * 	},
+ * });
  * const scores = record({ key: name, value: score });
  *
  * assertEquals(unwrap(parseSync(scores, { ada: 3 })), { ada: 3 });
@@ -123,24 +125,26 @@ export function record(options: {
 }): Schema<unknown, unknown, Issues<unknown>> {
 	const { key, value } = options;
 
-	return new Schema((input: unknown): Parsed => {
-		if (!isRecord(input)) return invalidType({ input, expected: "object" });
+	return new Schema({
+		parse: (input: unknown): Parsed => {
+			if (!isRecord(input)) return invalidType({ input, expected: "object" });
 
-		// Each key's own parse, then its value's: issues stay in key order.
-		const pending = Object.keys(input).flatMap((name) => [
-			run({ key: name, child: key, value: name }),
-			run({ key: name, child: value, value: input[name] }),
-		]);
+			// Each key's own parse, then its value's: issues stay in key order.
+			const pending = Object.keys(input).flatMap((name) => [
+				run({ key: name, child: key, value: name }),
+				run({ key: name, child: value, value: input[name] }),
+			]);
 
-		return compose({
-			pending,
-			extra: undefined,
-			build: (outputs) =>
-				Object.fromEntries(
-					outputs.flatMap(([, outputKey], index) =>
-						index % 2 === 0 ? [[outputKey, outputs[index + 1]?.[1]]] : [],
+			return compose({
+				pending,
+				extra: undefined,
+				build: (outputs) =>
+					Object.fromEntries(
+						outputs.flatMap(([, outputKey], index) =>
+							index % 2 === 0 ? [[outputKey, outputs[index + 1]?.[1]]] : [],
+						),
 					),
-				),
-		});
+			});
+		},
 	});
 }

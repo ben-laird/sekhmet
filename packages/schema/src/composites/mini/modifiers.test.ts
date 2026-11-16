@@ -17,12 +17,18 @@ import { array } from "./array.ts";
 import { lazy, nullable, optional } from "./modifiers.ts";
 import { object } from "./object.ts";
 
-const text: Schema<unknown, string, "not text"> = new Schema((input) =>
-	typeof input === "string" ? Ok(input) : Err("not text"),
-);
-const laterText: Schema<unknown, string, "not text"> = new Schema((input) =>
-	Promise.resolve(typeof input === "string" ? Ok(input) : Err("not text")),
-);
+const text: Schema<unknown, string, "not text"> = new Schema({
+	parse: (input) => {
+		return typeof input === "string" ? Ok(input) : Err("not text");
+	},
+});
+const laterText: Schema<unknown, string, "not text"> = new Schema({
+	parse: (input) => {
+		return Promise.resolve(
+			typeof input === "string" ? Ok(input) : Err("not text"),
+		);
+	},
+});
 
 Deno.test("optional passes undefined through and parses anything else", async () => {
 	// Given: an optional text schema
@@ -61,7 +67,9 @@ Deno.test("optional and nullable keep the inner schema's timing", () => {
 
 Deno.test("optional and nullable widen the input and output types", () => {
 	// Given: optional and nullable text schemas
-	const maybe = optional(new Schema((input: string) => Ok(input.length)));
+	const maybe = optional(
+		new Schema({ parse: (input: string) => Ok(input.length) }),
+	);
 	const orNull = nullable(text);
 
 	// When: reading their types

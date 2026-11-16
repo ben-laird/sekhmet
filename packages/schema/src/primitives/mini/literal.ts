@@ -52,10 +52,10 @@ export function literal<const T extends Literal>(
 ): Schema<unknown, T, SchemaIssue> {
 	const isValue = sameAs(value);
 
-	return new Schema(
-		(input): Result<T, SchemaIssue> =>
+	return new Schema({
+		parse: (input): Result<T, SchemaIssue> =>
 			isValue(input)
 				? Ok(input)
 				: Err(InvalidValue({ input, expected: [value] })),
-	);
+	});
 }

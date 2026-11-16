@@ -32,7 +32,7 @@ import {
 
 Deno.test("parse handles synchronous schemas", () => {
 	// Given: a synchronous schema
-	const schema = new Schema((input: number) => Ok(input * 2));
+	const schema = new Schema({ parse: (input: number) => Ok(input * 2) });
 
 	// When: parsing input
 	const result = parse(schema, 10);
@@ -50,7 +50,9 @@ Deno.test("parse handles synchronous schemas", () => {
 
 Deno.test("parse handles asynchronous schemas", async () => {
 	// Given: an asynchronous schema
-	const schema = new Schema((input: number) => Promise.resolve(Ok(input * 2)));
+	const schema = new Schema({
+		parse: (input: number) => Promise.resolve(Ok(input * 2)),
+	});
 
 	// When: parsing input
 	const result = parse(schema, 10);
@@ -68,7 +70,7 @@ Deno.test("parse handles asynchronous schemas", async () => {
 
 Deno.test("parseSync succeeds with synchronous schema", () => {
 	// Given: a synchronous schema
-	const schema = new Schema((input: number) => Ok(input * 2));
+	const schema = new Schema({ parse: (input: number) => Ok(input * 2) });
 
 	// When: parsing synchronously
 	const result = parseSync(schema, 10);
@@ -85,7 +87,9 @@ Deno.test("parseSync succeeds with synchronous schema", () => {
 
 Deno.test("parseSync fails with asynchronous schema", () => {
 	// Given: an asynchronous schema
-	const schema = new Schema((input: number) => Promise.resolve(Ok(input * 2)));
+	const schema = new Schema({
+		parse: (input: number) => Promise.resolve(Ok(input * 2)),
+	});
 
 	// When: parsing synchronously
 	const result = parseSync(schema, 10);
@@ -108,7 +112,9 @@ Deno.test("parseSync fails with asynchronous schema", () => {
 
 Deno.test("parseSync wraps parse errors", () => {
 	// Given: a schema that returns an error
-	const schema = new Schema((_input: number) => Err(new TypeError()));
+	const schema = new Schema({
+		parse: (_input: number) => Err(new TypeError()),
+	});
 
 	// When: parsing synchronously
 	const result = parseSync(schema, 10);
@@ -131,7 +137,7 @@ Deno.test("parseSync wraps parse errors", () => {
 
 Deno.test("parseAsync handles synchronous schemas", async () => {
 	// Given: a synchronous schema
-	const schema = new Schema((input: number) => Ok(input * 2));
+	const schema = new Schema({ parse: (input: number) => Ok(input * 2) });
 
 	// When: parsing asynchronously
 	const result = await parseAsync(schema, 10);
@@ -148,7 +154,9 @@ Deno.test("parseAsync handles synchronous schemas", async () => {
 
 Deno.test("parseAsync handles asynchronous schemas", async () => {
 	// Given: an asynchronous schema
-	const schema = new Schema((input: number) => Promise.resolve(Ok(input * 2)));
+	const schema = new Schema({
+		parse: (input: number) => Promise.resolve(Ok(input * 2)),
+	});
 
 	// When: parsing asynchronously
 	const result = await parseAsync(schema, 10);
@@ -165,7 +173,7 @@ Deno.test("parseAsync handles asynchronous schemas", async () => {
 
 Deno.test("map transforms successful results", () => {
 	// Given: a schema that returns a number
-	const schema = new Schema((input: number) => Ok(input));
+	const schema = new Schema({ parse: (input: number) => Ok(input) });
 
 	// When: mapping the output
 	const mapped = map(schema, (n) => n * 2);
@@ -183,7 +191,9 @@ Deno.test("map transforms successful results", () => {
 
 Deno.test("map preserves errors", () => {
 	// Given: a schema that returns an error
-	const schema = new Schema((_input: number) => Err(new TypeError()));
+	const schema = new Schema({
+		parse: (_input: number) => Err(new TypeError()),
+	});
 
 	// When: mapping the output
 	const mapped = map(schema, (n: number) => n * 2);
@@ -207,7 +217,9 @@ Deno.test("map preserves errors", () => {
 
 Deno.test("mapErr transforms errors", () => {
 	// Given: a schema that returns a TypeError
-	const schema = new Schema((_input: number) => Err(new TypeError("original")));
+	const schema = new Schema({
+		parse: (_input: number) => Err(new TypeError("original")),
+	});
 
 	// When: mapping the error
 	const mapped = mapErr(schema, (e) => new Error(`${e.message} transformed`));
@@ -230,8 +242,8 @@ Deno.test("mapErr transforms errors", () => {
 
 Deno.test("pipe chains schemas together", () => {
 	// Given: two schemas
-	const first = new Schema((input: string) => Ok(input.length));
-	const second = new Schema((input: number) => Ok(input * 2));
+	const first = new Schema({ parse: (input: string) => Ok(input.length) });
+	const second = new Schema({ parse: (input: number) => Ok(input * 2) });
 
 	// When: piping them together
 	const piped = pipe(first, second);
@@ -249,8 +261,8 @@ Deno.test("pipe chains schemas together", () => {
 
 Deno.test("pipe short-circuits on first error", () => {
 	// Given: a schema that errors and a second schema
-	const first = new Schema((_input: string) => Err(new TypeError()));
-	const second = new Schema((input: number) => Ok(input * 2));
+	const first = new Schema({ parse: (_input: string) => Err(new TypeError()) });
+	const second = new Schema({ parse: (input: number) => Ok(input * 2) });
 
 	// When: piping them together
 	const piped = pipe(first, second);
@@ -274,7 +286,7 @@ Deno.test("pipe short-circuits on first error", () => {
 
 Deno.test("filter accepts values that pass the predicate", () => {
 	// Given: a schema and a type guard
-	const schema = new Schema((input: number) => Ok(input));
+	const schema = new Schema({ parse: (input: number) => Ok(input) });
 	const isPositive = (n: number): n is number => n > 0;
 
 	// When: filtering with the predicate
@@ -296,7 +308,7 @@ Deno.test("filter accepts values that pass the predicate", () => {
 
 Deno.test("filter rejects values that fail the predicate", () => {
 	// Given: a schema and a type guard
-	const schema = new Schema((input: number) => Ok(input));
+	const schema = new Schema({ parse: (input: number) => Ok(input) });
 	const isPositive = (n: number): n is number => n > 0;
 
 	// When: filtering with the predicate on a negative value
@@ -324,9 +336,9 @@ Deno.test("filter rejects values that fail the predicate", () => {
 
 Deno.test("Input, Output, Infer and ErrorOf extract a schema's types", () => {
 	// Given: a schema from strings to numbers failing with RangeError
-	const schema = new Schema(
-		(input: string): Result<number, RangeError> => Ok(input.length),
-	);
+	const schema = new Schema({
+		parse: (input: string): Result<number, RangeError> => Ok(input.length),
+	});
 	type S = typeof schema;
 
 	// When: extracting its type parameters
@@ -340,9 +352,11 @@ Deno.test("Input, Output, Infer and ErrorOf extract a schema's types", () => {
 Deno.test("AnySchema accepts every schema", () => {
 	// Given: schemas with unrelated input, output and error types
 	const schemas = [
-		new Schema((input: string) => Ok(input.length)),
-		new Schema((input: unknown) => Err(new TypeError(String(input)))),
-		map(new Schema((input: number) => Ok(input)), (n) => [n]),
+		new Schema({ parse: (input: string) => Ok(input.length) }),
+		new Schema({
+			parse: (input: unknown) => Err(new TypeError(String(input))),
+		}),
+		map(new Schema({ parse: (input: number) => Ok(input) }), (n) => [n]),
 	];
 
 	// When: treating them as AnySchema
@@ -361,9 +375,11 @@ function parseDigits(input: string): Result<number, "not digits"> {
 	return Err("not digits");
 }
 
-const digits = new Schema(parseDigits);
-const laterDigits = new Schema((input: string) => {
-	return Promise.resolve(parseDigits(input));
+const digits = new Schema({ parse: parseDigits });
+const laterDigits = new Schema({
+	parse: (input: string) => {
+		return Promise.resolve(parseDigits(input));
+	},
 });
 
 /** The error a `parseSync` failure wraps, or `undefined` on success. */

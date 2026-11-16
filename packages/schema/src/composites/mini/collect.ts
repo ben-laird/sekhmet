@@ -61,12 +61,12 @@ export function wrap({
 }): Child {
 	WRAPPED.set(parser, { modifier, inner });
 
-	return new Schema(parser);
+	return new Schema({ parse: parser });
 }
 
 /** `nullable`'s erased implementation: `null` passes, anything else is parsed. */
 export function acceptNull(inner: Child): Child {
-	const parser = getStructParams(inner);
+	const parser = getStructParams(inner).parse;
 
 	return wrap({
 		modifier: "nullable",
@@ -81,7 +81,7 @@ export function acceptNull(inner: Child): Child {
  * still reports its inner schema's issue for a missing key.
  */
 export function withoutOptional(schema: Child): Child {
-	const wrapped = WRAPPED.get(getStructParams(schema));
+	const wrapped = WRAPPED.get(getStructParams(schema).parse);
 	if (wrapped === undefined) return schema;
 
 	const inner = withoutOptional(wrapped.inner);

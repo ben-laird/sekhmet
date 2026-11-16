@@ -20,18 +20,23 @@ import {
 import { optional } from "./modifiers.ts";
 import { tuple } from "./tuple.ts";
 
-const text: Schema<unknown, string, "not text"> = new Schema((input) =>
-	typeof input === "string" ? Ok(input) : Err("not text"),
-);
-const count: Schema<unknown, number, "not a number"> = new Schema((input) =>
-	typeof input === "number" ? Ok(input) : Err("not a number"),
-);
-const laterCount: Schema<unknown, number, "not a number"> = new Schema(
-	(input) =>
-		Promise.resolve(
+const text: Schema<unknown, string, "not text"> = new Schema({
+	parse: (input) => {
+		return typeof input === "string" ? Ok(input) : Err("not text");
+	},
+});
+const count: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
+		return typeof input === "number" ? Ok(input) : Err("not a number");
+	},
+});
+const laterCount: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
+		return Promise.resolve(
 			typeof input === "number" ? Ok(input) : Err("not a number"),
-		),
-);
+		);
+	},
+});
 
 Deno.test("tuple parses each element with its own schema", () => {
 	// Given: a (text, number) tuple
@@ -117,7 +122,10 @@ Deno.test("tuple is Async when any element is", async () => {
 Deno.test("tuple infers its input, output and error types", () => {
 	// Given: a loose tuple and one with a typed element
 	const pair = tuple([text, count]);
-	const typed = tuple([text, new Schema((input: string) => Ok(input.length))]);
+	const typed = tuple([
+		text,
+		new Schema({ parse: (input: string) => Ok(input.length) }),
+	]);
 
 	// When: reading their types
 	// Then: output and input are tuples; the error flattens each element's

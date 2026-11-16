@@ -78,15 +78,17 @@ export function stringbool(
 		...(options?.falsy ?? STRINGBOOL_FALSY),
 	];
 
-	return new Schema((input): Result<boolean, SchemaIssue> => {
-		if (typeof input !== "string") {
-			return Err(InvalidType({ input, expected: "string" }));
-		}
+	return new Schema({
+		parse: (input): Result<boolean, SchemaIssue> => {
+			if (typeof input !== "string") {
+				return Err(InvalidType({ input, expected: "string" }));
+			}
 
-		const value = read(input);
+			const value = read(input);
 
-		return value === undefined
-			? Err(InvalidValue({ input, expected }))
-			: Ok(value);
+			return value === undefined
+				? Err(InvalidValue({ input, expected }))
+				: Ok(value);
+		},
 	});
 }

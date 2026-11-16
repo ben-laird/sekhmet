@@ -19,7 +19,7 @@ import { type ReadonlyOutput, readonly } from "./readonly.ts";
 
 /** Passes its input through, typed as `T`: the caller's value is the output. */
 function identity<T>(): Schema<T, T, never> {
-	return new Schema((input: T) => Ok(input));
+	return new Schema({ parse: (input: T) => Ok(input) });
 }
 
 Deno.test("readonly freezes a copy of a plain object, never the input", () => {
@@ -107,9 +107,9 @@ Deno.test("readonly passes primitives, Maps, Dates and class instances through",
 
 Deno.test("readonly keeps failures and the parse's Potential", async () => {
 	// Given: a readonly sync schema that fails, and a readonly async one
-	const failing = readonly(new Schema((_: unknown) => Err("nope")));
+	const failing = readonly(new Schema({ parse: (_: unknown) => Err("nope") }));
 	const later = readonly(
-		new Schema((input: number[]) => Promise.resolve(Ok(input))),
+		new Schema({ parse: (input: number[]) => Promise.resolve(Ok(input)) }),
 	);
 
 	// When: parsing with each
@@ -125,7 +125,9 @@ Deno.test("readonly keeps failures and the parse's Potential", async () => {
 
 Deno.test("readonly types: only the output changes", () => {
 	// Given: a readonly schema of objects
-	const frozen = readonly(new Schema((input: string) => Ok({ name: input })));
+	const frozen = readonly(
+		new Schema({ parse: (input: string) => Ok({ name: input }) }),
+	);
 
 	// When: reading its types
 	// Then: the input and error are kept, and the output is Readonly

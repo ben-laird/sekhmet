@@ -20,10 +20,10 @@ import { Schema } from "@/src/core/mini/schema.ts";
  * ```
  */
 export function symbol(): Schema<unknown, symbol, SchemaIssue> {
-	return new Schema(
-		(input): Result<symbol, SchemaIssue> =>
+	return new Schema({
+		parse: (input): Result<symbol, SchemaIssue> =>
 			typeof input === "symbol"
 				? Ok(input)
 				: Err(InvalidType({ input, expected: "symbol" })),
-	);
+	});
 }

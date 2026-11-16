@@ -154,9 +154,11 @@ export interface DiscriminatedUnionOptions<
  * import { discriminatedUnion, object } from "@sekhmet/schema/composites/mini";
  * import { entries, formatIssue, parseAsync, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const size = new Schema((input: unknown) =>
- * 	typeof input === "number" ? Ok(input) : Err("not a size"),
- * );
+ * const size = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" ? Ok(input) : Err("not a size");
+ * 	},
+ * });
  * const shape = discriminatedUnion({
  * 	key: "kind",
  * 	options: {
@@ -187,31 +189,36 @@ export function discriminatedUnion(declaration: {
 }): Schema<unknown, unknown, Issues<unknown>> {
 	const { key, options } = declaration;
 
-	return new Schema((input: unknown): Parsed => {
-		if (!isRecord(input)) return invalidType({ input, expected: "object" });
+	return new Schema({
+		parse: (input: unknown): Parsed => {
+			if (!isRecord(input)) return invalidType({ input, expected: "object" });
 
-		const value = input[key];
-		const option =
-			typeof value === "string" && Object.hasOwn(options, value)
-				? options[value]
-				: undefined;
-		if (typeof value !== "string" || option === undefined) {
-			return Err(
-				locate({
-					key,
-					error: InvalidValue({ input: value, expected: Object.keys(options) }),
-				}),
+			const value = input[key];
+			const option =
+				typeof value === "string" && Object.hasOwn(options, value)
+					? options[value]
+					: undefined;
+			if (typeof value !== "string" || option === undefined) {
+				return Err(
+					locate({
+						key,
+						error: InvalidValue({
+							input: value,
+							expected: Object.keys(options),
+						}),
+					}),
+				);
+			}
+
+			return union(
+				mapPotential(parse(option, input), (result) =>
+					match(result)({
+						Ok: (output): Parsed =>
+							Ok(isRecord(output) ? { ...output, [key]: value } : output),
+						Err: (error) => Err(toIssues(error)),
+					}),
+				),
 			);
-		}
-
-		return union(
-			mapPotential(parse(option, input), (result) =>
-				match(result)({
-					Ok: (output): Parsed =>
-						Ok(isRecord(output) ? { ...output, [key]: value } : output),
-					Err: (error) => Err(toIssues(error)),
-				}),
-			),
-		);
+		},
 	});
 }

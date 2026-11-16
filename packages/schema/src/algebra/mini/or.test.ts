@@ -16,22 +16,28 @@ import {
 } from "@/src/core/mini/schema.ts";
 import { or } from "./or.ts";
 
-const text: Schema<unknown, string, "not text"> = new Schema((input) => {
-	return typeof input === "string" ? Ok(input) : Err("not text");
+const text: Schema<unknown, string, "not text"> = new Schema({
+	parse: (input) => {
+		return typeof input === "string" ? Ok(input) : Err("not text");
+	},
 });
-const count: Schema<unknown, number, "not a number"> = new Schema((input) => {
-	return typeof input === "number" ? Ok(input) : Err("not a number");
+const count: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
+		return typeof input === "number" ? Ok(input) : Err("not a number");
+	},
 });
-const flag: Schema<unknown, boolean, "not a flag"> = new Schema((input) => {
-	return typeof input === "boolean" ? Ok(input) : Err("not a flag");
+const flag: Schema<unknown, boolean, "not a flag"> = new Schema({
+	parse: (input) => {
+		return typeof input === "boolean" ? Ok(input) : Err("not a flag");
+	},
 });
-const laterCount: Schema<unknown, number, "not a number"> = new Schema(
-	(input) => {
+const laterCount: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
 		return Promise.resolve(
 			typeof input === "number" ? Ok(input) : Err("not a number"),
 		);
 	},
-);
+});
 
 Deno.test("or tries left, then right", () => {
 	// Given: text or count
@@ -46,9 +52,11 @@ Deno.test("or tries left, then right", () => {
 Deno.test("or doesn't run right when left succeeds", () => {
 	// Given: a right side that counts its calls
 	let calls = 0;
-	const counted = new Schema((input: unknown) => {
-		calls += 1;
-		return Ok(input);
+	const counted = new Schema({
+		parse: (input: unknown) => {
+			calls += 1;
+			return Ok(input);
+		},
 	});
 	const either = or({ left: text, right: counted });
 
@@ -99,8 +107,8 @@ Deno.test("or stays Sync when both sides are, and is Async otherwise", () => {
 
 Deno.test("or's types: input intersects, output unions, error is Issues", () => {
 	// Given: two sides with typed inputs
-	const left = new Schema((input: { a: string }) => Ok(input.a));
-	const right = new Schema((input: { b: number }) => Ok(input.b));
+	const left = new Schema({ parse: (input: { a: string }) => Ok(input.a) });
+	const right = new Schema({ parse: (input: { b: number }) => Ok(input.b) });
 
 	// When: combining them
 	const either = or({ left, right });

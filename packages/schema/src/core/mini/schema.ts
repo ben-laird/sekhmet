@@ -10,6 +10,8 @@ import {
 	type Result,
 } from "@sekhmet/enum/result/mini";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
+import type { Annotation } from "./annotation.ts";
+import { Opaque, SchemaNode, type TransformStep } from "./node.ts";
 import {
 	from,
 	type MaybePromise,
@@ -50,14 +52,102 @@ export type Parser<I, O, E> = (input: I) => MaybePromise<Result<O, E>>;
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const even = new Schema((input: number) =>
- * 	input % 2 === 0 ? Ok(input) : Err("odd"),
- * );
+ * const even = new Schema({
+ * 	parse: (input: number) => {
+ * 		return input % 2 === 0 ? Ok(input) : Err("odd");
+ * 	},
+ * });
  *
  * assertEquals(unwrap(parseSync(even, 4)), 4);
  * ```
  */
-export class Schema<I, O, E> extends Struct<Parser<I, O, E>> {}
+export class Schema<I, O, E> extends Struct<SchemaParams<I, O, E>> {
+	/**
+	 * Builds a schema from its parser, and optionally its node and
+	 * annotations.
+	 *
+	 * @param init The parser, the node (default `Opaque()`) and the
+	 *   annotations (default none)
+	 */
+	constructor(init: SchemaInit<I, O, E>) {
+		super({
+			parse: init.parse,
+			node: init.node ?? Opaque(),
+			annotations: init.annotations ?? [],
+		});
+	}
+}
+
+/**
+ * What a {@linkcode Schema} holds: how it parses, what it is as data, and
+ * its metadata. Read with `getStructParams`; every field is immutable.
+ *
+ * @template I The input type
+ * @template O The output type
+ * @template E The error type
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unionKinds } from "@sekhmet/enum/core/mini/exit";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import { getStructParams } from "@sekhmet/primordials/struct";
+ * import { Schema, type SchemaParams } from "@sekhmet/schema/core/mini";
+ *
+ * const params: SchemaParams<unknown, unknown, never> = getStructParams(
+ * 	new Schema({ parse: (input: unknown) => Ok(input) }),
+ * );
+ *
+ * assertEquals(unionKinds(params.node), "Opaque");
+ * assertEquals(params.annotations, []);
+ * ```
+ */
+export interface SchemaParams<I, O, E> {
+	/** Parses an input. */
+	readonly parse: Parser<I, O, E>;
+	/** What the schema is, as data (see {@linkcode SchemaNode}). */
+	readonly node: SchemaNode;
+	/** The schema's annotations, in order; a later one for a key wins. */
+	readonly annotations: readonly Annotation[];
+}
+
+/**
+ * What `new Schema(…)` takes: the parser, and optionally the schema's node
+ * and annotations. A schema that names no node is `Opaque`, and one that
+ * names no annotations has none. Under `exactOptionalPropertyTypes`, an
+ * omitted field is left out, not set to `undefined`.
+ *
+ * @template I The input type
+ * @template O The output type
+ * @template E The error type
+ *
+ * @example
+ * ```ts
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import { Schema, type SchemaInit } from "@sekhmet/schema/core/mini";
+ *
+ * const init: SchemaInit<string, number, never> = {
+ * 	parse: (input) => Ok(input.length),
+ * };
+ * const length = new Schema(init);
+ * ```
+ */
+export interface SchemaInit<I, O, E> {
+	/** Parses an input. */
+	readonly parse: Parser<I, O, E>;
+	/**
+	 * What the schema is, as data.
+	 *
+	 * @default Opaque()
+	 */
+	readonly node?: SchemaNode;
+	/**
+	 * The schema's annotations.
+	 *
+	 * @default []
+	 */
+	readonly annotations?: readonly Annotation[];
+}
 
 /**
  * Any schema: every `Schema<I, O, E>` is assignable to it. Use it to
@@ -70,8 +160,8 @@ export class Schema<I, O, E> extends Struct<Parser<I, O, E>> {}
  * import { type AnySchema, Schema } from "@sekhmet/schema/core/mini/schema";
  *
  * const schemas: AnySchema[] = [
- * 	new Schema((input: string) => Ok(input.length)),
- * 	new Schema((input: unknown) => Ok(input)),
+ * 	new Schema({ parse: (input: string) => Ok(input.length) }),
+ * 	new Schema({ parse: (input: unknown) => Ok(input) }),
  * ];
  * ```
  */
@@ -161,8 +251,8 @@ export type ErrorOf<S extends AnySchema> =
  * import { Ok } from "@sekhmet/enum/result/mini";
  * import { parse, Schema } from "@sekhmet/schema/core/mini";
  *
- * const now = new Schema((input: string) => Ok(input));
- * const later = new Schema((input: string) => Promise.resolve(Ok(input)));
+ * const now = new Schema({ parse: (input: string) => Ok(input) });
+ * const later = new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) });
  *
  * assertEquals(unionKinds(parse(now, "a")), "Sync");
  * assertEquals(unionKinds(parse(later, "a")), "Async");
@@ -172,7 +262,7 @@ export function parse<I, O, E>(
 	self: Schema<I, O, E>,
 	input: I,
 ): Potential<Result<O, E>> {
-	return from(getStructParams(self)(input));
+	return from(getStructParams(self).parse(input));
 }
 
 /**
@@ -279,8 +369,8 @@ export function ParseError<E>(error: E): ParseSyncError<E> {
  * import { Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const now = new Schema((input: string) => Ok(input));
- * const later = new Schema((input: string) => Promise.resolve(Ok(input)));
+ * const now = new Schema({ parse: (input: string) => Ok(input) });
+ * const later = new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) });
  *
  * assertEquals(unwrap(parseSync(now, "a")), "a");
  * assertEquals(unionKinds(unwrapErr(parseSync(later, "a"))), "UnexpectedAsyncParse");
@@ -315,7 +405,7 @@ export function parseSync<I, O, E>(
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseAsync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const later = new Schema((input: string) => Promise.resolve(Ok(input)));
+ * const later = new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) });
  *
  * assertEquals(unwrap(await parseAsync(later, "a")), "a");
  * ```
@@ -350,7 +440,7 @@ export function parseAsync<I, O, E>(
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { map, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: string) => Ok(input));
+ * const text = new Schema({ parse: (input: string) => Ok(input) });
  * const length = map(text, (value) => value.length);
  *
  * assertEquals(unwrap(parseSync(length, "four")), 4);
@@ -360,14 +450,10 @@ export function map<I, O, E, P>(
 	self: Schema<I, O, E>,
 	mapping: (output: O) => P,
 ): Schema<I, P, E> {
-	return new Schema((input) => {
-		const potentialResult = parse(self, input);
-
-		return union(
-			mapPotential(potentialResult, (result) => {
-				return mapResult(result, mapping);
-			}),
-		);
+	return continueWith({
+		step: "map",
+		schema: self,
+		next: (result) => mapResult(result, mapping),
 	});
 }
 
@@ -392,7 +478,7 @@ export function map<I, O, E, P>(
  * import { Err, unwrapErr } from "@sekhmet/enum/result/mini";
  * import { mapErr, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const reject = new Schema((_input: string) => Err(404));
+ * const reject = new Schema({ parse: (_input: string) => Err(404) });
  * const described = mapErr(reject, (code) => `error ${code}`);
  *
  * assertEquals(union(unwrapErr(parseSync(described, "a"))), "error 404");
@@ -402,14 +488,10 @@ export function mapErr<I, O, E, F>(
 	self: Schema<I, O, E>,
 	mapping: (error: E) => F,
 ): Schema<I, O, F> {
-	return new Schema((input) => {
-		const potentialResult = parse(self, input);
-
-		return union(
-			mapPotential(potentialResult, (result) => {
-				return mapErrResult(result, mapping);
-			}),
-		);
+	return continueWith({
+		step: "mapErr",
+		schema: self,
+		next: (result) => mapErrResult(result, mapping),
 	});
 }
 
@@ -433,10 +515,12 @@ export function mapErr<I, O, E, F>(
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync, pipe, Schema } from "@sekhmet/schema/core/mini";
  *
- * const digits = new Schema((input: string) =>
- * 	/^\d+$/.test(input) ? Ok(input) : Err("not digits"),
- * );
- * const integer = new Schema((input: string) => Ok(Number(input)));
+ * const digits = new Schema({
+ * 	parse: (input: string) => {
+ * 		return /^\d+$/.test(input) ? Ok(input) : Err("not digits");
+ * 	},
+ * });
+ * const integer = new Schema({ parse: (input: string) => Ok(Number(input)) });
  *
  * assertEquals(unwrap(parseSync(pipe(digits, integer), "42")), 42);
  * ```
@@ -445,19 +529,21 @@ export function pipe<I, O, E, P>(
 	self: Schema<I, O, E>,
 	nextSchema: Schema<O, P, E>,
 ): Schema<I, P, E> {
-	return new Schema((input) => {
-		return match(parse(self, input))({
-			Sync: (result) => handleResult(result),
-			Async: async (promisedResult) => handleResult(await promisedResult),
-		});
-	});
+	const next = getStructParams(nextSchema).parse;
 
-	function handleResult(result: Result<O, E>): MaybePromise<Result<P, E>> {
-		return match(result)({
-			Ok: (output) => getStructParams(nextSchema)(output),
-			Err: (error) => Err(error),
-		});
-	}
+	return new Schema({
+		parse: (input) => {
+			return union(
+				mapPotential(parse(self, input), (result) => {
+					return match(result)<MaybePromise<Result<P, E>>>({
+						Ok: next,
+						Err: (error) => Err(error),
+					});
+				}),
+			);
+		},
+		node: new SchemaNode("Pipe", { inner: self, next: nextSchema }),
+	});
 }
 
 /**
@@ -506,7 +592,7 @@ export interface FilterOptions<O, E, P extends O> {
  * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
  * import { filter, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const integer = new Schema((input: number) => Ok<number, string>(input));
+ * const integer = new Schema({ parse: (input: number) => Ok<number, string>(input) });
  * const positive = filter(integer, {
  * 	error: "not positive",
  * 	predicate: (n): n is number => n > 0,
@@ -519,49 +605,43 @@ export function filter<I, O, E, P extends O>(
 	self: Schema<I, O, E>,
 	options: FilterOptions<O, E, P>,
 ): Schema<I, P, E> {
-	const { error, predicate: filtering } = options;
+	const { error, predicate } = options;
 
-	return new Schema((input) => {
-		return match(parse(self, input))<MaybePromise<Result<P, E>>>({
-			Sync: (result) => handleResult(result),
-			Async: async (promisedResult) => handleResult(await promisedResult),
-		});
+	return continueWith({
+		step: "filter",
+		schema: self,
+		next: (result) => {
+			return match(result)<Result<P, E>>({
+				Ok: (output) => (predicate(output) ? Ok(output) : Err(error)),
+				Err: (failure) => Err(failure),
+			});
+		},
 	});
-
-	function handleResult(result: Result<O, E>): Result<P, E> {
-		return match(result)({
-			Ok: (output) => {
-				if (filtering(output)) {
-					return Ok(output);
-				}
-
-				return Err(error);
-			},
-			Err,
-		});
-	}
 }
 
 /**
- * How {@linkcode continueWith} extends a schema: the schema to parse with, and
- * the step each of its results goes through.
+ * How {@linkcode continueWith} extends a schema: which transform it is, the
+ * schema to parse with, and the step each of its results goes through.
  */
 interface Continuation<I, O, E, P, F> {
+	readonly step: TransformStep;
 	readonly schema: Schema<I, O, E>;
 	readonly next: (result: Result<O, E>) => MaybePromise<Result<P, F>>;
 }
 
 /**
- * A schema that parses with `schema`, then passes the result to `next`. The
- * parse stays sync when both are; a promise from either makes it async.
+ * A schema that parses with `schema`, then passes the result to `next`,
+ * recorded as a `Transform` node of `step`. The parse stays sync when both
+ * are; a promise from either makes it async.
  */
 function continueWith<I, O, E, P, F>(
 	continuation: Continuation<I, O, E, P, F>,
 ): Schema<I, P, F> {
-	const { schema, next } = continuation;
+	const { step, schema, next } = continuation;
 
-	return new Schema((input) => {
-		return union(mapPotential(parse(schema, input), next));
+	return new Schema({
+		parse: (input) => union(mapPotential(parse(schema, input), next)),
+		node: new SchemaNode("Transform", { step, inner: schema }),
 	});
 }
 
@@ -592,7 +672,7 @@ function continueWith<I, O, E, P, F>(
  * import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
  * import { andThen, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: string) => Ok(input));
+ * const text = new Schema({ parse: (input: string) => Ok(input) });
  * const integer = andThen(text, (value) => {
  * 	const parsed = Number.parseInt(value, 10);
  * 	return Number.isNaN(parsed) ? Err("not an integer") : Ok(parsed);
@@ -607,6 +687,7 @@ export function andThen<I, O, E, P, F>(
 	next: Parser<O, P, F>,
 ): Schema<I, P, E | F> {
 	return continueWith({
+		step: "andThen",
 		schema: self,
 		next: (result) => {
 			return match(result)<MaybePromise<Result<P, E | F>>>({
@@ -642,12 +723,14 @@ export function andThen<I, O, E, P, F>(
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { orElse, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const port = new Schema((input: string) => {
- * 	if (/^\d+$/.test(input)) {
- * 		return Ok<number, string>(Number(input));
- * 	}
+ * const port = new Schema({
+ * 	parse: (input: string) => {
+ * 		if (/^\d+$/.test(input)) {
+ * 			return Ok<number, string>(Number(input));
+ * 		}
  *
- * 	return Err<number, string>("not a port");
+ * 		return Err<number, string>("not a port");
+ * 	},
  * });
  * const withDefault = orElse(port, () => Ok(8080));
  *
@@ -660,6 +743,7 @@ export function orElse<I, O, E, F>(
 	recover: Parser<E, O, F>,
 ): Schema<I, O, F> {
 	return continueWith({
+		step: "orElse",
 		schema: self,
 		next: (result) => {
 			return match(result)<MaybePromise<Result<O, F>>>({
@@ -692,7 +776,7 @@ export function orElse<I, O, E, F>(
  * import { inspect, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
  * const seen: string[] = [];
- * const text = new Schema((input: string) => Ok(input));
+ * const text = new Schema({ parse: (input: string) => Ok(input) });
  * const logged = inspect(text, (value) => {
  * 	seen.push(value);
  * });
@@ -706,6 +790,7 @@ export function inspect<I, O, E>(
 	inspector: (output: O) => void,
 ): Schema<I, O, E> {
 	return continueWith({
+		step: "inspect",
 		schema: self,
 		next: (result) => {
 			inspectResult(result, inspector);
@@ -736,7 +821,7 @@ export function inspect<I, O, E>(
  * import { inspectErr, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
  * const seen: string[] = [];
- * const reject = new Schema((_input: string) => Err("rejected"));
+ * const reject = new Schema({ parse: (_input: string) => Err("rejected") });
  * const logged = inspectErr(reject, (error) => {
  * 	seen.push(error);
  * });
@@ -750,6 +835,7 @@ export function inspectErr<I, O, E>(
 	inspector: (error: E) => void,
 ): Schema<I, O, E> {
 	return continueWith({
+		step: "inspectErr",
 		schema: self,
 		next: (result) => {
 			inspectErrResult(result, inspector);
@@ -782,12 +868,14 @@ export function inspectErr<I, O, E>(
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync, preprocess, Schema } from "@sekhmet/schema/core/mini";
  *
- * const digits = new Schema((input: string) => {
- * 	if (/^\d+$/.test(input)) {
- * 		return Ok<number, string>(Number(input));
- * 	}
+ * const digits = new Schema({
+ * 	parse: (input: string) => {
+ * 		if (/^\d+$/.test(input)) {
+ * 			return Ok<number, string>(Number(input));
+ * 		}
  *
- * 	return Err<number, string>("not digits");
+ * 		return Err<number, string>("not digits");
+ * 	},
  * });
  * const trimmed = preprocess(digits, (input: string) => input.trim());
  *
@@ -798,9 +886,10 @@ export function preprocess<J, I, O, E>(
 	self: Schema<I, O, E>,
 	prepare: (input: J) => MaybePromise<I>,
 ): Schema<J, O, E> {
-	const parser = getStructParams(self);
+	const parser = getStructParams(self).parse;
 
-	return new Schema((input) => {
-		return union(mapPotential(from(prepare(input)), parser));
+	return new Schema({
+		parse: (input) => union(mapPotential(from(prepare(input)), parser)),
+		node: new SchemaNode("Transform", { step: "preprocess", inner: self }),
 	});
 }

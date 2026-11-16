@@ -21,18 +21,23 @@ import {
 import { object } from "./object.ts";
 import { union } from "./union.ts";
 
-const text: Schema<unknown, string, "not text"> = new Schema((input) =>
-	typeof input === "string" ? Ok(input) : Err("not text"),
-);
-const count: Schema<unknown, number, "not a number"> = new Schema((input) =>
-	typeof input === "number" ? Ok(input) : Err("not a number"),
-);
-const laterCount: Schema<unknown, number, "not a number"> = new Schema(
-	(input) =>
-		Promise.resolve(
+const text: Schema<unknown, string, "not text"> = new Schema({
+	parse: (input) => {
+		return typeof input === "string" ? Ok(input) : Err("not text");
+	},
+});
+const count: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
+		return typeof input === "number" ? Ok(input) : Err("not a number");
+	},
+});
+const laterCount: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
+		return Promise.resolve(
 			typeof input === "number" ? Ok(input) : Err("not a number"),
-		),
-);
+		);
+	},
+});
 
 Deno.test("union accepts what any option accepts", () => {
 	// Given: a union of text and number
@@ -47,9 +52,11 @@ Deno.test("union accepts what any option accepts", () => {
 Deno.test("union's first matching option wins and later options don't run", () => {
 	// Given: two options that both accept strings, the second counting calls
 	let calls = 0;
-	const counted = new Schema((input: unknown) => {
-		calls += 1;
-		return Ok(`second: ${String(input)}`);
+	const counted = new Schema({
+		parse: (input: unknown) => {
+			calls += 1;
+			return Ok(`second: ${String(input)}`);
+		},
 	});
 	const either = union([text, counted]);
 
@@ -99,7 +106,10 @@ Deno.test("union is Async when an option it runs is", async () => {
 Deno.test("union infers its input, output and error types", () => {
 	// Given: a loose union, and one with a typed option
 	const either = union([text, count]);
-	const typed = union([text, new Schema((input: string) => Ok(input.length))]);
+	const typed = union([
+		text,
+		new Schema({ parse: (input: string) => Ok(input.length) }),
+	]);
 
 	// When: reading their types
 	// Then: the output is the options' union, the input their intersection

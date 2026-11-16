@@ -23,7 +23,7 @@ import { acceptNull, type Child, type ChildParsed, wrap } from "./collect.ts";
  * import { array, optional } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) => Ok(String(input)));
+ * const text = new Schema({ parse: (input: unknown) => Ok(String(input)) });
  * const gaps = array({ item: optional(text) });
  *
  * assertEquals(unwrap(parseSync(gaps, ["a", undefined])), ["a", undefined]);
@@ -33,7 +33,7 @@ export function optional<I, O, E>(
 	self: Schema<I, O, E>,
 ): Schema<I | undefined, O | undefined, E>;
 export function optional(self: Child): Child {
-	const parser = getStructParams(self);
+	const parser = getStructParams(self).parse;
 
 	return wrap({
 		modifier: "optional",
@@ -63,7 +63,7 @@ export function optional(self: Child): Child {
  * import { nullable } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) => Ok(String(input)));
+ * const text = new Schema({ parse: (input: unknown) => Ok(String(input)) });
  *
  * assertEquals(unwrap(parseSync(nullable(text), null)), null);
  * ```
@@ -106,5 +106,7 @@ export function nullable(self: Child): Child {
  * ```
  */
 export function lazy<I, O, E>(getter: () => Schema<I, O, E>): Schema<I, O, E> {
-	return new Schema((input) => getStructParams(getter())(input));
+	return new Schema({
+		parse: (input) => getStructParams(getter()).parse(input),
+	});
 }

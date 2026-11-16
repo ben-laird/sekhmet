@@ -123,9 +123,11 @@ import { Err, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
 import { array, object } from "@sekhmet/schema/composites";
 import { entries, Schema } from "@sekhmet/schema/core";
 
-const text = new Schema((input: unknown) =>
-	typeof input === "string" ? Ok(input) : Err("not text"),
-);
+const text = new Schema({
+	parse: (input: unknown) => {
+		return typeof input === "string" ? Ok(input) : Err("not text");
+	},
+});
 const user = object({
 	shape: { name: text, tags: array({ item: text, minItems: 1 }) },
 	unknownKeys: "strict",
@@ -255,11 +257,13 @@ import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
 import { InvalidType, Schema } from "@sekhmet/schema/core/mini";
 import { fromStandard, toStandard } from "@sekhmet/schema/standard";
 
-const text = new Schema((input: unknown) =>
-	typeof input === "string"
-		? Ok(input)
-		: Err(InvalidType({ input, expected: "string" })),
-);
+const text = new Schema({
+	parse: (input: unknown) => {
+		if (typeof input === "string") return Ok(input);
+
+		return Err(InvalidType({ input, expected: "string" }));
+	},
+});
 const standard = toStandard({ schema: text });
 
 assertEquals(standard["~standard"].validate(1), {

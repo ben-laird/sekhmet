@@ -14,9 +14,13 @@
  * import { InvalidType, Schema } from "@sekhmet/schema/core/mini";
  * import { fromStandard, toStandard } from "@sekhmet/schema/standard";
  *
- * const text = new Schema((input: unknown) =>
- * 	typeof input === "string" ? Ok(input) : Err(InvalidType({ input, expected: "string" })),
- * );
+ * const text = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		if (typeof input === "string") return Ok(input);
+ *
+ * 		return Err(InvalidType({ input, expected: "string" }));
+ * 	},
+ * });
  * const length = fromStandard(toStandard({ schema: text })).map((s) => s.length);
  *
  * assertEquals(unwrap(length.parseSync("four")), 4);

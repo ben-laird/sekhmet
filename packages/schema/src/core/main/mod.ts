@@ -13,9 +13,11 @@
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { Schema } from "@sekhmet/schema/core";
  *
- * const digits = new Schema((input: string) =>
- * 	/^\d+$/.test(input) ? Ok(input) : Err("not digits"),
- * );
+ * const digits = new Schema({
+ * 	parse: (input: string) => {
+ * 		return /^\d+$/.test(input) ? Ok(input) : Err("not digits");
+ * 	},
+ * });
  * const doubled = digits.map(Number).map((n) => n * 2);
  *
  * assertEquals(unwrap(doubled.parseSync("21")), 42);
@@ -32,8 +34,15 @@ import * as composites from "../../composites/mini/mod.ts";
 import * as mini from "../mini/mod.ts";
 
 export type {
+	Annotation,
+	AnnotationKey,
 	AnySchema,
+	ArrayDetails,
+	CustomDataOptions,
 	CustomDetails,
+	CustomNodeDetails,
+	CustomOptions,
+	DiscriminatedUnionDetails,
 	ErrorOf,
 	FilterOptions,
 	Flatten,
@@ -43,26 +52,44 @@ export type {
 	InvalidTypeDetails,
 	InvalidUnionDetails,
 	InvalidValueDetails,
+	LazyDetails,
+	LeafDetails,
 	LimitOf,
 	Located,
 	MaybePromise,
+	NodeKind,
 	NonEmpty,
 	NotMultipleOfDetails,
+	ObjectDetails,
 	Origin,
 	Output,
 	Parser,
 	ParseSyncErrorVariants,
+	PipeDetails,
 	PotentialVariants,
+	RecordDetails,
+	SchemaInit,
 	SchemaIssueVariants,
+	SchemaNodeVariants,
+	SchemaParams,
 	TooBigDetails,
 	TooSmallDetails,
+	TransformDetails,
+	TransformStep,
+	TupleDetails,
 	TypeName,
+	UnionDetails,
 	UnknownKeyDetails,
+	WrapperDetails,
 } from "../mini/mod.ts";
 export {
 	Async,
+	annotationKey,
 	Custom,
+	children,
 	concat,
+	custom,
+	customData,
 	entries,
 	formatIssue,
 	from,
@@ -78,11 +105,15 @@ export {
 	locate,
 	mapPotential,
 	NotMultipleOf,
+	nodeKind,
+	nodeOf,
+	Opaque,
 	ParseError,
 	ParseSyncError,
 	Potential,
 	prefix,
 	SchemaIssue,
+	SchemaNode,
 	Sync,
 	TooBig,
 	TooSmall,
@@ -109,9 +140,11 @@ export {
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { Schema } from "@sekhmet/schema/core";
  *
- * const even = new Schema((input: number) =>
- * 	input % 2 === 0 ? Ok(input) : Err("odd"),
- * );
+ * const even = new Schema({
+ * 	parse: (input: number) => {
+ * 		return input % 2 === 0 ? Ok(input) : Err("odd");
+ * 	},
+ * });
  *
  * assertEquals(unwrap(even.parseSync(4)), 4);
  * ```
@@ -151,7 +184,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
-	 * const text = new Schema((input: string) => Ok(input));
+	 * const text = new Schema({ parse: (input: string) => Ok(input) });
 	 * const integer = text.andThen((value) => {
 	 * 	const parsed = Number.parseInt(value, 10);
 	 * 	return Number.isNaN(parsed) ? Err("not an integer") : Ok(parsed);
@@ -182,7 +215,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
-	 * const integer = new Schema((input: number) => Ok<number, string>(input));
+	 * const integer = new Schema({ parse: (input: number) => Ok<number, string>(input) });
 	 * const positive = integer.filter({
 	 * 	error: "not positive",
 	 * 	predicate: (n): n is number => n > 0,
@@ -213,7 +246,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
 	 * const seen: string[] = [];
-	 * const text = new Schema((input: string) => Ok(input));
+	 * const text = new Schema({ parse: (input: string) => Ok(input) });
 	 * const logged = text.inspect((value) => {
 	 * 	seen.push(value);
 	 * });
@@ -244,7 +277,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
 	 * const seen: string[] = [];
-	 * const reject = new Schema((_input: string) => Err("rejected"));
+	 * const reject = new Schema({ parse: (_input: string) => Err("rejected") });
 	 * const logged = reject.inspectErr((error) => {
 	 * 	seen.push(error);
 	 * });
@@ -273,7 +306,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
-	 * const text = new Schema((input: string) => Ok(input));
+	 * const text = new Schema({ parse: (input: string) => Ok(input) });
 	 * const length = text.map((value) => value.length);
 	 *
 	 * assertEquals(unwrap(length.parseSync("four")), 4);
@@ -300,7 +333,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Err, unwrapErr } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
-	 * const reject = new Schema((_input: string) => Err(404));
+	 * const reject = new Schema({ parse: (_input: string) => Err(404) });
 	 * const described = reject.mapErr((code) => `error ${code}`);
 	 *
 	 * assertEquals(union(unwrapErr(described.parseSync("a"))), "error 404");
@@ -331,12 +364,14 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
-	 * const port = new Schema((input: string) => {
-	 * 	if (/^\d+$/.test(input)) {
-	 * 		return Ok<number, string>(Number(input));
-	 * 	}
+	 * const port = new Schema({
+	 * 	parse: (input: string) => {
+	 * 		if (/^\d+$/.test(input)) {
+	 * 			return Ok<number, string>(Number(input));
+	 * 		}
 	 *
-	 * 	return Err<number, string>("not a port");
+	 * 		return Err<number, string>("not a port");
+	 * 	},
 	 * });
 	 * const withDefault = port.orElse(() => Ok(8080));
 	 *
@@ -364,8 +399,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Ok } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
-	 * const now = new Schema((input: string) => Ok(input));
-	 * const later = new Schema((input: string) => Promise.resolve(Ok(input)));
+	 * const now = new Schema({ parse: (input: string) => Ok(input) });
+	 * const later = new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) });
 	 *
 	 * assertEquals(unionKinds(now.parse("a")), "Sync");
 	 * assertEquals(unionKinds(later.parse("a")), "Async");
@@ -390,7 +425,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
-	 * const later = new Schema((input: string) => Promise.resolve(Ok(input)));
+	 * const later = new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) });
 	 *
 	 * assertEquals(unwrap(await later.parseAsync("a")), "a");
 	 * ```
@@ -415,8 +450,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
-	 * const now = new Schema((input: string) => Ok(input));
-	 * const later = new Schema((input: string) => Promise.resolve(Ok(input)));
+	 * const now = new Schema({ parse: (input: string) => Ok(input) });
+	 * const later = new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) });
 	 *
 	 * assertEquals(unwrap(now.parseSync("a")), "a");
 	 * assertEquals(unionKinds(unwrapErr(later.parseSync("a"))), "UnexpectedAsyncParse");
@@ -442,10 +477,12 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
-	 * const digits = new Schema((input: string) =>
-	 * 	/^\d+$/.test(input) ? Ok(input) : Err("not digits"),
-	 * );
-	 * const integer = new Schema((input: string) => Ok(Number(input)));
+	 * const digits = new Schema({
+	 * 	parse: (input: string) => {
+	 * 		return /^\d+$/.test(input) ? Ok(input) : Err("not digits");
+	 * 	},
+	 * });
+	 * const integer = new Schema({ parse: (input: string) => Ok(Number(input)) });
 	 *
 	 * assertEquals(unwrap((digits.pipe(integer)).parseSync("42")), 42);
 	 * ```
@@ -474,12 +511,14 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
-	 * const digits = new Schema((input: string) => {
-	 * 	if (/^\d+$/.test(input)) {
-	 * 		return Ok<number, string>(Number(input));
-	 * 	}
+	 * const digits = new Schema({
+	 * 	parse: (input: string) => {
+	 * 		if (/^\d+$/.test(input)) {
+	 * 			return Ok<number, string>(Number(input));
+	 * 		}
 	 *
-	 * 	return Err<number, string>("not digits");
+	 * 		return Err<number, string>("not digits");
+	 * 	},
 	 * });
 	 * const trimmed = digits.preprocess((input: string) => input.trim());
 	 *

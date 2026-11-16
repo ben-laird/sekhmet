@@ -16,8 +16,10 @@ import {
 import { omit, partial, pick, required } from "./shape.ts";
 
 type Text = Schema<unknown, string, "not text">;
-const text: Text = new Schema((input) => {
-	return typeof input === "string" ? Ok(input) : Err("not text");
+const text: Text = new Schema({
+	parse: (input) => {
+		return typeof input === "string" ? Ok(input) : Err("not text");
+	},
 });
 const maybeText = optional(text);
 

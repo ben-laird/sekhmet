@@ -20,9 +20,11 @@ import {
 	TooSmall,
 } from "./mod.ts";
 
-const digits = new Schema((input: string) =>
-	/^\d+$/.test(input) ? Ok(Number(input)) : Err("not digits"),
-);
+const digits = new Schema({
+	parse: (input: string) => {
+		return /^\d+$/.test(input) ? Ok(Number(input)) : Err("not digits");
+	},
+});
 
 Deno.test("parseSync returns enum's main Result, so its methods chain", () => {
 	// Given: a schema that accepts digit strings
@@ -114,8 +116,8 @@ Deno.test(".with's methods return main Schemas that keep chaining", async () => 
 
 Deno.test(".with.or infers the right schema's types", () => {
 	// Given: schemas with typed inputs
-	const left = new Schema((input: { a: string }) => Ok(input.a));
-	const right = new Schema((input: { b: number }) => Ok(input.b));
+	const left = new Schema({ parse: (input: { a: string }) => Ok(input.a) });
+	const right = new Schema({ parse: (input: { b: number }) => Ok(input.b) });
 
 	// When: or-ing them through the namespace
 	const either = left.with.or(right);
@@ -130,9 +132,11 @@ Deno.test(".with.or infers the right schema's types", () => {
 
 Deno.test("SchemaWith is covariant in its output, like the Schema it holds", () => {
 	// Given: a namespace of a schema with a narrow output
-	const narrow: SchemaWith<unknown, "a", never> = new Schema((_: unknown) =>
-		Ok("a" as const),
-	).with;
+	const narrow: SchemaWith<unknown, "a", never> = new Schema({
+		parse: (_: unknown) => {
+			return Ok("a" as const);
+		},
+	}).with;
 
 	// When: widening it, and narrowing a wide one
 	const wide: SchemaWith<unknown, string, unknown> = narrow;

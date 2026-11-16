@@ -57,9 +57,13 @@ export const EMPTY_FAILURE_MESSAGE: string = "Validation failed without issues";
 export function fromStandard<O>(
 	standard: StandardSchemaV1<unknown, O>,
 ): Schema<unknown, O, Issues<StandardIssue>> {
-	return new Schema((input: unknown) =>
-		union(mapPotential(from(standard["~standard"].validate(input)), toResult)),
-	);
+	return new Schema({
+		parse: (input: unknown) => {
+			return union(
+				mapPotential(from(standard["~standard"].validate(input)), toResult),
+			);
+		},
+	});
 }
 
 /** Converts a Standard result into a `Result`, its issues into `Issues`. */
