@@ -212,7 +212,10 @@ function wrapTargetOf(
 	return wrapNames.has(name) ? name : undefined;
 }
 
-/** Renders a type, spelling a top-level wrap target as its main class. */
+/**
+ * Renders a type, spelling a top-level wrap target as its main class. Each
+ * member of a top-level intersection counts as top-level.
+ */
 function renderWrapped({
 	module,
 	type,
@@ -222,6 +225,12 @@ function renderWrapped({
 	type: TypeNode;
 	context: RenderContext;
 }): string {
+	if (type.kind === "intersection") {
+		return type.types
+			.map((member) => renderWrapped({ module, type: member, context }))
+			.join(" & ");
+	}
+
 	const target = wrapTargetOf(module.wrapNames, type);
 	if (target === undefined || type.kind !== "ref") {
 		return renderType({ type, context });
