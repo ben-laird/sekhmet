@@ -38,11 +38,15 @@ export interface FeatureBase {
 
 /**
  * A function of another feature's mini barrel that becomes a method of the
- * primary class. Without `field`, the function takes the receiver as its
- * first parameter, `self`, and the method takes the rest. With `field`, the
- * function takes one options object whose type passes the primary's type
- * arguments in order (`ArrayOptions<I, O, E>` for `Schema<I, O, E>`); the
- * receiver fills that field, and the method takes no arguments.
+ * primary class (or of its namespace class; see {@linkcode Borrow.property}).
+ * Without `field`, the function takes the receiver as its first parameter,
+ * `self`, and the method takes the rest. With `field`, the function takes
+ * one options object whose type passes the primary's type arguments first,
+ * in order (`ArrayOptions<I, O, E>` for `Schema<I, O, E>`); the receiver
+ * fills that field. The method then takes no arguments, or, with
+ * `argument`, one: the value of that other field (`or({ left, right })`
+ * is `.or(right)`), whose type parameters past the primary's become the
+ * method's own.
  */
 export interface BorrowedMethod {
 	/** The function's name, which is also the method's. */
@@ -50,9 +54,16 @@ export interface BorrowedMethod {
 	/** The field of the function's options object that the receiver fills. */
 	readonly field?: string;
 	/**
+	 * The field of the function's options object that the method's single
+	 * argument fills (only with `field`).
+	 */
+	readonly argument?: string;
+	/**
 	 * The method's own docs, in place of the function's: for when the
 	 * function's prose or examples talk about parameters the method doesn't
-	 * take (`array`'s `item` and length bounds for `.array()`).
+	 * take (`array`'s `item` and length bounds for `.array()`). Required for
+	 * a method of a namespace class, whose call sites the function's
+	 * examples can't be rewritten to.
 	 */
 	readonly doc?: MethodDoc;
 }
@@ -61,10 +72,27 @@ export interface BorrowedMethod {
 export interface MethodDoc {
 	/** The description. */
 	readonly description: string;
+	/** Each parameter's description (its `@param`), by name. */
+	readonly params?: Readonly<Record<string, string>>;
 	/** What the method returns (its `@returns`). */
 	readonly returns: string;
 	/** A runnable example in method form (its `@example`, doc-tested). */
 	readonly example: string;
+}
+
+/**
+ * A getter on the primary class that groups a borrow's methods on a
+ * generated namespace class, rather than on the primary itself:
+ * `schema.with.or(other)`. The class holds the receiver and is exported
+ * from the generated module beside the primary.
+ */
+export interface NamespaceProperty {
+	/** The getter's name on the primary class (e.g. `with`). */
+	readonly name: string;
+	/** The generated class the getter returns (e.g. `SchemaWith`). */
+	readonly className: string;
+	/** The getter's docs; the class's are built from them. */
+	readonly doc: MethodDoc;
 }
 
 /**
@@ -81,6 +109,11 @@ export interface Borrow {
 	readonly namespace: string;
 	/** The barrel's functions that become methods. */
 	readonly methods: readonly BorrowedMethod[];
+	/**
+	 * Puts the methods on a namespace class behind a getter instead of on
+	 * the primary class.
+	 */
+	readonly property?: NamespaceProperty;
 }
 
 /**
@@ -203,6 +236,87 @@ const NULLABLE_METHOD_DOC: MethodDoc = {
 		'import { string } from "@sekhmet/schema/primitives";',
 		"",
 		"assertEquals(unwrap(string().nullable().parseSync(null)), null);",
+	].join("\n"),
+};
+
+/** `Schema.with`'s docs: the getter of the algebra namespace. */
+const WITH_DOC: MethodDoc = {
+	description: [
+		"The schema algebra for this schema: `.with.or(other)`,",
+		'`.with.brand("Name")` and `.with.readonly()`, each returning a main',
+		"`Schema`, so calls keep chaining.",
+	].join("\n"),
+	returns: "This schema's algebra methods",
+	example: [
+		'import { assertEquals } from "@std/assert";',
+		'import { unwrap } from "@sekhmet/enum/result/mini";',
+		'import { number, string } from "@sekhmet/schema/primitives";',
+		"",
+		"const id = string().with.or(number()).map(String);",
+		"",
+		'assertEquals(unwrap(id.parseSync(7)), "7");',
+	].join("\n"),
+};
+
+/** `Schema.with.or()`'s docs, written for the receiver. */
+const OR_METHOD_DOC: MethodDoc = {
+	description: [
+		"A schema that accepts what this schema or `right` accepts: this schema",
+		"is tried first, and `right` only when it fails; when both fail, it fails",
+		"with one `InvalidUnion` issue at the root. Chains nest:",
+		"`a.with.or(b).with.or(c)` is `union([union([a, b]), c])`.",
+	].join("\n"),
+	params: { right: "The schema to try when this one fails" },
+	returns: "A schema for what either accepts",
+	example: [
+		'import { assertEquals } from "@std/assert";',
+		'import { unwrap } from "@sekhmet/enum/result/mini";',
+		'import { boolean, number, string } from "@sekhmet/schema/primitives";',
+		"",
+		"const scalar = string().with.or(number()).with.or(boolean());",
+		"",
+		"assertEquals(unwrap(scalar.parseSync(true)), true);",
+	].join("\n"),
+};
+
+/** `Schema.with.brand()`'s docs, written for the receiver. */
+const BRAND_METHOD_DOC: MethodDoc = {
+	description: [
+		"This schema with its output branded `name`, a type-only brand: parsing",
+		"is the branded type's smart constructor. The output passes through",
+		"unchanged at runtime.",
+	].join("\n"),
+	params: { name: "The brand's name" },
+	returns: "A schema whose output is branded `name`",
+	example: [
+		'import { assertEquals } from "@std/assert";',
+		'import { unwrap } from "@sekhmet/enum/result/mini";',
+		'import type { Branded } from "@sekhmet/schema/algebra";',
+		'import { string } from "@sekhmet/schema/primitives";',
+		"",
+		'const userId = string({ minLength: 1 }).with.brand("UserId");',
+		'const id: Branded<string, "UserId"> = unwrap(userId.parseSync("u1"));',
+		"",
+		'assertEquals(id, "u1");',
+	].join("\n"),
+};
+
+/** `Schema.with.readonly()`'s docs, written for the receiver. */
+const READONLY_METHOD_DOC: MethodDoc = {
+	description: [
+		"This schema with its array and plain object outputs replaced by frozen",
+		"shallow copies (never the value it produced, which may be the input).",
+		"Other values pass through unchanged.",
+	].join("\n"),
+	returns: "A schema whose array and plain object outputs are frozen copies",
+	example: [
+		'import { assertEquals } from "@std/assert";',
+		'import { unwrap } from "@sekhmet/enum/result/mini";',
+		'import { string } from "@sekhmet/schema/primitives";',
+		"",
+		'const tags = unwrap(string().array().with.readonly().parseSync(["a"]));',
+		"",
+		"assertEquals(Object.isFrozen(tags), true);",
 	].join("\n"),
 };
 
@@ -399,6 +513,23 @@ export const FEATURES: readonly Feature[] = [
 					{ name: "array", field: "item", doc: ARRAY_METHOD_DOC },
 					{ name: "optional", doc: OPTIONAL_METHOD_DOC },
 					{ name: "nullable", doc: NULLABLE_METHOD_DOC },
+				],
+			},
+			// The algebra reads best chained too, but on a namespace of its own.
+			{
+				entrypoint: "@sekhmet/schema/algebra",
+				mini: "packages/schema/src/algebra/mini/mod.ts",
+				namespace: "algebra",
+				property: { name: "with", className: "SchemaWith", doc: WITH_DOC },
+				methods: [
+					{
+						name: "or",
+						field: "left",
+						argument: "right",
+						doc: OR_METHOD_DOC,
+					},
+					{ name: "brand", doc: BRAND_METHOD_DOC },
+					{ name: "readonly", doc: READONLY_METHOD_DOC },
 				],
 			},
 		],

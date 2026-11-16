@@ -2,17 +2,21 @@ import { Ok as MainOk, Result } from "@sekhmet/enum/result";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertInstanceOf } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
+import type { Branded } from "@/src/algebra/main/mod.ts";
 import { object } from "@/src/composites/main/mod.ts";
-import { number, string } from "@/src/primitives/main/mod.ts";
+import { boolean, number, string } from "@/src/primitives/main/mod.ts";
 import {
 	type ErrorOf,
 	entries,
+	formatIssue,
 	type Input,
 	type Issues,
+	isSchemaIssue,
 	type Output,
 	ParseError,
 	Schema,
 	type SchemaIssue,
+	SchemaWith,
 	TooSmall,
 } from "./mod.ts";
 
@@ -43,7 +47,8 @@ Deno.test("Schema has exactly the modifier, transform and parsing methods", () =
 		.sort();
 
 	// When: listing its own methods
-	// Then: they are the shape modifiers, the transforms and the parsers, only
+	// Then: they are the shape modifiers, the transforms, the parsers and the
+	// algebra namespace's getter, only
 	assertEquals(methods, [
 		"andThen",
 		"array",
@@ -60,7 +65,83 @@ Deno.test("Schema has exactly the modifier, transform and parsing methods", () =
 		"parseSync",
 		"pipe",
 		"preprocess",
+		"with",
 	]);
+});
+
+Deno.test("SchemaWith has exactly the algebra methods", () => {
+	// Given: the algebra namespace's prototype
+	const methods = Object.getOwnPropertyNames(SchemaWith.prototype)
+		.filter((name) => name !== "constructor")
+		.sort();
+
+	// When: listing its own methods
+	// Then: they are or, brand and readonly, only
+	assertEquals(methods, ["brand", "or", "readonly"]);
+});
+
+Deno.test(".with's methods return main Schemas that keep chaining", async () => {
+	// Given: a chain through each algebra method
+	const id = string()
+		.with.or(number())
+		.with.or(boolean())
+		.map(String)
+		.with.brand("Id")
+		.array()
+		.with.readonly();
+	// {}
+
+	// When: parsing a valid list and an invalid one
+	const parsed = unwrap(id.parseSync(["a", 1, true]));
+	const found = unwrapErr(await id.parseAsync([null]));
+
+	// Then: each step returned a main Schema, the output is a frozen array of
+	// branded ids, and a failing element is reported at its index
+	assertInstanceOf(string().with, SchemaWith);
+	assertInstanceOf(id, Schema);
+	assertEquals<readonly string[]>(parsed, ["a", "1", "true"]);
+	assertEquals(Object.isFrozen(parsed), true);
+	const [{ path, error }] = entries(found);
+	assertEquals(path, [0]);
+	assertEquals(
+		isSchemaIssue(error) && formatIssue(error),
+		"Invalid input: no union branch matched",
+	);
+	assertType<IsExact<Output<typeof id>, readonly Branded<string, "Id">[]>>(
+		true,
+	);
+});
+
+Deno.test(".with.or infers the right schema's types", () => {
+	// Given: schemas with typed inputs
+	const left = new Schema((input: { a: string }) => Ok(input.a));
+	const right = new Schema((input: { b: number }) => Ok(input.b));
+
+	// When: or-ing them through the namespace
+	const either = left.with.or(right);
+
+	// Then: the input intersects, the output unions, the error is a union's
+	assertType<IsExact<Input<typeof either>, { a: string } & { b: number }>>(
+		true,
+	);
+	assertType<IsExact<Output<typeof either>, string | number>>(true);
+	assertType<IsExact<ErrorOf<typeof either>, Issues<SchemaIssue>>>(true);
+});
+
+Deno.test("SchemaWith is covariant in its output, like the Schema it holds", () => {
+	// Given: a namespace of a schema with a narrow output
+	const narrow: SchemaWith<unknown, "a", never> = new Schema((_: unknown) =>
+		Ok("a" as const),
+	).with;
+
+	// When: widening it, and narrowing a wide one
+	const wide: SchemaWith<unknown, string, unknown> = narrow;
+	// @ts-expect-error a string output is not an "a" output
+	const narrowed: SchemaWith<unknown, "a", never> = string().with;
+
+	// Then: only the widening type-checks
+	assertInstanceOf(wide, SchemaWith);
+	assertInstanceOf(narrowed, SchemaWith);
 });
 
 Deno.test(".array() parses every element with the receiver, and chains", async () => {
