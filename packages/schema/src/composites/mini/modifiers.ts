@@ -1,12 +1,14 @@
-import { Ok, type Result } from "@sekhmet/enum/result/mini";
+import { Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
-import type { MaybePromise } from "@/src/core/mini/potential.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
+import { acceptNull, type Child, type ChildParsed, wrap } from "./collect.ts";
 
 /**
- * Makes a schema also accept `undefined`, which it passes through without
- * running `self`. In an `object`, a field built with `optional` may be
- * missing, and becomes an optional property.
+ * Makes a schema's value optional: it also accepts `undefined`, which it
+ * passes through without running `self`. It does not make an `object` key
+ * optional: a field built with `optional` must be present (its value may be
+ * `undefined`); declare a key optional with a field entry,
+ * `{ schema, key: "optional" }`.
  *
  * @template I The input type
  * @template O The output type
@@ -18,24 +20,30 @@ import { Schema } from "@/src/core/mini/schema.ts";
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
- * import { object, optional } from "@sekhmet/schema/composites/mini";
+ * import { array, optional } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
  * const text = new Schema((input: unknown) => Ok(String(input)));
- * const user = object({ shape: { nickname: optional(text) } });
+ * const gaps = array({ item: optional(text) });
  *
- * assertEquals(unwrap(parseSync(user, {})), {});
+ * assertEquals(unwrap(parseSync(gaps, ["a", undefined])), ["a", undefined]);
  * ```
  */
 export function optional<I, O, E>(
 	self: Schema<I, O, E>,
-): Schema<I | undefined, O | undefined, E> {
+): Schema<I | undefined, O | undefined, E>;
+export function optional(self: Child): Child {
 	const parser = getStructParams(self);
 
-	return new Schema(
-		(input): MaybePromise<Result<O | undefined, E>> =>
-			input === undefined ? Ok(undefined) : parser(input),
-	);
+	return wrap({
+		modifier: "optional",
+		inner: self,
+		parser: (input): ChildParsed => {
+			if (input === undefined) return Ok(undefined);
+
+			return parser(input);
+		},
+	});
 }
 
 /**
@@ -62,13 +70,9 @@ export function optional<I, O, E>(
  */
 export function nullable<I, O, E>(
 	self: Schema<I, O, E>,
-): Schema<I | null, O | null, E> {
-	const parser = getStructParams(self);
-
-	return new Schema(
-		(input): MaybePromise<Result<O | null, E>> =>
-			input === null ? Ok(null) : parser(input),
-	);
+): Schema<I | null, O | null, E>;
+export function nullable(self: Child): Child {
+	return acceptNull(self);
 }
 
 /**

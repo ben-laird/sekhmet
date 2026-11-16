@@ -111,6 +111,32 @@ An `object` strips undeclared keys; `unknownKeys: "strict"` reports each one
 and `unknownKeys: "passthrough"` keeps them. A composite is `Sync` when every
 child parse is, and `Async` otherwise.
 
+Every key of a shape is required unless its entry says
+`{ schema, key: "optional" }`. `.optional()` only lets the value be
+`undefined`; it doesn't make the key optional:
+
+```ts
+import { assertEquals } from "@std/assert";
+import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import { object } from "@sekhmet/schema/composites";
+import { string } from "@sekhmet/schema/primitives";
+
+// { name: string; middle: string | undefined; nickname?: string }
+const person = object({
+	shape: {
+		name: string(),
+		middle: string().optional(),
+		nickname: { schema: string(), key: "optional" },
+	},
+});
+
+assertEquals(unwrap(person.parseSync({ name: "Ada", middle: undefined })), {
+	name: "Ada",
+	middle: undefined,
+});
+assertEquals(isErr(person.parseSync({ name: "Ada" })), true); // middle is missing
+```
+
 ## Standard Schema
 
 `@sekhmet/schema/standard` bridges to [Standard Schema](https://standardschema.dev)

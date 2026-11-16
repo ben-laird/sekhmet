@@ -13,6 +13,7 @@
 
 import { match, union } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import { getStructParams } from "@sekhmet/primordials/struct";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import {
 	concat,
@@ -27,13 +28,66 @@ import {
 	type Potential,
 	Sync,
 } from "@/src/core/mini/potential.ts";
-import { parse, type Schema } from "@/src/core/mini/schema.ts";
+import { parse, Schema } from "@/src/core/mini/schema.ts";
 
 /** A child schema with its type parameters erased. */
 export type Child = Schema<unknown, unknown, unknown>;
 
 /** What an erased composite parser returns. */
 export type Parsed = MaybePromise<Result<unknown, Issues<unknown>>>;
+
+/** What an erased child's parser returns. */
+export type ChildParsed = MaybePromise<Result<unknown, unknown>>;
+
+/** A value modifier that lets a schema accept one more value. */
+type Modifier = "optional" | "nullable";
+
+/**
+ * The schema each modifier's result wraps, keyed by its parser (which a
+ * main schema shares with its mini form), so `object` can see past them.
+ */
+const WRAPPED: WeakMap<object, { modifier: Modifier; inner: Child }> =
+	new WeakMap();
+
+/** A modifier's schema, recorded as wrapping `inner`. */
+export function wrap({
+	modifier,
+	inner,
+	parser,
+}: {
+	modifier: Modifier;
+	inner: Child;
+	parser: (input: unknown) => ChildParsed;
+}): Child {
+	WRAPPED.set(parser, { modifier, inner });
+
+	return new Schema(parser);
+}
+
+/** `nullable`'s erased implementation: `null` passes, anything else is parsed. */
+export function acceptNull(inner: Child): Child {
+	const parser = getStructParams(inner);
+
+	return wrap({
+		modifier: "nullable",
+		inner,
+		parser: (input): ChildParsed => (input === null ? Ok(null) : parser(input)),
+	});
+}
+
+/**
+ * A schema without its `optional` modifiers, through any `nullable` ones:
+ * what a missing required key is parsed with, so a value-optional field
+ * still reports its inner schema's issue for a missing key.
+ */
+export function withoutOptional(schema: Child): Child {
+	const wrapped = WRAPPED.get(getStructParams(schema));
+	if (wrapped === undefined) return schema;
+
+	const inner = withoutOptional(wrapped.inner);
+
+	return wrapped.modifier === "optional" ? inner : acceptNull(inner);
+}
 
 /** A child's parse result, found under `key`. */
 export interface Settled {

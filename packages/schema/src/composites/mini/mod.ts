@@ -20,6 +20,9 @@ export {
 export { enumOf } from "./enum-of.ts";
 export { lazy, nullable, optional } from "./modifiers.ts";
 export {
+	type Field,
+	type FieldSchema,
+	type KeyPresence,
 	type ObjectError,
 	type ObjectInput,
 	type ObjectOptions,

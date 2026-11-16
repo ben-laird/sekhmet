@@ -345,21 +345,23 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	}
 
 	/**
-	 * A schema that also accepts `undefined`, passing it through without
-	 * parsing it with this schema. In an `object`, a field made optional may
-	 * be missing, and becomes an optional property.
+	 * A schema whose value is optional: it also accepts `undefined`, passing
+	 * it through without parsing it with this schema. It does not make an
+	 * `object` key optional: the key must still be present; declare an
+	 * optional key with a field entry, `{ schema, key: "optional" }`.
 	 *
 	 * @returns A schema for this schema's values or `undefined`
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
 	 * import { object } from "@sekhmet/schema/composites";
 	 * import { string } from "@sekhmet/schema/primitives";
 	 *
-	 * const user = object({ shape: { nickname: string().optional() } });
+	 * const user = object({ shape: { middle: string().optional() } });
 	 *
-	 * assertEquals(unwrap(user.parseSync({})), {});
+	 * assertEquals(unwrap(user.parseSync({ middle: undefined })), { middle: undefined });
+	 * assertEquals(isErr(user.parseSync({})), true);
 	 * ```
 	 * @see {@link composites.optional}
 	 */

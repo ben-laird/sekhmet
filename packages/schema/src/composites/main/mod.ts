@@ -17,16 +17,15 @@
  * const user = object({
  * 	shape: {
  * 		name: string({ minLength: 1 }),
- * 		age: number({ int: true, min: 0 }).optional(),
+ * 		age: { schema: number({ int: true, min: 0 }), key: "optional" },
+ * 		nickname: string().optional(),
  * 		tags: string().array(),
  * 	},
  * 	unknownKeys: "strict",
  * });
  *
- * assertEquals(unwrap(user.parseSync({ name: "Ada", tags: [] })), {
- * 	name: "Ada",
- * 	tags: [],
- * });
+ * const input = { name: "Ada", nickname: undefined, tags: [] };
+ * assertEquals(unwrap(user.parseSync(input)), input);
  * ```
  *
  * @module
@@ -50,6 +49,9 @@ export type {
 	DiscriminatedInput,
 	DiscriminatedOutput,
 	DiscriminatedUnionOptions,
+	Field,
+	FieldSchema,
+	KeyPresence,
 	ObjectError,
 	ObjectInput,
 	ObjectOptions,
@@ -270,9 +272,11 @@ export function nullable<I, O, E>(
 }
 
 /**
- * Makes a schema also accept `undefined`, which it passes through without
- * running `self`. In an `object`, a field built with `optional` may be
- * missing, and becomes an optional property.
+ * Makes a schema's value optional: it also accepts `undefined`, which it
+ * passes through without running `self`. It does not make an `object` key
+ * optional: a field built with `optional` must be present (its value may be
+ * `undefined`); declare a key optional with a field entry,
+ * `{ schema, key: "optional" }`.
  *
  * @template I - The input type
  * @template O - The output type
@@ -283,13 +287,13 @@ export function nullable<I, O, E>(
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
- * import { object, optional } from "@sekhmet/schema/composites";
+ * import { array, optional } from "@sekhmet/schema/composites";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
  * const text = new Schema((input: unknown) => Ok(String(input)));
- * const user = object({ shape: { nickname: optional(text) } });
+ * const gaps = array({ item: optional(text) });
  *
- * assertEquals(unwrap(parseSync(user, {})), {});
+ * assertEquals(unwrap(parseSync(gaps, ["a", undefined])), ["a", undefined]);
  * ```
  */
 export function optional<I, O, E>(
@@ -300,9 +304,21 @@ export function optional<I, O, E>(
 
 /**
  * Creates a schema for objects with the given fields. Every field is
- * parsed, and every failing field is reported at its path. A missing key is
- * parsed as `undefined`, so only fields that accept `undefined` (see
- * `optional`) may be missing; they become optional properties.
+ * parsed, and every failing field is reported at its path.
+ *
+ * A shape's value is a schema, whose key is required, or a field entry
+ * `{ schema, key }`. `key: "optional"` lets the key be missing (it is then
+ * left out of the output); a present key's value must still parse, so
+ * `{ nickname: undefined }` fails unless the schema accepts `undefined`.
+ * `.optional()` (`optional`) only makes the value optional: the key stays
+ * required. A missing required key fails with the issue its schema, without
+ * `optional`, reports for `undefined`, at the key's path.
+ *
+ * - `a: string()` gives `{ a: string }`;
+ * - `a: optional(string())` gives `{ a: string | undefined }`;
+ * - `a: { schema: string(), key: "optional" }` gives `{ a?: string }`;
+ * - `a: { schema: optional(string()), key: "optional" }` gives
+ *   `{ a?: string | undefined }`.
  *
  * Keys the shape doesn't declare are stripped from the output by default;
  * `unknownKeys: "strict"` reports each as an `UnknownKey` issue at its path,
@@ -334,6 +350,29 @@ export function optional<I, O, E>(
  * 	entries(found).map(({ path }) => path),
  * 	[["name"], ["address", "zip"]],
  * );
+ * ```
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { object, optional } from "@sekhmet/schema/composites";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const user = object({
+ * 	shape: {
+ * 		name: string(),
+ * 		middle: optional(string()),
+ * 		nickname: { schema: string(), key: "optional" },
+ * 	},
+ * });
+ *
+ * assertEquals(unwrap(parseSync(user, { name: "Ada", middle: undefined })), {
+ * 	name: "Ada",
+ * 	middle: undefined,
+ * });
+ * assertEquals(isErr(parseSync(user, { name: "Ada" })), true);
+ * assertEquals(isErr(parseSync(user, { name: "Ada", middle: "A", nickname: undefined })), true);
  * ```
  * @example
  * ```ts
