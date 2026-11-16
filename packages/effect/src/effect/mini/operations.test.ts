@@ -3,6 +3,7 @@ import { assertEquals } from "@std/assert";
 import {
 	Async,
 	type Continuation,
+	Deferred,
 	Ready,
 } from "@/src/continuation/continuation.ts";
 import {
@@ -430,6 +431,33 @@ Deno.test("inspectException() sees the thrown exception", () => {
 	// Then: the exception was observed and preserved
 	assertEquals(seen, [boom]);
 	assertEquals(result, Err(Panicked(boom)));
+});
+
+Deno.test("an exception thrown by the wrapped effect reaches the operation", async (t) => {
+	const throwBoom = (): never => {
+		throw boom;
+	};
+	const throwingSources: [string, Effect<void, number, string>][] = [
+		["on invocation", new Effect(throwBoom)],
+		["in a Deferred step", new Effect(() => Deferred(throwBoom))],
+		["while setting up an Async step", new Effect(() => Async(throwBoom))],
+	];
+
+	for (const [label, source] of throwingSources) {
+		await t.step(label, () => {
+			// Given: a source that throws, wrapped directly by inspectException
+			const seen: unknown[] = [];
+
+			// When: running it
+			const result = run(
+				TestSubject.inspectException(source, (x) => seen.push(x)),
+			);
+
+			// Then: the operation observed the exception like a settled one
+			assertEquals(seen, [boom]);
+			assertEquals(result, Err(Panicked(boom)));
+		});
+	}
 });
 
 Deno.test("a throwing inspector turns the result into a panic", async (t) => {
