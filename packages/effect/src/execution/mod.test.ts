@@ -2,10 +2,24 @@ import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
+import { stub } from "@std/testing/mock";
+import type { Fiber } from "@/src/fiber/mini/fiber.ts";
+import { Cancelled, type FiberResult } from "@/src/fiber/mini/fiber-error.ts";
 import { Scheduler } from "@/src/scheduler/scheduler.ts";
 import { sync } from "@/src/scheduler/schedules.ts";
-import { Async, Ready } from "../continuation/continuation.ts";
-import { Effect, Failed, Failure, Success } from "../effect/mini/effect.ts";
+import {
+	Async,
+	type Continuation,
+	Deferred,
+	Ready,
+} from "../continuation/continuation.ts";
+import {
+	Effect,
+	type EffectResult,
+	Failed,
+	Failure,
+	Success,
+} from "../effect/mini/effect.ts";
 import {
 	and,
 	andThen,
@@ -14,7 +28,7 @@ import {
 	or,
 	orElse,
 } from "../effect/mini/operations.ts";
-import { cancel } from "../fiber/mini/fiber.ts";
+import { cancel, join } from "../fiber/mini/fiber.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { fork } from "./mod.ts";
 
@@ -760,5 +774,254 @@ Deno.test("deeply nested map operations", () => {
 		Suspended: () => {
 			throw new Error("Fiber suspended");
 		},
+	});
+});
+
+Deno.test("a finalizer that cancels its completing fiber does not change the result", () => {
+	// Given: a suspended fiber whose first joiner cancels it on completion
+	let resume:
+		| ((c: Continuation<EffectResult<number, never>>) => void)
+		| undefined;
+	const runtime = new Runtime({
+		input: undefined,
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
+	});
+	const fiber = fork(
+		runtime,
+		new Effect<void, number, never>(() =>
+			Async((resolve) => {
+				resume = resolve;
+			}),
+		),
+	);
+	join(fiber, () => cancel(fiber));
+	const seen: FiberResult<number, never>[] = [];
+	join(fiber, (result) => seen.push(result));
+
+	// When: the fiber completes successfully
+	resume?.(Ready(Ok(1)));
+
+	// Then: joiners see only the success, and it remains the final result
+	assertEquals(seen, [Ok(1)]);
+	const late: FiberResult<number, never>[] = [];
+	join(fiber, (result) => late.push(result));
+	assertEquals(late, [Ok(1)]);
+});
+
+Deno.test("completion isolates throwing finalizers and logs each throw", () => {
+	// Given: a fiber with two throwing joiners around a healthy one
+	using errorLog = stub(console, "error");
+	let resume:
+		| ((c: Continuation<EffectResult<number, never>>) => void)
+		| undefined;
+	const runtime = new Runtime({
+		input: undefined,
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
+	});
+	const fiber = fork(
+		runtime,
+		new Effect<void, number, never>(() =>
+			Async((resolve) => {
+				resume = resolve;
+			}),
+		),
+	);
+	const first = new Error("first finalizer failed");
+	const second = new Error("second finalizer failed");
+	const seen: string[] = [];
+	join(fiber, () => {
+		seen.push("first");
+		throw first;
+	});
+	join(fiber, (result) => {
+		seen.push(`healthy:${match(result)({ Ok: (v) => v, Err: () => -1 })}`);
+	});
+	join(fiber, () => {
+		seen.push("second");
+		throw second;
+	});
+
+	// When: the fiber completes
+	resume?.(Ready(Ok(1)));
+
+	// Then: every joiner ran in order and each throw was logged
+	assertEquals(seen, ["first", "healthy:1", "second"]);
+	assertEquals(
+		errorLog.calls.map((call) => call.args.at(-1)),
+		[first, second],
+	);
+});
+
+Deno.test("an async step that resolves synchronously completes the fiber", () => {
+	// Given: an Async step that resolves before returning
+	const runtime = new Runtime({
+		input: undefined,
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
+	});
+	const effect = new Effect<void, number, never>(() =>
+		Async((resolve) => {
+			resolve(Ready(Ok(7)));
+		}),
+	);
+
+	// When: running it
+	const seen: FiberResult<number, never>[] = [];
+	join(fork(runtime, effect), (result) => seen.push(result));
+
+	// Then: the fiber completes with the resolved value
+	assertEquals(seen, [Ok(7)]);
+});
+
+Deno.test("an async step's resolver is one-shot", () => {
+	// Given: a fiber that resumes from a first async step into a second one
+	const runtime = new Runtime({
+		input: undefined,
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
+	});
+	let first:
+		| ((c: Continuation<EffectResult<string, never>>) => void)
+		| undefined;
+	const effect = new Effect<void, string, never>(() =>
+		Async((resolve) => {
+			first = resolve;
+		}),
+	);
+	const fiber = fork(runtime, effect);
+	const seen: FiberResult<string, never>[] = [];
+	join(fiber, (result) => seen.push(result));
+	first?.(Deferred(() => Async(() => {})));
+
+	// When: the first step's resolver is called again
+	first?.(Ready(Ok("stale")));
+
+	// Then: the stale resolution is ignored and the fiber stays suspended
+	assertEquals(seen, []);
+	match(getStructParams(fiber).fiberState)({
+		Suspended: () => {},
+		Queued: () => {
+			throw new Error("Expected Suspended, got Queued");
+		},
+		Running: () => {
+			throw new Error("Expected Suspended, got Running");
+		},
+		Complete: () => {
+			throw new Error("Expected Suspended, got Complete");
+		},
+	});
+});
+
+// --- a fiber cancelled while it is stepping stays cancelled ---
+
+/**
+ * Forks an effect built from its own fiber, on a parked scheduler, and runs
+ * it to quiescence. Joiners record every notification.
+ */
+function forkSelfAware<T>(
+	build: (self: () => Fiber<void, T, never>) => Effect<void, T, never>,
+): { fiber: Fiber<void, T, never>; seen: FiberResult<T, never>[] } {
+	const turns: (() => void)[] = [];
+	const runtime = new Runtime<void>({
+		input: undefined,
+		config: {
+			scheduler: new Scheduler({
+				schedule: (runStep) => {
+					turns.push(runStep);
+				},
+			}),
+		},
+	});
+	const ref: { fiber: Fiber<void, T, never> | undefined } = {
+		fiber: undefined,
+	};
+	const self = (): Fiber<void, T, never> => {
+		if (ref.fiber === undefined) throw new Error("fiber not forked yet");
+		return ref.fiber;
+	};
+	const forked = fork(runtime, build(self));
+	ref.fiber = forked;
+	const seen: FiberResult<T, never>[] = [];
+	join(forked, (result) => seen.push(result));
+	for (let turn = turns.shift(); turn; turn = turns.shift()) turn();
+	return { fiber: forked, seen };
+}
+
+Deno.test("a fiber cancelled while stepping is not overwritten by the step", async (t) => {
+	await t.step("Queued: cancelled while the effect starts", () => {
+		// Given: an effect that cancels its own fiber, then returns a success
+		// When: running it
+		const { fiber, seen } = forkSelfAware(
+			(self) =>
+				new Effect(() => {
+					cancel(self());
+					return Ready(Ok(1));
+				}),
+		);
+
+		// Then: joiners saw only the cancellation, and it is the final result
+		assertEquals(seen, [Err(Cancelled<never>())]);
+		assertEquals(getStructParams(getStructParams(fiber).fiberState).variant, [
+			"Complete",
+			Err(Cancelled<never>()),
+		]);
+	});
+
+	await t.step("Deferred: cancelled inside a deferred step", () => {
+		// Given: a deferred step that cancels its own fiber, then returns a success
+		// When: running it
+		const { seen } = forkSelfAware(
+			(self) =>
+				new Effect(() =>
+					Deferred(() => {
+						cancel(self());
+						return Ready(Ok(1));
+					}),
+				),
+		);
+
+		// Then: joiners saw only the cancellation
+		assertEquals(seen, [Err(Cancelled<never>())]);
+	});
+
+	await t.step("Async: cancelled then resolved during setup", () => {
+		// Given: an async setup that cancels its own fiber, then resolves
+		// When: running it
+		const { seen } = forkSelfAware(
+			(self) =>
+				new Effect(() =>
+					Async((resolve) => {
+						cancel(self());
+						resolve(Ready(Ok(1)));
+					}),
+				),
+		);
+
+		// Then: joiners saw only the cancellation
+		assertEquals(seen, [Err(Cancelled<never>())]);
+	});
+
+	await t.step("Async: cancelled during setup releases the async work", () => {
+		// Given: an async setup that cancels its own fiber and returns a cleanup
+		let cleanups = 0;
+
+		// When: running it
+		const { fiber, seen } = forkSelfAware(
+			(self) =>
+				new Effect(() =>
+					Async(() => {
+						cancel(self());
+						return () => {
+							cleanups++;
+						};
+					}),
+				),
+		);
+
+		// Then: it stays cancelled, and the cleanup ran since cancel could not
+		assertEquals(seen, [Err(Cancelled<never>())]);
+		assertEquals(getStructParams(getStructParams(fiber).fiberState).variant, [
+			"Complete",
+			Err(Cancelled<never>()),
+		]);
+		assertEquals(cleanups, 1);
 	});
 });

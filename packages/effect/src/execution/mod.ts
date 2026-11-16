@@ -1,7 +1,8 @@
-import { match } from "@sekhmet/enum/core/mini/exit";
+import { match, unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
-import type { Effect } from "../effect/mini/effect.ts";
+import type { Cancellation } from "../continuation/continuation.ts";
+import type { Effect, EffectOutput } from "../effect/mini/effect.ts";
 import { Fiber, FiberState, type Finalizer } from "../fiber/mini/fiber.ts";
 import {
 	Failed,
@@ -111,10 +112,13 @@ function step<I, T, E>(self: Fiber<I, T, E>): void {
 					runtime.createContext(),
 				);
 
-				getStructParams(fiberState).variant = [
-					"Running",
-					{ currentOutput, finalizers },
-				];
+				// The effect may have cancelled this fiber; never overwrite Complete.
+				if (unionKinds(fiberState) === "Queued") {
+					getStructParams(fiberState).variant = [
+						"Running",
+						{ currentOutput, finalizers },
+					];
+				}
 			} catch (exception: unknown) {
 				complete(self, Err(Panicked(exception)));
 			}
@@ -142,9 +146,22 @@ function step<I, T, E>(self: Fiber<I, T, E>): void {
 				},
 
 				Async: (asyncFn) => {
+					// The resolver is one-shot. A resolution arriving before asyncFn
+					// returns is held and applied once the step has been set up.
+					let resolved = false;
+					let settingUp = true;
+					let earlyOutput: EffectOutput<T, E> | undefined;
+
 					try {
-						// Suspend the fiber and set up async callback
 						const cancellation = asyncFn((continuation) => {
+							if (resolved) return;
+							resolved = true;
+
+							if (settingUp) {
+								earlyOutput = continuation;
+								return;
+							}
+
 							match(fiberState)({
 								Queued: () => {},
 								Running: () => {},
@@ -159,11 +176,22 @@ function step<I, T, E>(self: Fiber<I, T, E>): void {
 								Complete: () => {},
 							});
 						});
+						settingUp = false;
 
-						getStructParams(fiberState).variant = [
-							"Suspended",
-							{ cancellation, finalizers },
-						];
+						if (unionKinds(fiberState) !== "Running") {
+							// Cancelled during setup, before cancel could see the cleanup.
+							if (earlyOutput === undefined) releaseCancelled(cancellation);
+						} else if (earlyOutput === undefined) {
+							getStructParams(fiberState).variant = [
+								"Suspended",
+								{ cancellation, finalizers },
+							];
+						} else {
+							getStructParams(fiberState).variant = [
+								"Running",
+								{ currentOutput: earlyOutput, finalizers },
+							];
+						}
 					} catch (exception: unknown) {
 						complete(self, Err(Panicked(exception)));
 					}
@@ -171,11 +199,16 @@ function step<I, T, E>(self: Fiber<I, T, E>): void {
 
 				Deferred: (fn) => {
 					try {
-						// Unwrap one level and store the next continuation
-						getStructParams(fiberState).variant = [
-							"Running",
-							{ currentOutput: fn(), finalizers },
-						];
+						// Unwrap one level and store the next continuation, unless the
+						// step cancelled this fiber.
+						const currentOutput = fn();
+
+						if (unionKinds(fiberState) === "Running") {
+							getStructParams(fiberState).variant = [
+								"Running",
+								{ currentOutput, finalizers },
+							];
+						}
 					} catch (exception: unknown) {
 						complete(self, Err(Panicked(exception)));
 					}
@@ -188,38 +221,53 @@ function step<I, T, E>(self: Fiber<I, T, E>): void {
 	});
 }
 
+/**
+ * Runs the cleanup of async work whose fiber was cancelled while the work was
+ * being set up, logging a throwing cleanup as cancel() does.
+ */
+function releaseCancelled(cancellation: Cancellation): void {
+	try {
+		cancellation?.();
+	} catch (err: unknown) {
+		console.error("Fiber cancellation cleanup threw:", err);
+	}
+}
+
 function complete<I, T, E>(
 	self: Fiber<I, T, E>,
 	result: FiberResult<T, E>,
 ): void {
 	const { fiberState } = getStructParams(self);
 
+	// Mark Complete before finalizers run, so a re-entrant cancel is a no-op.
 	match(fiberState)({
 		Queued: ({ finalizers }) => {
-			runFinalizers(finalizers);
-
 			getStructParams(fiberState).variant = ["Complete", result];
+
+			runFinalizers(finalizers);
 		},
 		Running: ({ finalizers }) => {
-			runFinalizers(finalizers);
-
 			getStructParams(fiberState).variant = ["Complete", result];
+
+			runFinalizers(finalizers);
 		},
 		Suspended: ({ finalizers }) => {
-			runFinalizers(finalizers);
-
 			getStructParams(fiberState).variant = ["Complete", result];
+
+			runFinalizers(finalizers);
 		},
 		Complete: () => {},
 	});
 
+	// Each finalizer is isolated: a throw is logged and the rest still run.
+	// Rethrowing here would escape into the scheduler's turn and wedge it.
 	function runFinalizers(finalizers: Finalizer<T, E>[]): void {
-		try {
-			for (const finalizer of finalizers) {
+		for (const finalizer of finalizers) {
+			try {
 				finalizer(result);
+			} catch (err: unknown) {
+				console.error("Fiber finalizer threw:", err);
 			}
-		} catch (err: unknown) {
-			console.error({ err });
 		}
 	}
 }
