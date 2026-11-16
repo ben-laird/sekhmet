@@ -59,7 +59,10 @@ const runtime = new Runtime({
 	config: { scheduler: new Scheduler({ schedule: sync() }) },
 });
 
-const fiber = fork(runtime, Success(40).map((n) => n + 2));
+const fiber = fork(
+	runtime,
+	Success(40).map((n) => n + 2),
+);
 
 let message = "";
 fiber.join((result) => {
@@ -102,7 +105,7 @@ const runtime = new Runtime({
 });
 
 const result = await new Promise<FiberResult<number, never>>((resolve) =>
-	fork(runtime, Success(1)).join(resolve)
+	fork(runtime, Success(1)).join(resolve),
 );
 
 assertEquals(result, Ok(1));
@@ -129,7 +132,7 @@ const sleep = (ms: number) =>
 		Async((resolve) => {
 			const timer = setTimeout(() => resolve(Ready(Ok(ms))), ms);
 			return () => clearTimeout(timer); // runs on cancel
-		})
+		}),
 	);
 
 const runtime = new Runtime({
@@ -138,7 +141,10 @@ const runtime = new Runtime({
 });
 
 const result = await new Promise<FiberResult<number, never>>((resolve) =>
-	fork(runtime, sleep(10).map((ms) => ms * 2)).join(resolve)
+	fork(
+		runtime,
+		sleep(10).map((ms) => ms * 2),
+	).join(resolve),
 );
 
 assertEquals(result, Ok(20));

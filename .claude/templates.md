@@ -252,7 +252,7 @@ export function myFunction<T>(input: T) {
 
 ## JSDoc Comments
 
-```ts ignore
+````ts ignore
 /**
  * Brief one-line description of what this does
  *
@@ -277,7 +277,7 @@ export function isolate<T extends SomeVariant, const K extends T[0]>(
 ): self is Enum<Isolate<T, K>> {
 	return unionKinds(self) === kind;
 }
-```
+````
 
 ## New Package Structure
 

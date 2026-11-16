@@ -48,11 +48,15 @@ have no root export, so name the feature:
 import { assertEquals } from "@std/assert";
 import { Err, Ok, type Result } from "@sekhmet/enum/result";
 
-const half = (
-	n: number,
-): Result<number, string> => (n % 2 === 0 ? Ok(n / 2) : Err(`${n} is odd`));
+const half = (n: number): Result<number, string> =>
+	n % 2 === 0 ? Ok(n / 2) : Err(`${n} is odd`);
 
-assertEquals(half(10).map((n) => n + 1).unwrapOr(0), 6);
+assertEquals(
+	half(10)
+		.map((n) => n + 1)
+		.unwrapOr(0),
+	6,
+);
 assertEquals(half(3).unwrapOr(0), 0);
 ```
 

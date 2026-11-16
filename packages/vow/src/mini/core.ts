@@ -26,6 +26,7 @@ type Variants<T> = Split<{
 	Pending: [deps: Resolver<T>[]];
 	Resolved: [value: T];
 }>;
+
 export type { Variants as VowVariants };
 
 /**

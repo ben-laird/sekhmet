@@ -460,7 +460,12 @@ methods.
 ### Extracting variant information
 
 ```ts ignore
-import type { Kinds, Values, Isolate, Eliminate } from "@sekhmet/enum/core/mini";
+import type {
+	Kinds,
+	Values,
+	Isolate,
+	Eliminate,
+} from "@sekhmet/enum/core/mini";
 
 type MyVariants =
 	| [kind: "A", value: string]

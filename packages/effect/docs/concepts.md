@@ -43,7 +43,7 @@ import { Ok } from "@sekhmet/enum/result/mini";
 type Config = { greeting: string };
 
 const greet = new Effect<Config, string, never>((config) =>
-	Ready(Ok(`${config.greeting}, world`))
+	Ready(Ok(`${config.greeting}, world`)),
 );
 
 const runtime = new Runtime({
@@ -162,7 +162,7 @@ import { Err } from "@sekhmet/enum/result/mini";
 
 const log: string[] = [];
 const wait = new Effect<void, never, never>(() =>
-	Async(() => () => log.push("cleanup"))
+	Async(() => () => log.push("cleanup")),
 );
 
 const runtime = new Runtime({

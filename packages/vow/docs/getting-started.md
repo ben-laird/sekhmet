@@ -24,11 +24,10 @@ const alsoNow = resolved(2);
 const { vow: later, resolve } = vowWithResolver<number>();
 resolve(3);
 
-assertEquals(await Promise.all([wait(now), wait(alsoNow), wait(later)]), [
-	1,
-	2,
-	3,
-]);
+assertEquals(
+	await Promise.all([wait(now), wait(alsoNow), wait(later)]),
+	[1, 2, 3],
+);
 ```
 
 ## Resolution is synchronous
@@ -69,7 +68,8 @@ const message = map(loaded, (result) =>
 		Ok: (value) => `loaded ${String(value)}`,
 		Err: (reason) =>
 			`failed: ${reason instanceof Error ? reason.message : String(reason)}`,
-	}));
+	}),
+);
 
 assertEquals(await wait(message), "failed: offline");
 ```

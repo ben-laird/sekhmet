@@ -107,7 +107,13 @@ import { assertEquals } from "@std/assert";
 import { None, Some } from "@sekhmet/enum/option";
 
 // Option -> Result: give the missing case an error
-assertEquals(Some(3).okOr("missing").map((n) => n + 1).unwrapOr(0), 4);
+assertEquals(
+	Some(3)
+		.okOr("missing")
+		.map((n) => n + 1)
+		.unwrapOr(0),
+	4,
+);
 assertEquals(None<number>().okOr("missing").unwrapErr(), "missing");
 
 // Result -> Option: keep the value, drop the error
@@ -124,7 +130,13 @@ you import.
 import { assertEquals } from "@std/assert";
 import { map, Some, unwrapOr } from "@sekhmet/enum/option/mini";
 
-assertEquals(unwrapOr(map(Some(2), (n) => n * 10), 0), 20);
+assertEquals(
+	unwrapOr(
+		map(Some(2), (n) => n * 10),
+		0,
+	),
+	20,
+);
 ```
 
 Next: [concepts](./concepts.md) explains the model behind these types, and

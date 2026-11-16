@@ -47,6 +47,7 @@ export function None<T = never>(): Option<T> {
  * - `None`: Contains no value
  */
 type Variants<T> = Split<{ Some: [value: T]; None: [] }>;
+
 export type { Variants as OptionVariants };
 
 /**

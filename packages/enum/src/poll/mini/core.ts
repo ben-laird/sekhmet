@@ -47,6 +47,7 @@ export function Pending<T = never>(): Poll<T> {
  * - `Pending`: Represents that a value is not yet ready
  */
 type Variants<T> = Split<{ Ready: [value: T]; Pending: [] }>;
+
 export type { Variants as PollVariants };
 
 /**
