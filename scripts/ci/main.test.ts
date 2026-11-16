@@ -4,8 +4,11 @@ import {
 	biomeCiCommand,
 	ciSteps,
 	coverageCleanupCommand,
+	coverageOutputs,
+	coverageSummaryCommand,
 	EXIT_CODES,
 	main,
+	readinessCommand,
 } from "./main.ts";
 import { spawnCommand } from "./mod.ts";
 
@@ -30,6 +33,7 @@ Deno.test("EXIT_CODES are defined with unique values", () => {
 	assertEquals(EXIT_CODES.DENO_CHECK_FAILED, 7);
 	assertEquals(EXIT_CODES.CLEANUP_FAILED, 8);
 	assertEquals(EXIT_CODES.PUBLISH_READINESS_FAILED, 9);
+	assertEquals(EXIT_CODES.COVERAGE_SUMMARY_FAILED, 10);
 	const uniqueValues = new Set(values);
 	assertEquals(values.length, uniqueValues.size, "Exit codes should be unique");
 });
@@ -88,9 +92,12 @@ Deno.test("ciSteps cleans up coverage data locally even after a failure, and kee
 	);
 	const ciCleanup = ci.find((step) => step.name === "Cleanup coverage data");
 
-	// Then: locally it always runs after the report; CI omits it
+	// Then: locally it always runs after the report and summary; CI omits it
 	assertEquals(localCleanup?.condition, "always");
-	assertEquals(localCleanup?.dependsOn, ["Show coverage report"]);
+	assertEquals(localCleanup?.dependsOn, [
+		"Show coverage report",
+		"Coverage Summary",
+	]);
 	assertEquals(ciCleanup, undefined);
 });
 
@@ -176,4 +183,168 @@ Deno.test("main detects non-CI environment", () => {
 	if (originalCI !== undefined) {
 		Deno.env.set("CI", originalCI);
 	}
+});
+
+/** Writes a one-package fixture repo; `broken` drops its README. */
+async function fixtureRepo({ broken }: { broken: boolean }): Promise<string> {
+	const root = await Deno.makeTempDir({ prefix: "ci-fixture-" });
+	const write = async (path: string, text: string) => {
+		await Deno.mkdir(`${root}/${path}`.replace(/\/[^/]+$/, ""), {
+			recursive: true,
+		});
+		await Deno.writeTextFile(`${root}/${path}`, text);
+	};
+	await write(
+		"deno.json",
+		JSON.stringify({
+			workspace: ["./packages/*"],
+			publish: { exclude: ["**/*.test.ts"] },
+		}),
+	);
+	await write(
+		"packages/a/deno.json",
+		JSON.stringify({
+			name: "@sekhmet/a",
+			license: "MIT",
+			exports: { ".": "./mod.ts" },
+		}),
+	);
+	await write("packages/a/mod.ts", "/** A. */\nexport const a = 1;\n");
+	await write("packages/a/LICENSE.md", "MIT License\n");
+	if (!broken) await write("packages/a/README.md", "# a\n");
+	return root;
+}
+
+Deno.test("readinessCommand fails a repo with a missing README and names the file", async () => {
+	// Given: a fixture repo whose package has no README
+	const root = await fixtureRepo({ broken: true });
+	const command = readinessCommand("static");
+
+	try {
+		// When: running the static readiness checks on it
+		const output = await spawnCommand({
+			command: {
+				...command,
+				args: [...(command.args ?? []), "--root", root, "--no-allowlist"],
+			},
+			env: { GITHUB_ACTIONS: "false" },
+		}).output();
+
+		// Then: it fails with a file-located finding
+		const stdout = new TextDecoder().decode(output.stdout);
+		assertEquals(output.success, false);
+		assertEquals(
+			stdout.split("\n")[0],
+			"packages/a/README.md: error[package-files]: published package @sekhmet/a has no README.md",
+		);
+	} finally {
+		await Deno.remove(root, { recursive: true });
+	}
+});
+
+Deno.test("readinessCommand passes a ready repo", async () => {
+	// Given: a complete fixture repo
+	const root = await fixtureRepo({ broken: false });
+	const command = readinessCommand("static");
+
+	try {
+		// When: running the static readiness checks on it
+		const output = await spawnCommand({
+			command: {
+				...command,
+				args: [...(command.args ?? []), "--root", root, "--no-allowlist"],
+			},
+		}).output();
+
+		// Then: it passes and says so
+		assertEquals(output.success, true);
+		assertEquals(
+			new TextDecoder().decode(output.stdout).trim(),
+			"static: 0 error(s), 0 allowlisted",
+		);
+	} finally {
+		await Deno.remove(root, { recursive: true });
+	}
+});
+
+Deno.test("coverageSummaryCommand appends a package table to the GitHub job summary", async () => {
+	// Given: a fixture repo with an LCOV report and an empty job summary file
+	const root = await fixtureRepo({ broken: false });
+	const stepSummary = `${root}/summary.md`;
+	await Deno.mkdir(`${root}/coverage`);
+	await Deno.writeTextFile(
+		`${root}/coverage/lcov.info`,
+		`SF:${root}/packages/a/mod.ts\nFNF:0\nFNH:0\nBRF:0\nBRH:0\nLH:1\nLF:2\nend_of_record\n`,
+	);
+	const command = coverageSummaryCommand("github");
+
+	try {
+		// When: summarizing coverage for GitHub
+		const output = await spawnCommand({
+			command: {
+				...command,
+				args: [...(command.args ?? []), "--root", root],
+			},
+			env: { GITHUB_STEP_SUMMARY: stepSummary },
+		}).output();
+
+		// Then: the job summary has the package and total rows
+		assertEquals(output.success, true);
+		const markdown = await Deno.readTextFile(stepSummary);
+		assertEquals(
+			markdown.includes(
+				"| **@sekhmet/a** | **50.0% (1/2)** | **n/a** | **n/a** |",
+			),
+			true,
+		);
+		assertEquals(markdown.includes("| **Total** | **50.0% (1/2)**"), true);
+	} finally {
+		await Deno.remove(root, { recursive: true });
+	}
+});
+
+Deno.test("coverageSummaryCommand fails when there is no LCOV report", async () => {
+	// Given: a fixture repo where no tests ran with coverage
+	const root = await fixtureRepo({ broken: false });
+	const command = coverageSummaryCommand("json");
+
+	try {
+		// When: summarizing coverage
+		const output = await spawnCommand({
+			command: {
+				...command,
+				args: [...(command.args ?? []), "--root", root],
+			},
+		}).output();
+
+		// Then: it fails and says which file is missing
+		assertEquals(output.success, false);
+		assertEquals(
+			new TextDecoder()
+				.decode(output.stderr)
+				.startsWith("coverage/lcov.info not found"),
+			true,
+		);
+	} finally {
+		await Deno.remove(root, { recursive: true });
+	}
+});
+
+Deno.test("coverageOutputs captures JSON totals, and reports output that is not JSON", () => {
+	// Given: the stdout of a json-format summary, and garbage
+	const encode = (text: string): Deno.CommandOutput => ({
+		code: 0,
+		signal: null,
+		success: true,
+		stdout: new TextEncoder().encode(text),
+		stderr: new Uint8Array(),
+	});
+
+	// When: capturing both
+	const good = coverageOutputs(encode('{"total":{}}'));
+	const bad = coverageOutputs(encode("oops"));
+
+	// Then: the totals become the coverage output; garbage an error
+	assertEquals(good, { context: { coverage: { total: {} } } });
+	assertEquals(bad, { context: { coverageError: "not JSON: oops" } });
 });

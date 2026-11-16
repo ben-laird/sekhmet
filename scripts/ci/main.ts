@@ -1,6 +1,11 @@
 // deno-coverage-ignore-file
 import { fromFileUrl } from "@std/path";
-import { runWorkflow, type StepCommand, type WorkflowStep } from "@/mod.ts";
+import {
+	runWorkflow,
+	type StepCommand,
+	type StepOutputs,
+	type WorkflowStep,
+} from "@/mod.ts";
 
 /**
  * Exit codes for CI workflow failures.
@@ -25,6 +30,8 @@ export const EXIT_CODES = {
 	CLEANUP_FAILED: 8,
 	/** Exit code when the publish-readiness checks fail */
 	PUBLISH_READINESS_FAILED: 9,
+	/** Exit code when the coverage summary cannot be built */
+	COVERAGE_SUMMARY_FAILED: 10,
 } as const;
 
 /**
@@ -186,15 +193,68 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 			command: { program: "deno", args: ["coverage", "--detailed"] },
 		},
 
+		// Coverage table on the GitHub job summary, or totals in the AI JSON;
+		// reads the coverage/lcov.info that Deno Test wrote
+		{
+			name: "Coverage Summary",
+			dependsOn: ["Deno Test"],
+			condition: () => isCI || isAI,
+			showOutput: (status) => isCI || status === "failed",
+			exitCode: EXIT_CODES.COVERAGE_SUMMARY_FAILED,
+
+			command: coverageSummaryCommand(isCI ? "github" : "json"),
+			...(isCI ? {} : { captureOutputs: coverageOutputs }),
+		},
+
 		// Local cleanup (runs even if tests failed); CI keeps the coverage data
 		...(isCI ? [] : [cleanupStep()]),
 	];
 }
 
+/**
+ * The coverage summary over `coverage/lcov.info` (see `coverage-summary.ts`):
+ * `github` appends a markdown table to the job summary, `json` prints the
+ * totals for {@linkcode coverageOutputs}.
+ *
+ * @param format - Where the summary goes
+ * @returns The command to run
+ */
+export function coverageSummaryCommand(format: "github" | "json"): StepCommand {
+	return {
+		program: "deno",
+		args: [
+			"run",
+			"--no-prompt",
+			"--allow-read",
+			"--allow-write",
+			"--allow-env",
+			fromFileUrl(new URL("./coverage-summary.ts", import.meta.url)),
+			format,
+		],
+	};
+}
+
+/**
+ * Captures the JSON totals that `coverage-summary.ts json` prints as the
+ * step's `coverage` output, which the AI JSON carries. Output that is not
+ * JSON is captured as `coverageError` instead.
+ *
+ * @param output - The coverage summary command's output
+ * @returns The step outputs
+ */
+export function coverageOutputs(output: Deno.CommandOutput): StepOutputs {
+	const stdout = new TextDecoder().decode(output.stdout);
+	try {
+		return { context: { coverage: JSON.parse(stdout) } };
+	} catch {
+		return { context: { coverageError: `not JSON: ${stdout.slice(0, 200)}` } };
+	}
+}
+
 function cleanupStep(): WorkflowStep {
 	return {
 		name: "Cleanup coverage data",
-		dependsOn: ["Show coverage report"],
+		dependsOn: ["Show coverage report", "Coverage Summary"],
 		continueOnError: true,
 		condition: "always",
 		exitCode: EXIT_CODES.CLEANUP_FAILED,

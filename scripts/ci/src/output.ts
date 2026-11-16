@@ -18,6 +18,8 @@ export interface AIStepResult {
 	continuedOnError?: boolean | undefined;
 	/** The unhealthy dependencies that blocked the step, present when blocked */
 	blockedBy?: string[] | undefined;
+	/** Structured data the step captured (its `captureOutputs` context), if any */
+	outputs?: Record<string, unknown> | undefined;
 	/** Standard output from the step */
 	stdout?: string | undefined;
 	/** Standard error from the step */
@@ -178,6 +180,11 @@ export function formatAIOutput(
 			case "passed": {
 				break;
 			}
+		}
+
+		const context = result.outputs?.context;
+		if (context && Object.keys(context).length > 0) {
+			aiStep.outputs = context;
 		}
 
 		// Include output if configured to show

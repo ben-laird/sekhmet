@@ -35,7 +35,8 @@ CI_AI=true deno task ci
 #   tests excluded from publish, Given/When/Then comments, README/JSDoc
 #   import specifiers (known failures: scripts/ci/src/readiness/allowlisted.ts)
 # - JSR publish dry run
-# - All tests, with coverage
+# - All tests, with coverage (CI: a per-package table on the GitHub job
+#   summary; AI mode: totals in the "Coverage Summary" step outputs)
 
 # For manual formatting only:
 deno run npm:@biomejs/biome check --write .
