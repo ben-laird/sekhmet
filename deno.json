@@ -55,9 +55,9 @@
 			"description": "Install the published packages from JSR on a runtime (node, bun, chromium, firefox, webkit, workerd) and smoke-test every export path",
 			"command": "deno run --no-prompt --allow-env --allow-read --allow-write --allow-run --allow-net @sekhmet/compat-smoke"
 		},
-		"play": {
-			"description": "Open a REPL with every package's public features imported as globals",
-			"command": "deno repl --allow-read --eval 'await import(\"@sekhmet/playground/repl\")'"
+		"play:link": {
+			"description": "Link playground/ to a checkout's packages: main, a branch's worktree, a path, or off; no argument prints the current link",
+			"command": "deno run --no-prompt --allow-read --allow-write --allow-run=git --allow-env=INIT_CWD,HOME @sekhmet/playground/link"
 		},
 		"play:notebook": {
 			"description": "Create playground/start.ipynb from the starter notebook (never overwrites)",

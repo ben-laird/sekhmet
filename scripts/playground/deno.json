@@ -4,13 +4,13 @@
 	"publish": false,
 
 	"exports": {
-		"./repl": "./repl.ts",
-		"./notebook": "./notebook.ts",
-
-		"./lib": "./mod.ts"
+		"./link": "./link.ts",
+		"./notebook": "./notebook.ts"
 	},
 
 	"imports": {
-		"@/": "./"
+		"@/": "./",
+
+		"zod": "npm:zod@^4.1.0"
 	}
 }
