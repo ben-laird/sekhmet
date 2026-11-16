@@ -1,0 +1,43 @@
+{
+	"schema": "urn:dv:schema:v1:release-result",
+	"plan": {
+		"schema": "urn:dv:schema:v1:plan",
+		"command": "release",
+		"pending": [],
+		"awaitingRelease": [],
+		"unresolvedReferences": [],
+		"tracked": [
+			{
+				"package": "@fx/a",
+				"currentVersion": "0.1.0",
+				"path": "packages/a"
+			},
+			{
+				"package": "@fx/b",
+				"currentVersion": "0.1.0",
+				"path": "packages/b"
+			}
+		]
+	},
+	"mintedTagNames": [],
+	"reusedTagNames": ["@fx/a@0.1.0", "@fx/b@0.1.0"],
+	"releaseOpOutcomes": [
+		{
+			"package": "@fx/a",
+			"tag": "@fx/a@0.1.0",
+			"ok": true,
+			"published": false,
+			"skipped": true,
+			"message": "@fx/a@0.1.0 is already on JSR"
+		},
+		{
+			"package": "@fx/b",
+			"tag": "@fx/b@0.1.0",
+			"ok": true,
+			"published": true,
+			"skipped": false,
+			"message": "published @fx/b@0.1.0 to JSR"
+		}
+	],
+	"pushedTagNames": []
+}

@@ -1,0 +1,82 @@
+{
+	"schema": "urn:dv:schema:v1:plan",
+	"command": "status",
+	"pending": [],
+	"awaitingRelease": [
+		{
+			"package": "@sekhmet/effect",
+			"version": "0.1.0",
+			"tag": "@sekhmet/effect@0.1.0",
+			"firstStable": false,
+			"releaseNotes": ""
+		},
+		{
+			"package": "@sekhmet/enum",
+			"version": "0.1.0",
+			"tag": "@sekhmet/enum@0.1.0",
+			"firstStable": false,
+			"releaseNotes": ""
+		},
+		{
+			"package": "@sekhmet/matrix",
+			"version": "0.1.0",
+			"tag": "@sekhmet/matrix@0.1.0",
+			"firstStable": false,
+			"releaseNotes": ""
+		},
+		{
+			"package": "@sekhmet/panic",
+			"version": "0.1.0",
+			"tag": "@sekhmet/panic@0.1.0",
+			"firstStable": false,
+			"releaseNotes": ""
+		},
+		{
+			"package": "@sekhmet/primordials",
+			"version": "0.1.0",
+			"tag": "@sekhmet/primordials@0.1.0",
+			"firstStable": false,
+			"releaseNotes": ""
+		},
+		{
+			"package": "@sekhmet/vow",
+			"version": "0.1.0",
+			"tag": "@sekhmet/vow@0.1.0",
+			"firstStable": false,
+			"releaseNotes": ""
+		}
+	],
+	"unresolvedReferences": [],
+	"tracked": [
+		{
+			"package": "@sekhmet/effect",
+			"currentVersion": "0.1.0",
+			"path": "packages/effect"
+		},
+		{
+			"package": "@sekhmet/enum",
+			"currentVersion": "0.1.0",
+			"path": "packages/enum"
+		},
+		{
+			"package": "@sekhmet/matrix",
+			"currentVersion": "0.1.0",
+			"path": "packages/matrix"
+		},
+		{
+			"package": "@sekhmet/panic",
+			"currentVersion": "0.1.0",
+			"path": "packages/panic"
+		},
+		{
+			"package": "@sekhmet/primordials",
+			"currentVersion": "0.1.0",
+			"path": "packages/primordials"
+		},
+		{
+			"package": "@sekhmet/vow",
+			"currentVersion": "0.1.0",
+			"path": "packages/vow"
+		}
+	]
+}

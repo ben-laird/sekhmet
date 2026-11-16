@@ -7,6 +7,7 @@ import type { AllowlistEntry } from "./allowlist.ts";
  */
 export const ALLOWLIST: readonly AllowlistEntry[] = [
 	// READMEs and README fixes come with the docs work
+	missingReadme("effect"),
 	missingReadme("matrix"),
 	missingReadme("panic"),
 	missingReadme("vow"),

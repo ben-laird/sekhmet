@@ -16,6 +16,10 @@
 			"description": "Generate main (method-chaining) entrypoints from mini; pass --check to verify they are current",
 			"command": "deno run --no-prompt --allow-env --allow-read --allow-write --allow-run @sekhmet/gen-main"
 		},
+		"dv": {
+			"description": "Run the pinned dv release CLI (scripts/dv), e.g. `deno task dv status`",
+			"command": "deno run --frozen --quiet --no-prompt --allow-all @sekhmet/dv"
+		},
 		"add": {
 			"description": "Add a workspace to the repository",
 			"command": "deno run --no-prompt --allow-read --allow-write @sekhmet/add"

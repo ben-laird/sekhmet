@@ -1,0 +1,58 @@
+{
+	"schema": "urn:dv:schema:v1:release-result",
+	"plan": {
+		"schema": "urn:dv:schema:v1:plan",
+		"command": "release",
+		"pending": [],
+		"awaitingRelease": [
+			{
+				"package": "@fx/a",
+				"version": "0.1.0",
+				"tag": "@fx/a@0.1.0",
+				"firstStable": false,
+				"releaseNotes": "### Added\n\n- Add the first thing"
+			},
+			{
+				"package": "@fx/b",
+				"version": "0.1.0",
+				"tag": "@fx/b@0.1.0",
+				"firstStable": false,
+				"releaseNotes": ""
+			}
+		],
+		"unresolvedReferences": [],
+		"tracked": [
+			{
+				"package": "@fx/a",
+				"currentVersion": "0.1.0",
+				"path": "packages/a"
+			},
+			{
+				"package": "@fx/b",
+				"currentVersion": "0.1.0",
+				"path": "packages/b"
+			}
+		]
+	},
+	"mintedTagNames": ["@fx/a@0.1.0", "@fx/b@0.1.0"],
+	"reusedTagNames": [],
+	"releaseOpOutcomes": [
+		{
+			"package": "@fx/a",
+			"tag": "@fx/a@0.1.0",
+			"ok": true,
+			"published": true,
+			"skipped": false,
+			"message": "published @fx/a@0.1.0 to JSR"
+		},
+		{
+			"package": "@fx/b",
+			"tag": "@fx/b@0.1.0",
+			"ok": false,
+			"published": false,
+			"skipped": false,
+			"message": "deno publish failed for @fx/b@0.1.0 (exit 1): boom"
+		}
+	],
+	"pushedTagNames": []
+}

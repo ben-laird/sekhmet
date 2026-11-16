@@ -1,0 +1,43 @@
+# dv checks on every pull request: Records are well-formed and point at real
+# packages, and scripts/dv-plugin still honours the plugin contract of the dv
+# version the release workflow runs.
+#
+# A Record is not required for every change to packages/**: in dv's model a
+# refactor, test or doc change ships without one. Authors add a Record when
+# the change should appear in a release (see CONTRIBUTING.md § Releasing).
+
+name: dv-validate
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: dv-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.8
+          cache: true
+
+      # dv itself is pinned by scripts/dv/deno.json and deno.lock.
+      - uses: ./.github/actions/setup-dv
+
+      - name: dv validate
+        run: dv validate
+
+      - name: dv plugin verify
+        run: dv plugin verify "run:deno run --quiet --allow-all ./scripts/dv-plugin/main.ts" --glob "packages/*"
+
+      - name: dv status
+        run: dv status

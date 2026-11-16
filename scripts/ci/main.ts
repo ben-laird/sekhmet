@@ -34,6 +34,8 @@ export const EXIT_CODES = {
 	COVERAGE_SUMMARY_FAILED: 10,
 	/** Exit code when generated main modules are stale versus their mini source */
 	GENERATED_MAIN_STALE: 11,
+	/** Exit code when `dv validate` rejects the dv config or a Record */
+	DV_VALIDATE_FAILED: 12,
 } as const;
 
 /**
@@ -103,9 +105,20 @@ export function readinessCommand(mode: "doc-lint" | "static"): StepCommand {
 }
 
 /**
+ * `dv validate` over `.dv/` (config and Records), through `deno task dv`:
+ * the same pinned, `--frozen` dv the release workflow runs, so the step
+ * never depends on a `dv` binary being installed.
+ *
+ * @returns The command to run
+ */
+export function dvValidateCommand(): StepCommand {
+	return { program: "deno", args: ["task", "--quiet", "dv", "validate"] };
+}
+
+/**
  * The CI workflow's steps for an environment:
  * - Parallel linting (Deno lint, Biome check, per-package documentation lint,
- *   publish readiness, JSR dry run)
+ *   publish readiness, generated-main freshness, `dv validate`, JSR dry run)
  * - Type checking
  * - Testing with coverage
  * - Coverage reporting
@@ -155,7 +168,13 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 
 			command: { program: "deno", args: ["task", "gen:main", "--check"] },
 		},
-		// `dv validate` (#5) joins here once the .dv/ release config lands (#6)
+		{
+			name: "dv Validate",
+			showOutput: (status) => isCI || status === "failed",
+			exitCode: EXIT_CODES.DV_VALIDATE_FAILED,
+
+			command: dvValidateCommand(),
+		},
 		{
 			name: "JSR Publish Dry Run",
 			exitCode: EXIT_CODES.JSR_DRY_RUN_FAILED,

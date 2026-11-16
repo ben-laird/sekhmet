@@ -6,6 +6,7 @@ import {
 	coverageCleanupCommand,
 	coverageOutputs,
 	coverageSummaryCommand,
+	dvValidateCommand,
 	EXIT_CODES,
 	main,
 	readinessCommand,
@@ -34,6 +35,8 @@ Deno.test("EXIT_CODES are defined with unique values", () => {
 	assertEquals(EXIT_CODES.CLEANUP_FAILED, 8);
 	assertEquals(EXIT_CODES.PUBLISH_READINESS_FAILED, 9);
 	assertEquals(EXIT_CODES.COVERAGE_SUMMARY_FAILED, 10);
+	assertEquals(EXIT_CODES.GENERATED_MAIN_STALE, 11);
+	assertEquals(EXIT_CODES.DV_VALIDATE_FAILED, 12);
 	const uniqueValues = new Set(values);
 	assertEquals(values.length, uniqueValues.size, "Exit codes should be unique");
 });
@@ -53,6 +56,25 @@ Deno.test("ciSteps gives every step its own exit code", () => {
 			`steps without an exit code in ${JSON.stringify(environment)}`,
 		);
 		assertEquals(new Set(codes).size, steps.length);
+	}
+});
+
+Deno.test("ciSteps validates dv Records with the pinned dv in every environment", () => {
+	for (const environment of ENVIRONMENTS) {
+		// Given: the CI steps for an environment
+		const steps = ciSteps(environment);
+
+		// When: finding the dv step
+		const dvStep = steps.find((step) => step.name === "dv Validate");
+
+		// Then: it runs `dv validate` through the frozen `deno task dv` launcher
+		assertExists(dvStep, `no dv step in ${JSON.stringify(environment)}`);
+		assertEquals(dvStep.exitCode, EXIT_CODES.DV_VALIDATE_FAILED);
+		assertEquals(dvStep.command, dvValidateCommand());
+		assertEquals(dvValidateCommand(), {
+			program: "deno",
+			args: ["task", "--quiet", "dv", "validate"],
+		});
 	}
 });
 
