@@ -1,28 +1,75 @@
-# Sekhmet: The Toolchain of Powerful Safety
+# Sekhmet
 
-Sekhmet is a collection of frameworks aimed at giving developers the power to
-express things safely.
+Sekhmet is a set of small TypeScript libraries for expressing program states and
+effects in types: Rust-style enums (`Option`, `Result` and your own), an effect
+system with fibers and cancellation, and the primitives they share.
 
-## Features
+The packages are ESM-only, have no runtime dependencies outside the repository,
+run in any JavaScript runtime (Deno, Node.js, Bun, browsers), and are compiled
+with TypeScript's strictest settings, including `isolatedDeclarations`.
 
-1. **Environment-agnostic.** All frameworks here should run pretty much anywhere
-   JS or TS is supported.
-2. **Type-safe.** Instantly get errors and hints as you type.
-3. **Generic & Composable.** Slot in your own behavior using generics and enjoy
-   enterprise-grade expressive power with just a couple compositions.
-4. **Dependency-free.** We don't use external dependencies from a package
-   registry in our source code. If we depend on it, you can find it on MDN or in
-   this codebase.
-5. **Self-contained.** You can have as many copies of the exact same framework
-   running as you'd like, and they'll never cross wires or share state unless
-   you want them to.
-6. **Primitive-driven development.** We start with very simple primitives that
-   can be composed into complex systems, giving you the freedom to do the same
-   and even come up with your own primitives.
-7. **ESM-native.** Built in ESM, for ESM.
-8. **Tree-shakable options.** Many Sekhmet frameworks come in a `mini` variant,
-   allowing you to use exactly what you want to and nothing more.
-9. **TS at its strictest.** We use the strictest options we can in our compiler
-   options.
-10. **Ready for `isolatedDeclarations`.** We use `isolatedDeclarations` for
-    maximal compatibility with future TS enhancements (and JSR).
+## Packages
+
+| Package                                                  | What it is                                                                                    |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [`@sekhmet/enum`](packages/enum/README.md)               | Rust-style enums: `Enum`, `Option`, `Result`, `Ordering`, `Latch` and `Poll`                  |
+| [`@sekhmet/effect`](packages/effect/README.md)           | Effects run on fibers: typed errors, schedulers, concurrency, cancellation with cleanup       |
+| [`@sekhmet/vow`](packages/vow/README.md)                 | `Vow`, a promise-like value that resolves synchronously                                       |
+| [`@sekhmet/matrix`](packages/matrix/README.md)           | `matrix()`, every combination of a set of values, for parameterized tests                     |
+| [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic)        | Rust-style panics: a reporting hook and a catchUnwind recovery boundary, with no global state |
+| [`@sekhmet/primordials`](packages/primordials/README.md) | `Struct`, `Subtle`, `block` and `define`: the building blocks of the other packages           |
+
+Guides for each package are on the
+[docs site](https://ben-laird.github.io/sekhmet/), and the API reference is on
+[JSR](https://jsr.io/@sekhmet).
+
+## Using Sekhmet
+
+Every package is published on [JSR](https://jsr.io/@sekhmet). Add one with Deno:
+
+```sh
+deno add jsr:@sekhmet/enum
+```
+
+or, for Node.js and other npm-compatible tools, through JSR's npm compatibility
+layer:
+
+```sh
+npx jsr add @sekhmet/enum      # npm
+pnpm dlx jsr add @sekhmet/enum # pnpm
+yarn dlx jsr add @sekhmet/enum # yarn
+bunx jsr add @sekhmet/enum     # bun
+```
+
+Import a feature by its entrypoint. `@sekhmet/enum` and `@sekhmet/primordials`
+have no root export, so name the feature:
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Err, Ok, type Result } from "@sekhmet/enum/result";
+
+const half = (
+	n: number,
+): Result<number, string> => (n % 2 === 0 ? Ok(n / 2) : Err(`${n} is odd`));
+
+assertEquals(half(10).map((n) => n + 1).unwrapOr(0), 6);
+assertEquals(half(3).unwrapOr(0), 0);
+```
+
+Larger features come in two styles with the same behaviour:
+
+- **main** (`@sekhmet/enum/option`): classes with methods that chain, such as
+  `Some(1).map(f).unwrapOr(0)`;
+- **mini** (`@sekhmet/enum/option/mini`): free functions, such as
+  `unwrapOr(map(Some(1), f), 0)`, so a bundler keeps only what you import.
+
+A main value is also a mini value, so the two styles mix.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). `deno task ci` runs every check;
+`deno task docs:dev` serves the docs site locally.
+
+## License
+
+MIT. See [LICENSE.md](LICENSE.md).
