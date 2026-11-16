@@ -15,7 +15,12 @@
 		"./primitives/mini": "./src/primitives/mini/mod.ts",
 		"./primitives/mini/string": "./src/primitives/mini/string.ts",
 		"./primitives/mini/number": "./src/primitives/mini/number.ts",
-		"./primitives/mini/boolean": "./src/primitives/mini/boolean.ts"
+		"./primitives/mini/boolean": "./src/primitives/mini/boolean.ts",
+		"./standard": "./src/standard/main/mod.ts",
+		"./standard/mini": "./src/standard/mini/mod.ts",
+		"./standard/mini/from-standard": "./src/standard/mini/from-standard.ts",
+		"./standard/mini/spec": "./src/standard/mini/spec.ts",
+		"./standard/mini/to-standard": "./src/standard/mini/to-standard.ts"
 	},
 
 	"imports": {
