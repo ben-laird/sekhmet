@@ -8,8 +8,8 @@
 		"./prelude": "./prelude.ts",
 		"./mini": "./src/mini/mod.ts",
 		"./mini/core": "./src/mini/core.ts",
-		"./mini/hook": "./src/mini/hook.ts",
-		"./mini/registry": "./src/mini/registry.ts"
+		"./mini/registry": "./src/mini/registry.ts",
+		"./mini/runtime": "./src/mini/runtime.ts"
 	},
 
 	"imports": {
