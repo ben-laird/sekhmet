@@ -1,0 +1,13 @@
+{
+	"name": "@sekhmet/dv",
+	"version": "0.1.0",
+	"publish": false,
+
+	"exports": {
+		".": "./main.ts"
+	},
+
+	"imports": {
+		"@dv-cli/dv": "jsr:@dv-cli/dv@0.11.0"
+	}
+}

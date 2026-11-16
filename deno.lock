@@ -1,28 +1,61 @@
 {
   "version": "5",
   "specifiers": {
+    "jsr:@dv-cli/clipc@0.4": "0.4.2",
+    "jsr:@dv-cli/dv@0.11.0": "0.11.0",
     "jsr:@std/assert@1.0.16": "1.0.16",
     "jsr:@std/assert@^1.0.15": "1.0.16",
     "jsr:@std/async@^1.0.15": "1.0.15",
     "jsr:@std/cli@1.0.24": "1.0.24",
+    "jsr:@std/cli@^1.0.28": "1.0.32",
+    "jsr:@std/collections@^1.1.3": "1.2.0",
     "jsr:@std/data-structures@^1.0.9": "1.0.9",
     "jsr:@std/fmt@*": "1.0.8",
     "jsr:@std/fmt@1.0.8": "1.0.8",
+    "jsr:@std/fmt@^1.0.10": "1.0.10",
+    "jsr:@std/front-matter@1": "1.0.9",
+    "jsr:@std/fs@1": "1.0.20",
     "jsr:@std/fs@1.0.20": "1.0.20",
     "jsr:@std/fs@^1.0.19": "1.0.20",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "jsr:@std/json@^1.0.2": "1.0.2",
     "jsr:@std/jsonc@^1.0.2": "1.0.2",
+    "jsr:@std/path@1": "1.1.3",
     "jsr:@std/path@1.1.3": "1.1.3",
     "jsr:@std/path@^1.1.2": "1.1.3",
     "jsr:@std/path@^1.1.3": "1.1.3",
+    "jsr:@std/semver@1": "1.0.8",
     "jsr:@std/testing@1.0.16": "1.0.16",
+    "jsr:@std/toml@^1.0.3": "1.0.11",
+    "jsr:@std/yaml@1": "1.3.0",
+    "jsr:@std/yaml@^1.0.5": "1.3.0",
     "npm:@actions/core@^2.0.1": "2.0.1",
     "npm:@biomejs/biome@*": "2.3.10",
     "npm:@biomejs/biome@^2.3.10": "2.3.10",
+    "npm:zod@4": "4.6.7",
     "npm:zod@^4.1.0": "4.6.7"
   },
   "jsr": {
+    "@dv-cli/clipc@0.4.2": {
+      "integrity": "7cf2fd322e453671991a7b64e2e7608dcb7dd37ce5b0c6d651f50afd08e9ff34",
+      "dependencies": [
+        "jsr:@std/cli@^1.0.28",
+        "npm:zod@4"
+      ]
+    },
+    "@dv-cli/dv@0.11.0": {
+      "integrity": "4114181b34f2f901f0e65da43f203882ce44bd2aedfae8154e01c03e345e0ee4",
+      "dependencies": [
+        "jsr:@dv-cli/clipc",
+        "jsr:@std/cli@^1.0.28",
+        "jsr:@std/front-matter",
+        "jsr:@std/fs@1",
+        "jsr:@std/path@1",
+        "jsr:@std/semver",
+        "jsr:@std/yaml@1",
+        "npm:zod@4"
+      ]
+    },
     "@std/assert@1.0.16": {
       "integrity": "6a7272ed1eaa77defe76e5ff63ca705d9c495077e2d5fd0126d2b53fc5bd6532",
       "dependencies": [
@@ -38,11 +71,30 @@
         "jsr:@std/internal"
       ]
     },
+    "@std/cli@1.0.32": {
+      "integrity": "188b3a100d6202d64e3f5bd3d799c7fa4f6d77f92cc65eb7f641c1fa0aa92a66",
+      "dependencies": [
+        "jsr:@std/fmt@^1.0.10"
+      ]
+    },
+    "@std/collections@1.2.0": {
+      "integrity": "47627a21d3a13138b77fd0e4d790ba9d2e603c3510b686cde6b132fe9aa98a88"
+    },
     "@std/data-structures@1.0.9": {
       "integrity": "033d6e17e64bf1f84a614e647c1b015fa2576ae3312305821e1a4cb20674bb4d"
     },
     "@std/fmt@1.0.8": {
       "integrity": "71e1fc498787e4434d213647a6e43e794af4fd393ef8f52062246e06f7e372b7"
+    },
+    "@std/fmt@1.0.10": {
+      "integrity": "90dfba288802ac6de82fb31d0917eb9e4450b9925b954d5e51fc29ac07419db5"
+    },
+    "@std/front-matter@1.0.9": {
+      "integrity": "ee6201d06674cbef137dda2252f62477450b48249e7d8d9ab57a30f85ff6f051",
+      "dependencies": [
+        "jsr:@std/toml",
+        "jsr:@std/yaml@^1.0.5"
+      ]
     },
     "@std/fs@1.0.20": {
       "integrity": "e953206aae48d46ee65e8783ded459f23bec7dd1f3879512911c35e5484ea187",
@@ -69,6 +121,9 @@
         "jsr:@std/internal"
       ]
     },
+    "@std/semver@1.0.8": {
+      "integrity": "dc830e8b8b6a380c895d53fbfd1258dc253704ca57bbe1629ac65fd7830179b7"
+    },
     "@std/testing@1.0.16": {
       "integrity": "a917ffdeb5924c9be436dc78bc32e511760e14d3a96e49c607fc5ecca86d0092",
       "dependencies": [
@@ -79,6 +134,15 @@
         "jsr:@std/internal",
         "jsr:@std/path@^1.1.2"
       ]
+    },
+    "@std/toml@1.0.11": {
+      "integrity": "e084988b872ca4bad6aedfb7350f6eeed0e8ba88e9ee5e1590621c5b5bb8f715",
+      "dependencies": [
+        "jsr:@std/collections"
+      ]
+    },
+    "@std/yaml@1.3.0": {
+      "integrity": "b250103854378b8b36cbff0fe95aec017d3d9ce86b489c67605180c602fb4922"
     }
   },
   "npm": {
@@ -188,6 +252,11 @@
       "npm:@biomejs/biome@^2.3.10"
     ],
     "members": {
+      "scripts/dv": {
+        "dependencies": [
+          "jsr:@dv-cli/dv@0.11.0"
+        ]
+      },
       "scripts/dv-plugin": {
         "dependencies": [
           "jsr:@std/jsonc@^1.0.2",

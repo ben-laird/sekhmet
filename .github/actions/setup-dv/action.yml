@@ -1,29 +1,21 @@
 name: Set up dv
-description: Put a pinned version of the dv CLI (jsr:@dv-cli/dv) on PATH.
+description: Put the repo's pinned dv CLI (scripts/dv, `deno task dv`) on PATH as `dv`.
 
-# The documented `deno install jsr:@dv-cli/dv` does not work: the package's
-# entry point (src/lib.ts) only re-exports `main`, so the installed binary
-# exits 0 without running anything. The launcher calls the exported `main`
-# instead. --no-config/--no-lock keep dv's own dependencies out of this
-# repo's deno.json and deno.lock.
-
-inputs:
-  version:
-    description: Exact @dv-cli/dv version to run.
-    required: true
+# The dv version is pinned exactly in scripts/dv/deno.json and its whole
+# dependency tree in the committed deno.lock; --frozen fails the run rather
+# than resolve anything new. The release driver calls `dv` by name, so the
+# launcher goes on PATH. Run actions/checkout and setup-deno first.
 
 runs:
   using: composite
   steps:
     - name: Install the dv launcher
       shell: bash
-      env:
-        DV_VERSION: ${{ inputs.version }}
       run: |
         mkdir -p "$HOME/.local/bin"
         cat > "$HOME/.local/bin/dv" <<EOF
         #!/bin/sh
-        exec deno eval --quiet --no-config --no-lock 'import { main } from "jsr:@dv-cli/dv@${DV_VERSION}"; Deno.exit(await main(Deno.args));' -- "\$@"
+        exec deno run --frozen --quiet --no-prompt --allow-all --config "$GITHUB_WORKSPACE/deno.json" "$GITHUB_WORKSPACE/scripts/dv/main.ts" "\$@"
         EOF
         chmod +x "$HOME/.local/bin/dv"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"

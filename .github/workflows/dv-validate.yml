@@ -30,10 +30,8 @@ jobs:
           deno-version: v2.9.8
           cache: true
 
-      # Keep in step with release.yml.
+      # dv itself is pinned by scripts/dv/deno.json and deno.lock.
       - uses: ./.github/actions/setup-dv
-        with:
-          version: 0.11.0
 
       - name: dv validate
         run: dv validate

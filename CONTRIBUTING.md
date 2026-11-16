@@ -480,22 +480,20 @@ the Records a PR carries decide what ships.
 When a PR changes what a package's users see, add a Record describing it:
 
 ```bash
-dv add --packages @sekhmet/enum --type feat --message "Add Option.zip"
+deno task dv add --packages @sekhmet/enum --type feat --message "Add Option.zip"
 ```
 
 This writes a file under `.dv/records/` and stages it; commit it with the
 change. Types are `fix` (patch), `feat` (minor) and `feat!`/`fix!` (breaking).
 While a package is `0.x`, breaking changes bump the minor version. Refactors,
-tests and docs need no Record. `dv status` previews the bumps, and the
+tests and docs need no Record. `deno task dv status` previews the bumps, and the
 `dv-validate` check rejects malformed Records or unknown packages.
 
-Install `dv` with the version CI pins (`.github/actions/setup-dv`), for
-example by putting this launcher on your `PATH` as `dv`:
-
-```sh
-#!/bin/sh
-exec deno eval --quiet --no-config --no-lock 'import { main } from "jsr:@dv-cli/dv@0.11.0"; Deno.exit(await main(Deno.args));' -- "$@"
-```
+`deno task dv` runs the dv version CI uses: `jsr:@dv-cli/dv` is pinned
+exactly in `scripts/dv/deno.json`, its dependencies are locked in `deno.lock`,
+and the task runs with `--frozen`. CI puts the same launcher on `PATH` as `dv`
+(`.github/actions/setup-dv`). To bump dv, change the pin and run
+`deno install` to update the lockfile.
 
 ### What happens on merge
 
