@@ -22,8 +22,24 @@ import {
 	gitHubReleases,
 	parseReleaseResult,
 	parseStatusPlan,
+	releasedPackages,
 	releaseSteps,
 } from "./src/plan.ts";
+
+// dv's default `changelog.location`, which .dv/config.yaml keeps.
+async function readChangelogs(
+	paths: readonly string[],
+): Promise<Map<string, string>> {
+	const changelogs = new Map<string, string>();
+	for (const path of paths) {
+		try {
+			changelogs.set(path, await Deno.readTextFile(`${path}/CHANGELOG.md`));
+		} catch (caught: unknown) {
+			if (!(caught instanceof Deno.errors.NotFound)) throw caught;
+		}
+	}
+	return changelogs;
+}
 
 interface Finished {
 	code: number;
@@ -145,7 +161,13 @@ async function release(force: boolean): Promise<Result<void, string>> {
 	if (isErr(result)) {
 		return Err(`dv release exited ${code}; output: ${unwrapErr(result)}`);
 	}
-	for (const githubRelease of gitHubReleases(unwrap(result))) {
+	const changelogs = await readChangelogs(
+		releasedPackages(unwrap(result)).map(({ path }) => path),
+	);
+	for (const githubRelease of gitHubReleases({
+		result: unwrap(result),
+		changelogs,
+	})) {
 		const created = await createGitHubRelease(githubRelease);
 		if (isErr(created)) return Err(unwrapErr(created));
 	}

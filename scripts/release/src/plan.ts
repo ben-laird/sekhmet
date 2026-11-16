@@ -41,15 +41,30 @@ export interface ReleaseOutcome {
 }
 
 /**
+ * A package dv tracks, with the version its manifest holds.
+ */
+export interface TrackedPackage {
+	/** Package name. */
+	package: string;
+	/** The manifest's current version (the one just released). */
+	currentVersion: string;
+	/** Package directory, relative to the repo root. */
+	path: string;
+}
+
+/**
  * The slice of `dv release --json` (dv 0.11,
  * `urn:dv:schema:v1:release-result`) the release driver reads.
  */
 export interface ReleaseResult {
-	/** The executed plan. */
-	plan: { awaitingRelease: AwaitingRelease[] };
+	/**
+	 * The executed plan. `awaitingRelease` is computed from tags, so a
+	 * `--force` run, whose tags all exist, has none.
+	 */
+	plan: { awaitingRelease: AwaitingRelease[]; tracked: TrackedPackage[] };
 	/** Tags this run created. */
 	mintedTagNames: string[];
-	/** Per-package publish outcomes. */
+	/** Per-package publish outcomes, in publish order. */
 	releaseOpOutcomes: ReleaseOutcome[];
 }
 
@@ -68,7 +83,16 @@ const statusPlanSchema: z.ZodType<StatusPlan> = z.object({
 
 const releaseResultSchema: z.ZodType<ReleaseResult> = z.object({
 	schema: z.literal("urn:dv:schema:v1:release-result"),
-	plan: z.object({ awaitingRelease: z.array(awaitingReleaseSchema) }),
+	plan: z.object({
+		awaitingRelease: z.array(awaitingReleaseSchema),
+		tracked: z.array(
+			z.object({
+				package: z.string(),
+				currentVersion: z.string(),
+				path: z.string(),
+			}),
+		),
+	}),
 	mintedTagNames: z.array(z.string()),
 	releaseOpOutcomes: z.array(
 		z.object({
@@ -166,26 +190,107 @@ export interface GitHubRelease {
 }
 
 /**
- * Picks the GitHub Releases a `dv release` run earned: one per package that
- * is on JSR and was tagged or uploaded by this run. Failed publishes get no
- * Release until a `--force` recovery run succeeds.
+ * A package a `dv release` run uploaded to JSR.
+ */
+export interface ReleasedPackage {
+	/** Package name. */
+	package: string;
+	/** The released tag. */
+	tag: string;
+	/** The released version. */
+	version: string;
+	/** Package directory, relative to the repo root. */
+	path: string;
+}
+
+/**
+ * Lists the packages a run uploaded: release-op outcomes with
+ * `published: true`. Outcomes, not `plan.awaitingRelease`, are the source:
+ * the plan comes from tags, which dv pushes even when a publish fails, so a
+ * `--force` recovery run has an empty plan.
  *
  * @param result The `dv release --json` result.
- * @returns The Releases to create, in plan order.
+ * @returns The uploaded packages, in publish order.
  */
-export function gitHubReleases(result: ReleaseResult): GitHubRelease[] {
-	const minted = new Set(result.mintedTagNames);
-	const outcomes = new Map(
-		result.releaseOpOutcomes.map((outcome) => [outcome.tag, outcome]),
+export function releasedPackages(result: ReleaseResult): ReleasedPackage[] {
+	const tracked = new Map(
+		result.plan.tracked.map((entry) => [entry.package, entry]),
 	);
-	return result.plan.awaitingRelease.flatMap((entry) => {
-		const outcome = outcomes.get(entry.tag);
-		if (outcome === undefined || !outcome.ok) return [];
-		if (!minted.has(entry.tag) && outcome.published !== true) return [];
+	return result.releaseOpOutcomes.flatMap((outcome) => {
+		const entry = tracked.get(outcome.package);
+		if (!outcome.ok || outcome.published !== true || entry === undefined) {
+			return [];
+		}
+		return [
+			{
+				package: outcome.package,
+				tag: outcome.tag,
+				version: entry.currentVersion,
+				path: entry.path,
+			},
+		];
+	});
+}
+
+/**
+ * Slices one version's body out of a Keep a Changelog file: the lines under
+ * `## [<version>]` up to the next `## ` heading.
+ *
+ * @param args.changelog The CHANGELOG text.
+ * @param args.version The version whose section to return.
+ * @returns The trimmed section body, or `undefined` when absent or empty.
+ */
+export function changelogSection({
+	changelog,
+	version,
+}: {
+	changelog: string;
+	version: string;
+}): string | undefined {
+	const lines = changelog.split("\n");
+	const heading = `## [${version}]`;
+	const start = lines.findIndex(
+		(line) => line === heading || line.startsWith(`${heading} `),
+	);
+	if (start === -1) return undefined;
+	const rest = lines.slice(start + 1);
+	const end = rest.findIndex((line) => line.startsWith("## "));
+	const body = (end === -1 ? rest : rest.slice(0, end)).join("\n").trim();
+	return body.length > 0 ? body : undefined;
+}
+
+/**
+ * Picks the GitHub Releases a `dv release` run earned: one per package it
+ * uploaded (see {@linkcode releasedPackages}). Failed publishes get none
+ * until a `--force` recovery run uploads them.
+ *
+ * Notes come from dv's `releaseNotes` when the plan carries them, else from
+ * the version's section of the package CHANGELOG, else a one-line fallback.
+ *
+ * @param args.result The `dv release --json` result.
+ * @param args.changelogs CHANGELOG text by package path, for the packages
+ *   that have one.
+ * @returns The Releases to create, in publish order.
+ */
+export function gitHubReleases({
+	result,
+	changelogs,
+}: {
+	result: ReleaseResult;
+	changelogs: ReadonlyMap<string, string>;
+}): GitHubRelease[] {
+	const planNotes = new Map(
+		result.plan.awaitingRelease.map((entry) => [entry.tag, entry.releaseNotes]),
+	);
+	return releasedPackages(result).map(({ tag, version, path }) => {
+		const fromPlan = planNotes.get(tag)?.trim();
+		const changelog = changelogs.get(path);
 		const notes =
-			entry.releaseNotes.trim().length > 0
-				? entry.releaseNotes
-				: `Release ${entry.tag}.`;
-		return [{ tag: entry.tag, notes }];
+			fromPlan !== undefined && fromPlan.length > 0
+				? fromPlan
+				: changelog === undefined
+					? undefined
+					: changelogSection({ changelog, version });
+		return { tag, notes: notes ?? `Release ${tag}.` };
 	});
 }
