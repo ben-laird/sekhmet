@@ -238,21 +238,3 @@ export function commitVerdict({
 export function isMarkdown(path: string): boolean {
 	return path.endsWith(".md");
 }
-
-/** The `core.hooksPath` that turns the commit gate on. */
-export const HOOKS_PATH = ".githooks";
-
-/**
- * The warning `deno task ci` prints when this clone does not run the commit
- * gate's hooks.
- *
- * @param hooksPath - The configured `core.hooksPath`, if any
- * @returns The one-line warning, or `undefined` when the hooks are on
- */
-export function hooksWarning(
-	hooksPath: string | undefined,
-): string | undefined {
-	return hooksPath === HOOKS_PATH
-		? undefined
-		: "warning: commits are not gated in this clone (core.hooksPath is not .githooks); run `deno task hooks` once";
-}

@@ -502,14 +502,28 @@ chore(@sekhmet/enum): add eliminate mini exports
 ### Commit gate
 
 A git hook refuses a commit unless `deno task ci` passed on exactly the tree
-being committed. Turn it on once per clone (it covers every worktree of the
-clone, since they share `.git/config`):
+being committed. Turn it on once per clone:
 
 ```bash
-deno task hooks   # git config core.hooksPath .githooks
+deno task hooks
 ```
 
-`deno task ci` prints a one-line warning while it is off.
+- **How it is wired:** each branch carries its hooks in `.githooks/`.
+  `deno task hooks` installs a small shim for `pre-commit` and
+  `pre-merge-commit` into the clone's shared hooks directory
+  (`$(git rev-parse --git-common-dir)/hooks`, i.e. `.git/hooks/`), which every
+  worktree runs. The shim runs the committing worktree's own
+  `.githooks/<hook>`, so each worktree is gated by its own branch's hooks; a
+  branch without `.githooks/<hook>` is not gated. Rerunning it is harmless.
+- **`core.hooksPath` must stay unset:** while it is set, git ignores
+  `.git/hooks/`. `deno task hooks` unsets the old `.githooks` setting
+  (relative or absolute) and refuses any other value, as it refuses to
+  replace a hook in `.git/hooks/` that it did not install. The old setting
+  was one value for every worktree, and Claude Code's worktree setup rewrites
+  a relative one to the main checkout's absolute path, so every worktree ran
+  whatever hooks the main checkout's branch had.
+- `deno task ci` prints a one-line warning while a shim is missing or
+  outdated, or `core.hooksPath` is set.
 
 - **Recording:** when every step passes, `deno task ci` records the staged
   tree's id (`git write-tree`) in `$(git rev-parse --git-path ci-green)`, one

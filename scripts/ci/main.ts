@@ -11,14 +11,13 @@ import type { GateTool } from "@/src/gate-files.ts";
 import {
 	greenMarkerPath,
 	hooksPath,
+	readGateHooks,
+	sharedHooksDir,
 	stagedSnapshot,
 	writeGreenMarker,
 } from "@/src/git.ts";
-import {
-	type GreenRunDecision,
-	greenRunDecision,
-	hooksWarning,
-} from "@/src/green-run.ts";
+import { type GreenRunDecision, greenRunDecision } from "@/src/green-run.ts";
+import { hooksWarning } from "@/src/hooks.ts";
 
 export type { GateTool };
 
@@ -455,7 +454,7 @@ export function coverageCleanupCommand({ dir }: { dir: string }): StepCommand {
  */
 export async function main(): Promise<void> {
 	const isCI = Deno.env.get("CI") === "true";
-	const warning = isCI ? undefined : hooksWarning(await hooksPath());
+	const warning = isCI ? undefined : await gateWarning();
 	if (warning !== undefined) console.error(warning);
 	const before = await stagedSnapshot();
 	const result = await runWorkflow(
@@ -472,6 +471,18 @@ export async function main(): Promise<void> {
 		),
 	);
 	Deno.exit(result.exitCode);
+}
+
+/** The "commits are not gated" warning for this clone, if it applies. */
+async function gateWarning(): Promise<string | undefined> {
+	const dir = await sharedHooksDir();
+	if (!dir.ok)
+		return `warning: cannot tell whether commits are gated: ${dir.error}`;
+	const hooks = await readGateHooks(dir.value);
+	if (!hooks.ok) {
+		return `warning: cannot tell whether commits are gated: ${hooks.error}`;
+	}
+	return hooksWarning({ hooksPath: await hooksPath(), hooks: hooks.value });
 }
 
 /**
