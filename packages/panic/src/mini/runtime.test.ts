@@ -274,6 +274,45 @@ Deno.test("Primitive payloads are reported at every boundary that catches them",
 	}
 });
 
+Deno.test("Hostile payloads are recovered, reported and never mistaken for a hook failure", async (t) => {
+	const fail = (): never => {
+		throw new Error("trap");
+	};
+	const revoked = Proxy.revocable({}, {});
+	revoked.revoke();
+	const payloads: [kind: string, payload: unknown][] = [
+		["revoked Proxy", revoked.proxy],
+		["throwing getPrototypeOf", new Proxy({}, { getPrototypeOf: fail })],
+		["throwing get on an Error", new Proxy(new Error("x"), { get: fail })],
+		["throwing defineProperty", new Proxy({}, { defineProperty: fail })],
+		[
+			"throwing getOwnPropertyDescriptor",
+			new Proxy({}, { getOwnPropertyDescriptor: fail }),
+		],
+	];
+
+	for (const [kind, payload] of payloads) {
+		await t.step(kind, () => {
+			// Given: a runtime with a recording hook
+			const { runtime, reports } = recordingRuntime();
+
+			// When: a boundary catches the hostile payload twice
+			const result = runtime.catchUnwind(() => {
+				throw payload;
+			});
+			runtime.catchUnwind(() => {
+				throw payload;
+			});
+
+			// Then: it is Err of that payload, reported once with no stack
+			assertStrictEquals(unwrapErr(result), payload);
+			assertEquals(reports.length, 1);
+			assertStrictEquals(reports[0]?.payload, payload);
+			assertEquals(reports[0]?.stack, undefined);
+		});
+	}
+});
+
 Deno.test("Two runtimes are isolated", () => {
 	// Given: runtimes A and B, each with its own recording hook
 	const a = recordingRuntime();

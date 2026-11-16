@@ -192,8 +192,9 @@ export function definePanicRuntime(): PanicRuntime {
 		}
 		markReported(payload);
 
+		const info: PanicHookInfo = { payload, stack: stackOf(payload) };
 		try {
-			hook({ payload, stack: stackOf(payload) });
+			hook(info);
 		} catch (thrown: unknown) {
 			throw new Panic<PanicHookFailure>({
 				name: "PanicHook",
@@ -243,8 +244,12 @@ function isObjectLike(value: unknown): value is object {
 	);
 }
 
+/** Reads an Error payload's stack; a Proxy trap that throws yields `undefined`. */
 function stackOf(payload: unknown): string | undefined {
-	return payload instanceof Error && typeof payload.stack === "string"
-		? payload.stack
-		: undefined;
+	try {
+		const stack = payload instanceof Error ? payload.stack : undefined;
+		return typeof stack === "string" ? stack : undefined;
+	} catch {
+		return undefined;
+	}
 }
