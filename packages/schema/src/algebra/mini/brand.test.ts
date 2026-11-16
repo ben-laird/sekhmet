@@ -2,6 +2,7 @@ import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
+import { nodeOf } from "@/src/core/mini/node.ts";
 import {
 	type ErrorOf,
 	type Input,
@@ -104,4 +105,13 @@ Deno.test("Brands compose: a twice-branded value is both", () => {
 	assertType<Assignable<Both, Branded<string, "A">>>(true);
 	assertType<Assignable<Both, Branded<string, "B">>>(true);
 	assertType<Assignable<Branded<string, "A">, Both>>(false);
+});
+
+Deno.test("brand records no node: it returns its schema", () => {
+	// Given: a schema
+	// When: branding it
+	const branded = brand(text, "Text");
+
+	// Then: the branded schema has the schema's own node
+	assertStrictEquals(nodeOf(branded), nodeOf(text));
 });

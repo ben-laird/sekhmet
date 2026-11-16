@@ -1,5 +1,7 @@
+import { getStructParams } from "@sekhmet/primordials/struct";
 import type { Child } from "@/src/composites/mini/collect.ts";
-import { map, type Schema } from "@/src/core/mini/schema.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
+import { map, Schema } from "@/src/core/mini/schema.ts";
 
 /**
  * The type {@linkcode readonly} gives an output: a `Map` becomes a
@@ -65,6 +67,8 @@ function frozenCopy(value: unknown): unknown {
  * class instance can't be copied without bypassing its constructor. A
  * `Map` or `Set` output is still typed as a `ReadonlyMap` or `ReadonlySet`.
  *
+ * The schema records a `Readonly` node over `self`.
+ *
  * @template I The input type
  * @template O The output type
  * @template E The error type
@@ -91,5 +95,8 @@ export function readonly<I, O, E>(
 	self: Schema<I, O, E>,
 ): Schema<I, ReadonlyOutput<O>, E>;
 export function readonly(self: Child): Child {
-	return map(self, frozenCopy);
+	return new Schema({
+		parse: getStructParams(map(self, frozenCopy)).parse,
+		node: new SchemaNode("Readonly", { inner: self }),
+	});
 }

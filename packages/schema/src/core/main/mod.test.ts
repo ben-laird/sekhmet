@@ -3,7 +3,7 @@ import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertInstanceOf } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import type { Branded } from "@/src/algebra/main/mod.ts";
-import { object } from "@/src/composites/main/mod.ts";
+import { object, union } from "@/src/composites/main/mod.ts";
 import { boolean, number, string } from "@/src/primitives/main/mod.ts";
 import {
 	type ErrorOf,
@@ -12,6 +12,7 @@ import {
 	type Input,
 	type Issues,
 	isSchemaIssue,
+	nodeOf,
 	type Output,
 	ParseError,
 	Schema,
@@ -80,6 +81,21 @@ Deno.test("SchemaWith has exactly the algebra methods", () => {
 	// When: listing its own methods
 	// Then: they are or, brand and readonly, only
 	assertEquals(methods, ["brand", "or", "readonly"]);
+});
+
+Deno.test("union([a, b]).with.or(c) is union([a, b, c])", async () => {
+	// Given: a main union extended with .with.or, and the flat union
+	const [a, b, c] = [string(), number(), boolean()];
+	const extended = union([a, b]).with.or(c);
+	const flat = union([a, b, c]);
+
+	// When: both reject a value
+	const found = unwrapErr(await extended.parseAsync(null));
+
+	// Then: they fail alike (one InvalidUnion of three branches) and record
+	// the same node
+	assertEquals(found, unwrapErr(await flat.parseAsync(null)));
+	assertEquals(nodeOf(extended), nodeOf(flat));
 });
 
 Deno.test(".with's methods return main Schemas that keep chaining", async () => {

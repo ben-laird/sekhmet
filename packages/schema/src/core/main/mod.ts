@@ -652,8 +652,9 @@ export class SchemaWith<I, O, E> {
 	/**
 	 * A schema that accepts what this schema or `right` accepts: this schema
 	 * is tried first, and `right` only when it fails; when both fail, it fails
-	 * with one `InvalidUnion` issue at the root. Chains nest:
-	 * `a.with.or(b).with.or(c)` is `union([union([a, b]), c])`.
+	 * with one `InvalidUnion` issue at the root. Chains flatten:
+	 * `a.with.or(b).with.or(c)` is `union([a, b, c])`, as is
+	 * `union([a, b]).with.or(c)`; a union with annotations stays one branch.
 	 *
 	 * @param right - The schema to try when this one fails
 	 * @returns A schema for what either accepts

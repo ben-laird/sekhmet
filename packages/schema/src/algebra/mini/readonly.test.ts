@@ -6,6 +6,7 @@ import {
 	assertStrictEquals,
 } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
+import { children, nodeOf, SchemaNode } from "@/src/core/mini/node.ts";
 import {
 	type ErrorOf,
 	type Input,
@@ -159,4 +160,16 @@ Deno.test("ReadonlyOutput maps each kind of output", () => {
 			readonly string[] | { readonly a: number } | undefined
 		>
 	>(true);
+});
+
+Deno.test("readonly records a Readonly node over its schema", () => {
+	// Given: a schema
+	const anything = new Schema({ parse: (input: unknown) => Ok(input) });
+
+	// When: making it read-only
+	const node = nodeOf(readonly(anything));
+
+	// Then: the node wraps the schema itself, not a map of it
+	assertEquals(node, new SchemaNode("Readonly", { inner: anything }));
+	assertStrictEquals(children(node)[0], anything);
 });
