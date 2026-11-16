@@ -59,10 +59,13 @@ export async function main(args: string[]): Promise<number> {
 			root === undefined ? path : join(root, path),
 		),
 	});
+	// Inherit stdio: the tool's diagnostics are the step's output
 	const { code } = await new Deno.Command(program, {
 		args: [...toolArgs],
 		stdin: "null",
-	}).output();
+		stdout: "inherit",
+		stderr: "inherit",
+	}).spawn().status;
 	return code;
 }
 

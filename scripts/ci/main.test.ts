@@ -1,4 +1,4 @@
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
 import { exists } from "@std/fs/exists";
 import {
 	biomeCiCommand,
@@ -203,9 +203,11 @@ Deno.test("gateFilesCommand ignores gitignored scratch but fails other broken fi
 		await Deno.writeTextFile(`${dir}/new.ts`, broken);
 		const [biomeNew, checkNew] = [await run("biome"), await run("check")];
 
-		// Then: both tools fail it, before it is ever staged
+		// Then: both tools fail it, before it is ever staged, and their
+		// diagnostics reach the step's output
 		assertEquals(biomeNew.success, false);
 		assertEquals(checkNew.success, false);
+		assertStringIncludes(new TextDecoder().decode(checkNew.stderr), "TS2322");
 	} finally {
 		await Deno.remove(dir, { recursive: true });
 	}
