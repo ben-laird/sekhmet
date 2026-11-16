@@ -24,7 +24,8 @@
  * @module
  */
 
-import type { Result } from "@sekhmet/enum/result/mini";
+import { Result } from "@sekhmet/enum/result";
+import type { Result as MiniResult } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import * as mini from "../mini/mod.ts";
 
@@ -231,7 +232,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.parse}
 	 */
-	parse(input: I): mini.Potential<Result<O, E>> {
+	parse(input: I): mini.Potential<MiniResult<O, E>> {
 		return mini.parse(this, input);
 	}
 
@@ -255,7 +256,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.parseAsync}
 	 */
-	parseAsync(input: I): Promise<Result<O, E>> {
+	parseAsync(input: I): Promise<MiniResult<O, E>> {
 		return mini.parseAsync(this, input);
 	}
 
@@ -283,7 +284,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * @see {@link mini.parseSync}
 	 */
 	parseSync(input: I): Result<O, mini.ParseSyncError<E>> {
-		return mini.parseSync(this, input);
+		return Result.fromMini(mini.parseSync(this, input));
 	}
 
 	/**
