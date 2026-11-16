@@ -37,6 +37,20 @@ function recordingRuntime(): {
 
 const boom = (): Panic<null> => new Panic({ message: "boom", cause: null });
 
+/** A PromiseLike that is not a Promise, settled by `executor`. */
+function thenable<T>(
+	executor: (
+		resolve: (value: T) => void,
+		reject: (reason: unknown) => void,
+	) => void,
+): PromiseLike<T> {
+	return {
+		// biome-ignore lint/suspicious/noThenProperty: a thenable is the subject under test
+		then: (onFulfilled, onRejected) =>
+			new Promise<T>(executor).then(onFulfilled, onRejected),
+	};
+}
+
 Deno.test("catchUnwind() of a returning fn is Ok and reports nothing", () => {
 	// Given: a runtime with a recording hook
 	const { runtime, reports } = recordingRuntime();
@@ -532,6 +546,54 @@ Deno.test("catchUnwindAsync() covers resolve, rejection and synchronous throw", 
 		const result = await runtime.catchUnwindAsync((): Promise<number> => {
 			throw payload;
 		});
+
+		// Then: the result is Err of the payload, reported once
+		assertStrictEquals(unwrapErr(result), payload);
+		assertEquals(reports.length, 1);
+	});
+
+	await t.step("resolving thenable", async () => {
+		// Given: a runtime and a thenable (not a Promise) that resolves
+		const { runtime, reports } = recordingRuntime();
+
+		// When: catching a function that returns it
+		const result = await runtime.catchUnwindAsync(() =>
+			thenable<number>((resolve) => resolve(3)),
+		);
+
+		// Then: the result is Ok and nothing was reported
+		assertEquals(result, Ok(3));
+		assertEquals(reports, []);
+	});
+
+	await t.step("rejecting thenable", async () => {
+		// Given: a runtime and a thenable that rejects with a payload
+		const { runtime, reports } = recordingRuntime();
+		const payload = boom();
+
+		// When: catching a function that returns it
+		const result = await runtime.catchUnwindAsync(() =>
+			thenable<number>((_resolve, reject) => reject(payload)),
+		);
+
+		// Then: the result is Err of the payload, reported once
+		assertStrictEquals(unwrapErr(result), payload);
+		assertEquals(reports.length, 1);
+	});
+
+	await t.step("thenable whose then throws", async () => {
+		// Given: a runtime and a thenable whose then method throws a payload
+		const { runtime, reports } = recordingRuntime();
+		const payload = boom();
+		const hostile: PromiseLike<number> = {
+			// biome-ignore lint/suspicious/noThenProperty: a thenable is the subject under test
+			then: () => {
+				throw payload;
+			},
+		};
+
+		// When: catching a function that returns it
+		const result = await runtime.catchUnwindAsync(() => hostile);
 
 		// Then: the result is Err of the payload, reported once
 		assertStrictEquals(unwrapErr(result), payload);

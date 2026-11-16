@@ -89,12 +89,13 @@ export interface PanicRuntime {
 	readonly catchUnwind: <T>(fn: () => T) => Result<T, unknown>;
 	/**
 	 * The async form of {@linkcode PanicRuntime.catchUnwind}: it catches a
-	 * rejection of the returned promise and a synchronous throw from `fn`
-	 * alike, so it never leaves an unhandled rejection. It rejects only when
-	 * the hook throws, with the same `Panic (PanicHook)`.
+	 * rejection of the returned promise or thenable, a `then` that throws, and
+	 * a synchronous throw from `fn` alike, so it never leaves an unhandled
+	 * rejection. It rejects only when the hook throws, with the same
+	 * `Panic (PanicHook)`.
 	 *
-	 * @template T The resolved type of `fn`'s promise
-	 * @param fn The async work to run
+	 * @template T The resolved type of `fn`'s promise or thenable
+	 * @param fn The async work to run; any `PromiseLike` is accepted
 	 * @returns A promise of `Ok` of the resolved value, or `Err` of the payload
 	 *
 	 * @example
@@ -103,7 +104,7 @@ export interface PanicRuntime {
 	 * ```
 	 */
 	readonly catchUnwindAsync: <T>(
-		fn: () => Promise<T>,
+		fn: () => PromiseLike<T>,
 	) => Promise<Result<T, unknown>>;
 	/**
 	 * Throws `payload` unchanged without reporting it, like Rust's
@@ -210,7 +211,7 @@ export function definePanicRuntime(): PanicRuntime {
 			}
 		},
 		catchUnwindAsync: async <T>(
-			fn: () => Promise<T>,
+			fn: () => PromiseLike<T>,
 		): Promise<Result<T, unknown>> => {
 			try {
 				return Ok(await fn());
