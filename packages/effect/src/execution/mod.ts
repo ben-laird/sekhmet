@@ -19,6 +19,7 @@ import {
 	Panicked,
 } from "../fiber/mini/fiber-error.ts";
 import type { Runtime } from "../runtime/runtime.ts";
+import { randomUuid } from "./uuid.ts";
 
 const DEFAULT_STEP_BUDGET = 1024;
 
@@ -61,7 +62,7 @@ export function fork<I, T, E>(
 	} = getStructParams(self);
 
 	const fiber = new Fiber<I, T, E>({
-		id: crypto.randomUUID(),
+		id: randomUuid(),
 		runtime: self,
 		fiberState: new FiberState("Queued", { effect, finalizers: [] }),
 	});

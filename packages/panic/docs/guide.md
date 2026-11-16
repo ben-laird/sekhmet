@@ -34,8 +34,12 @@ A hook is a function that receives a `PanicHookInfo` and returns nothing:
 - `stack`: the payload's stack when it is an `Error` (a `Panic` included),
   otherwise `undefined`.
 
-A new runtime starts with `defaultPanicHook`, which writes `panicked: …` and
-the stack to `console.error`. Replace it with `setHook`. To add to a hook
+A new runtime starts with `defaultPanicHook`, which writes a report to
+`console.error`. For an `Error` payload (a `Panic` included) the report is
+`panicked: <name>: <message>`, then the stack frames; the header comes from
+the payload, so it reads the same on every engine (V8, Bun, Firefox, WebKit).
+Any other payload prints as `panicked: …` with the value. Replace the hook
+with `setHook`. To add to a hook
 instead of replacing it, take the current one with `takeHook` and call it from
 the new hook, as in Rust:
 
