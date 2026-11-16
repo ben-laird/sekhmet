@@ -307,4 +307,29 @@ export const FEATURES: readonly Feature[] = [
 			'assertEquals(unwrap(length.parseSync("four")), 4);',
 		].join("\n"),
 	},
+	{
+		entrypoint: "@sekhmet/schema/standard",
+		mini: "packages/schema/src/standard/mini/mod.ts",
+		output: "packages/schema/src/standard/main/mod.ts",
+		wraps: [
+			{
+				type: "Schema",
+				from: "../../core/main/mod.ts",
+				mappers: SCHEMA_MAPPERS,
+			},
+		],
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";',
+			'import { InvalidType, Schema } from "@sekhmet/schema/core/mini";',
+			'import { fromStandard, toStandard } from "@sekhmet/schema/standard";',
+			"",
+			"const text = new Schema((input: unknown) =>",
+			'\ttypeof input === "string" ? Ok(input) : Err(InvalidType({ input, expected: "string" })),',
+			");",
+			"const length = fromStandard(toStandard(text)).map((s) => s.length);",
+			"",
+			'assertEquals(unwrap(length.parseSync("four")), 4);',
+		].join("\n"),
+	},
 ];
