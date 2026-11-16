@@ -267,7 +267,8 @@ When adding new functionality to a package, first decide the structure (see
 1. **Add to `mini/` first**: Create the individual export in
    `src/feature/mini/function.ts`
 2. **Export from `mini/mod.ts`**: Re-export from the mini barrel file
-3. **Export from `main/mod.ts`**: Re-export in the main barrel file
+3. **Regenerate main**: Run `deno task gen:main` (main is generated from mini;
+   never edit a generated `main/mod.ts`) and commit it with the mini change
 4. **Update package `deno.json`**: Add explicit export path if it's a new mini
    entry point
 5. **Write tests**: Place `function.test.ts` next to `function.ts`

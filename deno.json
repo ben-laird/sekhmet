@@ -12,6 +12,10 @@
 			"description": "Run CI checks",
 			"command": "deno run --no-prompt --allow-env --allow-run --allow-write --allow-read @sekhmet/ci"
 		},
+		"gen:main": {
+			"description": "Generate main (method-chaining) entrypoints from mini; pass --check to verify they are current",
+			"command": "deno run --no-prompt --allow-env --allow-read --allow-write --allow-run @sekhmet/gen-main"
+		},
 		"add": {
 			"description": "Add a workspace to the repository",
 			"command": "deno run --no-prompt --allow-read --allow-write @sekhmet/add"
