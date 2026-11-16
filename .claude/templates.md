@@ -31,13 +31,11 @@ export * from "./myFunction.ts";
 export * from "./otherFunction.ts";
 ```
 
-### 3. Export from main barrel
+### 3. Generate the main module
 
-**File**: `packages/package-name/src/feature/main/mod.ts`
-
-```ts ignore
-export * from "../mini/mod.ts";
-```
+Add the feature to `FEATURES` in `scripts/gen-main/src/config.ts`, then run
+`deno task gen:main`. It writes `packages/package-name/src/feature/main/mod.ts`;
+commit it with the mini source.
 
 ### 4. Update package deno.json
 
