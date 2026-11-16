@@ -4,8 +4,6 @@ import {
 	commitVerdict,
 	type GreenRunDecision,
 	greenRunDecision,
-	HOOKS_PATH,
-	hooksWarning,
 	parseStatus,
 	parseTreeId,
 	type Result,
@@ -315,13 +313,4 @@ Deno.test("commitVerdict holds a merge commit to the same rule, and says how to 
 		kind: "refuse",
 		message: `staged tree ${TREE} has no green \`deno task ci\` run; the merge is staged: run \`deno task ci\`, then \`git commit\``,
 	});
-});
-
-Deno.test("hooksWarning warns only when the commit gate's hooks are off", () => {
-	// Given: an unset, a foreign and the gate's hooks path
-	// When: asking for a warning
-	// Then: only .githooks is silent
-	assertEquals(typeof hooksWarning(undefined), "string");
-	assertEquals(typeof hooksWarning(".husky"), "string");
-	assertEquals(hooksWarning(HOOKS_PATH), undefined);
 });

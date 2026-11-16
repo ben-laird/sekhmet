@@ -1,7 +1,16 @@
 import { assert, assertEquals } from "@std/assert";
 import { fromFileUrl, join } from "@std/path";
-import { git, greenMarkerPath, stagedTree } from "./src/git.ts";
+import { installHooks } from "./hooks.ts";
+import {
+	git,
+	greenMarkerPath,
+	hooksPath,
+	readGateHooks,
+	sharedHooksDir,
+	stagedTree,
+} from "./src/git.ts";
 import type { Result } from "./src/green-run.ts";
+import { shimScript } from "./src/hooks.ts";
 
 const COMMIT_GATE = fromFileUrl(new URL("./commit-gate.ts", import.meta.url));
 
@@ -14,25 +23,33 @@ async function run(cwd: string, ...args: string[]): Promise<string> {
 	return unwrap(await git({ args, cwd }));
 }
 
+const PRE_MERGE_COMMIT = fromFileUrl(
+	new URL("../../.githooks/pre-merge-commit", import.meta.url),
+);
+
 /**
- * A repository with one commit whose hooks run the commit gate: the same
- * hooks as `.githooks/`, pointed at this checkout's `commit-gate.ts`.
+ * A repository with one commit that carries the commit gate's `.githooks/`
+ * (its `pre-commit` pointed at this checkout's `commit-gate.ts`), turned on
+ * by {@linkcode installHooks} as `deno task hooks` does. `before` runs
+ * first, e.g. to set an old `core.hooksPath`. The repository is `repo/` in
+ * a temp dir whose other entries are free for linked worktrees.
  */
 async function withGatedRepo(
 	test: (dir: string) => Promise<void>,
+	before: (dir: string) => Promise<void> = async () => {},
 ): Promise<void> {
-	const dir = await Deno.realPath(
+	const parent = await Deno.realPath(
 		await Deno.makeTempDir({ prefix: "ci-commit-gate-test-" }),
 	);
+	const dir = join(parent, "repo");
 	try {
+		await Deno.mkdir(dir);
 		await run(dir, "init", "--quiet", "--initial-branch=main");
 		await run(dir, "config", "user.name", "Test");
 		await run(dir, "config", "user.email", "test@example.com");
 		await run(dir, "config", "commit.gpgsign", "false");
 		await Deno.writeTextFile(join(dir, "a.ts"), "export const a = 1;\n");
-		await run(dir, "add", ".");
-		await run(dir, "commit", "--quiet", "--no-verify", "-m", "init");
-		const hooks = join(dir, ".git", "test-hooks");
+		const hooks = join(dir, ".githooks");
 		await Deno.mkdir(hooks);
 		const gate = `exec deno run --quiet --no-prompt --allow-run=git --allow-read "${COMMIT_GATE}"`;
 		await Deno.writeTextFile(
@@ -40,16 +57,45 @@ async function withGatedRepo(
 			`#!/bin/sh\n${gate} "$@"\n`,
 			{ mode: 0o755 },
 		);
-		await Deno.writeTextFile(
-			join(hooks, "pre-merge-commit"),
-			`#!/bin/sh\nexec "$(dirname "$0")/pre-commit" --merge\n`,
-			{ mode: 0o755 },
-		);
-		await run(dir, "config", "core.hooksPath", hooks);
+		await Deno.copyFile(PRE_MERGE_COMMIT, join(hooks, "pre-merge-commit"));
+		await Deno.chmod(join(hooks, "pre-merge-commit"), 0o755);
+		await run(dir, "add", ".");
+		await run(dir, "commit", "--quiet", "--no-verify", "-m", "init");
+		await before(dir);
+		unwrap(await installHooks({ cwd: dir }));
 		await test(dir);
 	} finally {
-		await Deno.remove(dir, { recursive: true });
+		await Deno.remove(parent, { recursive: true });
 	}
+}
+
+/** Adds a linked worktree beside the repository, on a new branch. */
+async function addWorktree({
+	dir,
+	name,
+	from,
+}: {
+	dir: string;
+	name: string;
+	from: string;
+}): Promise<string> {
+	const worktree = join(dir, "..", name);
+	await run(dir, "worktree", "add", "--quiet", "-b", name, worktree, from);
+	return worktree;
+}
+
+/** Commits a branch off main that drops `.githooks/`: an ungated branch. */
+async function ungatedBranch(dir: string): Promise<void> {
+	await run(dir, "switch", "--quiet", "-c", "ungated");
+	await run(dir, "rm", "--quiet", "-r", ".githooks");
+	await run(dir, "commit", "--quiet", "--no-verify", "-m", "drop hooks");
+	await run(dir, "switch", "--quiet", "main");
+}
+
+/** Stages a code change to `a.ts` in a worktree. */
+async function stageCodeChange(worktree: string): Promise<void> {
+	await Deno.writeTextFile(join(worktree, "a.ts"), "export const a = 9;\n");
+	await run(worktree, "add", "a.ts");
 }
 
 /** Records a green run for the staged tree, as a passing gate would. */
@@ -177,5 +223,106 @@ Deno.test("the pre-merge-commit hook refuses an ungated merge, leaving it staged
 			.trim()
 			.split(" ");
 		assertEquals(parents.length, 3);
+	});
+});
+
+Deno.test("a linked worktree on a branch with .githooks/ runs its own gate", async () => {
+	await withGatedRepo(async (dir) => {
+		// Given: a linked worktree on a gated branch, with a code change staged
+		const worktree = await addWorktree({ dir, name: "feat", from: "main" });
+		await stageCodeChange(worktree);
+
+		// When: committing it with no green run, then after one
+		const refused = await git({ args: ["commit", "-m", "x"], cwd: worktree });
+		await markGreen(worktree);
+		const accepted = await git({ args: ["commit", "-m", "x"], cwd: worktree });
+
+		// Then: the gate refuses, then lets it through
+		assertEquals(refused.ok, false);
+		assert(
+			!refused.ok && refused.error.includes("has no green `deno task ci` run"),
+		);
+		assertEquals(accepted.ok, true);
+	});
+});
+
+Deno.test("a linked worktree on a branch without .githooks/ is not gated", async () => {
+	await withGatedRepo(async (dir) => {
+		// Given: a linked worktree on a branch that has no .githooks/
+		await ungatedBranch(dir);
+		const worktree = await addWorktree({ dir, name: "wt", from: "ungated" });
+		await stageCodeChange(worktree);
+
+		// When: committing a code change with no green run
+		const committed = await git({
+			args: ["commit", "-m", "x"],
+			cwd: worktree,
+		});
+
+		// Then: it lands
+		assertEquals(committed.ok, true);
+	});
+});
+
+Deno.test("deno task hooks unsets an absolutized core.hooksPath, so a worktree runs its own gate whatever the main checkout has out", async () => {
+	await withGatedRepo(
+		async (dir) => {
+			// Given: the main checkout on an ungated branch (whose hooks the old
+			// setup ran everywhere), and a worktree on a gated branch
+			await ungatedBranch(dir);
+			await run(dir, "switch", "--quiet", "ungated");
+			const worktree = await addWorktree({ dir, name: "feat", from: "main" });
+			await stageCodeChange(worktree);
+
+			// When: committing in the worktree with no green run
+			const refused = await git({
+				args: ["commit", "-m", "x"],
+				cwd: worktree,
+			});
+
+			// Then: core.hooksPath is gone and the worktree's gate refuses
+			assertEquals(await hooksPath({ cwd: dir }), undefined);
+			assertEquals(refused.ok, false);
+		},
+		async (dir) => {
+			// Given (before `deno task hooks`): the absolutized old setting
+			await run(dir, "config", "core.hooksPath", join(dir, ".githooks"));
+		},
+	);
+});
+
+Deno.test("deno task hooks is idempotent, and refuses to replace a hook it did not install or a foreign core.hooksPath", async () => {
+	await withGatedRepo(async (dir) => {
+		// Given: a gated repository whose shims are installed
+		const hooksDir = unwrap(await sharedHooksDir({ cwd: dir }));
+
+		// When: rerunning, then with a foreign pre-merge-commit, then with a
+		// foreign core.hooksPath
+		const again = await installHooks({ cwd: dir });
+		await Deno.writeTextFile(
+			join(hooksDir, "pre-merge-commit"),
+			"#!/bin/sh\nmine\n",
+		);
+		const foreignHook = await installHooks({ cwd: dir });
+		const foreignHookText = await Deno.readTextFile(
+			join(hooksDir, "pre-merge-commit"),
+		);
+		await Deno.writeTextFile(
+			join(hooksDir, "pre-merge-commit"),
+			shimScript("pre-merge-commit"),
+		);
+		await run(dir, "config", "core.hooksPath", ".husky");
+		const foreignPath = await installHooks({ cwd: dir });
+
+		// Then: the rerun changes nothing; each refusal names its cause and
+		// leaves the owner's hook and setting alone
+		assertEquals(again.ok, true);
+		assert(again.ok && again.value.every((line) => line.endsWith("current")));
+		assert(!foreignHook.ok && foreignHook.error.includes("pre-merge-commit"));
+		assertEquals(foreignHookText, "#!/bin/sh\nmine\n");
+		assert(!foreignPath.ok && foreignPath.error.includes(".husky"));
+		assertEquals(await hooksPath({ cwd: dir }), ".husky");
+		const hooks = unwrap(await readGateHooks(hooksDir));
+		assertEquals(hooks["pre-commit"], shimScript("pre-commit"));
 	});
 });

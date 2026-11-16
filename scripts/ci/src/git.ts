@@ -1,6 +1,8 @@
 /**
  * The commit gate's git edge: each function runs `git` and returns its
- * answer as a {@linkcode Result}, for the pure decisions in `green-run.ts`.
+ * answer as a {@linkcode Result}, for the pure decisions in `green-run.ts`
+ * and `hooks.ts`; the hook-file helpers read and write the shared hooks
+ * directory.
  *
  * Commands inherit the environment, so inside a hook they see the index git
  * is committing (`GIT_INDEX_FILE`), and in a linked worktree its own index
@@ -8,6 +10,7 @@
  *
  * @module
  */
+import { join } from "@std/path";
 import {
 	parseStatus,
 	parseTreeId,
@@ -15,6 +18,7 @@ import {
 	type StagedSnapshot,
 	type TreeId,
 } from "./green-run.ts";
+import { HOOK_NAMES, type HookName } from "./hooks.ts";
 import { parseChangedLines, touchesRunnableCode } from "./markdown-code.ts";
 
 /** Where git runs: a directory in the repository (default: the cwd). */
@@ -200,6 +204,108 @@ export async function hooksPath({
 		...cwdOf(cwd),
 	});
 	return output.ok ? output.value.trim() : undefined;
+}
+
+/**
+ * Unsets this clone's `core.hooksPath` in its repository config, then checks
+ * that no other config (global, system, worktree) still sets it.
+ *
+ * @param options.cwd - A directory in the repository (default: the cwd)
+ * @returns Nothing, or why it is still set
+ */
+export async function unsetHooksPath({
+	cwd,
+}: GitOptions = {}): Promise<Result<undefined>> {
+	await git({
+		args: ["config", "--local", "--unset-all", "core.hooksPath"],
+		...cwdOf(cwd),
+	});
+	const left = await git({
+		args: ["config", "--show-origin", "--get", "core.hooksPath"],
+		...cwdOf(cwd),
+	});
+	return left.ok
+		? {
+				ok: false,
+				error: `core.hooksPath is still set (${left.value.trim()}); unset it there and rerun \`deno task hooks\``,
+			}
+		: { ok: true, value: undefined };
+}
+
+/**
+ * The clone's shared hooks directory, `hooks/` in the common git dir, as an
+ * absolute path. Every worktree of the clone runs the hooks in it while
+ * `core.hooksPath` is unset.
+ *
+ * @param options.cwd - A directory in the repository (default: the cwd)
+ * @returns The path
+ */
+export async function sharedHooksDir({
+	cwd,
+}: GitOptions = {}): Promise<Result<string>> {
+	const output = await git({
+		args: ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+		...cwdOf(cwd),
+	});
+	return output.ok
+		? { ok: true, value: join(output.value.trim(), "hooks") }
+		: output;
+}
+
+/**
+ * The text of each commit gate hook in the shared hooks directory.
+ *
+ * @param dir - The shared hooks directory
+ * @returns Each hook's text, `undefined` where there is no file
+ */
+export async function readGateHooks(
+	dir: string,
+): Promise<Result<Record<HookName, string | undefined>>> {
+	const hooks: Record<HookName, string | undefined> = {
+		"pre-commit": undefined,
+		"pre-merge-commit": undefined,
+	};
+	for (const name of HOOK_NAMES) {
+		try {
+			hooks[name] = await Deno.readTextFile(join(dir, name));
+		} catch (error) {
+			if (!(error instanceof Deno.errors.NotFound)) {
+				return {
+					ok: false,
+					error: `cannot read ${join(dir, name)}: ${String(error)}`,
+				};
+			}
+		}
+	}
+	return { ok: true, value: hooks };
+}
+
+/**
+ * Writes an executable hook into the shared hooks directory, creating it.
+ *
+ * @param options.dir - The shared hooks directory
+ * @param options.name - The hook
+ * @param options.script - Its text
+ * @returns Nothing, or why it could not be written
+ */
+export async function writeHook({
+	dir,
+	name,
+	script,
+}: {
+	dir: string;
+	name: HookName;
+	script: string;
+}): Promise<Result<undefined>> {
+	const path = join(dir, name);
+	try {
+		await Deno.mkdir(dir, { recursive: true });
+		await Deno.writeTextFile(path, script);
+		await Deno.chmod(path, 0o755);
+		return { ok: true, value: undefined };
+	} catch (error) {
+		return { ok: false, error: `cannot write ${path}: ${String(error)}` };
+	}
 }
 
 /**

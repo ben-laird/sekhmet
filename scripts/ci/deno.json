@@ -5,6 +5,7 @@
 
 	"exports": {
 		".": "./main.ts",
+		"./hooks": "./hooks.ts",
 
 		"./lib": "./mod.ts"
 	},

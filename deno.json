@@ -20,8 +20,8 @@
 			"command": "deno run --no-prompt --allow-env --allow-run --allow-write --allow-read @sekhmet/ci"
 		},
 		"hooks": {
-			"description": "Turn on the commit gate's git hooks (.githooks) for this clone and all its worktrees",
-			"command": "git config core.hooksPath .githooks"
+			"description": "Turn on the commit gate for this clone and all its worktrees: shims in .git/hooks run each worktree's .githooks/",
+			"command": "deno run --no-prompt --allow-run=git --allow-read --allow-write @sekhmet/ci/hooks"
 		},
 		"fmt": {
 			"description": "Format and lint-fix with the pinned Biome; pass paths to limit it (default: the project)",
