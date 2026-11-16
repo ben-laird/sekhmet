@@ -31,6 +31,24 @@ export {
 } from "./number-checks.ts";
 export { type StringSchemaOptions, string } from "./string.ts";
 export {
+	maxLength,
+	minLength,
+	type NormalizationForm,
+	normalize,
+	regex,
+	trim,
+} from "./string-checks.ts";
+export {
+	EMAIL_PATTERN,
+	email,
+	isoDate,
+	isoDateTime,
+	isoTime,
+	UUID_PATTERN,
+	url,
+	uuid,
+} from "./string-formats.ts";
+export {
 	STRINGBOOL_FALSY,
 	STRINGBOOL_TRUTHY,
 	type StringboolOptions,

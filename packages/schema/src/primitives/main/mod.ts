@@ -32,12 +32,18 @@ export type {
 	CoerceMode,
 	LimitOptions,
 	Literal,
+	NormalizationForm,
 	NumberSchemaOptions,
 	Range,
 	StringboolOptions,
 	StringSchemaOptions,
 } from "../mini/mod.ts";
-export { STRINGBOOL_FALSY, STRINGBOOL_TRUTHY } from "../mini/mod.ts";
+export {
+	EMAIL_PATTERN,
+	STRINGBOOL_FALSY,
+	STRINGBOOL_TRUTHY,
+	UUID_PATTERN,
+} from "../mini/mod.ts";
 
 /**
  * Creates a schema that accepts only bigints, failing with an `InvalidType`
@@ -457,6 +463,323 @@ export function string(
 	options?: mini.StringSchemaOptions,
 ): Schema<unknown, string, SchemaIssue> {
 	return Schema.fromMini(mini.string(options));
+}
+
+/**
+ * Checks that a string has at most `maximum` characters (UTF-16 code units,
+ * as {@linkcode minLength} counts them), failing with a `TooBig` issue.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @param maximum - The most characters allowed
+ * @returns A schema that also rejects longer strings
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { maxLength, string } from "@sekhmet/schema/primitives";
+ *
+ * const code = maxLength(string(), 3);
+ *
+ * assertEquals(isOk(parseSync(code, "abc")), true);
+ * assertEquals(isErr(parseSync(code, "abcd")), true);
+ * ```
+ */
+export function maxLength<I, E>(
+	self: MiniSchema<I, string, E>,
+	maximum: number,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.maxLength(self, maximum));
+}
+
+/**
+ * Checks that a string has at least `minimum` characters, failing with a
+ * `TooSmall` issue. Length is `String.prototype.length`: UTF-16 code units,
+ * so an emoji outside the Basic Multilingual Plane counts as 2.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @param minimum - The fewest characters allowed
+ * @returns A schema that also rejects shorter strings
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { minLength, string } from "@sekhmet/schema/primitives";
+ *
+ * const name = minLength(string(), 2);
+ *
+ * assertEquals(isOk(parseSync(name, "Al")), true);
+ * assertEquals(isErr(parseSync(name, "A")), true);
+ * ```
+ */
+export function minLength<I, E>(
+	self: MiniSchema<I, string, E>,
+	minimum: number,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.minLength(self, minimum));
+}
+
+/**
+ * Transforms a string to a Unicode normalization form (`NFC` by default), so
+ * that canonically equivalent strings compare equal: `"é"` written as one
+ * code point or as `e` plus a combining accent becomes the same string. It
+ * never fails.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to transform
+ * @param form - The normalization form; `"NFC"` when omitted
+ * @returns A schema whose output is normalized
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { normalize, string } from "@sekhmet/schema/primitives";
+ *
+ * const decomposed = "é";
+ *
+ * assertEquals(unwrap(parseSync(normalize(string()), decomposed)), "é");
+ * ```
+ */
+export function normalize<I, E>(
+	self: MiniSchema<I, string, E>,
+	form?: mini.NormalizationForm,
+): Schema<I, string, E> {
+	return Schema.fromMini(mini.normalize(self, form));
+}
+
+/**
+ * Checks that a string matches `pattern`, failing with an `InvalidFormat`
+ * issue (format `"regex"`) that carries the pattern. The pattern's `g` and
+ * `y` flags are ignored, so its `lastIndex` never makes a check stateful.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @param pattern - The pattern the string must match
+ * @returns A schema that also rejects non-matching strings
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { regex, string } from "@sekhmet/schema/primitives";
+ *
+ * const slug = regex(string(), /^[a-z0-9-]+$/);
+ *
+ * assertEquals(isOk(parseSync(slug, "hello-world")), true);
+ * assertEquals(isErr(parseSync(slug, "Hello World")), true);
+ * ```
+ */
+export function regex<I, E>(
+	self: MiniSchema<I, string, E>,
+	pattern: RegExp,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.regex(self, pattern));
+}
+
+/**
+ * Transforms a string by removing leading and trailing whitespace (as
+ * `String.prototype.trim` does). It never fails; chain checks after it to
+ * validate the trimmed value.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to transform
+ * @returns A schema whose output is trimmed
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string, trim } from "@sekhmet/schema/primitives";
+ *
+ * assertEquals(unwrap(parseSync(trim(string()), "  hi \n")), "hi");
+ * ```
+ */
+export function trim<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E> {
+	return Schema.fromMini(mini.trim(self));
+}
+
+/**
+ * Checks that a string is an email address matching
+ * {@linkcode EMAIL_PATTERN}, failing with an `InvalidFormat` issue (format
+ * `"email"`). The pattern is deliberately pragmatic, not RFC 5322: it
+ * accepts the addresses people type and rejects the exotic forms mail
+ * systems rarely support.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects non-email strings
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { email, string } from "@sekhmet/schema/primitives";
+ *
+ * const address = email(string());
+ *
+ * assertEquals(isOk(parseSync(address, "ada+news@example.co.uk")), true);
+ * assertEquals(isErr(parseSync(address, "ada@localhost")), true);
+ * ```
+ */
+export function email<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.email(self));
+}
+
+/**
+ * Checks that a string is an ISO 8601 calendar date, `YYYY-MM-DD`, that
+ * exists (so `2023-02-29` fails but `2024-02-29` passes), failing with an
+ * `InvalidFormat` issue (format `"date"`).
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects strings that are not ISO dates
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { isoDate, string } from "@sekhmet/schema/primitives";
+ *
+ * const day = isoDate(string());
+ *
+ * assertEquals(isOk(parseSync(day, "2024-02-29")), true);
+ * assertEquals(isErr(parseSync(day, "2023-02-29")), true);
+ * ```
+ */
+export function isoDate<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.isoDate(self));
+}
+
+/**
+ * Checks that a string is an ISO 8601 date-time with a UTC offset: an
+ * {@linkcode isoDate}, `T`, an {@linkcode isoTime}, then `Z` or `±HH:MM`
+ * (as RFC 3339 requires, since a date-time without an offset is
+ * ambiguous). It fails with an `InvalidFormat` issue (format
+ * `"date-time"`).
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects strings that are not ISO date-times
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { isoDateTime, string } from "@sekhmet/schema/primitives";
+ *
+ * const instant = isoDateTime(string());
+ *
+ * assertEquals(isOk(parseSync(instant, "2026-11-16T09:30:00Z")), true);
+ * assertEquals(isOk(parseSync(instant, "2026-11-16T09:30+05:30")), true);
+ * assertEquals(isErr(parseSync(instant, "2026-11-16T09:30:00")), true);
+ * ```
+ */
+export function isoDateTime<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.isoDateTime(self));
+}
+
+/**
+ * Checks that a string is an ISO 8601 time of day without an offset,
+ * `HH:MM`, `HH:MM:SS` or `HH:MM:SS.fraction` (24-hour, no leap second),
+ * failing with an `InvalidFormat` issue (format `"time"`).
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects strings that are not ISO times
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { isoTime, string } from "@sekhmet/schema/primitives";
+ *
+ * const time = isoTime(string());
+ *
+ * assertEquals(isOk(parseSync(time, "23:59:59.999")), true);
+ * assertEquals(isErr(parseSync(time, "24:00")), true);
+ * ```
+ */
+export function isoTime<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.isoTime(self));
+}
+
+/**
+ * Checks that a string is an absolute URL by the WHATWG URL Standard (what
+ * `new URL(value)` accepts, tested with `URL.canParse`), failing with an
+ * `InvalidFormat` issue (format `"url"`). Any scheme is accepted, so
+ * `mailto:` and `data:` URLs pass; chain {@linkcode regex} to restrict it.
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects strings that are not URLs
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string, url } from "@sekhmet/schema/primitives";
+ *
+ * const link = url(string());
+ *
+ * assertEquals(isOk(parseSync(link, "https://example.com/a?b=c")), true);
+ * assertEquals(isErr(parseSync(link, "example.com")), true);
+ * ```
+ */
+export function url<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.url(self));
+}
+
+/**
+ * Checks that a string is a UUID matching {@linkcode UUID_PATTERN}, failing
+ * with an `InvalidFormat` issue (format `"uuid"`).
+ *
+ * @template I - The schema's input type
+ * @template E - The schema's error type
+ * @param self - The string schema to check
+ * @returns A schema that also rejects non-UUID strings
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string, uuid } from "@sekhmet/schema/primitives";
+ *
+ * const id = uuid(string());
+ *
+ * assertEquals(isOk(parseSync(id, "550e8400-e29b-41d4-a716-446655440000")), true);
+ * assertEquals(isErr(parseSync(id, "550e8400")), true);
+ * ```
+ */
+export function uuid<I, E>(
+	self: MiniSchema<I, string, E>,
+): Schema<I, string, E | SchemaIssue> {
+	return Schema.fromMini(mini.uuid(self));
 }
 
 /**

@@ -18,6 +18,8 @@
 		"./primitives/mini/number-checks": "./src/primitives/mini/number-checks.ts",
 		"./primitives/mini/boolean": "./src/primitives/mini/boolean.ts",
 		"./primitives/mini/coerce": "./src/primitives/mini/coerce.ts",
+		"./primitives/mini/string-checks": "./src/primitives/mini/string-checks.ts",
+		"./primitives/mini/string-formats": "./src/primitives/mini/string-formats.ts",
 		"./primitives/mini/stringbool": "./src/primitives/mini/stringbool.ts",
 		"./primitives/mini/bigint": "./src/primitives/mini/bigint.ts",
 		"./primitives/mini/date": "./src/primitives/mini/date.ts",
