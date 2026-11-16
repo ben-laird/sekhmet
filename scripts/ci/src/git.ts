@@ -98,6 +98,48 @@ export async function stagedSnapshot({
 }
 
 /**
+ * The paths that differ between `HEAD` and the index, with renames split
+ * into a deletion and an addition so both paths count. On an unborn branch
+ * every path in the index counts.
+ *
+ * @param options.cwd - A directory in the repository (default: the cwd)
+ * @returns The paths
+ */
+export async function stagedPaths({
+	cwd,
+}: GitOptions = {}): Promise<Result<string[]>> {
+	const head = await git({
+		args: ["rev-parse", "--verify", "--quiet", "HEAD"],
+		...cwdOf(cwd),
+	});
+	const args = head.ok
+		? ["diff", "--cached", "--name-only", "--no-renames", "-z"]
+		: ["ls-files", "-z"];
+	const output = await git({ args, ...cwdOf(cwd) });
+	if (!output.ok) return output;
+	return {
+		ok: true,
+		value: output.value.split("\0").filter((path) => path.length > 0),
+	};
+}
+
+/**
+ * This clone's `core.hooksPath`.
+ *
+ * @param options.cwd - A directory in the repository (default: the cwd)
+ * @returns The configured path, or `undefined` when it is not set
+ */
+export async function hooksPath({
+	cwd,
+}: GitOptions = {}): Promise<string | undefined> {
+	const output = await git({
+		args: ["config", "--get", "core.hooksPath"],
+		...cwdOf(cwd),
+	});
+	return output.ok ? output.value.trim() : undefined;
+}
+
+/**
  * The green marker's path: `ci-green` in this worktree's git dir, as an
  * absolute path. Linked worktrees each have their own (as they do an index).
  *

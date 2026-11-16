@@ -1,7 +1,11 @@
 import { assertEquals } from "@std/assert";
 import {
+	type CommitVerdict,
+	commitVerdict,
 	type GreenRunDecision,
 	greenRunDecision,
+	HOOKS_PATH,
+	hooksWarning,
 	parseStatus,
 	parseTreeId,
 	type Result,
@@ -215,4 +219,86 @@ Deno.test("greenRunDecision skips when a snapshot could not be taken", () => {
 		reason: "no staged tree: not a repo",
 	});
 	assertEquals(noAfter, { kind: "skip", reason: "no staged tree: not a repo" });
+});
+
+Deno.test("commitVerdict allows a commit whose staged tree has a green run", () => {
+	// Given: the staged tree matches the green marker
+	// When: deciding
+	const verdict = commitVerdict({
+		staged: TREE,
+		green: TREE,
+		stagedPaths: ["scripts/ci/main.ts"],
+	});
+
+	// Then: it goes ahead
+	assertEquals(verdict, { kind: "allow", reason: "green" });
+});
+
+Deno.test("commitVerdict refuses a code change whose staged tree has no green run", () => {
+	// Given: a staged code change after a stale green run, and one with no
+	// green run at all
+	const stale = commitVerdict({
+		staged: TREE,
+		green: OTHER_TREE,
+		stagedPaths: ["README.md", "scripts/ci/main.ts"],
+	});
+	const none = commitVerdict({
+		staged: TREE,
+		green: undefined,
+		stagedPaths: ["deno.json"],
+	});
+
+	// When: the verdicts are reached
+	// Then: both are refused, naming the staged tree
+	const refused: CommitVerdict = {
+		kind: "refuse",
+		message: `staged tree ${TREE} has no green \`deno task ci\` run; run it, then commit`,
+	};
+	assertEquals(stale, refused);
+	assertEquals(none, refused);
+});
+
+Deno.test("commitVerdict exempts a markdown-only change and an unchanged tree", () => {
+	// Given: only markdown files staged, and nothing staged against HEAD
+	const markdown = commitVerdict({
+		staged: TREE,
+		green: undefined,
+		stagedPaths: ["README.md", "packages/enum/docs/guide.md"],
+	});
+	const unchanged = commitVerdict({
+		staged: TREE,
+		green: undefined,
+		stagedPaths: [],
+	});
+
+	// When: the verdicts are reached
+	// Then: both go ahead, each for its own reason
+	assertEquals(markdown, { kind: "allow", reason: "markdown-only" });
+	assertEquals(unchanged, { kind: "allow", reason: "unchanged" });
+});
+
+Deno.test("commitVerdict holds a merge commit to the same rule, and says how to finish the merge", () => {
+	// Given: a merge whose result has no green run
+	// When: deciding
+	const verdict = commitVerdict({
+		staged: TREE,
+		green: OTHER_TREE,
+		stagedPaths: ["scripts/ci/main.ts"],
+		kind: "merge",
+	});
+
+	// Then: it is refused, pointing at gating the staged merge
+	assertEquals(verdict, {
+		kind: "refuse",
+		message: `staged tree ${TREE} has no green \`deno task ci\` run; the merge is staged: run \`deno task ci\`, then \`git commit\``,
+	});
+});
+
+Deno.test("hooksWarning warns only when the commit gate's hooks are off", () => {
+	// Given: an unset, a foreign and the gate's hooks path
+	// When: asking for a warning
+	// Then: only .githooks is silent
+	assertEquals(typeof hooksWarning(undefined), "string");
+	assertEquals(typeof hooksWarning(".husky"), "string");
+	assertEquals(hooksWarning(HOOKS_PATH), undefined);
 });

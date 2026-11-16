@@ -3,7 +3,9 @@ import { join } from "@std/path";
 import {
 	git,
 	greenMarkerPath,
+	hooksPath,
 	readGreenMarker,
+	stagedPaths,
 	stagedSnapshot,
 	stagedTree,
 	writeGreenMarker,
@@ -143,6 +145,50 @@ Deno.test("writeGreenMarker returns an error value when the marker cannot be wri
 
 		// Then: the failure is a value, not a throw
 		assertEquals(written.ok, false);
+	});
+});
+
+Deno.test("stagedPaths counts both sides of a staged rename, and every path on an unborn branch", async () => {
+	await withRepo(async (dir) => {
+		// Given: a.ts renamed to a.md and staged
+		await run(dir, "mv", "a.ts", "a.md");
+
+		// When: listing the staged paths
+		const paths = unwrap(await stagedPaths({ cwd: dir }));
+
+		// Then: the rename's source counts too, so it is not markdown-only
+		assertEquals(paths.toSorted(), ["a.md", "a.ts"]);
+	});
+
+	const unborn = await Deno.makeTempDir({ prefix: "ci-git-test-unborn-" });
+	try {
+		// Given: a repository with no commit yet and one staged file
+		await run(unborn, "init", "--quiet");
+		await Deno.writeTextFile(join(unborn, "README.md"), "# x\n");
+		await run(unborn, "add", "README.md");
+
+		// When: listing the staged paths
+		const paths = unwrap(await stagedPaths({ cwd: unborn }));
+
+		// Then: the staged file is listed
+		assertEquals(paths, ["README.md"]);
+	} finally {
+		await Deno.remove(unborn, { recursive: true });
+	}
+});
+
+Deno.test("hooksPath reads core.hooksPath, and is undefined when it is unset", async () => {
+	await withRepo(async (dir) => {
+		// Given: a repository without, then with, a hooks path
+		const unset = await hooksPath({ cwd: dir });
+		await run(dir, "config", "core.hooksPath", ".githooks");
+
+		// When: reading it again
+		const set = await hooksPath({ cwd: dir });
+
+		// Then: it is undefined, then the configured path
+		assertEquals(unset, undefined);
+		assertEquals(set, ".githooks");
 	});
 });
 

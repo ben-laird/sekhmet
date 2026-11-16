@@ -9,10 +9,15 @@ import {
 } from "@/mod.ts";
 import {
 	greenMarkerPath,
+	hooksPath,
 	stagedSnapshot,
 	writeGreenMarker,
 } from "@/src/git.ts";
-import { type GreenRunDecision, greenRunDecision } from "@/src/green-run.ts";
+import {
+	type GreenRunDecision,
+	greenRunDecision,
+	hooksWarning,
+} from "@/src/green-run.ts";
 
 /**
  * Exit codes for CI workflow failures.
@@ -417,6 +422,8 @@ export function coverageCleanupCommand({ dir }: { dir: string }): StepCommand {
  */
 export async function main(): Promise<void> {
 	const isCI = Deno.env.get("CI") === "true";
+	const warning = isCI ? undefined : hooksWarning(await hooksPath());
+	if (warning !== undefined) console.error(warning);
 	const before = await stagedSnapshot();
 	const result = await runWorkflow(
 		ciSteps({

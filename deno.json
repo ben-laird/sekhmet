@@ -19,6 +19,10 @@
 			"description": "Run CI checks",
 			"command": "deno run --no-prompt --allow-env --allow-run --allow-write --allow-read @sekhmet/ci"
 		},
+		"hooks": {
+			"description": "Turn on the commit gate's git hooks (.githooks) for this clone and all its worktrees",
+			"command": "git config core.hooksPath .githooks"
+		},
 		"fmt": {
 			"description": "Format and lint-fix with the pinned Biome; pass paths to limit it (default: the project)",
 			"command": "deno run --no-prompt --allow-env --allow-run @biomejs/biome check --write"

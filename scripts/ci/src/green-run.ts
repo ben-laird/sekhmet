@@ -169,3 +169,70 @@ export function greenRunDecision({
 	}
 	return { kind: "record", tree: before.value.tree };
 }
+
+/** What the commit is: an ordinary commit, or a merge commit. */
+export type CommitKind = "commit" | "merge";
+
+/**
+ * Whether a commit may go ahead:
+ * - `allow`, because its staged tree has a green run (`green`), every staged
+ *   path is markdown (`markdown-only`), or it stages no change against
+ *   `HEAD` (`unchanged`: its tree is one already committed)
+ * - `refuse`, with the message the hook prints
+ */
+export type CommitVerdict =
+	| { kind: "allow"; reason: "green" | "markdown-only" | "unchanged" }
+	| { kind: "refuse"; message: string };
+
+/**
+ * Decides whether a commit (or merge commit) may go ahead.
+ *
+ * @param options.staged - The staged tree being committed
+ * @param options.green - The tree in the green marker, if any
+ * @param options.stagedPaths - Paths that differ between `HEAD` and the index
+ * @param options.kind - Whether this is a merge commit (default: `commit`)
+ * @returns The verdict
+ */
+export function commitVerdict({
+	staged,
+	green,
+	stagedPaths,
+	kind = "commit",
+}: {
+	staged: TreeId;
+	green: TreeId | undefined;
+	stagedPaths: readonly string[];
+	kind?: CommitKind;
+}): CommitVerdict {
+	if (staged === green) return { kind: "allow", reason: "green" };
+	if (stagedPaths.length === 0) return { kind: "allow", reason: "unchanged" };
+	if (stagedPaths.every((path) => path.endsWith(".md"))) {
+		return { kind: "allow", reason: "markdown-only" };
+	}
+	const next =
+		kind === "merge"
+			? "the merge is staged: run `deno task ci`, then `git commit`"
+			: "run it, then commit";
+	return {
+		kind: "refuse",
+		message: `staged tree ${staged} has no green \`deno task ci\` run; ${next}`,
+	};
+}
+
+/** The `core.hooksPath` that turns the commit gate on. */
+export const HOOKS_PATH = ".githooks";
+
+/**
+ * The warning `deno task ci` prints when this clone does not run the commit
+ * gate's hooks.
+ *
+ * @param hooksPath - The configured `core.hooksPath`, if any
+ * @returns The one-line warning, or `undefined` when the hooks are on
+ */
+export function hooksWarning(
+	hooksPath: string | undefined,
+): string | undefined {
+	return hooksPath === HOOKS_PATH
+		? undefined
+		: "warning: commits are not gated in this clone (core.hooksPath is not .githooks); run `deno task hooks` once";
+}
