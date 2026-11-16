@@ -226,6 +226,35 @@ Deno.test("generateMain rewrites self predicates and assertions to this", () => 
 	assertStringIncludes(output, "\t\tmini.assertFull(this);\n");
 });
 
+Deno.test("generateMain names the main class in each member of an intersection predicate", () => {
+	// Given: a guard narrowing self to a variant and to the primary at once
+	const isEmpty = fn(
+		"isEmpty",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: {
+				kind: "predicate",
+				asserts: false,
+				subject: "self",
+				type: {
+					kind: "intersection",
+					types: [
+						named("Enum", [typeParam("T")]),
+						named("Box", [keyword("never")]),
+					],
+				},
+			},
+		}),
+	);
+
+	// When: generating
+	const output = source([isEmpty]);
+
+	// Then: the primary member is the main class, and the rest keep their spelling
+	assertStringIncludes(output, "isEmpty(): this is Enum<T> & Box<never> {");
+});
+
 Deno.test("generateMain does not return from void methods", () => {
 	// Given: a void self-first function
 	const clear = fn(

@@ -32,7 +32,8 @@ export function map<T, U>(self: Poll<T>, mapping: (value: T) => U): Poll<U> {
 /**
  * Type guard to check if a Poll is in the Ready state.
  *
- * Narrows the Poll to its Ready variant, so its value can be read directly.
+ * Narrows both the variant and the type parameter: the Poll becomes its Ready
+ * variant, so its value can be read directly, and stays a `Poll<T>`.
  *
  * @template T - The type of the value in the Poll
  * @param self - The Poll to check
@@ -49,21 +50,25 @@ export function map<T, U>(self: Poll<T>, mapping: (value: T) => U): Poll<U> {
  *
  * const poll: Poll<number> = Ready(42);
  * if (isReady(poll)) {
- *   const value: number = union(poll); // TypeScript knows poll is Ready
+ *   const value: number = union(poll); // the variant: poll is Ready
+ *   const same: Poll<number> = poll; // the type parameter: still a Poll<number>
  *   assertEquals(value, 42);
+ *   assertEquals(same, poll);
  * }
  * ```
  */
 export function isReady<T>(
 	self: Poll<T>,
-): self is Enum<Isolate<PollVariants<T>, "Ready">> {
+): self is Enum<Isolate<PollVariants<T>, "Ready">> & Poll<T> {
 	return isolate(self, "Ready");
 }
 
 /**
  * Type guard to check if a Poll is in the Pending state.
  *
- * Narrows the Poll to its Pending variant, which holds no value.
+ * Narrows both the variant and the type parameter: the Poll becomes its
+ * Pending variant, which holds no value, and a `Poll<never>`, which fits a Poll
+ * of any type.
  *
  * @template T - The type of the value in the Poll
  * @param self - The Poll to check
@@ -80,13 +85,16 @@ export function isReady<T>(
  *
  * const poll: Poll<number> = Pending();
  * if (isPending(poll)) {
- *   // TypeScript knows poll is Pending, so no Ready arm is needed
+ *   // the variant: poll is Pending, so no Ready arm is needed
  *   assertEquals(match(poll)({ Pending: () => "waiting" }), "waiting");
+ *   // the type parameter: poll is a Poll<never>, so it fits any Poll
+ *   const other: Poll<string> = poll;
+ *   assertEquals(other, Pending());
  * }
  * ```
  */
 export function isPending<T>(
 	self: Poll<T>,
-): self is Enum<Isolate<PollVariants<T>, "Pending">> {
+): self is Enum<Isolate<PollVariants<T>, "Pending">> & Poll<never> {
 	return isolate(self, "Pending");
 }

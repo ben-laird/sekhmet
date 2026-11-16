@@ -5,6 +5,7 @@ import {
 } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { Enum, type Split } from "./core.ts";
+import { match, union } from "./exit.ts";
 import * as TestSubject from "./isolate.ts";
 
 // Given (dog-food code)
@@ -51,9 +52,10 @@ Deno.test("isolateAnd() isolates variant with additional predicate", async (t) =
 	const greeting = new Greeting("Formal", "Cady");
 
 	await t.step("Returns true when variant and predicate match", () => {
-		// When/Then: isolateAnd() returns true when variant and predicate match
+		// When/Then: isolateAnd() returns true when variant and predicate match,
+		// narrowing the name to "Cady" (TypeScript infers the predicate as a guard)
 		if (TestSubject.isolateAnd(greeting, "Formal", (name) => name === "Cady")) {
-			type Isolated = Enum<[kind: "Formal", name: string]>;
+			type Isolated = Enum<[kind: "Formal", name: "Cady"]>;
 
 			assertType<IsExact<typeof greeting, Isolated>>(true);
 		} else {
@@ -79,6 +81,86 @@ Deno.test("isolateAnd() isolates variant with additional predicate", async (t) =
 			TestSubject.isolateAnd(greeting, "Informal", (name) => name === "Cady")
 		) {
 			assertUnreachable();
+		}
+	});
+});
+
+Deno.test("isolateAnd() narrows the value to a type-guard predicate", async (t) => {
+	type Reading = Split<{ Value: [value: string | number]; Missing: [] }>;
+	class Sensor extends Enum<Reading> {}
+
+	await t.step("a valued variant's value narrows to the guarded type", () => {
+		// Given: a sensor whose value may be a string or a number
+		const sensor = new Sensor("Value", 42);
+
+		// When: isolating Value with a guard for numbers
+		if (
+			TestSubject.isolateAnd(
+				sensor,
+				"Value",
+				(value): value is number => typeof value === "number",
+			)
+		) {
+			// Then: only the Value variant remains, and its value is a number
+			const value = union(sensor);
+			assertType<IsExact<typeof value, number>>(true);
+			assertEquals(value, 42);
+			assertEquals(match(sensor)({ Value: (n) => n.toFixed(1) }), "42.0");
+		} else {
+			assertUnreachable();
+		}
+	});
+
+	await t.step("a boolean predicate keeps the variant's value type", () => {
+		// Given: a sensor whose value may be a string or a number
+		const sensor = new Sensor("Value", 42);
+
+		// When: isolating Value with a plain boolean predicate
+		if (TestSubject.isolateAnd(sensor, "Value", (value) => value !== "")) {
+			// Then: the value type is unchanged
+			assertType<
+				IsExact<typeof sensor, Enum<[kind: "Value", value: string | number]>>
+			>(true);
+		} else {
+			assertUnreachable();
+		}
+	});
+
+	await t.step("a value-less variant narrows to that variant", () => {
+		// Given: a sensor with no reading
+		const sensor = new Sensor("Missing");
+
+		// When: isolating Missing with a guard on its (absent) value
+		if (
+			TestSubject.isolateAnd(
+				sensor,
+				"Missing",
+				(value): value is undefined => value === undefined,
+			)
+		) {
+			// Then: the sensor is the Missing variant
+			assertType<IsExact<typeof sensor, Enum<[kind: "Missing"]>>>(true);
+		} else {
+			assertUnreachable();
+		}
+	});
+
+	await t.step("the else-branch is not narrowed", () => {
+		// Given: a sensor holding a string
+		const sensor = new Sensor("Value", "high");
+
+		// When: the numeric guard fails
+		if (
+			TestSubject.isolateAnd(
+				sensor,
+				"Value",
+				(value): value is number => typeof value === "number",
+			)
+		) {
+			assertUnreachable();
+		} else {
+			// Then: the sensor keeps its declared type
+			assertType<IsExact<typeof sensor, Sensor>>(true);
 		}
 	});
 });

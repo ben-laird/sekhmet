@@ -85,6 +85,30 @@ export type Isolate<T extends SomeVariant, K extends Kinds<T>> = Extract<
 >;
 
 /**
+ * Refines the value of each variant in `T` to `U`, a subtype of that value. A
+ * value-less variant, or one whose value is already `U`, is unchanged.
+ *
+ * A refined variant is the intersection `T & [kind, U]`, so it stays a subtype
+ * of `T` even when `T` is generic (which a type guard on `Enum<T>` requires).
+ *
+ * @example
+ * ```ts
+ * import { assertType, type IsExact } from "@std/testing/types";
+ * import type { Refine, Values } from "@sekhmet/enum/core/mini";
+ *
+ * type Valued = Refine<[kind: "Value", value: string | number], number>;
+ * assertType<IsExact<Values<Valued>, number>>(true);
+ *
+ * type Empty = Refine<[kind: "Missing"], never>;
+ * assertType<IsExact<Empty, [kind: "Missing"]>>(true);
+ * ```
+ */
+export type Refine<T extends SomeVariant, U> = Extract<
+	{ [I in keyof T]: I extends "1" ? T[I] & U : T[I] },
+	SomeVariant
+>;
+
+/**
  * Eliminates a specific variant `K` from a variant union `T`.
  * Returns all variant tuples except those matching kind `K`.
  */

@@ -40,7 +40,9 @@ through the functions below rather than through a property.
 Type guards check the kind and narrow the type:
 
 - `isolate(value, kind)` is true when the value is of that kind;
-  `isolateAny(value, kinds)` checks a set of kinds.
+  `isolateAny(value, kinds)` checks a set of kinds, and
+  `isolateAnd(value, kind, predicate)` also tests the value, narrowing it when
+  the predicate is itself a type guard.
 - `eliminate(value, kind)` is the opposite: true when the value is **not** of
   that kind.
 - `assertIsolated` and `assertEliminated` throw instead of returning `false`.
@@ -65,6 +67,26 @@ assertEquals(double(Some(4)), 8);
 Each feature also has named guards: `isSome`/`isNone`, `isOk`/`isErr`,
 `isActive`/`isInactive`, `isReady`/`isPending`, and `isLt`/`isEq`/`isGt` and
 friends for `Ordering`.
+
+The guards of `Option`, `Result`, `Latch` and `Poll` (with their `…And` forms)
+narrow two things at once. They narrow the **variant**, so a later `match`
+needs only the remaining arms. They also narrow the **type parameters**, so the
+value stays an `Option` (or `Result`, …) whose emptied slot is `never`: after
+`isNone`, an `Option<number>` is an `Option<never>`, which fits any
+`Option<U>`.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { match } from "@sekhmet/enum/core/mini";
+import { None, type Option } from "@sekhmet/enum/option";
+
+const option: Option<number> = None();
+if (option.isNone()) {
+	assertEquals(match(option)({ None: () => "empty" }), "empty"); // no Some arm
+	const other: Option<string> = option; // an Option<never> fits any Option
+	assertEquals(other.isNone(), true);
+}
+```
 
 ## Matching
 

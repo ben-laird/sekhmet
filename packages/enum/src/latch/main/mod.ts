@@ -23,6 +23,7 @@
  */
 
 import { getStructParams, struct } from "@sekhmet/primordials/struct";
+import type { Enum, Isolate } from "@/src/core/mini/core.ts";
 import type { Option as MiniOption } from "@/src/option/mini/core.ts";
 import { Option } from "../../option/main/mod.ts";
 import { Result } from "../../result/main/mod.ts";
@@ -446,15 +447,23 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	/**
 	 * Type guard that checks if a Latch is in the Active state.
 	 *
+	 * Narrows both the variant and the type parameters: the Latch becomes its
+	 * Active variant, so its value can be read directly, and a `Latch<A, never>`,
+	 * which fits a Latch with any inactive type.
+	 *
 	 * @returns True if the Latch is Active, narrowing the type accordingly
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
+	 * import { union } from "@sekhmet/enum/core/mini";
 	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
 	 *
 	 * const latch: Latch<number, string> = Active(42);
 	 * if (latch.isActive()) {
-	 *   const narrowed: Latch<number, never> = latch;
+	 *   const value: number = union(latch); // the variant: latch is Active
+	 *   const other: Latch<number, boolean> = latch; // the type parameters: a Latch<number, never>
+	 *   assertEquals(value, 42);
+	 *   assertEquals(other, latch);
 	 * }
 	 *
 	 * assertEquals(latch.isActive(), true);
@@ -462,12 +471,17 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * ```
 	 * @see {@link mini.isActive}
 	 */
-	isActive(): this is Latch<A, never> {
+	isActive(): this is Enum<Isolate<mini.LatchVariants<A, I>, "Active">> &
+		Latch<A, never> {
 		return mini.isActive(this);
 	}
 
 	/**
 	 * Type guard that checks if a Latch is Active AND satisfies a predicate on its value.
+	 *
+	 * Narrows both the variant and the type parameters: the Latch becomes its
+	 * Active variant and a `Latch<B, never>`, where `B` is the type a type-guard
+	 * predicate guards (or `A` for a boolean predicate).
 	 *
 	 * @template B - A narrowed type that A can be refined to
 	 * @param predicate - Additional condition the active value must satisfy
@@ -475,33 +489,53 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
+	 * import { match } from "@sekhmet/enum/core/mini";
 	 * import { Active, type Latch } from "@sekhmet/enum/latch";
 	 *
 	 * const latch: Latch<number, string> = Active(42);
 	 *
 	 * assertEquals(latch.isActiveAnd((n) => n > 0), true);
 	 * assertEquals(latch.isActiveAnd((n) => n < 0), false);
+	 *
+	 * // With type guard
+	 * const mixed: Latch<string | number, string> = Active(42);
+	 * if (mixed.isActiveAnd((v): v is number => typeof v === "number")) {
+	 *   // the variant: mixed is Active holding a number, so no Inactive arm is needed
+	 *   assertEquals(match(mixed)({ Active: (n) => n + 1 }), 43);
+	 *   // the type parameters: mixed is a Latch<number, never>
+	 *   const narrowed: Latch<number, boolean> = mixed;
+	 *   assertEquals(narrowed, mixed);
+	 * }
 	 * ```
 	 * @see {@link mini.isActiveAnd}
 	 */
 	isActiveAnd<B extends A>(
 		predicate: ((value: A) => value is B) | ((value: A) => boolean),
-	): this is Latch<B, never> {
+	): this is Enum<Isolate<mini.LatchVariants<B, I>, "Active">> &
+		Latch<B, never> {
 		return mini.isActiveAnd(this, predicate);
 	}
 
 	/**
 	 * Type guard that checks if a Latch is in the Inactive state.
 	 *
+	 * Narrows both the variant and the type parameters: the Latch becomes its
+	 * Inactive variant, so its value can be read directly, and a
+	 * `Latch<never, I>`, which fits a Latch with any active type.
+	 *
 	 * @returns True if the Latch is Inactive, narrowing the type accordingly
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
+	 * import { union } from "@sekhmet/enum/core/mini";
 	 * import { Active, Inactive, type Latch } from "@sekhmet/enum/latch";
 	 *
 	 * const latch: Latch<number, string> = Inactive("paused");
 	 * if (latch.isInactive()) {
-	 *   const narrowed: Latch<never, string> = latch;
+	 *   const value: string = union(latch); // the variant: latch is Inactive
+	 *   const other: Latch<boolean, string> = latch; // the type parameters: a Latch<never, string>
+	 *   assertEquals(value, "paused");
+	 *   assertEquals(other, latch);
 	 * }
 	 *
 	 * assertEquals(latch.isInactive(), true);
@@ -509,12 +543,17 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * ```
 	 * @see {@link mini.isInactive}
 	 */
-	isInactive(): this is Latch<never, I> {
+	isInactive(): this is Enum<Isolate<mini.LatchVariants<A, I>, "Inactive">> &
+		Latch<never, I> {
 		return mini.isInactive(this);
 	}
 
 	/**
 	 * Type guard that checks if a Latch is Inactive AND satisfies a predicate on its value.
+	 *
+	 * Narrows both the variant and the type parameters: the Latch becomes its
+	 * Inactive variant and a `Latch<never, J>`, where `J` is the type a type-guard
+	 * predicate guards (or `I` for a boolean predicate).
 	 *
 	 * @template J - A narrowed type that I can be refined to
 	 * @param predicate - Additional condition the inactive value must satisfy
@@ -522,18 +561,30 @@ export class Latch<out A, out I> extends mini.Latch<A, I> {
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
+	 * import { match } from "@sekhmet/enum/core/mini";
 	 * import { Inactive, type Latch } from "@sekhmet/enum/latch";
 	 *
 	 * const latch: Latch<number, string> = Inactive("error: timeout");
 	 *
 	 * assertEquals(latch.isInactiveAnd((s) => s.startsWith("error")), true);
 	 * assertEquals(latch.isInactiveAnd((s) => s.startsWith("paused")), false);
+	 *
+	 * // With type guard
+	 * const mixed: Latch<number, string | number> = Inactive("paused");
+	 * if (mixed.isInactiveAnd((v): v is string => typeof v === "string")) {
+	 *   // the variant: mixed is Inactive holding a string, so no Active arm is needed
+	 *   assertEquals(match(mixed)({ Inactive: (s) => s.length }), 6);
+	 *   // the type parameters: mixed is a Latch<never, string>
+	 *   const narrowed: Latch<boolean, string> = mixed;
+	 *   assertEquals(narrowed, mixed);
+	 * }
 	 * ```
 	 * @see {@link mini.isInactiveAnd}
 	 */
 	isInactiveAnd<J extends I>(
 		predicate: ((value: I) => value is J) | ((value: I) => boolean),
-	): this is Latch<never, J> {
+	): this is Enum<Isolate<mini.LatchVariants<A, J>, "Inactive">> &
+		Latch<never, J> {
 		return mini.isInactiveAnd(this, predicate);
 	}
 

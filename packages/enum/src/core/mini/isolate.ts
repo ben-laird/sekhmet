@@ -6,7 +6,7 @@
  */
 
 import { getStructParams } from "@sekhmet/primordials/struct";
-import type { Enum, Isolate, SomeVariant, Values } from "./core.ts";
+import type { Enum, Isolate, Refine, SomeVariant, Values } from "./core.ts";
 import { union, unionKinds } from "./exit.ts";
 
 /**
@@ -24,10 +24,28 @@ export function isolate<T extends SomeVariant, const K extends T[0]>(
 
 /**
  * Type guard that checks if an enum matches a specific variant kind AND satisfies a predicate on its value.
+ *
+ * Narrows the enum to the variant `K`. When the predicate is itself a type
+ * guard for `U`, the variant's value narrows to `U` as well.
+ *
  * @param self The enum to check
  * @param kind The variant kind to test for
  * @param predicate Additional condition the variant's value must satisfy
  * @returns True if both the kind matches and the predicate returns true
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Enum, isolateAnd, type Split, union } from "@sekhmet/enum/core/mini";
+ *
+ * class Reading extends Enum<Split<{ Value: [value: string | number]; Missing: [] }>> {}
+ *
+ * const reading = new Reading("Value", 42);
+ * if (isolateAnd(reading, "Value", (v): v is number => typeof v === "number")) {
+ *   const value: number = union(reading); // the Value variant, holding a number
+ *   assertEquals(value, 42);
+ * }
+ * ```
  */
 export function isolateAnd<
 	T extends SomeVariant,
@@ -39,7 +57,7 @@ export function isolateAnd<
 	predicate:
 		| ((value: Values<Isolate<T, K>>) => value is U)
 		| ((value: Values<Isolate<T, K>>) => boolean),
-): self is Enum<Isolate<T, K>> {
+): self is Enum<Refine<Isolate<T, K>, U>> {
 	return isolate(self, kind) && predicate(union(self));
 }
 

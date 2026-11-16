@@ -36,6 +36,7 @@ export type {
 	Kinds,
 	MatchArms,
 	RawEnum,
+	Refine,
 	SomeSplitVariants,
 	SomeVariant,
 	Split,
@@ -221,9 +222,25 @@ export class Enum<out T extends mini.SomeVariant> extends mini.Enum<T> {
 	/**
 	 * Type guard that checks if an enum matches a specific variant kind AND satisfies a predicate on its value.
 	 *
+	 * Narrows the enum to the variant `K`. When the predicate is itself a type
+	 * guard for `U`, the variant's value narrows to `U` as well.
+	 *
 	 * @param kind - The variant kind to test for
 	 * @param predicate - Additional condition the variant's value must satisfy
 	 * @returns True if both the kind matches and the predicate returns true
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Enum, type Split } from "@sekhmet/enum/core";
+	 *
+	 * class Reading extends Enum<Split<{ Value: [value: string | number]; Missing: [] }>> {}
+	 *
+	 * const reading = new Reading("Value", 42);
+	 * if (reading.isolateAnd("Value", (v): v is number => typeof v === "number")) {
+	 *   const value: number = reading.union(); // the Value variant, holding a number
+	 *   assertEquals(value, 42);
+	 * }
+	 * ```
 	 * @see {@link mini.isolateAnd}
 	 */
 	isolateAnd<const K extends T[0], U extends mini.Values<mini.Isolate<T, K>>>(
@@ -231,7 +248,7 @@ export class Enum<out T extends mini.SomeVariant> extends mini.Enum<T> {
 		predicate:
 			| ((value: mini.Values<mini.Isolate<T, K>>) => value is U)
 			| ((value: mini.Values<mini.Isolate<T, K>>) => boolean),
-	): this is Enum<mini.Isolate<T, K>> {
+	): this is Enum<mini.Refine<mini.Isolate<T, K>, U>> {
 		return mini.isolateAnd(this, kind, predicate);
 	}
 

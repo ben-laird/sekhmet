@@ -87,7 +87,8 @@ export class Poll<out T> extends mini.Poll<T> {
 	/**
 	 * Type guard to check if a Poll is in the Ready state.
 	 *
-	 * Narrows the Poll to its Ready variant, so its value can be read directly.
+	 * Narrows both the variant and the type parameter: the Poll becomes its Ready
+	 * variant, so its value can be read directly, and stays a `Poll<T>`.
 	 *
 	 * @returns `true` if the Poll is Ready, `false` if Pending
 	 * @example
@@ -101,20 +102,24 @@ export class Poll<out T> extends mini.Poll<T> {
 	 *
 	 * const poll: Poll<number> = Ready(42);
 	 * if (poll.isReady()) {
-	 *   const value: number = union(poll); // TypeScript knows poll is Ready
+	 *   const value: number = union(poll); // the variant: poll is Ready
+	 *   const same: Poll<number> = poll; // the type parameter: still a Poll<number>
 	 *   assertEquals(value, 42);
+	 *   assertEquals(same, poll);
 	 * }
 	 * ```
 	 * @see {@link mini.isReady}
 	 */
-	isReady(): this is Enum<Isolate<mini.PollVariants<T>, "Ready">> {
+	isReady(): this is Enum<Isolate<mini.PollVariants<T>, "Ready">> & Poll<T> {
 		return mini.isReady(this);
 	}
 
 	/**
 	 * Type guard to check if a Poll is in the Pending state.
 	 *
-	 * Narrows the Poll to its Pending variant, which holds no value.
+	 * Narrows both the variant and the type parameter: the Poll becomes its
+	 * Pending variant, which holds no value, and a `Poll<never>`, which fits a Poll
+	 * of any type.
 	 *
 	 * @returns `true` if the Poll is Pending, `false` if Ready
 	 * @example
@@ -128,13 +133,17 @@ export class Poll<out T> extends mini.Poll<T> {
 	 *
 	 * const poll: Poll<number> = Pending();
 	 * if (poll.isPending()) {
-	 *   // TypeScript knows poll is Pending, so no Ready arm is needed
+	 *   // the variant: poll is Pending, so no Ready arm is needed
 	 *   assertEquals(match(poll)({ Pending: () => "waiting" }), "waiting");
+	 *   // the type parameter: poll is a Poll<never>, so it fits any Poll
+	 *   const other: Poll<string> = poll;
+	 *   assertEquals(other, Pending());
 	 * }
 	 * ```
 	 * @see {@link mini.isPending}
 	 */
-	isPending(): this is Enum<Isolate<mini.PollVariants<T>, "Pending">> {
+	isPending(): this is Enum<Isolate<mini.PollVariants<T>, "Pending">> &
+		Poll<never> {
 		return mini.isPending(this);
 	}
 }
