@@ -6,7 +6,7 @@
  * @module
  */
 
-import { Err, Ok, type Result } from "@sekhmet/enum/result";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { expandGlob } from "@std/fs";
 import { type Io, runOp } from "./src/ops.ts";
 import { isOp } from "./src/protocol.ts";

@@ -1,4 +1,4 @@
-import { unwrap, unwrapErr } from "@sekhmet/enum/result";
+import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { parseModuleGraph, workspaceDependencies } from "./dependencies.ts";
 
@@ -18,7 +18,7 @@ Deno.test("workspaceDependencies reads bare workspace imports from the package's
 				local: `${ROOT}/panic/mod.ts`,
 				dependencies: [
 					{ specifier: "./src/mini/mod.ts" },
-					{ specifier: "@sekhmet/enum/result" },
+					{ specifier: "@sekhmet/enum/result/mini" },
 				],
 			},
 			{
@@ -57,7 +57,7 @@ Deno.test("workspaceDependencies ignores non-candidates and merges entry points"
 			modules: [
 				{
 					local: `${ROOT}/effect/src/fiber.ts`,
-					dependencies: [{ specifier: "@sekhmet/enum/result" }],
+					dependencies: [{ specifier: "@sekhmet/enum/result/mini" }],
 				},
 				{
 					local: `${ROOT}/effect-extra/mod.ts`,

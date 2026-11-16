@@ -5,7 +5,7 @@ import {
 	type Result,
 	unwrap,
 	unwrapErr,
-} from "@sekhmet/enum/result";
+} from "@sekhmet/enum/result/mini";
 import { dirname, join, relative, resolve } from "@std/path";
 import {
 	type ModuleGraph,

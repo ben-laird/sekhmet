@@ -1,4 +1,4 @@
-import { Err, Ok, type Result } from "@sekhmet/enum/result";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { z } from "zod";
 
 /**

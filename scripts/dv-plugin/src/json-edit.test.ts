@@ -1,4 +1,4 @@
-import { isErr, unwrap, unwrapErr } from "@sekhmet/enum/result";
+import { isErr, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assert, assertEquals } from "@std/assert";
 import {
 	describeJsonEditError,

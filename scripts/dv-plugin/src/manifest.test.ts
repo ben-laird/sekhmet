@@ -1,4 +1,4 @@
-import { unwrap, unwrapErr } from "@sekhmet/enum/result";
+import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assertEquals } from "@std/assert";
 import {
 	exportTargets,

@@ -4,9 +4,7 @@
 	"publish": false,
 
 	"exports": {
-		".": "./main.ts",
-
-		"./lib": "./mod.ts"
+		".": "./main.ts"
 	},
 
 	"imports": {

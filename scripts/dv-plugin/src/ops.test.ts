@@ -1,4 +1,4 @@
-import { Err, Ok } from "@sekhmet/enum/result";
+import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { type Io, runOp } from "./ops.ts";
 

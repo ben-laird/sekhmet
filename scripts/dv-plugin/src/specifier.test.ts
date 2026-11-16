@@ -5,7 +5,7 @@ Deno.test("packageNameOf extracts the scoped name from any specifier form", () =
 	// Given: bare, subpath, jsr, npm and non-package specifiers
 	const cases: [string, string | undefined][] = [
 		["@sekhmet/enum", "@sekhmet/enum"],
-		["@sekhmet/enum/result", "@sekhmet/enum"],
+		["@sekhmet/enum/result/mini", "@sekhmet/enum"],
 		["jsr:@sekhmet/enum@^0.1.0", "@sekhmet/enum"],
 		["jsr:/@sekhmet/enum@^0.1.0/result", "@sekhmet/enum"],
 		["npm:@biomejs/biome@^2", "@biomejs/biome"],

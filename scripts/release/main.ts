@@ -16,7 +16,7 @@ import {
 	type Result,
 	unwrap,
 	unwrapErr,
-} from "@sekhmet/enum/result";
+} from "@sekhmet/enum/result/mini";
 import {
 	type GitHubRelease,
 	gitHubReleases,

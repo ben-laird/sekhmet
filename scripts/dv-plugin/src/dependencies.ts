@@ -1,4 +1,4 @@
-import { Err, Ok, type Result } from "@sekhmet/enum/result";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { isAbsolute, relative } from "@std/path";
 import { z } from "zod";
 import { packageNameOf } from "./specifier.ts";
