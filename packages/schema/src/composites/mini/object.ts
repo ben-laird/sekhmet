@@ -429,19 +429,18 @@ export function object(options: {
 				return [run({ key, child: missing, value: undefined })];
 			});
 
+			const reported = unknownKeys === "strict" ? undeclared : [];
+			const kept = unknownKeys === "passthrough" ? undeclared : [];
+
 			return compose({
 				pending,
-				extra:
-					unknownKeys === "strict"
-						? unknownKeyIssues({ input, keys: undeclared })
-						: undefined,
-				build: (outputs) =>
-					Object.fromEntries([
+				extra: unknownKeyIssues({ input, keys: reported }),
+				build: (outputs) => {
+					return Object.fromEntries([
 						...outputs,
-						...(unknownKeys === "passthrough"
-							? undeclared.map((key) => [key, input[key]])
-							: []),
-					]),
+						...kept.map((key) => [key, input[key]]),
+					]);
+				},
 			});
 		},
 	});

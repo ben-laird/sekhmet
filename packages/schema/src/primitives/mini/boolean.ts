@@ -70,9 +70,11 @@ export function boolean(
 		parse: (input): Result<boolean, SchemaIssue> => {
 			const value = coerceBoolean({ input, mode });
 
-			return value === undefined
-				? Err(InvalidType({ input, expected: "boolean" }))
-				: Ok(value);
+			if (value === undefined) {
+				return Err(InvalidType({ input, expected: "boolean" }));
+			}
+
+			return Ok(value);
 		},
 	});
 }

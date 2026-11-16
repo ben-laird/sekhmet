@@ -83,6 +83,21 @@ export type TupleError<T extends readonly AnySchema[]> = Issues<
 	Flatten<ErrorOf<T[number]>> | SchemaIssue
 >;
 
+/** The issue of a tuple input longer than its elements, if it is. */
+function tooLong({
+	input,
+	maximum,
+}: {
+	input: readonly unknown[];
+	maximum: number;
+}): Issues<SchemaIssue> | undefined {
+	if (input.length <= maximum) return undefined;
+
+	return fromError(
+		TooBig({ input, origin: "array", maximum, inclusive: true }),
+	);
+}
+
 /**
  * Creates a schema for fixed-length arrays: element `i` is parsed by
  * `items[i]`, and every failing element is reported at its index.
@@ -132,17 +147,7 @@ export function tuple(
 				pending: items.map((child, index) =>
 					run({ key: index, child, value: input[index] }),
 				),
-				extra:
-					input.length > items.length
-						? fromError(
-								TooBig({
-									input,
-									origin: "array",
-									maximum: items.length,
-									inclusive: true,
-								}),
-							)
-						: undefined,
+				extra: tooLong({ input, maximum: items.length }),
 				build: (outputs) => outputs.map(([, output]) => output),
 			});
 		},

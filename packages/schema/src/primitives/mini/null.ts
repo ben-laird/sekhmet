@@ -24,9 +24,10 @@ import { Schema } from "@/src/core/mini/schema.ts";
  */
 export function null_(): Schema<unknown, null, SchemaIssue> {
 	return new Schema({
-		parse: (input): Result<null, SchemaIssue> =>
-			input === null
-				? Ok(input)
-				: Err(InvalidType({ input, expected: "null" })),
+		parse: (input): Result<null, SchemaIssue> => {
+			if (input === null) return Ok(input);
+
+			return Err(InvalidType({ input, expected: "null" }));
+		},
 	});
 }

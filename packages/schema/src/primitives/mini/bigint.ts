@@ -108,10 +108,11 @@ export function bigint(
 	options?: BigintSchemaOptions,
 ): Schema<unknown, bigint, SchemaIssue> {
 	return leaf({
-		read: (input) =>
-			typeof input === "bigint"
-				? Ok(input)
-				: Err(InvalidType({ input, expected: "bigint" })),
+		read: (input) => {
+			if (typeof input === "bigint") return Ok(input);
+
+			return Err(InvalidType({ input, expected: "bigint" }));
+		},
 		inspections: [
 			...when({ option: options?.min, inspect: minimum }),
 			...when({ option: options?.max, inspect: maximum }),

@@ -194,10 +194,8 @@ export function discriminatedUnion(declaration: {
 			if (!isRecord(input)) return invalidType({ input, expected: "object" });
 
 			const value = input[key];
-			const option =
-				typeof value === "string" && Object.hasOwn(options, value)
-					? options[value]
-					: undefined;
+			const known = typeof value === "string" && Object.hasOwn(options, value);
+			const option = known ? options[value] : undefined;
 			if (typeof value !== "string" || option === undefined) {
 				return Err(
 					locate({

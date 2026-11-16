@@ -140,9 +140,11 @@ export function string(
 		read: (input) => {
 			const value = coerceString({ input, mode });
 
-			return value === undefined
-				? Err(InvalidType({ input, expected: "string" }))
-				: Ok(transform(value));
+			if (value === undefined) {
+				return Err(InvalidType({ input, expected: "string" }));
+			}
+
+			return Ok(transform(value));
 		},
 		inspections: [
 			...when({ option: options?.minLength, inspect: minLength }),

@@ -86,9 +86,9 @@ export function stringbool(
 
 			const value = read(input);
 
-			return value === undefined
-				? Err(InvalidValue({ input, expected }))
-				: Ok(value);
+			if (value === undefined) return Err(InvalidValue({ input, expected }));
+
+			return Ok(value);
 		},
 	});
 }

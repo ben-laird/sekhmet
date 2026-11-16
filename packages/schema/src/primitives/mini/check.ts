@@ -45,15 +45,16 @@ export function leaf<O>({
 	inspections: readonly Inspect<O>[];
 }): Schema<unknown, O, SchemaIssue> {
 	return new Schema({
-		parse: (input) =>
-			match(read(input))<Result<O, SchemaIssue>>({
+		parse: (input) => {
+			return match(read(input))<Result<O, SchemaIssue>>({
 				Ok: (value) => {
 					const issue = firstIssue({ value, inspections });
 
 					return issue === undefined ? Ok(value) : Err(issue);
 				},
 				Err: (issue) => Err(issue),
-			}),
+			});
+		},
 	});
 }
 
