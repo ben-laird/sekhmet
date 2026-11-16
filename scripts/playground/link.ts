@@ -216,6 +216,7 @@ async function link({
 			root: root.value,
 			playground: at.playground,
 			compilerOptions: rootConfig.value?.compilerOptions,
+			imports: rootConfig.value?.imports,
 		}),
 	});
 	if (!merged.ok) return { ok: false, error: `${at.config}: ${merged.error}` };
