@@ -18,7 +18,6 @@
 
 	"imports": {
 		"@actions/core": "npm:@actions/core@^2.0.1",
-		"@actions/github": "npm:@actions/github@^6.0.1",
 		"@std/async": "jsr:@std/async@^1.0.15",
 		"@std/cli": "jsr:@std/cli@1.0.24",
 		"@std/fs": "jsr:@std/fs@1.0.20",
