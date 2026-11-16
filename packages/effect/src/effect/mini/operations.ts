@@ -131,7 +131,14 @@ export function mapOr<I, T, E, U>(
 	return transformEffect(self, (result) => {
 		return match(result)({
 			Ok: (value) => safeDeferred(() => Ready(Ok(mapping(value)))),
-			Err: () => Ready(Ok(defaultValue)),
+			Err: (effectError) => {
+				return match(effectError)({
+					Failed: () => Ready(Ok(defaultValue)),
+					ExceptionOccurred: (exception) => {
+						return Ready(Err(ExceptionOccurred(exception)));
+					},
+				});
+			},
 		});
 	});
 }

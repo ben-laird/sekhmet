@@ -218,6 +218,17 @@ Deno.test("mapOr() maps success or substitutes the default on failure", async (t
 		assertEquals(result, Ok(-1));
 	});
 
+	await t.step("exception is not replaced by the default", () => {
+		// Given: an effect that settles with an exception
+		// When: mapping with a default
+		const result = run(
+			TestSubject.mapOr(excepting<number, string>(boom), -1, (n) => n),
+		);
+
+		// Then: the exception still surfaces as a panic
+		assertEquals(result, Err(Panicked(boom)));
+	});
+
 	await t.step("throwing mapping", () => {
 		// Given: a successful effect and a throwing mapping
 		// When: mapping with a default
