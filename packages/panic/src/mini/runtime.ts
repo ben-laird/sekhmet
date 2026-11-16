@@ -196,11 +196,7 @@ export function definePanicRuntime(): PanicRuntime {
 		try {
 			hook(info);
 		} catch (thrown: unknown) {
-			throw new Panic<PanicHookFailure>({
-				name: "PanicHook",
-				message: "the panic hook threw while reporting a panic",
-				cause: { payload, thrown },
-			});
+			throw new HookFailurePanic({ payload, thrown });
 		}
 	};
 
@@ -236,6 +232,46 @@ export function definePanicRuntime(): PanicRuntime {
 			return taken;
 		},
 	};
+}
+
+/**
+ * Whether `payload` is the `Panic (PanicHook)` a boundary throws when its hook
+ * throws. Use it to read the {@linkcode PanicHookFailure} cause without a
+ * cast. A `Panic` built by hand with the same name and cause is not one.
+ *
+ * @param payload Any caught value
+ * @returns True if a boundary threw `payload` because its hook threw
+ *
+ * @example
+ * ```ts ignore
+ * const result = outer.catchUnwind(() => inner.catchUnwind(work));
+ * const payload = unwrapErr(result);
+ * if (isPanicHookFailure(payload)) {
+ *   console.error("hook failed on", payload.cause.payload);
+ * }
+ * ```
+ */
+export function isPanicHookFailure(
+	payload: unknown,
+): payload is Panic<PanicHookFailure> {
+	return HookFailurePanic.is(payload);
+}
+
+/** The `Panic (PanicHook)` a boundary throws; the private brand runs no Proxy trap. */
+class HookFailurePanic extends Panic<PanicHookFailure> {
+	constructor(cause: PanicHookFailure) {
+		super({
+			name: "PanicHook",
+			message: "the panic hook threw while reporting a panic",
+			cause,
+		});
+	}
+
+	#brand = true;
+
+	static is(value: unknown): value is HookFailurePanic {
+		return isObjectLike(value) && #brand in value;
+	}
 }
 
 function isObjectLike(value: unknown): value is object {

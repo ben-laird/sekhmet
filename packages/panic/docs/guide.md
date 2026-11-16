@@ -108,3 +108,8 @@ abort, so the boundary instead stops recovering: it throws a new `Panic` named
 records the original payload as reported. An outer boundary then reports and catches the
 `Panic (PanicHook)` like any other unwind; with no outer boundary, the host
 reports it as an uncaught error.
+
+To recognize it, use `isPanicHookFailure(payload)`. It narrows the payload to
+`Panic<PanicHookFailure>`, so `payload.cause.payload` and
+`payload.cause.thrown` need no cast. It accepts only the panic a boundary
+threw, never a `Panic` built by hand with the same name.

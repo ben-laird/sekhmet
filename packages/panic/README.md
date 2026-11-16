@@ -81,7 +81,7 @@ Two differences follow from having no global state:
 - **A throwing hook does not abort.** Rust aborts on a panic while panicking.
   Here the boundary gives up recovering and throws a `Panic (PanicHook)` whose
   cause holds the original payload and what the hook threw; an outer boundary
-  reports and catches it.
+  reports and catches it. Recognize it with `isPanicHookFailure(payload)`.
 
 See [the guide](./docs/guide.md) for hooks, chaining, nested boundaries and
 converting payloads into app errors.

@@ -16,6 +16,7 @@ import { Panic, panic } from "@/src/mini/core.ts";
 import {
 	defaultPanicHook,
 	definePanicRuntime,
+	isPanicHookFailure,
 	type PanicHook,
 	type PanicHookInfo,
 	type PanicRuntime,
@@ -444,6 +445,53 @@ Deno.test("A throwing hook panics out of the boundary", async (t) => {
 		assertEquals(caught.name, "Panic (PanicHook)");
 		assertEquals(outer.reports.length, 1);
 		assertStrictEquals(outer.reports[0]?.payload, caught);
+	});
+});
+
+Deno.test("isPanicHookFailure() recognizes only a boundary's hook-failure panic", async (t) => {
+	await t.step("the panic a boundary throws when its hook throws", () => {
+		// Given: a runtime whose hook throws, and a payload
+		const runtime = definePanicRuntime();
+		const hookError = new Error("hook broke");
+		runtime.setHook(() => {
+			throw hookError;
+		});
+		const payload = boom();
+
+		// When: the boundary's hook fails and the guard checks what escaped
+		const thrown = assertThrows(() =>
+			runtime.catchUnwind(() => {
+				throw payload;
+			}),
+		);
+
+		// Then: the guard accepts it and narrows the cause without a cast
+		assert(isPanicHookFailure(thrown));
+		assertStrictEquals(thrown.cause.payload, payload);
+		assertStrictEquals(thrown.cause.thrown, hookError);
+	});
+
+	await t.step("look-alikes and other payloads", () => {
+		// Given: a hand-made Panic with the same name and cause shape, and others
+		const revoked = Proxy.revocable({}, {});
+		revoked.revoke();
+		const others: unknown[] = [
+			new Panic({
+				name: "PanicHook",
+				message: "forged",
+				cause: { payload: 1, thrown: 2 },
+			}),
+			new Error("plain"),
+			"Panic (PanicHook)",
+			undefined,
+			revoked.proxy,
+		];
+
+		// When: the guard checks each
+		const accepted = others.filter(isPanicHookFailure);
+
+		// Then: it rejects them all, without throwing on the revoked Proxy
+		assertEquals(accepted, []);
 	});
 });
 
