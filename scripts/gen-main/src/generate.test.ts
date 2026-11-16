@@ -64,7 +64,7 @@ function signature({
 }: {
 	typeParams?: string[];
 	params: Param[];
-	returnType: TypeNode;
+	returnType: TypeNode | undefined;
 	jsDoc?: JsDoc;
 }): FunctionDeclaration {
 	return {
@@ -532,4 +532,149 @@ Deno.test("generateMain requires the primary class", () => {
 	// Then: generation fails, naming the primary
 	assert(!result.ok);
 	assertEquals(result.error.symbol, "Box");
+});
+
+function rejection(
+	symbols: DocSymbol[],
+	feature: Feature = FEATURE,
+): {
+	symbol: string | undefined;
+	message: string;
+} {
+	const result = generate(symbols, feature);
+	if (result.ok) throw new Error("expected generation to fail");
+	return { symbol: result.error.symbol, message: result.error.message };
+}
+
+const isBox = (arg: TypeNode): TypeNode => ({
+	kind: "predicate",
+	asserts: false,
+	subject: "self",
+	type: named("Box", [arg]),
+});
+
+Deno.test("generateMain rejects self that omits the class's type arguments", () => {
+	// Given: self typed as a bare Box although Box takes T
+	const bare = fn(
+		"bare",
+		signature({
+			params: [param("self", named("Box"))],
+			returnType: keyword("void"),
+		}),
+	);
+
+	// When: generating
+	const error = rejection([bare]);
+
+	// Then: generation fails on the arity
+	assertEquals(error.symbol, "bare");
+	assertStringIncludes(error.message, "must pass all 1");
+});
+
+Deno.test("generateMain rejects self type arguments that aren't the function's type parameters", () => {
+	// Given: self typed Box<number>
+	const fixed = fn(
+		"fixed",
+		signature({
+			params: [param("self", named("Box", [keyword("number")]))],
+			returnType: keyword("void"),
+		}),
+	);
+
+	// When: generating
+	const error = rejection([fixed]);
+
+	// Then: generation fails, asking for distinct type parameters
+	assertEquals(error.symbol, "fixed");
+	assertStringIncludes(error.message, "distinct type parameters");
+});
+
+Deno.test("generateMain rejects a method without a return type", () => {
+	// Given: a self-first function with no annotated return type
+	const untyped = fn(
+		"untyped",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: undefined,
+		}),
+	);
+
+	// When: generating
+	const error = rejection([untyped]);
+
+	// Then: generation fails on the missing annotation
+	assertEquals(error, {
+		symbol: "untyped",
+		message: "the return type must be annotated",
+	});
+});
+
+Deno.test("generateMain rejects uncurrying a function that doesn't return a function", () => {
+	// Given: a configured uncurry target that returns a plain value
+	const flat = fn(
+		"flat",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: typeParam("T"),
+		}),
+	);
+
+	// When: generating with it uncurried
+	const error = rejection([flat], { ...FEATURE, uncurry: ["flat"] });
+
+	// Then: generation fails
+	assertEquals(error.symbol, "flat");
+	assertStringIncludes(error.message, "uncurried");
+});
+
+Deno.test("generateMain rejects overloads that disagree on returning the primary", () => {
+	// Given: one overload returning Box and one returning a number
+	const split = fn(
+		"split",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: named("Box", [typeParam("T")]),
+		}),
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T"), param("n", keyword("number"))],
+			returnType: keyword("number"),
+		}),
+	);
+
+	// When: generating
+	const error = rejection([split]);
+
+	// Then: generation fails
+	assertEquals(error.symbol, "split");
+	assertStringIncludes(error.message, "overloads must agree");
+});
+
+Deno.test("generateMain rejects overloaded type predicates", () => {
+	// Given: two overloaded type guards on self
+	const guard = fn(
+		"guard",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: isBox(keyword("never")),
+		}),
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T"), param("strict", keyword("boolean"))],
+			returnType: isBox(keyword("never")),
+		}),
+	);
+
+	// When: generating
+	const error = rejection([guard]);
+
+	// Then: generation fails
+	assertEquals(error, {
+		symbol: "guard",
+		message: "overloaded type predicates are not supported",
+	});
 });
