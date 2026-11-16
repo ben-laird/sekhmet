@@ -111,7 +111,7 @@ Before contributing:
 covers it: the Deno language server (hovers, completions, type errors) and
 Biome (formatting, lint, organize imports) both see the folder. Imports of
 `@sekhmet/*` resolve to the checked-out source, so you are always playing with
-the current branch:
+the current branch (or, after `deno task play:link`, with a worktree's):
 
 ```bash
 deno run playground/try.ts         # any script that imports @sekhmet/*
@@ -129,6 +129,48 @@ Deno's lint diagnostics for it in the editor; Biome's lint still runs there.
   `playground/start.ipynb` (it never overwrites yours). Open it in VS Code with
   the Jupyter extension and pick the Deno kernel; if the kernel isn't listed,
   run `deno jupyter --install` once.
+- **`deno task play:link <target>`** points `playground/` at another tree's
+  packages, so you can dogfood a worktree's branch without switching the main
+  checkout (see below).
+
+#### Dogfooding a worktree
+
+Your editor's `playground/` lives in the main checkout, but the branch you want
+to try often lives in a worktree (`.claude/worktrees/…`). `play:link` writes a
+`playground/deno.json` that links every `@sekhmet/*` package to that tree, so
+hovers, completions, `deno run` and `deno check` in `playground/` all use its
+source:
+
+```bash
+deno task play:link refactor/schema-declarative  # the worktree on that branch
+deno task play:link ../some/checkout             # any checkout, by path
+deno task play:link main                         # back to this checkout
+deno task play:link                              # what is linked, and is it still there?
+deno task play:link off                          # back to the root workspace
+```
+
+- **A target** is `main` (or `checkout`) for this clone's own checkout, a
+  branch name for the worktree that has it checked out (it lists the branches
+  that have one when yours does not), or a path starting with `/`, `.` or `~`.
+  It works the same run from the main checkout or from any worktree, and always
+  writes the main checkout's `playground/deno.json`.
+- **The file is not a workspace member**, so Deno treats `playground/` as a
+  standalone project and prints
+  `Warning: config file …/playground/deno.json is not a member of the workspace … Ignoring the parent workspace config.`
+  That warning is expected while linked. The root workspace's `imports` (such
+  as `@std/*`) no longer apply there; add any you need to
+  `playground/deno.json` yourself.
+- **It owns three keys**: the `@sekhmet/*` entries of `imports` (one `jsr:`
+  specifier per package, which `links` overrides, so unpublished packages work
+  too), `links` (every package of the target, relative to `playground/`), and
+  `compilerOptions` (copied from the target's root `deno.json`, so strictness
+  matches). Every other key and import you add is kept on relink and on `off`;
+  `off` deletes the file only when nothing of yours is left in it.
+- **Restart the Deno language server after switching** (VS Code:
+  `Deno: Restart Language Server`) so it resolves through the new `links`.
+- **Worktrees go away after their branch merges.** `deno task play:link` with no
+  target reports links whose directories no longer exist; relink with
+  `deno task play:link main` or drop the link with `off`.
 
 #### Using your checkout from another Deno project
 

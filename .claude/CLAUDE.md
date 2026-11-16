@@ -123,7 +123,9 @@ Scripts (`scripts/`, unpublished):
 - `@sekhmet/gen-main`: generates each feature's main (method-chaining)
   `main/mod.ts` from its mini barrel (`deno task gen:main`; `--check` in CI)
 - `@sekhmet/playground`: `deno task play:notebook` starts a Jupyter notebook
-  in the gitignored `playground/` (see CONTRIBUTING.md, "Playground")
+  in the gitignored `playground/`, and `deno task play:link <target>` links
+  `playground/` to a worktree's (or any checkout's) packages for the editor
+  (see CONTRIBUTING.md, "Playground")
 - `@sekhmet/release`: the release driver `.github/workflows/release.yml` runs
   on every push to main: versions pending Records, tags, publishes, and opens
   GitHub Releases
