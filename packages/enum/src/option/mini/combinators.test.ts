@@ -1,8 +1,8 @@
 import { assertEquals } from "@std/assert";
 import { match } from "@/src/core/mini/exit.ts";
 import { isolate } from "@/src/core/mini/isolate.ts";
-import { None, Some } from "./core.ts";
 import * as TestSubject from "./combinators.ts";
+import { None, Some } from "./core.ts";
 
 Deno.test("iter() yields value for Some", () => {
 	// Given: an Option with a Some variant containing a value

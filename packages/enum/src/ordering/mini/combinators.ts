@@ -1,4 +1,4 @@
-import { match } from "@sekhmet/enum/core/mini/exit";
+import { match } from "@/src/core/mini/exit.ts";
 import { Equal, Greater, Less, type Ordering } from "./core.ts";
 
 /**
@@ -72,10 +72,7 @@ export function andThen(self: Ordering, other: Ordering): Ordering {
  * );
  * ```
  */
-export function andThenWith(
-	self: Ordering,
-	other: () => Ordering,
-): Ordering {
+export function andThenWith(self: Ordering, other: () => Ordering): Ordering {
 	return match(self)({
 		Less: () => self,
 		Equal: other,

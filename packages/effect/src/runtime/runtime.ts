@@ -4,11 +4,11 @@
  * @module
  */
 
-import type { Effect } from "@sekhmet/effect/effect/mini";
-import { fork } from "@sekhmet/effect/execution";
-import type { Fiber } from "@sekhmet/effect/fiber/mini";
-import type { Scheduler } from "@sekhmet/effect/scheduler";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
+import type { Effect } from "@/src/effect/mini/mod.ts";
+import { fork } from "@/src/execution/mod.ts";
+import type { Fiber } from "@/src/fiber/mini/mod.ts";
+import type { Scheduler } from "@/src/scheduler/mod.ts";
 
 /**
  * Configuration for fiber execution.

@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
-import { unionKinds } from "@sekhmet/enum/core/mini/exit";
-import { Equal, Greater, Less } from "./core.ts";
+import { unionKinds } from "@/src/core/mini/exit.ts";
 import { andThen, andThenWith, reverse, toNumber } from "./combinators.ts";
+import { Equal, Greater, Less } from "./core.ts";
 
 Deno.test("reverse swaps Less and Greater, keeps Equal", () => {
 	// Given: the three ordering states

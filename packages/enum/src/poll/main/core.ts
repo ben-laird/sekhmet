@@ -1,4 +1,4 @@
-import { match } from "@sekhmet/enum/core/mini/exit";
+import { match } from "@/src/core/mini/exit.ts";
 import * as mini from "../mini/mod.ts";
 
 /**

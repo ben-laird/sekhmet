@@ -15,7 +15,7 @@ import { inspect as inspectOption } from "@sekhmet/enum/option/mini/transform";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { Async, Deferred, Ready } from "../continuation/continuation.ts";
 import { Effect, ExceptionOccurred, Failed } from "../effect/mini/effect.ts";
-import { cancel, join, type Fiber } from "../fiber/mini/fiber.ts";
+import { cancel, type Fiber, join } from "../fiber/mini/fiber.ts";
 import type { FiberError } from "../fiber/mini/fiber-error.ts";
 
 /**

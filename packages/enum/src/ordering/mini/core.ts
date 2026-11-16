@@ -1,4 +1,4 @@
-import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
+import { Enum, type Split } from "@/src/core/mini/core.ts";
 
 /**
  * Constructs an Ordering indicating that the left value is less than the right.

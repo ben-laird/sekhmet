@@ -4,5 +4,5 @@
  * @module
  */
 
-export { Runtime } from "./runtime.ts";
 export type { FiberConfig, RuntimeParams } from "./runtime.ts";
+export { Runtime } from "./runtime.ts";

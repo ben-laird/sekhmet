@@ -2,12 +2,12 @@ import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import type { Effect } from "../effect/mini/effect.ts";
+import { Fiber, FiberState, type Finalizer } from "../fiber/mini/fiber.ts";
 import {
 	Failed,
 	type FiberResult,
 	Panicked,
 } from "../fiber/mini/fiber-error.ts";
-import { Fiber, FiberState, type Finalizer } from "../fiber/mini/fiber.ts";
 import type { Runtime } from "../runtime/runtime.ts";
 
 const DEFAULT_STEP_BUDGET = 1024;

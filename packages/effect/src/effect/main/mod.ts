@@ -167,9 +167,7 @@ export class Effect<I, T, E> extends mini.Effect<I, T, E> {
 	 * @returns A new effect that tries this and falls back on error
 	 * @see {@link mini.orElse}
 	 */
-	orElse<F>(
-		fallbackStep: (error: E) => mini.Effect<I, T, F>,
-	): Effect<I, T, F> {
+	orElse<F>(fallbackStep: (error: E) => mini.Effect<I, T, F>): Effect<I, T, F> {
 		return fromMini(mini.orElse(this, fallbackStep));
 	}
 

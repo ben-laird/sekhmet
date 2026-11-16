@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { unionKinds } from "@sekhmet/enum/core/mini/exit";
+import { unionKinds } from "@/src/core/mini/exit.ts";
 import {
 	compareBy,
 	compareByString,

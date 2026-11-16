@@ -4,7 +4,6 @@
  * @module
  */
 
-export { Async, Continuation, Deferred, Ready } from "./continuation.ts";
 export type {
 	AsyncContinuation,
 	Cancellation,
@@ -12,3 +11,4 @@ export type {
 	ContinuationVariants,
 	DeferredContinuation,
 } from "./continuation.ts";
+export { Async, Continuation, Deferred, Ready } from "./continuation.ts";

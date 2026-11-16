@@ -4,6 +4,13 @@
  * @module
  */
 
+export { zip } from "../../concurrency/concurrency.ts";
+export type {
+	EffectErrorVariants,
+	EffectFn,
+	EffectOutput,
+	EffectResult,
+} from "./effect.ts";
 export {
 	Effect,
 	EffectError,
@@ -12,13 +19,7 @@ export {
 	Failure,
 	Success,
 } from "./effect.ts";
-export type {
-	EffectErrorVariants,
-	EffectFn,
-	EffectOutput,
-	EffectResult,
-} from "./effect.ts";
-export { zip } from "../../concurrency/concurrency.ts";
+export type { ResultArms } from "./operations.ts";
 export {
 	and,
 	andThen,
@@ -32,4 +33,3 @@ export {
 	or,
 	orElse,
 } from "./operations.ts";
-export type { ResultArms } from "./operations.ts";

@@ -1,5 +1,5 @@
-import { match } from "@sekhmet/enum/core/mini/exit";
-import { isolate } from "@sekhmet/enum/core/mini/isolate";
+import { match } from "@/src/core/mini/exit.ts";
+import { isolate } from "@/src/core/mini/isolate.ts";
 import { Pending, type Poll, Ready } from "./core.ts";
 
 /**
