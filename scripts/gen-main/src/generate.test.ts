@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import type { Feature } from "./config.ts";
+import type { Borrow, Feature } from "./config.ts";
 import { moduleScopeValueUses } from "./cycle.ts";
 import type {
 	DocSymbol,
@@ -912,4 +912,241 @@ Deno.test("generateMain uses wrap targets only inside bodies", () => {
 	// Then: Bag is never used while the module evaluates, so the import cycle is safe
 	assertStringIncludes(output, "Bag.fromMini(");
 	assertEquals(moduleScopeValueUses({ source: output, names: ["Bag"] }), []);
+});
+
+const SHELF: Borrow = {
+	entrypoint: "@pkg/shelf",
+	mini: "pkg/src/shelf/mini/mod.ts",
+	namespace: "shelf",
+	methods: [{ name: "wrap" }, { name: "stack", field: "item" }],
+};
+const SHELF_URL = "file:///repo/pkg/src/shelf/mini/mod.ts";
+const BORROWING: Feature = { ...FEATURE, borrows: [SHELF] };
+
+const example = (doc: string): JsDoc => ({
+	doc: "",
+	tags: [{ kind: "example", doc }],
+});
+
+/** `wrap<A>(self: Box<A>, label: string): Box<shelf.Label<A>>`. */
+const WRAP = fn(
+	"wrap",
+	signature({
+		typeParams: ["A"],
+		params: [selfBox("A"), param("label", keyword("string"))],
+		returnType: named("Box", [
+			{
+				kind: "ref",
+				name: "Label",
+				args: [typeParam("A")],
+				resolution: { kind: "local" },
+			},
+		]),
+		jsDoc: example(
+			'```ts\nimport { wrap } from "@pkg/shelf/mini";\nimport { full } from "@pkg/box/mini";\n\nwrap(full(1), "a");\n```',
+		),
+	}),
+);
+
+/** `stack<A>(options: StackOptions<A>): Box<A[]>`, filling `item`. */
+const STACK = fn(
+	"stack",
+	signature({
+		typeParams: ["A"],
+		params: [
+			param("options", {
+				kind: "ref",
+				name: "StackOptions",
+				args: [typeParam("A")],
+				resolution: { kind: "local" },
+			}),
+		],
+		returnType: named("Box", [{ kind: "array", element: typeParam("A") }]),
+		jsDoc: {
+			doc: "Stacks a box.",
+			tags: [
+				{ kind: "param", name: "options", doc: "What to stack" },
+				{
+					kind: "example",
+					doc: '```ts\nimport { stack } from "@pkg/shelf/mini";\nimport { full } from "@pkg/box/mini";\n\nconst pile = stack({ item: full(1) });\n```',
+				},
+			],
+		},
+	}),
+);
+
+const LABEL: DocSymbol = {
+	name: "Label",
+	declarations: [{ kind: "other", typeOnly: true }],
+};
+
+function borrowing({
+	borrowed,
+	symbols = [],
+	feature = BORROWING,
+}: {
+	borrowed: readonly DocSymbol[] | undefined;
+	symbols?: DocSymbol[];
+	feature?: Feature;
+}): ReturnType<typeof generateMain> {
+	return generateMain({
+		feature,
+		symbols: [BOX_CLASS, ...symbols],
+		sources: SOURCES,
+		miniUrl: MINI_URL,
+		outputUrl: OUTPUT_URL,
+		borrowed:
+			borrowed === undefined
+				? []
+				: [{ borrow: SHELF, url: SHELF_URL, symbols: borrowed }],
+	});
+}
+
+Deno.test("generateMain makes a borrowed self-first function a method", () => {
+	// Given: a feature borrowing wrap(self: Box<A>, label) from the shelf barrel
+	const borrowed = [WRAP, STACK, LABEL];
+
+	// When: generating
+	const result = borrowing({ borrowed });
+
+	// Then: the barrel is imported as its namespace, and the method calls it with this
+	assert(result.ok);
+	const output = result.value;
+	assertStringIncludes(
+		output,
+		'import * as shelf from "../../shelf/mini/mod.ts";',
+	);
+	assertStringIncludes(output, "wrap(label: string): Box<shelf.Label<T>> {");
+	assertStringIncludes(output, "return Box.fromMini(shelf.wrap(this, label));");
+	assertStringIncludes(output, "@see {@link shelf.wrap}");
+	assertStringIncludes(
+		output,
+		"It also takes `wrap`, `stack` from `@pkg/shelf/mini` as methods.",
+	);
+});
+
+Deno.test("generateMain fills a borrowed function's options field with this", () => {
+	// Given: a feature borrowing stack({ item }) from the shelf barrel
+	const borrowed = [WRAP, STACK, LABEL];
+
+	// When: generating
+	const result = borrowing({ borrowed });
+
+	// Then: the method takes no arguments and passes the receiver as the item
+	assert(result.ok);
+	const output = result.value;
+	assertStringIncludes(output, "stack(): Box<T[]> {");
+	assertStringIncludes(
+		output,
+		"return Box.fromMini(shelf.stack({ item: this }));",
+	);
+	assert(!output.includes("@param options"));
+});
+
+Deno.test("generateMain rewrites borrowed methods' examples to method form", () => {
+	// Given: borrowed functions whose examples call them as functions
+	const borrowed = [WRAP, STACK, LABEL];
+
+	// When: generating
+	const result = borrowing({ borrowed });
+
+	// Then: the calls are method calls and the borrowed imports are gone
+	assert(result.ok);
+	const output = result.value;
+	assertStringIncludes(output, 'full(1).wrap("a");');
+	assertStringIncludes(output, "const pile = full(1).stack();");
+	assertStringIncludes(output, 'import { full } from "@pkg/box";');
+	assert(!output.includes('from "@pkg/shelf/mini"'));
+});
+
+Deno.test("generateMain rejects borrows it can't resolve or attach", async (t) => {
+	// Given: a box feature that also has its own wrap method
+	const ownWrap = fn(
+		"wrap",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: keyword("void"),
+		}),
+	);
+	const loose = fn(
+		"wrap",
+		signature({
+			typeParams: ["A"],
+			params: [param("label", keyword("string"))],
+			returnType: keyword("void"),
+		}),
+	);
+	const generic = fn("stack", {
+		...signature({
+			typeParams: ["A", "B"],
+			params: [
+				param("options", {
+					kind: "ref",
+					name: "StackOptions",
+					args: [typeParam("A")],
+					resolution: { kind: "local" },
+				}),
+			],
+			returnType: typeParam("B"),
+		}),
+	});
+	const cases: {
+		name: string;
+		borrowed: readonly DocSymbol[] | undefined;
+		symbols?: DocSymbol[];
+		message: string;
+		symbol: string | undefined;
+	}[] = [
+		{
+			name: "the barrel's symbols are missing",
+			borrowed: undefined,
+			message: "the symbols of pkg/src/shelf/mini/mod.ts were not provided",
+			symbol: undefined,
+		},
+		{
+			name: "the function isn't exported",
+			borrowed: [STACK],
+			message: "@pkg/shelf/mini must export the function wrap",
+			symbol: "wrap",
+		},
+		{
+			name: "it clashes with an own method",
+			borrowed: [WRAP, STACK],
+			symbols: [ownWrap],
+			message: "wrap is already a method of Box",
+			symbol: "wrap",
+		},
+		{
+			name: "it doesn't take self first",
+			borrowed: [loose, STACK],
+			message:
+				"a borrowed function must take `self: Box` first, or name the options field it fills",
+			symbol: "wrap",
+		},
+		{
+			name: "a field method has type parameters it can't infer",
+			borrowed: [WRAP, generic],
+			message:
+				"a method filling `item` takes no arguments, so it can't infer B",
+			symbol: "stack",
+		},
+	];
+
+	for (const { name, borrowed, symbols, message, symbol } of cases) {
+		await t.step(name, () => {
+			// When: generating
+			const result = borrowing({
+				borrowed,
+				...(symbols === undefined ? {} : { symbols }),
+			});
+
+			// Then: generation fails, naming the function at fault
+			assert(!result.ok);
+			assertEquals(
+				{ symbol: result.error.symbol, message: result.error.message },
+				{ symbol, message },
+			);
+		});
+	}
 });

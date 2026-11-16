@@ -26,7 +26,10 @@ import { type Child, invalidType, isRecord, type Parsed } from "./collect.ts";
  * import type { Options } from "@sekhmet/schema/composites/mini";
  * import { object } from "@sekhmet/schema/composites/mini";
  *
- * const shapes: Options = { circle: object({}), square: object({}) };
+ * const shapes: Options = {
+ * 	circle: object({ shape: {} }),
+ * 	square: object({ shape: {} }),
+ * };
  * ```
  */
 export type Options = {
@@ -97,6 +100,37 @@ export type DiscriminatedOutput<K extends string, M extends Options> = {
 }[keyof M & string];
 
 /**
+ * What {@linkcode discriminatedUnion} builds a schema from: the key holding
+ * the discriminant, and each discriminant value's schema.
+ *
+ * @template K The discriminant key
+ * @template M The options
+ *
+ * @example
+ * ```ts
+ * import {
+ * 	type DiscriminatedUnionOptions,
+ * 	object,
+ * } from "@sekhmet/schema/composites/mini";
+ *
+ * const circle = object({ shape: {} });
+ * const shapes: DiscriminatedUnionOptions<"kind", { circle: typeof circle }> = {
+ * 	key: "kind",
+ * 	options: { circle },
+ * };
+ * ```
+ */
+export interface DiscriminatedUnionOptions<
+	K extends string,
+	M extends Options,
+> {
+	/** The key holding the discriminant. */
+	readonly key: K;
+	/** Each discriminant value's schema, which parses an object carrying it. */
+	readonly options: M;
+}
+
+/**
  * Creates a schema for a union of objects told apart by the string under
  * `key`: the value there picks the option that parses the whole object.
  * The output carries the discriminant, whether or not the option declares
@@ -109,8 +143,8 @@ export type DiscriminatedOutput<K extends string, M extends Options> = {
  *
  * @template K The discriminant key
  * @template M The options
- * @param key The key holding the discriminant
- * @param options Each discriminant value's schema
+ * @param declaration The key holding the discriminant, and each discriminant
+ *   value's schema
  * @returns A schema for the union of `options`
  *
  * @example
@@ -123,9 +157,12 @@ export type DiscriminatedOutput<K extends string, M extends Options> = {
  * const size = new Schema((input: unknown) =>
  * 	typeof input === "number" ? Ok(input) : Err("not a size"),
  * );
- * const shape = discriminatedUnion("kind", {
- * 	circle: object({ radius: size }),
- * 	square: object({ side: size }),
+ * const shape = discriminatedUnion({
+ * 	key: "kind",
+ * 	options: {
+ * 		circle: object({ shape: { radius: size } }),
+ * 		square: object({ shape: { side: size } }),
+ * 	},
  * });
  *
  * assertEquals(unwrap(parseSync(shape, { kind: "circle", radius: 2 })), {
@@ -138,17 +175,18 @@ export type DiscriminatedOutput<K extends string, M extends Options> = {
  * ```
  */
 export function discriminatedUnion<const K extends string, M extends Options>(
-	key: K,
-	options: M,
+	declaration: DiscriminatedUnionOptions<K, M>,
 ): Schema<
 	DiscriminatedInput<K, M>,
 	DiscriminatedOutput<K, M>,
 	Issues<Flatten<ErrorOf<M[keyof M]>> | SchemaIssue>
 >;
-export function discriminatedUnion(
-	key: string,
-	options: Readonly<Record<string, Child>>,
-): Schema<unknown, unknown, Issues<unknown>> {
+export function discriminatedUnion(declaration: {
+	readonly key: string;
+	readonly options: Readonly<Record<string, Child>>;
+}): Schema<unknown, unknown, Issues<unknown>> {
+	const { key, options } = declaration;
+
 	return new Schema((input: unknown): Parsed => {
 		if (!isRecord(input)) return invalidType({ input, expected: "object" });
 

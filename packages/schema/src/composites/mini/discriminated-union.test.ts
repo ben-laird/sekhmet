@@ -26,9 +26,12 @@ const size: Schema<unknown, number, "not a size"> = new Schema((input) =>
 const laterSize: Schema<unknown, number, "not a size"> = new Schema((input) =>
 	Promise.resolve(typeof input === "number" ? Ok(input) : Err("not a size")),
 );
-const shape = discriminatedUnion("kind", {
-	circle: object({ radius: size }),
-	square: object({ side: size }),
+const shape = discriminatedUnion({
+	key: "kind",
+	options: {
+		circle: object({ shape: { radius: size } }),
+		square: object({ shape: { side: size } }),
+	},
 });
 
 Deno.test("discriminatedUnion dispatches on the key and keeps the discriminant", () => {
@@ -84,9 +87,12 @@ Deno.test("discriminatedUnion rejects non-objects with InvalidType at the root",
 
 Deno.test("discriminatedUnion is Async when the chosen option is", async () => {
 	// Given: a union whose circle option is async
-	const later = discriminatedUnion("kind", {
-		circle: object({ radius: laterSize }),
-		square: object({ side: size }),
+	const later = discriminatedUnion({
+		key: "kind",
+		options: {
+			circle: object({ shape: { radius: laterSize } }),
+			square: object({ shape: { side: size } }),
+		},
 	});
 
 	// When: parsing a square and a circle

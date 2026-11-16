@@ -51,6 +51,35 @@ export type RecordOutput<K extends PropertyKey, V> = string extends K
 	: Partial<Record<K, V>>;
 
 /**
+ * What {@linkcode record} builds a schema from: the schema for each key and
+ * the schema for each value.
+ *
+ * @template KO The key schema's output type
+ * @template KE The key schema's error type
+ * @template VI The value schema's input type
+ * @template VO The value schema's output type
+ * @template VE The value schema's error type
+ *
+ * @example
+ * ```ts
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import type { RecordOptions } from "@sekhmet/schema/composites/mini";
+ * import { Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const options: RecordOptions<string, never, unknown, unknown, never> = {
+ * 	key: new Schema((input: string) => Ok(input)),
+ * 	value: new Schema((input: unknown) => Ok(input)),
+ * };
+ * ```
+ */
+export interface RecordOptions<KO extends PropertyKey, KE, VI, VO, VE> {
+	/** The schema each own enumerable string key is parsed by. */
+	readonly key: Schema<string, KO, KE>;
+	/** The schema each key's value is parsed by. */
+	readonly value: Schema<VI, VO, VE>;
+}
+
+/**
  * Creates a schema for objects used as dictionaries: every own enumerable
  * string key is parsed by `key`, and its value by `value`. The output maps
  * each parsed key to its parsed value; every failing key or value is
@@ -62,8 +91,7 @@ export type RecordOutput<K extends PropertyKey, V> = string extends K
  * @template VI The value schema's input type
  * @template VO The value schema's output type
  * @template VE The value schema's error type
- * @param key The schema for each key
- * @param value The schema for each value
+ * @param options The schema for each key and for each value
  * @returns A schema for records of `key` to `value`
  *
  * @example
@@ -77,22 +105,24 @@ export type RecordOutput<K extends PropertyKey, V> = string extends K
  * const score = new Schema((input: unknown) =>
  * 	typeof input === "number" ? Ok(input) : Err("not a score"),
  * );
+ * const scores = record({ key: name, value: score });
  *
- * assertEquals(unwrap(parseSync(record(name, score), { ada: 3 })), { ada: 3 });
+ * assertEquals(unwrap(parseSync(scores, { ada: 3 })), { ada: 3 });
  * ```
  */
 export function record<KO extends PropertyKey, KE, VI, VO, VE>(
-	key: Schema<string, KO, KE>,
-	value: Schema<VI, VO, VE>,
+	options: RecordOptions<KO, KE, VI, VO, VE>,
 ): Schema<
 	RecordInput<VI>,
 	RecordOutput<KO, VO>,
 	Issues<Flatten<KE | VE> | SchemaIssue>
 >;
-export function record(
-	key: Schema<string, PropertyKey, unknown>,
-	value: Child,
-): Schema<unknown, unknown, Issues<unknown>> {
+export function record(options: {
+	readonly key: Schema<string, PropertyKey, unknown>;
+	readonly value: Child;
+}): Schema<unknown, unknown, Issues<unknown>> {
+	const { key, value } = options;
+
 	return new Schema((input: unknown): Parsed => {
 		if (!isRecord(input)) return invalidType({ input, expected: "object" });
 

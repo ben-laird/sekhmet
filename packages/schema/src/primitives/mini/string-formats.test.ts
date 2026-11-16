@@ -3,16 +3,7 @@ import { assertEquals } from "@std/assert";
 import { InvalidFormat, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { ParseError, parseSync, type Schema } from "@/src/core/mini/schema.ts";
 import { string } from "./string.ts";
-import {
-	EMAIL_PATTERN,
-	email,
-	isoDate,
-	isoDateTime,
-	isoTime,
-	UUID_PATTERN,
-	url,
-	uuid,
-} from "./string-formats.ts";
+import { EMAIL_PATTERN, UUID_PATTERN } from "./string-formats.ts";
 
 /** One format's cases: the strings it accepts and those it rejects. */
 interface Table {
@@ -56,7 +47,7 @@ function runTable(table: Table): void {
 
 runTable({
 	format: "email",
-	schema: email(string()),
+	schema: string({ format: "email" }),
 	pattern: EMAIL_PATTERN,
 	valid: [
 		"ada@example.com",
@@ -91,7 +82,7 @@ runTable({
 
 runTable({
 	format: "url",
-	schema: url(string()),
+	schema: string({ format: "url" }),
 	valid: [
 		"https://example.com",
 		"http://localhost:8000/path?q=1#frag",
@@ -113,7 +104,7 @@ runTable({
 
 runTable({
 	format: "uuid",
-	schema: uuid(string()),
+	schema: string({ format: "uuid" }),
 	pattern: UUID_PATTERN,
 	valid: [
 		"550e8400-e29b-41d4-a716-446655440000",
@@ -137,7 +128,7 @@ runTable({
 
 runTable({
 	format: "date",
-	schema: isoDate(string()),
+	schema: string({ format: "date" }),
 	valid: ["2026-11-16", "2024-02-29", "2000-02-29", "0001-01-01", "9999-12-31"],
 	invalid: [
 		"",
@@ -157,7 +148,7 @@ runTable({
 
 runTable({
 	format: "time",
-	schema: isoTime(string()),
+	schema: string({ format: "time" }),
 	valid: [
 		"00:00",
 		"23:59",
@@ -181,7 +172,7 @@ runTable({
 
 runTable({
 	format: "date-time",
-	schema: isoDateTime(string()),
+	schema: string({ format: "date-time" }),
 	valid: [
 		"2026-11-16T09:30:00Z",
 		"2026-11-16T09:30Z",

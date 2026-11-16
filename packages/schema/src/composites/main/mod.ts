@@ -3,22 +3,27 @@
 /**
  * Main entrypoint for `@sekhmet/schema/composites`: the method-chaining API.
  *
- * `ObjectSchema` here extends the mini `ObjectSchema` from `@sekhmet/schema/composites/mini`, so its instances work with every mini function too. Each `self`-first mini function is a method, and functions whose mini form returns `ObjectSchema` return this main class, so calls chain.
+ * Functions whose mini form (`@sekhmet/schema/composites/mini`) returns `Schema` return the main class instead, so calls chain.
  *
  * Generated from `../mini/mod.ts` by `deno task gen:main`; edit the mini source, then regenerate.
  *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
- * import { array, object } from "@sekhmet/schema/composites";
- * import { parseSync } from "@sekhmet/schema/core/mini";
- * import { Schema } from "@sekhmet/schema/core";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { object } from "@sekhmet/schema/composites";
+ * import { number, string } from "@sekhmet/schema/primitives";
  *
- * const text = new Schema((input: unknown) => Ok(String(input)));
- * const user = object({ name: text, tags: array(text) }).strict();
+ * const user = object({
+ * 	shape: {
+ * 		name: string({ minLength: 1 }),
+ * 		age: number({ int: true, min: 0 }).optional(),
+ * 		tags: string().array(),
+ * 	},
+ * 	unknownKeys: "strict",
+ * });
  *
- * assertEquals(unwrap(parseSync(user, { name: "Ada", tags: [] })), {
+ * assertEquals(unwrap(user.parseSync({ name: "Ada", tags: [] })), {
  * 	name: "Ada",
  * 	tags: [],
  * });
@@ -27,7 +32,6 @@
  * @module
  */
 
-import { getStructParams } from "@sekhmet/primordials/struct";
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Flatten, Issues } from "@/src/core/mini/issues.ts";
 import type {
@@ -42,14 +46,17 @@ import * as mini from "../mini/mod.ts";
 
 export type {
 	ArrayInput,
+	ArrayOptions,
 	DiscriminatedInput,
 	DiscriminatedOutput,
+	DiscriminatedUnionOptions,
 	ObjectError,
 	ObjectInput,
+	ObjectOptions,
 	ObjectOutput,
-	ObjectParser,
 	Options,
 	RecordInput,
+	RecordOptions,
 	RecordOutput,
 	Shape,
 	TupleError,
@@ -61,116 +68,13 @@ export type {
 } from "../mini/mod.ts";
 
 /**
- * A schema for objects with known fields. Its parser remembers the
- * {@linkcode Shape}, so `strict`, `passthrough` and `strip` can change what
- * it does with undeclared keys.
- *
- * This is the main, method-chaining `ObjectSchema`: every `self`-first function of the mini API is a method, and methods whose mini form returns `ObjectSchema` return this class. It extends the mini {@linkcode mini.ObjectSchema}, so instances work with the mini functions too.
- *
- * @template S - The object's shape
- * @template U - What the object does with undeclared keys
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { unwrap } from "@sekhmet/enum/result/mini";
- * import { object } from "@sekhmet/schema/composites";
- * import { parseSync } from "@sekhmet/schema/core/mini";
- * import { string } from "@sekhmet/schema/primitives/mini";
- *
- * const user = object({ name: string() });
- *
- * assertEquals(unwrap(parseSync(user, { name: "Ada", admin: true })), { name: "Ada" });
- * ```
- */
-export class ObjectSchema<
-	S extends mini.Shape,
-	U extends mini.UnknownKeys,
-> extends mini.ObjectSchema<S, U> {
-	/**
-	 * Views a mini {@linkcode mini.ObjectSchema} as a main `ObjectSchema`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
-	 *
-	 * @param self - The ObjectSchema to convert
-	 * @returns A main `ObjectSchema` sharing `self`'s state
-	 */
-	static fromMini<S extends mini.Shape, U extends mini.UnknownKeys>(
-		self: mini.ObjectSchema<S, U>,
-	): ObjectSchema<S, U> {
-		if (self instanceof ObjectSchema) return self;
-
-		return new ObjectSchema(getStructParams(self));
-	}
-
-	/**
-	 * Makes an object schema copy undeclared keys to its output unchecked.
-	 *
-	 * @returns The same object schema, keeping undeclared keys
-	 * @example
-	 * ```ts
-	 * import { assertEquals } from "@std/assert";
-	 * import { unwrap } from "@sekhmet/enum/result/mini";
-	 * import { object } from "@sekhmet/schema/composites";
-	 * import { parseSync } from "@sekhmet/schema/core/mini";
-	 *
-	 * const loose = object({}).passthrough();
-	 *
-	 * assertEquals(unwrap(parseSync(loose, { admin: true })), { admin: true });
-	 * ```
-	 * @see {@link mini.passthrough}
-	 */
-	passthrough(): ObjectSchema<S, "passthrough"> {
-		return ObjectSchema.fromMini(mini.passthrough(this));
-	}
-
-	/**
-	 * Makes an object schema report each undeclared key as an `UnknownKey`
-	 * issue at that key's path.
-	 *
-	 * @returns The same object schema, rejecting undeclared keys
-	 * @example
-	 * ```ts
-	 * import { assertEquals } from "@std/assert";
-	 * import { unwrapErr } from "@sekhmet/enum/result/mini";
-	 * import { object } from "@sekhmet/schema/composites";
-	 * import { entries, formatIssue, parseAsync } from "@sekhmet/schema/core/mini";
-	 *
-	 * const empty = object({}).strict();
-	 * const [issue] = entries(unwrapErr(await parseAsync(empty, { admin: true })));
-	 *
-	 * assertEquals(issue.path, ["admin"]);
-	 * ```
-	 * @see {@link mini.strict}
-	 */
-	strict(): ObjectSchema<S, "strict"> {
-		return ObjectSchema.fromMini(mini.strict(this));
-	}
-
-	/**
-	 * Makes an object schema drop undeclared keys from its output: the default,
-	 * restored after {@linkcode strict} or {@linkcode passthrough}.
-	 *
-	 * @returns The same object schema, stripping undeclared keys
-	 * @example
-	 * ```ts
-	 * import { assertEquals } from "@std/assert";
-	 * import { unwrap } from "@sekhmet/enum/result/mini";
-	 * import { object } from "@sekhmet/schema/composites";
-	 * import { parseSync } from "@sekhmet/schema/core/mini";
-	 *
-	 * const lenient = (object({}).strict()).strip();
-	 *
-	 * assertEquals(unwrap(parseSync(lenient, { admin: true })), {});
-	 * ```
-	 * @see {@link mini.strip}
-	 */
-	strip(): ObjectSchema<S, "strip"> {
-		return ObjectSchema.fromMini(mini.strip(this));
-	}
-}
-
-/**
  * Creates a schema for arrays whose every element `item` accepts. Every
  * element is parsed, and every failing element is reported at its index.
  * A non-array input fails with an `InvalidType` issue at the root.
+ *
+ * `minItems` and `maxItems` bound the length (JSON Schema's names, apart
+ * from the string length options). A length out of bounds is reported at
+ * the root, after any failing elements, so both are seen at once.
  *
  * The input is `unknown` when `item` accepts anything, and otherwise an
  * array of `item`'s input.
@@ -178,7 +82,7 @@ export class ObjectSchema<
  * @template I - The element schema's input type
  * @template O - The element schema's output type
  * @template E - The element schema's error type
- * @param item - The schema for each element
+ * @param options - The element schema and the length bounds
  * @returns A schema for arrays of `item`
  * @example
  * ```ts
@@ -190,80 +94,28 @@ export class ObjectSchema<
  * const positive = new Schema((input: unknown) =>
  * 	typeof input === "number" && input > 0 ? Ok(input) : Err("not positive"),
  * );
- * const issues = unwrapErr(await parseAsync(array(positive), [1, -2, 3, 0]));
+ * const found = unwrapErr(await parseAsync(array({ item: positive }), [1, -2, 3, 0]));
  *
- * assertEquals(entries(issues).map(({ path }) => path), [[1], [3]]);
+ * assertEquals(entries(found).map(({ path }) => path), [[1], [3]]);
  * ```
- */
-export function array<I, O, E>(
-	item: MiniSchema<I, O, E>,
-): Schema<mini.ArrayInput<I>, O[], Issues<Flatten<E> | SchemaIssue>> {
-	return Schema.fromMini(mini.array(item));
-}
-
-/**
- * Requires an array schema's output to have at most `maximum` elements,
- * failing with a `TooBig` issue (origin `"array"`) at the root, mirroring
- * {@linkcode minItems}.
- *
- * @template I - The input type
- * @template O - The array output type
- * @template E - The error type
- * @param self - The array schema
- * @param maximum - The most elements allowed (inclusive)
- * @returns The schema, with the length check
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
- * import { array, maxItems } from "@sekhmet/schema/composites";
+ * import { array } from "@sekhmet/schema/composites";
  * import { entries, formatIssue, parseAsync, Schema } from "@sekhmet/schema/core/mini";
  *
  * const anything = new Schema((input: unknown) => Ok(input));
- * const pair = maxItems(array(anything), 2);
+ * const pair = array({ item: anything, minItems: 1, maxItems: 2 });
  * const [{ error }] = entries(unwrapErr(await parseAsync(pair, [1, 2, 3])));
  *
  * assertEquals(formatIssue(error), "Too big: expected array to have <= 2 items");
  * ```
  */
-export function maxItems<I, O extends readonly unknown[], E>(
-	self: MiniSchema<I, O, E>,
-	maximum: number,
-): Schema<I, O, Issues<Flatten<E> | SchemaIssue>> {
-	return Schema.fromMini(mini.maxItems(self, maximum));
-}
-
-/**
- * Requires an array schema's output to have at least `minimum` elements,
- * failing with a `TooSmall` issue (origin `"array"`) at the root. When the
- * array also has failing elements and its input is too short, both are
- * reported.
- *
- * @template I - The input type
- * @template O - The array output type
- * @template E - The error type
- * @param self - The array schema
- * @param minimum - The fewest elements allowed (inclusive)
- * @returns The schema, with the length check
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
- * import { array, minItems } from "@sekhmet/schema/composites";
- * import { entries, formatIssue, parseAsync, Schema } from "@sekhmet/schema/core/mini";
- *
- * const anything = new Schema((input: unknown) => Ok(input));
- * const nonEmpty = minItems(array(anything), 1);
- * const [{ error }] = entries(unwrapErr(await parseAsync(nonEmpty, [])));
- *
- * assertEquals(formatIssue(error), "Too small: expected array to have >= 1 items");
- * ```
- */
-export function minItems<I, O extends readonly unknown[], E>(
-	self: MiniSchema<I, O, E>,
-	minimum: number,
-): Schema<I, O, Issues<Flatten<E> | SchemaIssue>> {
-	return Schema.fromMini(mini.minItems(self, minimum));
+export function array<I, O, E>(
+	options: mini.ArrayOptions<I, O, E>,
+): Schema<mini.ArrayInput<I>, O[], Issues<Flatten<E> | SchemaIssue>> {
+	return Schema.fromMini(mini.array(options));
 }
 
 /**
@@ -279,8 +131,8 @@ export function minItems<I, O extends readonly unknown[], E>(
  *
  * @template K - The discriminant key
  * @template M - The options
- * @param key - The key holding the discriminant
- * @param options - Each discriminant value's schema
+ * @param declaration - The key holding the discriminant, and each discriminant
+ * value's schema
  * @returns A schema for the union of `options`
  * @example
  * ```ts
@@ -292,9 +144,12 @@ export function minItems<I, O extends readonly unknown[], E>(
  * const size = new Schema((input: unknown) =>
  * 	typeof input === "number" ? Ok(input) : Err("not a size"),
  * );
- * const shape = discriminatedUnion("kind", {
- * 	circle: object({ radius: size }),
- * 	square: object({ side: size }),
+ * const shape = discriminatedUnion({
+ * 	key: "kind",
+ * 	options: {
+ * 		circle: object({ shape: { radius: size } }),
+ * 		square: object({ shape: { side: size } }),
+ * 	},
  * });
  *
  * assertEquals(unwrap(parseSync(shape, { kind: "circle", radius: 2 })), {
@@ -310,14 +165,13 @@ export function discriminatedUnion<
 	const K extends string,
 	M extends mini.Options,
 >(
-	key: K,
-	options: M,
+	declaration: mini.DiscriminatedUnionOptions<K, M>,
 ): Schema<
 	mini.DiscriminatedInput<K, M>,
 	mini.DiscriminatedOutput<K, M>,
 	Issues<Flatten<ErrorOf<M[keyof M]>> | SchemaIssue>
 > {
-	return Schema.fromMini(mini.discriminatedUnion(key, options));
+	return Schema.fromMini(mini.discriminatedUnion(declaration));
 }
 
 /**
@@ -374,7 +228,7 @@ export function enumOf<const T extends readonly [Literal, ...Literal[]]>(
  * 	children: Tree[];
  * }
  * const tree: Schema<unknown, Tree, Issues<unknown>> = object({
- * 	children: array(lazy(() => tree)),
+ * 	shape: { children: array({ item: lazy(() => tree) }) },
  * });
  *
  * assertEquals(unwrap(parseSync(tree, { children: [{ children: [] }] })), {
@@ -433,7 +287,7 @@ export function nullable<I, O, E>(
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
  * const text = new Schema((input: unknown) => Ok(String(input)));
- * const user = object({ nickname: optional(text) });
+ * const user = object({ shape: { nickname: optional(text) } });
  *
  * assertEquals(unwrap(parseSync(user, {})), {});
  * ```
@@ -448,41 +302,65 @@ export function optional<I, O, E>(
  * Creates a schema for objects with the given fields. Every field is
  * parsed, and every failing field is reported at its path. A missing key is
  * parsed as `undefined`, so only fields that accept `undefined` (see
- * `optional`) may be missing; they become optional properties. Keys the
- * shape doesn't declare are stripped from the output; see
- * {@linkcode strict} and {@linkcode passthrough}.
+ * `optional`) may be missing; they become optional properties.
+ *
+ * Keys the shape doesn't declare are stripped from the output by default;
+ * `unknownKeys: "strict"` reports each as an `UnknownKey` issue at its path,
+ * and `unknownKeys: "passthrough"` copies them to the output unchecked.
  *
  * A non-object input (including `null` and arrays) fails with an
  * `InvalidType` issue at the root.
  *
  * @template S - The object's shape
- * @param shape - Each field's schema
+ * @template U - What the object does with undeclared keys
+ * @param options - The fields, and what to do with undeclared keys
  * @returns A schema for objects of that shape
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { Err, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
  * import { object } from "@sekhmet/schema/composites";
- * import { entries, parse, Schema } from "@sekhmet/schema/core/mini";
- * import { Err, Ok } from "@sekhmet/enum/result/mini";
- * import { union } from "@sekhmet/enum/core/mini/exit";
+ * import { entries, parseAsync, Schema } from "@sekhmet/schema/core/mini";
  *
  * const text = new Schema((input: unknown) =>
  * 	typeof input === "string" ? Ok(input) : Err("not text"),
  * );
- * const user = object({ name: text, address: object({ zip: text }) });
+ * const user = object({
+ * 	shape: { name: text, address: object({ shape: { zip: text } }) },
+ * });
  *
- * const issues = unwrapErr(await union(parse(user, { name: 1, address: { zip: 2 } })));
+ * const found = unwrapErr(await parseAsync(user, { name: 1, address: { zip: 2 } }));
  * assertEquals(
- * 	entries(issues).map(({ path }) => path),
+ * 	entries(found).map(({ path }) => path),
  * 	[["name"], ["address", "zip"]],
  * );
  * ```
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { object } from "@sekhmet/schema/composites";
+ * import { entries, parseAsync, parseSync } from "@sekhmet/schema/core/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const shape = { name: string() };
+ * const strict = object({ shape, unknownKeys: "strict" });
+ * const loose = object({ shape, unknownKeys: "passthrough" });
+ * const input = { name: "Ada", admin: true };
+ *
+ * assertEquals(unwrap(parseSync(object({ shape }), input)), { name: "Ada" });
+ * assertEquals(unwrap(parseSync(loose, input)), input);
+ * const [issue] = entries(unwrapErr(await parseAsync(strict, input)));
+ * assertEquals(issue.path, ["admin"]);
+ * ```
  */
-export function object<S extends mini.Shape>(
-	shape: S,
-): ObjectSchema<S, "strip"> {
-	return ObjectSchema.fromMini(mini.object(shape));
+export function object<
+	S extends mini.Shape,
+	U extends mini.UnknownKeys = "strip",
+>(
+	options: mini.ObjectOptions<S, U>,
+): Schema<mini.ObjectInput<S>, mini.ObjectOutput<S, U>, mini.ObjectError<S>> {
+	return Schema.fromMini(mini.object(options));
 }
 
 /**
@@ -497,8 +375,7 @@ export function object<S extends mini.Shape>(
  * @template VI - The value schema's input type
  * @template VO - The value schema's output type
  * @template VE - The value schema's error type
- * @param key - The schema for each key
- * @param value - The schema for each value
+ * @param options - The schema for each key and for each value
  * @returns A schema for records of `key` to `value`
  * @example
  * ```ts
@@ -511,19 +388,19 @@ export function object<S extends mini.Shape>(
  * const score = new Schema((input: unknown) =>
  * 	typeof input === "number" ? Ok(input) : Err("not a score"),
  * );
+ * const scores = record({ key: name, value: score });
  *
- * assertEquals(unwrap(parseSync(record(name, score), { ada: 3 })), { ada: 3 });
+ * assertEquals(unwrap(parseSync(scores, { ada: 3 })), { ada: 3 });
  * ```
  */
 export function record<KO extends PropertyKey, KE, VI, VO, VE>(
-	key: MiniSchema<string, KO, KE>,
-	value: MiniSchema<VI, VO, VE>,
+	options: mini.RecordOptions<KO, KE, VI, VO, VE>,
 ): Schema<
 	mini.RecordInput<VI>,
 	mini.RecordOutput<KO, VO>,
 	Issues<Flatten<KE | VE> | SchemaIssue>
 > {
-	return Schema.fromMini(mini.record(key, value));
+	return Schema.fromMini(mini.record(options));
 }
 
 /**

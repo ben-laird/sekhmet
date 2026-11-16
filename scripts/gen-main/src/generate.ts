@@ -17,7 +17,12 @@
  */
 
 import { dirname, relative } from "@std/path/posix";
-import { type ClassFeature, type Feature, isClassFeature } from "./config.ts";
+import {
+	type Borrow,
+	type ClassFeature,
+	type Feature,
+	isClassFeature,
+} from "./config.ts";
 import {
 	type Conversion,
 	type ConvertContext,
@@ -36,7 +41,7 @@ import type {
 	TypeNode,
 	TypeParam,
 } from "./doc.ts";
-import { toMainImports, toMethodForm } from "./example.ts";
+import { toFieldMethodForm, toMainImports, toMethodForm } from "./example.ts";
 import {
 	forwardParam,
 	type NamedRef,
@@ -82,6 +87,18 @@ export interface GenerateInput {
 	readonly miniUrl: string;
 	/** The generated module's file URL. */
 	readonly outputUrl: string;
+	/** The symbols of each barrel the feature borrows methods from. */
+	readonly borrowed?: readonly BorrowedBarrel[];
+}
+
+/** A barrel a feature borrows methods from, with its exported symbols. */
+export interface BorrowedBarrel {
+	/** The feature's configuration of what it borrows. */
+	readonly borrow: Borrow;
+	/** The barrel's file URL. */
+	readonly url: string;
+	/** The barrel's exported symbols. */
+	readonly symbols: readonly DocSymbol[];
 }
 
 /** A generated value, or why generation failed. */
@@ -97,8 +114,17 @@ interface Member {
 interface Module {
 	readonly feature: Feature;
 	readonly miniNames: ReadonlySet<string>;
-	/** Mini functions that are methods of the main class. */
+	/** Functions that are methods of the main class taking `self` first. */
 	readonly methodNames: ReadonlySet<string>;
+	/** Borrowed methods whose receiver fills an options field, by name. */
+	readonly fieldMethods: ReadonlyMap<string, string>;
+	/** What the feature borrows from other barrels. */
+	readonly borrows: readonly Borrow[];
+	/** The borrowed barrels' namespace imports. */
+	readonly barrelImports: readonly {
+		readonly namespace: string;
+		readonly specifier: string;
+	}[];
 	/** Mini exports left out of main. */
 	readonly omitted: ReadonlySet<string>;
 	readonly wrapNames: ReadonlySet<string>;
@@ -112,6 +138,7 @@ interface Module {
 }
 
 const EMPTY_RENAME: ReadonlyMap<string, string> = new Map();
+const EMPTY_SET: ReadonlySet<string> = new Set();
 
 function failure({
 	feature,
@@ -161,18 +188,29 @@ function importType({
 	return local;
 }
 
+/** The barrel a function comes from, as the generated module imports it. */
+interface Barrel {
+	/** The namespace the barrel is imported under (`mini` for the feature's own). */
+	readonly namespace: string;
+	/** The names the barrel exports. */
+	readonly names: ReadonlySet<string>;
+}
+
 /**
  * The render context for a declaration in `fileUrl`: names exported by the
- * mini barrel are spelled `mini.X`; others are imported by type.
+ * mini barrel are spelled `mini.X`, names exported by a borrowed `barrel`
+ * `namespace.X`; others are imported by type.
  */
 function contextFor({
 	module,
 	fileUrl,
 	rename,
+	barrel,
 }: {
 	module: Module;
 	fileUrl: string;
 	rename: ReadonlyMap<string, string>;
+	barrel?: Barrel;
 }): RenderContext {
 	return {
 		rename,
@@ -181,6 +219,7 @@ function contextFor({
 
 			const name = originalName(ref);
 			if (module.miniNames.has(name)) return `mini.${name}`;
+			if (barrel?.names.has(name)) return `${barrel.namespace}.${name}`;
 
 			if (ref.resolution.kind === "local") {
 				const specifier = specifierFor({ from: module.outputUrl, to: fileUrl });
@@ -318,6 +357,11 @@ function fallbackDoc(name: string): JsDoc {
 	return { doc: `Method form of {@linkcode mini.${name}}.`, tags: [] };
 }
 
+/** Whether `code` still calls `name` as a function, not as a method. */
+function isCalled({ code, name }: { code: string; name: string }): boolean {
+	return new RegExp(`(?<![\\w$.])${name}\\(`).test(code);
+}
+
 /**
  * Rewrites a mini JSDoc's examples for main: calls of every function that
  * became a method move to method form, and imports from mini move to the
@@ -337,12 +381,28 @@ function mainExamples({
 		for (const name of module.methodNames) {
 			methodForm = toMethodForm({ code: methodForm, name }) ?? methodForm;
 		}
-		const doc = toMainImports({
+		for (const [name, field] of module.fieldMethods) {
+			methodForm =
+				toFieldMethodForm({ code: methodForm, name, field }) ?? methodForm;
+		}
+		let doc = toMainImports({
 			code: methodForm,
 			entrypoint: module.feature.entrypoint,
 			methods: module.methodNames,
 			omitted: module.omitted,
 		});
+		for (const borrow of module.borrows) {
+			doc = toMainImports({
+				code: doc,
+				entrypoint: borrow.entrypoint,
+				methods: new Set(
+					borrow.methods
+						.map((method) => method.name)
+						.filter((name) => !isCalled({ code: doc, name })),
+				),
+				omitted: EMPTY_SET,
+			});
+		}
 
 		return { ...tag, doc };
 	});
@@ -355,11 +415,15 @@ function methodDoc({
 	name,
 	jsDoc,
 	dropTemplates,
+	dropParam,
+	receiver,
 	module,
 }: {
 	name: string;
 	jsDoc: JsDoc | undefined;
 	dropTemplates: ReadonlySet<string>;
+	dropParam: string;
+	receiver: Receiver;
 	module: Module;
 }): JsDoc {
 	const source = mainExamples({
@@ -368,14 +432,28 @@ function methodDoc({
 	});
 	const tags = source.tags.filter(
 		(tag) =>
-			!(tag.kind === "param" && tag.name === "self") &&
+			!(tag.kind === "param" && tag.name === dropParam) &&
 			!(tag.kind === "template" && dropTemplates.has(tag.name)),
 	);
 
 	return {
 		doc: source.doc,
-		tags: [...tags, { kind: "see", doc: `{@link mini.${name}}` }],
+		tags: [...tags, { kind: "see", doc: `{@link ${receiver.callee}}` }],
 	};
+}
+
+/**
+ * Where a method's function lives and how the receiver reaches it: the
+ * function as the generated module spells it (`mini.map`), and the options
+ * field the receiver fills when it isn't passed as `self`.
+ */
+interface Receiver {
+	/** The function, spelled with its barrel's namespace. */
+	readonly callee: string;
+	/** The borrowed barrel, when the function isn't the feature's own. */
+	readonly barrel: Barrel | undefined;
+	/** The options field the receiver fills, or `undefined` to pass it first. */
+	readonly field: string | undefined;
 }
 
 interface MethodHead {
@@ -406,39 +484,44 @@ function generatorStar(conversion: Conversion): string {
 	return conversion.kind === "iterable" ? "*" : "";
 }
 
-/** Renders one signature of a `self`-first function as a method. */
-function methodHead({
+/**
+ * Maps the type parameters a receiver's type passes, in order, to the
+ * primary class's: `self: Schema<A, B, C>` renames `A`, `B`, `C` to the
+ * class's `I`, `O`, `E`.
+ */
+function receiverRename({
 	module,
 	name,
-	signature: declared,
+	signature,
+	param,
 	classParams,
 }: {
 	module: Module;
 	name: string;
 	signature: FunctionDeclaration;
+	param: Param | undefined;
 	classParams: readonly TypeParam[];
-}): Generated<MethodHead> {
+}): Generated<Map<string, string>> {
 	const { feature } = module;
-	const signature = labelled(module, declared);
-	const [self, ...params] = signature.params;
-	const selfType = self?.type;
-	if (selfType?.kind !== "ref") {
+	const label = `\`${param?.name ?? "self"}\``;
+	const type = param?.type;
+	if (type?.kind !== "ref") {
 		return failure({
 			feature,
 			symbol: name,
-			message: "`self` must be typed as the primary class",
+			message: `${label} must be typed as the primary class`,
 		});
 	}
-	if (selfType.args.length !== classParams.length) {
+	if (type.args.length !== classParams.length) {
 		return failure({
 			feature,
 			symbol: name,
-			message: `\`self\` must pass all ${classParams.length} of ${feature.primary}'s type parameters`,
+			message: `${label} must pass all ${classParams.length} of ${feature.primary}'s type parameters`,
 		});
 	}
 
 	const rename = new Map<string, string>();
-	for (const [i, arg] of selfType.args.entries()) {
+	for (const [i, arg] of type.args.entries()) {
 		const classParam = classParams[i];
 		const isBareParam =
 			arg.kind === "ref" &&
@@ -450,14 +533,64 @@ function methodHead({
 			return failure({
 				feature,
 				symbol: name,
-				message: `\`self\`'s type arguments must be distinct type parameters of ${name}`,
+				message: `${label}'s type arguments must be distinct type parameters of ${name}`,
 			});
 		}
 		rename.set(arg.name, classParam.name);
 	}
 
+	return ok(rename);
+}
+
+/**
+ * Renders one signature of a function as a method: a `self`-first one, or a
+ * borrowed one whose options object takes the receiver in `field`.
+ */
+function methodHead({
+	module,
+	name,
+	signature: declared,
+	classParams,
+	receiver,
+}: {
+	module: Module;
+	name: string;
+	signature: FunctionDeclaration;
+	classParams: readonly TypeParam[];
+	receiver: Receiver;
+}): Generated<MethodHead> {
+	const { feature } = module;
+	const signature = labelled(module, declared);
+	const [self, ...rest] = signature.params;
+	const { field } = receiver;
+	if (field !== undefined && rest.length > 0) {
+		return failure({
+			feature,
+			symbol: name,
+			message: `a method filling \`${field}\` must take one options object`,
+		});
+	}
+
+	const renamed = receiverRename({
+		module,
+		name,
+		signature,
+		param: self,
+		classParams,
+	});
+	if (!renamed.ok) return renamed;
+	const rename = renamed.value;
+
 	const classNames = new Set(classParams.map((tp) => tp.name));
 	const ownParams = signature.typeParams.filter((tp) => !rename.has(tp.name));
+	if (field !== undefined && ownParams.length > 0) {
+		return failure({
+			feature,
+			symbol: name,
+			message: `a method filling \`${field}\` takes no arguments, so it can't infer ${ownParams.map((tp) => tp.name).join(", ")}`,
+		});
+	}
+	const params = rest;
 	const curried = feature.uncurry?.includes(name) ?? false;
 	const returnType = signature.returnType;
 	if (returnType === undefined) {
@@ -499,6 +632,7 @@ function methodHead({
 		module,
 		fileUrl: signature.location.filename,
 		rename,
+		...(receiver.barrel === undefined ? {} : { barrel: receiver.barrel }),
 	});
 	const typeParams = renderTypeParams({
 		typeParams: methodTypeParams,
@@ -509,10 +643,25 @@ function methodHead({
 		.map((param) => renderParam({ param, context }))
 		.join(", ");
 
-	const outerArgs = ["this", ...params.map(forwardParam)].join(", ");
+	const outerArgs =
+		field === undefined
+			? ["this", ...params.map(forwardParam)].join(", ")
+			: `{ ${field}: this }`;
 	const call = curried
-		? `mini.${name}(${outerArgs})(${methodParams.map(forwardParam).join(", ")})`
-		: `mini.${name}(${outerArgs})`;
+		? `${receiver.callee}(${outerArgs})(${methodParams.map(forwardParam).join(", ")})`
+		: `${receiver.callee}(${outerArgs})`;
+	const doc = renderJsDoc({
+		jsDoc: methodDoc({
+			name,
+			jsDoc: signature.jsDoc,
+			dropTemplates: new Set(rename.keys()),
+			dropParam: self?.name ?? "self",
+			receiver,
+			module,
+		}),
+		context,
+		indent: "\t",
+	});
 
 	if (finalReturn.kind !== "predicate") {
 		const converted = convertReturn({
@@ -529,7 +678,7 @@ function methodHead({
 		return ok({
 			head: `${generatorStar(conversion)}${name}${typeParams}(${paramList}): ${text}`,
 			body: convertedBody({ call, conversion, isVoid, indent: "\t\t" }),
-			doc: renderMethodDoc({ module, name, signature, rename, context }),
+			doc,
 			conversion,
 			isPredicate: false,
 		});
@@ -545,34 +694,9 @@ function methodHead({
 	return ok({
 		head: `${name}${typeParams}(${paramList}): ${asserts}${subject}${target}`,
 		body: finalReturn.asserts ? `${call};` : `return ${call};`,
-		doc: renderMethodDoc({ module, name, signature, rename, context }),
+		doc,
 		conversion: { kind: "none" },
 		isPredicate: true,
-	});
-}
-
-function renderMethodDoc({
-	module,
-	name,
-	signature,
-	rename,
-	context,
-}: {
-	module: Module;
-	name: string;
-	signature: FunctionDeclaration;
-	rename: ReadonlyMap<string, string>;
-	context: RenderContext;
-}): string {
-	return renderJsDoc({
-		jsDoc: methodDoc({
-			name,
-			jsDoc: signature.jsDoc,
-			dropTemplates: new Set(rename.keys()),
-			module,
-		}),
-		context,
-		indent: "\t",
 	});
 }
 
@@ -582,11 +706,13 @@ function overloadImplementation({
 	name,
 	heads,
 	receiver,
+	callee = `mini.${name}`,
 }: {
 	feature: Feature;
 	name: string;
 	heads: readonly { conversion: Conversion; isPredicate: boolean }[];
 	receiver: "this" | undefined;
+	callee?: string;
 }): Generated<{ signature: string; body: string }> {
 	const keys = new Set(heads.map((head) => conversionKey(head.conversion)));
 	if (keys.size > 1) {
@@ -605,7 +731,7 @@ function overloadImplementation({
 	}
 
 	const args = receiver === undefined ? "args" : `[${receiver}, ...args]`;
-	const call = `Reflect.apply(mini.${name}, undefined, ${args})`;
+	const call = `Reflect.apply(${callee}, undefined, ${args})`;
 	const [first] = heads;
 	const conversion = first?.conversion ?? { kind: "none" };
 	if (conversion.kind !== "none" && conversion.kind !== "value") {
@@ -622,14 +748,21 @@ function overloadImplementation({
 	});
 }
 
+/** The receiver of a method made from the feature's own `self`-first function. */
+function ownReceiver(name: string): Receiver {
+	return { callee: `mini.${name}`, barrel: undefined, field: undefined };
+}
+
 function renderMethod({
 	module,
 	symbol,
 	classParams,
+	receiver = ownReceiver(symbol.name),
 }: {
 	module: Module;
 	symbol: DocSymbol;
 	classParams: readonly TypeParam[];
+	receiver?: Receiver;
 }): Generated<Member> {
 	const heads: MethodHead[] = [];
 	for (const signature of signaturesOf(symbol)) {
@@ -638,6 +771,7 @@ function renderMethod({
 			name: symbol.name,
 			signature,
 			classParams,
+			receiver,
 		});
 		if (!head.ok) return head;
 		heads.push(head.value);
@@ -650,12 +784,20 @@ function renderMethod({
 			source: `${only.doc}\t${only.head} {\n\t\t${only.body}\n\t}\n`,
 		});
 	}
+	if (receiver.field !== undefined) {
+		return failure({
+			feature: module.feature,
+			symbol: symbol.name,
+			message: `an overloaded function can't fill \`${receiver.field}\``,
+		});
+	}
 
 	const impl = overloadImplementation({
 		feature: module.feature,
 		name: symbol.name,
 		heads,
 		receiver: "this",
+		callee: receiver.callee,
 	});
 	if (!impl.ok) return impl;
 
@@ -855,7 +997,12 @@ function renderClass({
 
 function describeFeature(feature: Feature): string {
 	if (isClassFeature(feature)) {
-		return `\`${feature.primary}\` here extends the mini \`${feature.primary}\` from \`${feature.entrypoint}/mini\`, so its instances work with every mini function too. Each \`self\`-first mini function is a method, and functions whose mini form returns \`${feature.primary}\` return this main class, so calls chain.`;
+		const borrowed = (feature.borrows ?? []).map(
+			(borrow) =>
+				` It also takes ${borrow.methods.map((method) => `\`${method.name}\``).join(", ")} from \`${borrow.entrypoint}/mini\` as methods.`,
+		);
+
+		return `\`${feature.primary}\` here extends the mini \`${feature.primary}\` from \`${feature.entrypoint}/mini\`, so its instances work with every mini function too. Each \`self\`-first mini function is a method, and functions whose mini form returns \`${feature.primary}\` return this main class, so calls chain.${borrowed.join("")}`;
 	}
 
 	const targets = (feature.wraps ?? [])
@@ -902,6 +1049,10 @@ function renderImports({
 						: 'import { getStructParams } from "@sekhmet/primordials/struct";',
 				]),
 		`import * as mini from "${miniSpecifier}";`,
+		...module.barrelImports.map(
+			({ namespace, specifier }) =>
+				`import * as ${namespace} from "${specifier}";`,
+		),
 		...(module.feature.wraps ?? []).map(
 			(target) => `import { ${target.type} } from "${target.from}";`,
 		),
@@ -976,6 +1127,86 @@ function primaryOf({
 	return ok({ feature, declaration });
 }
 
+/** A borrowed function and how the method made from it reaches it. */
+interface BorrowedFunction {
+	readonly symbol: DocSymbol;
+	readonly receiver: Receiver;
+}
+
+/**
+ * Finds each function a class feature borrows in its barrel's symbols. A
+ * function without a `field` must take the primary as `self` first, and no
+ * borrowed name may clash with one of the feature's own methods.
+ */
+function borrowedMethods({
+	feature,
+	barrels,
+	taken,
+}: {
+	feature: Feature;
+	barrels: readonly BorrowedBarrel[];
+	taken: ReadonlySet<string>;
+}): Generated<{
+	methods: BorrowedFunction[];
+	imports: { namespace: string; url: string }[];
+}> {
+	const methods: BorrowedFunction[] = [];
+	const imports: { namespace: string; url: string }[] = [];
+	if (!isClassFeature(feature)) return ok({ methods, imports });
+
+	for (const borrow of feature.borrows ?? []) {
+		const found = barrels.find((barrel) => barrel.borrow.mini === borrow.mini);
+		if (found === undefined) {
+			return failure({
+				feature,
+				symbol: undefined,
+				message: `the symbols of ${borrow.mini} were not provided`,
+			});
+		}
+		imports.push({ namespace: borrow.namespace, url: found.url });
+		const barrel: Barrel = {
+			namespace: borrow.namespace,
+			names: new Set(found.symbols.map((symbol) => symbol.name)),
+		};
+
+		for (const { name, field } of borrow.methods) {
+			const symbol = found.symbols.find((candidate) => candidate.name === name);
+			const signatures = symbol === undefined ? [] : signaturesOf(symbol);
+			if (symbol === undefined || signatures.length === 0) {
+				return failure({
+					feature,
+					symbol: name,
+					message: `${borrow.entrypoint}/mini must export the function ${name}`,
+				});
+			}
+			if (taken.has(name)) {
+				return failure({
+					feature,
+					symbol: name,
+					message: `${name} is already a method of ${feature.primary}`,
+				});
+			}
+			const selfFirst = signatures.every((sig) =>
+				isSelfOfPrimary(feature.primary, sig.params[0]),
+			);
+			if (field === undefined && !selfFirst) {
+				return failure({
+					feature,
+					symbol: name,
+					message: `a borrowed function must take \`self: ${feature.primary}\` first, or name the options field it fills`,
+				});
+			}
+
+			methods.push({
+				symbol,
+				receiver: { callee: `${borrow.namespace}.${name}`, barrel, field },
+			});
+		}
+	}
+
+	return ok({ methods, imports });
+}
+
 /**
  * Generates a feature's main module from its mini barrel's symbols. The
  * output is valid TypeScript but not yet Biome-formatted.
@@ -1045,10 +1276,33 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		(typeOnly ? types : values).push(symbol.name);
 	}
 
+	const borrowed = borrowedMethods({
+		feature,
+		barrels: input.borrowed ?? [],
+		taken: new Set(methodSymbols.map((symbol) => symbol.name)),
+	});
+	if (!borrowed.ok) return borrowed;
+	const borrows = isClassFeature(feature) ? (feature.borrows ?? []) : [];
+
 	const module: Module = {
 		feature,
 		miniNames,
-		methodNames: new Set(methodSymbols.map((symbol) => symbol.name)),
+		methodNames: new Set([
+			...methodSymbols.map((symbol) => symbol.name),
+			...borrowed.value.methods.flatMap(({ symbol, receiver }) =>
+				receiver.field === undefined ? [symbol.name] : [],
+			),
+		]),
+		fieldMethods: new Map(
+			borrowed.value.methods.flatMap(({ symbol, receiver }) =>
+				receiver.field === undefined ? [] : [[symbol.name, receiver.field]],
+			),
+		),
+		borrows,
+		barrelImports: borrowed.value.imports.map(({ namespace, url }) => ({
+			namespace,
+			specifier: specifierFor({ from: outputUrl, to: url }),
+		})),
 		omitted,
 		wrapNames,
 		mappers,
@@ -1059,18 +1313,22 @@ export function generateMain(input: GenerateInput): Generated<string> {
 			"mini",
 			"getStructParams",
 			"struct",
+			...borrows.map((borrow) => borrow.namespace),
 			...wrapNames,
 			...wrapperSymbols.map((symbol) => symbol.name),
 		]),
 	};
 
+	const classParams = primary.value?.declaration.typeParams ?? [];
 	const methods: Member[] = [];
-	for (const symbol of methodSymbols) {
-		const method = renderMethod({
-			module,
+	for (const { symbol, receiver } of [
+		...methodSymbols.map((symbol) => ({
 			symbol,
-			classParams: primary.value?.declaration.typeParams ?? [],
-		});
+			receiver: ownReceiver(symbol.name),
+		})),
+		...borrowed.value.methods,
+	]) {
+		const method = renderMethod({ module, symbol, classParams, receiver });
 		if (!method.ok) return method;
 		methods.push(method.value);
 	}

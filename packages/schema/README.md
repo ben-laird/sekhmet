@@ -18,8 +18,11 @@ Each feature has two forms:
 
 - **Main** (`@sekhmet/schema/core`, `@sekhmet/schema/primitives`,
   `@sekhmet/schema/composites`, `@sekhmet/schema/standard`): the
-  method-chaining API, `string().map((s) => s.length)`. It is generated from
-  mini by `deno task gen:main`.
+  method-chaining API, `string().optional().map((s) => s?.length)`. Every
+  main `Schema` has the shape modifiers `.array()`, `.optional()` and
+  `.nullable()`, the transforms `.map`, `.mapErr`, `.pipe` and `.filter`, and
+  `.parse`, `.parseSync` and `.parseAsync`. It is generated from mini by
+  `deno task gen:main`.
 - **Mini** (`@sekhmet/schema/core/mini`, `@sekhmet/schema/primitives/mini`,
   `@sekhmet/schema/composites/mini`, `@sekhmet/schema/standard/mini`):
   tree-shakable functions, `map(string(), (s) => s.length)`, with a subpath per
@@ -52,36 +55,61 @@ const length = map(string(), (text) => text.length);
 assertEquals(unwrap(parseSync(length, "four")), 4);
 ```
 
+## Checks are options
+
+Checks and transforms are options of the schema they refine, the same in mini
+and main: `number({ int: true, min: 0 })`,
+`string({ trim: true, minLength: 3, format: "email" })`,
+`bigint({ multipleOf: 2n })`, `date({ max: new Date() })`. A `min` or `max` is
+inclusive; `{ value, inclusive: false }` excludes the bound itself. Coercion
+and the transforms (`trim`, `normalize`) apply before the checks, and a
+primitive reports the first check that fails.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import { number, string } from "@sekhmet/schema/primitives";
+
+const email = string({ trim: true, format: "email" });
+const ratio = number({ min: 0, max: { value: 1, inclusive: false } });
+
+assertEquals(unwrap(email.parseSync(" ada@example.com ")), "ada@example.com");
+assertEquals(isErr(ratio.parseSync(1)), true);
+```
+
 ## Composites
 
-`@sekhmet/schema/composites` builds schemas from schemas: `object`, `array`
-(with `minItems`/`maxItems`), `tuple`, `record`, `union`,
-`discriminatedUnion`, `enumOf`, `optional`, `nullable` and `lazy`. Each reports
-every failing part as `Issues`, located by its path from the root:
+`@sekhmet/schema/composites` builds schemas from schemas: `object`, `array`,
+`tuple`, `record`, `union`, `discriminatedUnion`, `enumOf`, `optional`,
+`nullable` and `lazy`. Each reports every failing part as `Issues`, located by
+its path from the root:
 
 ```ts
 import { assertEquals } from "@std/assert";
 import { Err, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
 import { array, object } from "@sekhmet/schema/composites";
-import { entries, parseAsync, Schema } from "@sekhmet/schema/core/mini";
+import { entries, Schema } from "@sekhmet/schema/core";
 
 const text = new Schema((input: unknown) =>
 	typeof input === "string" ? Ok(input) : Err("not text"),
 );
-const user = object({ name: text, tags: array(text) }).strict();
+const user = object({
+	shape: { name: text, tags: array({ item: text, minItems: 1 }) },
+	unknownKeys: "strict",
+});
 
-const issues = unwrapErr(
-	await parseAsync(user, { name: 1, tags: ["a", 2], admin: true }),
+const found = unwrapErr(
+	await user.parseAsync({ name: 1, tags: ["a", 2], admin: true }),
 );
 assertEquals(
-	entries(issues).map(({ path }) => path),
+	entries(found).map(({ path }) => path),
 	[["name"], ["tags", 1], ["admin"]],
 );
 ```
 
-An `object` strips undeclared keys; `.strict()` reports each one and
-`.passthrough()` keeps them. A composite is `Sync` when every child parse is,
-and `Async` otherwise.
+An `object` strips undeclared keys; `unknownKeys: "strict"` reports each one
+and `unknownKeys: "passthrough"` keeps them. A composite is `Sync` when every
+child parse is, and `Async` otherwise.
 
 ## Standard Schema
 
@@ -89,7 +117,7 @@ and `Async` otherwise.
 v1 in both directions, with no dependency on `@standard-schema/spec` (its
 types are copied locally):
 
-- `toStandard(schema)` exposes a schema whose input is `unknown` to any tool
+- `toStandard({ schema })` exposes a schema whose input is `unknown` to any tool
   that accepts a Standard Schema. `SchemaIssue` and `Issues<SchemaIssue>`
   errors become Standard issues with `formatIssue`'s message and their path;
   any other error type needs a `toIssue` option, and the types require it.
@@ -109,7 +137,7 @@ const text = new Schema((input: unknown) =>
 		? Ok(input)
 		: Err(InvalidType({ input, expected: "string" })),
 );
-const standard = toStandard(text);
+const standard = toStandard({ schema: text });
 
 assertEquals(standard["~standard"].validate(1), {
 	issues: [{ message: "Expected string, received number" }],

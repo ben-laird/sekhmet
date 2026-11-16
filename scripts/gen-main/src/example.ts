@@ -141,6 +141,95 @@ export function toMethodForm({
 	return output + code.slice(cursor);
 }
 
+/**
+ * The expression an object literal gives `field`, when that is its only
+ * property (`{ field: expression }` or the shorthand `{ field }`).
+ *
+ * @param options.text - The object literal's source
+ * @param options.field - The property to read
+ * @returns The expression, or `undefined` when the literal has another shape
+ */
+function soleField({
+	text,
+	field,
+}: {
+	text: string;
+	field: string;
+}): string | undefined {
+	const literal = text.trim();
+	if (!(literal.startsWith("{") && literal.endsWith("}"))) return undefined;
+
+	const body = `${literal.slice(1, -1)})`;
+	const end = argumentEnd({ code: body, start: 0 });
+	if (end < 0 || body.slice(end + 1, -1).trim() !== "") return undefined;
+
+	const property = body.slice(0, end).trim();
+	if (property === field) return field;
+
+	const label = new RegExp(`^${field}\\s*:`).exec(property);
+
+	return label === null ? undefined : property.slice(label[0].length).trim();
+}
+
+/**
+ * Rewrites every call of `name` whose only argument is an object literal
+ * holding just `field` into method form on that field's value:
+ * `array({ item: text })` becomes `text.array()`. A call passing other
+ * properties stays a function call.
+ *
+ * @param options.code - The example code
+ * @param options.name - The function being turned into a method
+ * @param options.field - The options field that holds the receiver
+ * @returns The rewritten code, or `undefined` when a call can't be parsed
+ */
+export function toFieldMethodForm({
+	code,
+	name,
+	field,
+}: {
+	code: string;
+	name: string;
+	field: string;
+}): string | undefined {
+	const call = `${name}(`;
+	let output = "";
+	let cursor = 0;
+
+	while (cursor < code.length) {
+		const at = code.indexOf(call, cursor);
+		if (at < 0) break;
+
+		const argStart = at + call.length;
+		if (at > 0 && IDENTIFIER_CHAR.test(code.charAt(at - 1))) {
+			output += code.slice(cursor, argStart);
+			cursor = argStart;
+			continue;
+		}
+
+		const end = argumentEnd({ code, start: argStart });
+		if (end < 0) return undefined;
+
+		const receiverText =
+			code.charAt(end) === ")"
+				? soleField({ text: code.slice(argStart, end), field })
+				: undefined;
+		if (receiverText === undefined) {
+			output += code.slice(cursor, argStart);
+			cursor = argStart;
+			continue;
+		}
+
+		const receiver = toFieldMethodForm({ code: receiverText, name, field });
+		if (receiver === undefined) return undefined;
+
+		const wrapped = isSimpleReceiver(receiver) ? receiver : `(${receiver})`;
+		output += `${code.slice(cursor, at)}${wrapped}.${name}()`;
+		cursor = end + 1;
+	}
+
+	return output + code.slice(cursor);
+}
+
 const NAMED_IMPORT =
 	/import\s+(type\s+)?\{([^}]*)\}\s*from\s*(["'])([^"']+)\3;?[ \t]*\n?/g;
 

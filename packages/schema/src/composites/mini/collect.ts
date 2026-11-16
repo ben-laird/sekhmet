@@ -110,22 +110,23 @@ export function gather({
 	extra: Issues<unknown> | undefined;
 }): Result<[PropertyKey, unknown][], Issues<unknown>> {
 	const outputs: [PropertyKey, unknown][] = [];
-	let issues: Issues<unknown> | undefined;
-	const add = (more: Issues<unknown>): void => {
-		issues = issues === undefined ? more : concat(issues, more);
-	};
+	const failures: Issues<unknown>[] = [];
 
 	for (const { key, result } of settled) {
 		match(result)({
 			Ok: (output) => {
 				outputs.push([key, output]);
 			},
-			Err: (error) => add(locate({ key, error })),
+			Err: (error) => {
+				failures.push(locate({ key, error }));
+			},
 		});
 	}
-	if (extra !== undefined) add(extra);
+	if (extra !== undefined) failures.push(extra);
 
-	return issues === undefined ? Ok(outputs) : Err(issues);
+	const [first, ...rest] = failures;
+
+	return first === undefined ? Ok(outputs) : Err(concat([first, ...rest]));
 }
 
 /**

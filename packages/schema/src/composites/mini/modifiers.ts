@@ -22,7 +22,7 @@ import { Schema } from "@/src/core/mini/schema.ts";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
  * const text = new Schema((input: unknown) => Ok(String(input)));
- * const user = object({ nickname: optional(text) });
+ * const user = object({ shape: { nickname: optional(text) } });
  *
  * assertEquals(unwrap(parseSync(user, {})), {});
  * ```
@@ -93,7 +93,7 @@ export function nullable<I, O, E>(
  * 	children: Tree[];
  * }
  * const tree: Schema<unknown, Tree, Issues<unknown>> = object({
- * 	children: array(lazy(() => tree)),
+ * 	shape: { children: array({ item: lazy(() => tree) }) },
  * });
  *
  * assertEquals(unwrap(parseSync(tree, { children: [{ children: [] }] })), {

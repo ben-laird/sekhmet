@@ -78,8 +78,10 @@ interface Tree {
 }
 
 const tree: Schema<unknown, Tree, Issues<"not text" | SchemaIssue>> = object({
-	label: text,
-	children: array(lazy(() => tree)),
+	shape: {
+		label: text,
+		children: array({ item: lazy(() => tree) }),
+	},
 });
 
 Deno.test("lazy builds recursive schemas such as trees", () => {

@@ -1,6 +1,11 @@
 import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertStrictEquals } from "@std/assert";
-import { formatIssue, InvalidType } from "@/src/core/mini/issue.ts";
+import {
+	formatIssue,
+	InvalidType,
+	TooBig,
+	TooSmall,
+} from "@/src/core/mini/issue.ts";
 import { ParseError, parseSync } from "@/src/core/mini/schema.ts";
 import { date } from "./date.ts";
 
@@ -42,4 +47,40 @@ Deno.test("date does not coerce strings or timestamps", () => {
 			Deno.inspect(input),
 		);
 	}
+});
+
+Deno.test("date's min and max compare times, with each bound's inclusivity", () => {
+	// Given: dates in [2000-01-01, 2100-01-01)
+	const start = new Date("2000-01-01T00:00:00Z");
+	const end = new Date("2100-01-01T00:00:00Z");
+	const schema = date({ min: start, max: { value: end, inclusive: false } });
+	const before = new Date("1999-12-31T23:59:59Z");
+
+	// When: parsing the bounds, a copy of the start, and a date before it
+	// Then: the inclusive start passes, by time, and the exclusive end fails
+	assertEquals(
+		parseSync(schema, new Date(start.getTime())),
+		Ok(new Date(start)),
+	);
+	assertEquals(
+		parseSync(schema, before),
+		Err(
+			ParseError(
+				TooSmall({
+					input: before,
+					origin: "date",
+					minimum: start,
+					inclusive: true,
+				}),
+			),
+		),
+	);
+	assertEquals(
+		parseSync(schema, end),
+		Err(
+			ParseError(
+				TooBig({ input: end, origin: "date", maximum: end, inclusive: false }),
+			),
+		),
+	);
 });

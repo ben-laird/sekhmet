@@ -18,7 +18,7 @@ import {
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
-import { array, maxItems, minItems } from "./array.ts";
+import { array } from "./array.ts";
 import { object } from "./object.ts";
 
 const count: Schema<unknown, number, "not a number"> = new Schema((input) =>
@@ -33,7 +33,7 @@ const laterCount: Schema<unknown, number, "not a number"> = new Schema(
 
 Deno.test("array parses every element", () => {
 	// Given: an array of numbers
-	const counts = array(count);
+	const counts = array({ item: count });
 
 	// When: parsing a numeric array
 	const parsed = unwrap(parseSync(counts, [1, 2, 3]));
@@ -44,7 +44,7 @@ Deno.test("array parses every element", () => {
 
 Deno.test("array reports every failing element at its index", async () => {
 	// Given: an array of objects with a number field
-	const rows = array(object({ n: count }));
+	const rows = array({ item: object({ shape: { n: count } }) });
 
 	// When: parsing an array whose first and third rows are wrong
 	const issues = unwrapErr(
@@ -60,7 +60,7 @@ Deno.test("array reports every failing element at its index", async () => {
 
 Deno.test("array rejects non-arrays with InvalidType at the root", async () => {
 	// Given: an array schema
-	const counts = array(count);
+	const counts = array({ item: count });
 
 	// When: parsing an array-like object
 	const input = { 0: 1, length: 1 };
@@ -74,8 +74,8 @@ Deno.test("array rejects non-arrays with InvalidType at the root", async () => {
 
 Deno.test("array is Sync for sync elements and Async otherwise, collecting every issue", async () => {
 	// Given: arrays of a sync and an async element schema
-	const now = array(count);
-	const later = array(laterCount);
+	const now = array({ item: count });
+	const later = array({ item: laterCount });
 
 	// When: parsing with each
 	const nowKind = unionKinds(parse(now, [1]));
@@ -93,7 +93,7 @@ Deno.test("array is Sync for sync elements and Async otherwise, collecting every
 
 Deno.test("minItems and maxItems bound the array's length, inclusively", async (t) => {
 	// Given: an array of one to two numbers
-	const bounded = maxItems(minItems(array(count), 1), 2);
+	const bounded = array({ item: count, minItems: 1, maxItems: 2 });
 
 	await t.step("lengths within the bounds pass", () => {
 		// When: parsing arrays of one and two numbers
@@ -137,7 +137,7 @@ Deno.test("minItems and maxItems bound the array's length, inclusively", async (
 
 Deno.test("a length check also reports alongside failing elements", async () => {
 	// Given: an array of at most one number
-	const single = maxItems(array(count), 1);
+	const single = array({ item: count, maxItems: 1 });
 
 	// When: parsing two wrong elements
 	const issues = unwrapErr(await parseAsync(single, ["a", "b"]));
@@ -151,8 +151,11 @@ Deno.test("a length check also reports alongside failing elements", async () => 
 
 Deno.test("array infers its input, output and error types", () => {
 	// Given: arrays of a loose and a typed element schema
-	const counts = array(count);
-	const lengths = array(new Schema((input: string) => Ok(input.length)));
+	const counts = array({ item: count });
+	const lengths = array({
+		item: new Schema((input: string) => Ok(input.length)),
+	});
+	const bounded = array({ item: count, minItems: 1 });
 
 	// When: reading their types
 	// Then: the output is an array of the element's output, the error
@@ -164,17 +167,6 @@ Deno.test("array infers its input, output and error types", () => {
 	>(true);
 	assertType<IsExact<Input<typeof lengths>, readonly string[]>>(true);
 	assertType<
-		IsExact<
-			ErrorOf<
-				ReturnType<
-					typeof minItems<
-						unknown,
-						number[],
-						Issues<"not a number" | SchemaIssue>
-					>
-				>
-			>,
-			Issues<"not a number" | SchemaIssue>
-		>
+		IsExact<ErrorOf<typeof bounded>, Issues<"not a number" | SchemaIssue>>
 	>(true);
 });

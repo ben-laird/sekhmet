@@ -8,13 +8,7 @@ import {
 	type SchemaIssue,
 	TooSmall,
 } from "@/src/core/mini/issue.ts";
-import {
-	concat,
-	entries,
-	fromError,
-	type Issues,
-	prefix,
-} from "@/src/core/mini/issues.ts";
+import { entries, type Issues, issues } from "@/src/core/mini/issues.ts";
 import {
 	type ErrorOf,
 	type Output,
@@ -166,30 +160,25 @@ const tagged = new Schema((input: unknown) =>
 	Array.isArray(input) && input.length > 0
 		? Ok(input.length)
 		: Err(
-				concat(
-					prefix(fromError(InvalidType({ input, expected: "array" })), "tags"),
-					prefix(
-						prefix(
-							fromError(
-								TooSmall({
-									input,
-									origin: "array",
-									minimum: 1,
-									inclusive: true,
-								}),
-							),
-							0,
-						),
-						"tags",
-					),
-				),
+				issues([
+					{ path: ["tags"], error: InvalidType({ input, expected: "array" }) },
+					{
+						path: ["tags", 0],
+						error: TooSmall({
+							input,
+							origin: "array",
+							minimum: 1,
+							inclusive: true,
+						}),
+					},
+				]),
 			),
 );
 
-Deno.test("fromStandard(toStandard(schema)) round-trips", async (t) => {
+Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
 	await t.step("outputs are preserved", async () => {
 		// Given: a schema round-tripped through Standard Schema
-		const schema = fromStandard(toStandard(tagged));
+		const schema = fromStandard(toStandard({ schema: tagged }));
 
 		// When: parsing a valid value
 		const output = await parseAsync(schema, ["a", "b"]);
@@ -200,7 +189,7 @@ Deno.test("fromStandard(toStandard(schema)) round-trips", async (t) => {
 
 	await t.step("issue messages and paths are preserved", async () => {
 		// Given: a schema round-tripped through Standard Schema
-		const schema = fromStandard(toStandard(tagged));
+		const schema = fromStandard(toStandard({ schema: tagged }));
 
 		// When: parsing an invalid value
 		const roundTripped = unwrapErr(await parseAsync(schema, []));
@@ -224,7 +213,7 @@ Deno.test("fromStandard(toStandard(schema)) round-trips", async (t) => {
 		const single = new Schema<unknown, never, SchemaIssue>((input) =>
 			Err(InvalidType({ input, expected: "string" })),
 		);
-		const schema = fromStandard(toStandard(single));
+		const schema = fromStandard(toStandard({ schema: single }));
 
 		// When: parsing
 		const issues = unwrapErr(await parseAsync(schema, 1));
@@ -237,7 +226,7 @@ Deno.test("fromStandard(toStandard(schema)) round-trips", async (t) => {
 
 	await t.step("sync stays sync", () => {
 		// Given: a synchronous schema, round-tripped
-		const schema = fromStandard(toStandard(tagged));
+		const schema = fromStandard(toStandard({ schema: tagged }));
 
 		// When: parsing
 		const potential = parse(schema, ["a"]);
@@ -255,7 +244,7 @@ Deno.test("fromStandard(toStandard(schema)) round-trips", async (t) => {
 					: Err(InvalidType({ input, expected: "number" })),
 			),
 		);
-		const schema = fromStandard(toStandard(delayed));
+		const schema = fromStandard(toStandard({ schema: delayed }));
 
 		// When: parsing
 		const potential = parse(schema, 1);
@@ -268,7 +257,8 @@ Deno.test("fromStandard(toStandard(schema)) round-trips", async (t) => {
 
 Deno.test("toStandard(fromStandard(standard)) round-trips with toIssue", async () => {
 	// Given: a Standard Schema wrapped and exposed again, keeping each issue
-	const standard = toStandard(fromStandard(asyncUser), {
+	const standard = toStandard({
+		schema: fromStandard(asyncUser),
 		toIssue: (issue) => ({ message: issue.message }),
 	});
 

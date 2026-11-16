@@ -1,6 +1,7 @@
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { matrix } from "@sekhmet/matrix";
 import { assertEquals } from "@std/assert";
+import { assertType, type IsExact } from "@std/testing/types";
 import {
 	InvalidType,
 	type SchemaIssue,
@@ -8,11 +9,14 @@ import {
 	TooSmall,
 } from "@/src/core/mini/issue.ts";
 import {
+	type ErrorOf,
+	type Input,
+	type Output,
 	ParseError,
 	type ParseSyncError,
 	parseSync,
 } from "@/src/core/mini/schema.ts";
-import { type NumberSchemaOptions, number, type Range } from "./number.ts";
+import { type NumberSchemaOptions, number } from "./number.ts";
 
 /** The result `parseSync` gives for a schema failing with `issue`. */
 function failed(issue: SchemaIssue) {
@@ -70,10 +74,23 @@ for (const { input, nan, infinite } of matrix({
 	});
 }
 
-Deno.test("number honours its range, with each bound's inclusivity", () => {
+Deno.test("number's options don't change its types", () => {
+	// Given: a number schema with checks and coercion
+	const schema = number({ coerce: true, int: true, min: 0 });
+
+	// When: reading its types
+	// Then: it takes anything, gives a number and fails with a SchemaIssue
+	assertType<IsExact<Input<typeof schema>, unknown>>(true);
+	assertType<IsExact<Output<typeof schema>, number>>(true);
+	assertType<IsExact<ErrorOf<typeof schema>, SchemaIssue>>(true);
+});
+
+Deno.test("number honours min and max, with each bound's inclusivity", () => {
 	// Given: a range [0, 10) and the expected result per input
-	const range: Range = { min: [0, "inclusive"], max: [10, "non-inclusive"] };
-	const options: NumberSchemaOptions = { range };
+	const options: NumberSchemaOptions = {
+		min: 0,
+		max: { value: 10, inclusive: false },
+	};
 	const cases: [number, Result<number, ParseSyncError<SchemaIssue>>][] = [
 		[0, Ok(0)],
 		[9.5, Ok(9.5)],
@@ -100,11 +117,9 @@ Deno.test("number honours its range, with each bound's inclusivity", () => {
 	}
 });
 
-Deno.test("number's range excludes exclusive minimums and allows inclusive maximums", () => {
+Deno.test("number excludes an exclusive minimum and allows an inclusive maximum", () => {
 	// Given: a range (0, 10]
-	const schema = number({
-		range: { min: [0, "non-inclusive"], max: [10, "inclusive"] },
-	});
+	const schema = number({ min: { value: 0, inclusive: false }, max: 10 });
 
 	// When: parsing each bound
 	const atMin = parseSync(schema, 0);

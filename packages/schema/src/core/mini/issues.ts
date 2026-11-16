@@ -33,14 +33,14 @@ export interface Located<E> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { concat, entries, fromError, prefix } from "@sekhmet/schema/core/mini/issues";
+ * import { entries, issues } from "@sekhmet/schema/core/mini/issues";
  *
- * const issues = concat(
- * 	prefix(fromError("required"), "name"),
- * 	prefix(fromError("too short"), "password"),
- * );
+ * const found = issues([
+ * 	{ path: ["name"], error: "required" },
+ * 	{ path: ["password"], error: "too short" },
+ * ]);
  *
- * assertEquals(entries(issues), [
+ * assertEquals(entries(found), [
  * 	{ path: ["name"], error: "required" },
  * 	{ path: ["password"], error: "too short" },
  * ]);
@@ -79,7 +79,7 @@ export function fromError<E>(error: E): Issues<E> {
  * import { assertEquals } from "@std/assert";
  * import { entries, fromError, prefix } from "@sekhmet/schema/core/mini/issues";
  *
- * const [first] = entries(prefix(fromError("invalid"), 0));
+ * const [first] = entries(prefix({ issues: fromError("invalid"), path: [0] }));
  * assertEquals(first.path, [0]);
  * ```
  */
@@ -88,55 +88,92 @@ export function entries<E>(self: Issues<E>): NonEmpty<Located<E>> {
 }
 
 /**
- * Moves every error one level down: prepends `key` to each path. A composite
- * prefixes a child's issues with the key it found the child under.
+ * Builds `Issues` from located errors, each with its full path, in order.
+ * The list must not be empty (an empty one is a type error), and the error
+ * type is the union of the entries' errors.
+ *
+ * @template L The entries
+ * @param list The located errors
+ * @returns `Issues` holding exactly those entries
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { entries, issues } from "@sekhmet/schema/core/mini/issues";
+ *
+ * const found = issues([
+ * 	{ path: ["name"], error: "required" },
+ * 	{ path: ["user", "age"], error: "too small" },
+ * ]);
+ *
+ * assertEquals(entries(found).map(({ path }) => path), [["name"], ["user", "age"]]);
+ * ```
+ */
+export function issues<const L extends NonEmpty<Located<unknown>>>(
+	list: L,
+): Issues<L[number]["error"]>;
+export function issues(list: NonEmpty<Located<unknown>>): Issues<unknown> {
+	return new Issues(list);
+}
+
+/**
+ * Moves every error down under `path`: prepends the whole path to each
+ * entry's. A composite prefixes a child's issues with the key it found the
+ * child under; `prefix({ issues, path: [] })` changes nothing.
  *
  * @template E The error type
- * @param self The issues to prefix
- * @param key The path segment to prepend
- * @returns New issues with `key` in front of every path
+ * @param options.issues The issues to prefix
+ * @param options.path The keys to prepend, outermost first
+ * @returns New issues with `path` in front of every path
  *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { entries, fromError, prefix } from "@sekhmet/schema/core/mini/issues";
  *
- * const issues = prefix(prefix(fromError("invalid"), "street"), "address");
- * assertEquals(entries(issues), [{ path: ["address", "street"], error: "invalid" }]);
+ * const moved = prefix({ issues: fromError("invalid"), path: ["address", "street"] });
+ * assertEquals(entries(moved), [{ path: ["address", "street"], error: "invalid" }]);
  * ```
  */
-export function prefix<E>(self: Issues<E>, key: PropertyKey): Issues<E> {
+export function prefix<E>(options: {
+	issues: Issues<E>;
+	path: readonly PropertyKey[];
+}): Issues<E> {
 	const under = ({ path, error }: Located<E>): Located<E> => ({
-		path: [key, ...path],
+		path: [...options.path, ...path],
 		error,
 	});
-	const [first, ...rest] = entries(self);
+	const [first, ...rest] = entries(options.issues);
 
 	return new Issues([under(first), ...rest.map(under)]);
 }
 
 /**
- * Joins two `Issues`, `self`'s entries first. `concat` is associative.
+ * Joins a non-empty list of `Issues` into one, keeping every entry in order.
+ * `concat` is associative: joining nested lists gives the same entries as
+ * joining them flat. The error type is the union of each list's errors.
  *
- * @template E The first issues' error type
- * @template F The second issues' error type
- * @param self The first issues
- * @param other The issues to append
- * @returns Issues holding both lists of entries
+ * @template L The issues to join
+ * @param list The issues, in order
+ * @returns Issues holding every entry of every list
  *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { concat, entries, fromError } from "@sekhmet/schema/core/mini/issues";
  *
- * const issues = concat(fromError("a"), fromError(1));
- * assertEquals(entries(issues).map(({ error }) => error), ["a", 1]);
+ * const joined = concat([fromError("a"), fromError(1)]);
+ * assertEquals(entries(joined).map(({ error }) => error), ["a", 1]);
  * ```
  */
-export function concat<E, F>(self: Issues<E>, other: Issues<F>): Issues<E | F> {
-	const [first, ...rest] = entries(self);
+export function concat<const L extends NonEmpty<Issues<unknown>>>(
+	list: L,
+): Issues<Flatten<L[number]>>;
+export function concat(list: NonEmpty<Issues<unknown>>): Issues<unknown> {
+	const [first, ...rest] = list;
+	const [head, ...tail] = entries(first);
 
-	return new Issues<E | F>([first, ...rest, ...entries(other)]);
+	return new Issues([head, ...tail, ...rest.flatMap(entries)]);
 }
 
 /**
@@ -221,13 +258,13 @@ export function toIssues(error: unknown): Issues<unknown> {
  * } from "@sekhmet/schema/core/mini/issues";
  *
  * const nameError = "required";
- * const addressErrors = prefix(fromError("invalid"), "street");
- * const issues = concat(
+ * const addressErrors = prefix({ issues: fromError("invalid"), path: ["street"] });
+ * const found = concat([
  * 	locate({ key: "name", error: nameError }),
  * 	locate({ key: "address", error: addressErrors }),
- * );
+ * ]);
  *
- * assertEquals(entries(issues), [
+ * assertEquals(entries(found), [
  * 	{ path: ["name"], error: "required" },
  * 	{ path: ["address", "street"], error: "invalid" },
  * ]);
@@ -241,5 +278,5 @@ export function locate(located: {
 	key: PropertyKey;
 	error: unknown;
 }): Issues<unknown> {
-	return prefix(toIssues(located.error), located.key);
+	return prefix({ issues: toIssues(located.error), path: [located.key] });
 }

@@ -44,6 +44,7 @@ export {
 	fromError,
 	Issues,
 	isIssues,
+	issues,
 	type Located,
 	locate,
 	type NonEmpty,

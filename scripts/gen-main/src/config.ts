@@ -37,6 +37,37 @@ export interface FeatureBase {
 }
 
 /**
+ * A function of another feature's mini barrel that becomes a method of the
+ * primary class. Without `field`, the function takes the receiver as its
+ * first parameter, `self`, and the method takes the rest. With `field`, the
+ * function takes one options object whose type passes the primary's type
+ * arguments in order (`ArrayOptions<I, O, E>` for `Schema<I, O, E>`); the
+ * receiver fills that field, and the method takes no arguments.
+ */
+export interface BorrowedMethod {
+	/** The function's name, which is also the method's. */
+	readonly name: string;
+	/** The field of the function's options object that the receiver fills. */
+	readonly field?: string;
+}
+
+/**
+ * Methods the primary class takes from another feature's mini barrel: a
+ * function that belongs to that feature but reads best chained (a schema's
+ * `.optional()`). The generated module imports the barrel as `namespace`.
+ */
+export interface Borrow {
+	/** The other feature's public entrypoint (e.g. `@sekhmet/schema/composites`). */
+	readonly entrypoint: string;
+	/** The other feature's mini barrel, relative to the repository root. */
+	readonly mini: string;
+	/** The name the generated module imports the barrel under. */
+	readonly namespace: string;
+	/** The barrel's functions that become methods. */
+	readonly methods: readonly BorrowedMethod[];
+}
+
+/**
  * A feature whose mini barrel exports a class: main extends it, with each
  * `self`-first function as a method.
  */
@@ -51,6 +82,8 @@ export interface ClassFeature extends FeatureBase {
 	readonly construct: "variant" | "params";
 	/** The primary's mapper per type argument; see {@linkcode WrapTarget.mappers}. */
 	readonly mappers?: readonly (string | undefined)[];
+	/** Methods taken from other features' mini barrels. */
+	readonly borrows?: readonly Borrow[];
 }
 
 /**
@@ -65,6 +98,8 @@ export interface FunctionFeature extends FeatureBase {
 	readonly construct?: never;
 	/** Absent: there is no primary class to map. */
 	readonly mappers?: never;
+	/** Absent: there is no primary class to take methods. */
+	readonly borrows?: never;
 }
 
 /** One feature whose main entrypoint is generated from its mini barrel. */
@@ -280,6 +315,19 @@ export const FEATURES: readonly Feature[] = [
 		construct: "params",
 		mappers: SCHEMA_MAPPERS,
 		wraps: [ENUM_RESULT],
+		// The shape modifiers belong to composites but read best chained.
+		borrows: [
+			{
+				entrypoint: "@sekhmet/schema/composites",
+				mini: "packages/schema/src/composites/mini/mod.ts",
+				namespace: "composites",
+				methods: [
+					{ name: "array", field: "item" },
+					{ name: "optional" },
+					{ name: "nullable" },
+				],
+			},
+		],
 		example: [
 			'import { assertEquals } from "@std/assert";',
 			'import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";',
@@ -334,7 +382,7 @@ export const FEATURES: readonly Feature[] = [
 			"const text = new Schema((input: unknown) =>",
 			'\ttypeof input === "string" ? Ok(input) : Err(InvalidType({ input, expected: "string" })),',
 			");",
-			"const length = fromStandard(toStandard(text)).map((s) => s.length);",
+			"const length = fromStandard(toStandard({ schema: text })).map((s) => s.length);",
 			"",
 			'assertEquals(unwrap(length.parseSync("four")), 4);',
 		].join("\n"),
@@ -343,8 +391,6 @@ export const FEATURES: readonly Feature[] = [
 		entrypoint: "@sekhmet/schema/composites",
 		mini: "packages/schema/src/composites/mini/mod.ts",
 		output: "packages/schema/src/composites/main/mod.ts",
-		primary: "ObjectSchema",
-		construct: "params",
 		wraps: [
 			{
 				type: "Schema",
@@ -354,15 +400,20 @@ export const FEATURES: readonly Feature[] = [
 		],
 		example: [
 			'import { assertEquals } from "@std/assert";',
-			'import { Ok, unwrap } from "@sekhmet/enum/result/mini";',
-			'import { array, object } from "@sekhmet/schema/composites";',
-			'import { parseSync } from "@sekhmet/schema/core/mini";',
-			'import { Schema } from "@sekhmet/schema/core";',
+			'import { unwrap } from "@sekhmet/enum/result/mini";',
+			'import { object } from "@sekhmet/schema/composites";',
+			'import { number, string } from "@sekhmet/schema/primitives";',
 			"",
-			"const text = new Schema((input: unknown) => Ok(String(input)));",
-			"const user = object({ name: text, tags: array(text) }).strict();",
+			"const user = object({",
+			"\tshape: {",
+			"\t\tname: string({ minLength: 1 }),",
+			"\t\tage: number({ int: true, min: 0 }).optional(),",
+			"\t\ttags: string().array(),",
+			"\t},",
+			'\tunknownKeys: "strict",',
+			"});",
 			"",
-			'assertEquals(unwrap(parseSync(user, { name: "Ada", tags: [] })), {',
+			'assertEquals(unwrap(user.parseSync({ name: "Ada", tags: [] })), {',
 			'\tname: "Ada",',
 			"\ttags: [],",
 			"});",
