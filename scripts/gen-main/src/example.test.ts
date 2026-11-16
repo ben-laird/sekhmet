@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { toMainImports, toMethodForm } from "./example.ts";
+import { toFieldMethodForm, toMainImports, toMethodForm } from "./example.ts";
 
 const NONE: ReadonlySet<string> = new Set();
 
@@ -140,6 +140,56 @@ Deno.test("toMethodForm gives up on unbalanced calls", () => {
 
 	// When: rewriting it
 	const rewritten = toMethodForm({ code, name: "map" });
+
+	// Then: there is no rewrite
+	assertEquals(rewritten, undefined);
+});
+
+Deno.test("toFieldMethodForm moves an options field's value to the receiver", () => {
+	// Given: calls passing the receiver in an options field, by name and shorthand
+	const code =
+		"const tags = array({ item: text });\nconst all = array({ item });";
+
+	// When: rewriting calls of array whose receiver is the item field
+	const rewritten = toFieldMethodForm({ code, name: "array", field: "item" });
+
+	// Then: each call becomes a method call on the field's value
+	assertEquals(
+		rewritten,
+		"const tags = text.array();\nconst all = item.array();",
+	);
+});
+
+Deno.test("toFieldMethodForm nests and parenthesizes complex receivers", () => {
+	// Given: a nested call, and a receiver that isn't a plain identifier or call
+	const code =
+		"array({ item: array({ item: text }) }); array({ item: a ?? b, })";
+
+	// When: rewriting calls of array
+	const rewritten = toFieldMethodForm({ code, name: "array", field: "item" });
+
+	// Then: the inner call is rewritten too, and the complex receiver is wrapped
+	assertEquals(rewritten, "text.array().array(); (a ?? b).array()");
+});
+
+Deno.test("toFieldMethodForm leaves calls with other options or arguments alone", () => {
+	// Given: a call with another option, a positional call and a method call
+	const code =
+		"array({ item: text, minItems: 1 }); array(text); xs.array({ item: text })";
+
+	// When: rewriting calls of array
+	const rewritten = toFieldMethodForm({ code, name: "array", field: "item" });
+
+	// Then: none passes the receiver alone in the field, so none changes
+	assertEquals(rewritten, code);
+});
+
+Deno.test("toFieldMethodForm gives up on unbalanced calls", () => {
+	// Given: a call missing its closing parenthesis
+	const code = "array({ item: text }";
+
+	// When: rewriting it
+	const rewritten = toFieldMethodForm({ code, name: "array", field: "item" });
 
 	// Then: there is no rewrite
 	assertEquals(rewritten, undefined);

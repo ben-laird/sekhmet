@@ -332,6 +332,15 @@ function, or a method, returns the primary type, main returns the main class
 (converted with its static `fromMini`), so calls keep chaining. See
 [patterns.md](.claude/patterns.md) for the full contract.
 
+A class feature can also take methods from another feature's mini barrel
+with `borrows` in its config entry, for a function that belongs to that
+feature but reads best chained (`@sekhmet/schema`'s `Schema` takes
+`optional`, `nullable` and `array` from composites). A borrowed function
+takes `self` first, like any method's, or names the `field` of its single
+options object that the receiver fills (`array({ item })` becomes
+`.array()`, a method with no arguments). The generated module imports the
+barrel as a namespace, and borrowed examples are rewritten to method form.
+
 ### Infrastructure Code Conventions
 
 Code in `scripts/`, CI configuration, GitHub Actions workflows, and other
