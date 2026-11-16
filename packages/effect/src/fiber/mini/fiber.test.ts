@@ -330,3 +330,28 @@ Deno.test("a finalizer that cancels its own fiber does not re-notify joiners", (
 	assertEquals(seen, [Err(Cancelled<never>())]);
 	assertEquals(control.cleanups(), 1);
 });
+
+Deno.test("cancel() still notifies joiners when the async cleanup throws", () => {
+	// Given: a fiber suspended on an Async step whose cleanup throws
+	using errorLog = stub(console, "error");
+	const cleanupError = new Error("cleanup failed");
+	const fiber = fork(
+		runtimeWith(sync()),
+		new Effect<void, number, never>(() =>
+			Async(() => () => {
+				throw cleanupError;
+			}),
+		),
+	);
+	const { finalizer, seen } = recorder<number, never>();
+	join(fiber, finalizer);
+
+	// When: cancelling it
+	cancel(fiber);
+
+	// Then: the joiner sees the cancellation and the cleanup error is logged
+	assertEquals(seen, [Err(Cancelled<never>())]);
+	assertEquals(stateOf(fiber), "Complete");
+	assertEquals(errorLog.calls.length, 1);
+	assertEquals(errorLog.calls[0]?.args.includes(cleanupError), true);
+});

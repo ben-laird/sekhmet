@@ -185,7 +185,12 @@ export function cancel<I, T, E>(self: Fiber<I, T, E>): void {
 		},
 		Suspended: ({ cancellation, finalizers }) => {
 			getStructParams(fiberState).variant = ["Complete", result];
-			cancellation?.();
+			try {
+				cancellation?.();
+			} catch (err: unknown) {
+				// Joiners must still learn of the cancellation; report the cleanup failure.
+				console.error("Fiber cancellation cleanup threw:", err);
+			}
 			runFinalizers(finalizers, result);
 		},
 		Complete: () => {},
