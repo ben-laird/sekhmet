@@ -228,6 +228,7 @@ Deno.test("commitVerdict allows a commit whose staged tree has a green run", () 
 		staged: TREE,
 		green: TREE,
 		stagedPaths: ["scripts/ci/main.ts"],
+		markdownWithCode: [],
 	});
 
 	// Then: it goes ahead
@@ -241,11 +242,13 @@ Deno.test("commitVerdict refuses a code change whose staged tree has no green ru
 		staged: TREE,
 		green: OTHER_TREE,
 		stagedPaths: ["README.md", "scripts/ci/main.ts"],
+		markdownWithCode: [],
 	});
 	const none = commitVerdict({
 		staged: TREE,
 		green: undefined,
 		stagedPaths: ["deno.json"],
+		markdownWithCode: [],
 	});
 
 	// When: the verdicts are reached
@@ -264,17 +267,36 @@ Deno.test("commitVerdict exempts a markdown-only change and an unchanged tree", 
 		staged: TREE,
 		green: undefined,
 		stagedPaths: ["README.md", "packages/enum/docs/guide.md"],
+		markdownWithCode: [],
 	});
 	const unchanged = commitVerdict({
 		staged: TREE,
 		green: undefined,
 		stagedPaths: [],
+		markdownWithCode: [],
 	});
 
 	// When: the verdicts are reached
 	// Then: both go ahead, each for its own reason
 	assertEquals(markdown, { kind: "allow", reason: "markdown-only" });
 	assertEquals(unchanged, { kind: "allow", reason: "unchanged" });
+});
+
+Deno.test("commitVerdict refuses a markdown-only change that touches runnable code, and says why", () => {
+	// Given: only markdown staged, but one file's change edits a ts block
+	// When: deciding with no green run
+	const verdict = commitVerdict({
+		staged: TREE,
+		green: undefined,
+		stagedPaths: ["README.md", "docs/guide.md"],
+		markdownWithCode: ["docs/guide.md"],
+	});
+
+	// Then: it is refused, naming the file and the reason
+	assertEquals(verdict, {
+		kind: "refuse",
+		message: `staged tree ${TREE} has no green \`deno task ci\` run; run it, then commit\nmarkdown-only, but not exempt: the change to docs/guide.md touches code blocks that \`deno test --doc\` runs`,
+	});
 });
 
 Deno.test("commitVerdict holds a merge commit to the same rule, and says how to finish the merge", () => {
@@ -284,6 +306,7 @@ Deno.test("commitVerdict holds a merge commit to the same rule, and says how to 
 		staged: TREE,
 		green: OTHER_TREE,
 		stagedPaths: ["scripts/ci/main.ts"],
+		markdownWithCode: [],
 		kind: "merge",
 	});
 

@@ -102,6 +102,37 @@ Deno.test("the pre-commit hook lets a markdown-only commit through without a gre
 	});
 });
 
+Deno.test("the pre-commit hook refuses a markdown-only commit that edits a runnable code block, and lets prose edits around it through", async () => {
+	await withGatedRepo(async (dir) => {
+		// Given: a committed doc with prose and a ts block
+		const fence = "```";
+		const doc = (prose: string, code: string) =>
+			`# Guide\n\n${prose}\n\n${fence}ts\n${code}\n${fence}\n`;
+		const path = join(dir, "guide.md");
+		await Deno.writeTextFile(path, doc("Old prose.", "const a = 1;"));
+		await run(dir, "add", "guide.md");
+		await run(dir, "commit", "--quiet", "--no-verify", "-m", "guide");
+
+		// When: committing a prose edit, then an edit inside the ts block
+		await Deno.writeTextFile(path, doc("New prose.", "const a = 1;"));
+		await run(dir, "add", "guide.md");
+		const prose = await git({ args: ["commit", "-m", "prose"], cwd: dir });
+		await Deno.writeTextFile(path, doc("New prose.", "const a = 2;"));
+		await run(dir, "add", "guide.md");
+		const code = await git({ args: ["commit", "-m", "code"], cwd: dir });
+
+		// Then: the prose edit lands; the code edit is refused, saying why
+		assertEquals(prose.ok, true);
+		assertEquals(code.ok, false);
+		assert(
+			!code.ok &&
+				code.error.includes(
+					"the change to guide.md touches code blocks that `deno test --doc` runs",
+				),
+		);
+	});
+});
+
 Deno.test("the hook judges the index git commits, so `git commit -a` needs a green run for the tree it stages", async () => {
 	await withGatedRepo(async (dir) => {
 		// Given: a green run for the staged tree, then an unstaged edit

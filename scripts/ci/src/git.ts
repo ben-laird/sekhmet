@@ -15,6 +15,7 @@ import {
 	type StagedSnapshot,
 	type TreeId,
 } from "./green-run.ts";
+import { parseChangedLines, touchesRunnableCode } from "./markdown-code.ts";
 
 /** Where git runs: a directory in the repository (default: the cwd). */
 export interface GitOptions {
@@ -121,6 +122,68 @@ export async function stagedPaths({
 		ok: true,
 		value: output.value.split("\0").filter((path) => path.length > 0),
 	};
+}
+
+/**
+ * The staged markdown paths whose change touches a block `deno test --doc`
+ * runs, judged from `HEAD`'s and the index's version of each and their
+ * zero-context diff (see `markdown-code.ts`).
+ *
+ * @param options.paths - The staged markdown paths
+ * @param options.cwd - A directory in the repository (default: the cwd)
+ * @returns The paths that touch runnable code
+ */
+export async function markdownWithCode({
+	paths,
+	cwd,
+}: GitOptions & { paths: readonly string[] }): Promise<Result<string[]>> {
+	const touching: string[] = [];
+	for (const path of paths) {
+		const [before, after, diff] = await Promise.all([
+			blob({ spec: `HEAD:${path}`, cwd }),
+			blob({ spec: `:${path}`, cwd }),
+			git({
+				args: [
+					"diff",
+					"--cached",
+					"-U0",
+					"--no-color",
+					"--no-ext-diff",
+					"--no-textconv",
+					"--no-renames",
+					"--",
+					path,
+				],
+				...cwdOf(cwd),
+			}),
+		]);
+		if (!before.ok) return before;
+		if (!after.ok) return after;
+		if (!diff.ok) return diff;
+		const changed = parseChangedLines(diff.value);
+		if (
+			touchesRunnableCode({ before: before.value, after: after.value, changed })
+		) {
+			touching.push(path);
+		}
+	}
+	return { ok: true, value: touching };
+}
+
+/** A blob's text, or `""` when the object does not exist (a new file). */
+async function blob({
+	spec,
+	cwd,
+}: {
+	spec: string;
+	cwd: string | undefined;
+}): Promise<Result<string>> {
+	const exists = await git({
+		args: ["rev-parse", "--verify", "--quiet", spec],
+		...cwdOf(cwd),
+	});
+	if (!exists.ok) return { ok: true, value: "" };
+	return await git({ args: ["show", spec], ...cwdOf(cwd) });
 }
 
 /**

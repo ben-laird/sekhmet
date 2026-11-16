@@ -48,7 +48,8 @@ considering the task complete.
 
 **Commit gate**: with the hooks on (`deno task hooks`), `.githooks/pre-commit`
 refuses a commit whose staged tree has no green `deno task ci` run
-(markdown-only commits are exempt). Stage first, run the gate, then commit;
+(markdown-only commits are exempt unless they touch a code block
+`deno test --doc` runs). Stage first, run the gate, then commit;
 never bypass it with `--no-verify`. See CONTRIBUTING.md, "Commit gate".
 
 **AI Mode (`CI_AI=true`)**: Always use the `CI_AI=true` environment variable

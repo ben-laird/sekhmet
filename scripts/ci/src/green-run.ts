@@ -176,7 +176,8 @@ export type CommitKind = "commit" | "merge";
 /**
  * Whether a commit may go ahead:
  * - `allow`, because its staged tree has a green run (`green`), every staged
- *   path is markdown (`markdown-only`), or it stages no change against
+ *   path is markdown and no change touches a block `deno test --doc` runs
+ *   (`markdown-only`; see `markdown-code.ts`), or it stages no change against
  *   `HEAD` (`unchanged`: its tree is one already committed)
  * - `refuse`, with the message the hook prints
  */
@@ -190,6 +191,8 @@ export type CommitVerdict =
  * @param options.staged - The staged tree being committed
  * @param options.green - The tree in the green marker, if any
  * @param options.stagedPaths - Paths that differ between `HEAD` and the index
+ * @param options.markdownWithCode - The staged markdown paths whose change
+ *   touches a block `deno test --doc` runs
  * @param options.kind - Whether this is a merge commit (default: `commit`)
  * @returns The verdict
  */
@@ -197,26 +200,43 @@ export function commitVerdict({
 	staged,
 	green,
 	stagedPaths,
+	markdownWithCode,
 	kind = "commit",
 }: {
 	staged: TreeId;
 	green: TreeId | undefined;
 	stagedPaths: readonly string[];
+	markdownWithCode: readonly string[];
 	kind?: CommitKind;
 }): CommitVerdict {
 	if (staged === green) return { kind: "allow", reason: "green" };
 	if (stagedPaths.length === 0) return { kind: "allow", reason: "unchanged" };
-	if (stagedPaths.every((path) => path.endsWith(".md"))) {
+	const markdownOnly = stagedPaths.every(isMarkdown);
+	if (markdownOnly && markdownWithCode.length === 0) {
 		return { kind: "allow", reason: "markdown-only" };
 	}
 	const next =
 		kind === "merge"
 			? "the merge is staged: run `deno task ci`, then `git commit`"
 			: "run it, then commit";
+	const why = markdownOnly
+		? `\nmarkdown-only, but not exempt: the change to ${listPaths(markdownWithCode)} touches code blocks that \`deno test --doc\` runs`
+		: "";
 	return {
 		kind: "refuse",
-		message: `staged tree ${staged} has no green \`deno task ci\` run; ${next}`,
+		message: `staged tree ${staged} has no green \`deno task ci\` run; ${next}${why}`,
 	};
+}
+
+/**
+ * Whether a path is a markdown file, the only kind a commit may change
+ * without a green run.
+ *
+ * @param path - A repository path
+ * @returns true for `*.md`
+ */
+export function isMarkdown(path: string): boolean {
+	return path.endsWith(".md");
 }
 
 /** The `core.hooksPath` that turns the commit gate on. */

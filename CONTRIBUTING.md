@@ -454,8 +454,16 @@ deno task hooks   # git config core.hooksPath .githooks
   tracked file and no untracked, unignored file, both before the first step
   and after the last. A failed, blocked or interrupted run records nothing.
 - **Checking:** `.githooks/pre-commit` refuses a commit whose staged tree is
-  not the recorded one. A commit that changes only `*.md` files (a rename
-  counts both its paths) is exempt.
+  not the recorded one.
+- **Markdown exemption:** a commit that changes only `*.md` files (a rename
+  counts both its paths) is exempt, unless its staged diff adds, removes or
+  changes a line inside a code block that `deno test --doc` runs, in either
+  `HEAD`'s or the staged version. The refusal then names those files. As in
+  Deno, such a block is a backtick fence (three or more, `~~~` does not count)
+  whose first info word is exactly `ts`, `tsx`, `typescript`, `mts`, `cts`,
+  `js`, `jsx`, `javascript`, `mjs` or `cjs`, without an `ignore` word
+  (`no-eval` is still type-checked). Its fence lines count, so dropping an
+  `ignore` is a code change.
 - **The workflow:** stage everything (`git add`), run `deno task ci`, then
   commit. Any edit or `git add` after the run needs a new run.
 - **Merges:** `.githooks/pre-merge-commit` holds a merge commit to the same

@@ -9,6 +9,7 @@
  */
 import {
 	greenMarkerPath,
+	markdownWithCode,
 	readGreenMarker,
 	stagedPaths,
 	stagedTree,
@@ -16,6 +17,7 @@ import {
 import {
 	type CommitVerdict,
 	commitVerdict,
+	isMarkdown,
 	type Result,
 } from "./src/green-run.ts";
 
@@ -34,7 +36,7 @@ export async function main(args: readonly string[]): Promise<number> {
 	if (verdict.value.kind === "refuse") {
 		console.error(verdict.value.message);
 		console.error(
-			'(markdown-only commits are exempt; see "Commit gate" in CONTRIBUTING.md)',
+			'(markdown-only commits that touch no runnable code block are exempt; see "Commit gate" in CONTRIBUTING.md)',
 		);
 		return 1;
 	}
@@ -54,12 +56,17 @@ async function decide({
 	if (!staged.ok) return staged;
 	if (!paths.ok) return paths;
 	if (!markerPath.ok) return markerPath;
+	const withCode = paths.value.every(isMarkdown)
+		? await markdownWithCode({ paths: paths.value })
+		: { ok: true as const, value: [] };
+	if (!withCode.ok) return withCode;
 	return {
 		ok: true,
 		value: commitVerdict({
 			staged: staged.value,
 			green: await readGreenMarker(markerPath.value),
 			stagedPaths: paths.value,
+			markdownWithCode: withCode.value,
 			kind: merge ? "merge" : "commit",
 		}),
 	};
