@@ -36,6 +36,7 @@ import * as mini from "../mini/mod.ts";
 export type {
 	Annotation,
 	AnnotationKey,
+	AnnotationOptions,
 	AnySchema,
 	ArrayDetails,
 	CustomDataOptions,
@@ -84,12 +85,14 @@ export type {
 } from "../mini/mod.ts";
 export {
 	Async,
+	annotation,
 	annotationKey,
 	Custom,
 	children,
 	concat,
 	custom,
 	customData,
+	description,
 	entries,
 	formatIssue,
 	from,
@@ -117,6 +120,7 @@ export {
 	Sync,
 	TooBig,
 	TooSmall,
+	title,
 	toIssues,
 	typeName,
 	UnexpectedAsyncParse,
@@ -160,6 +164,34 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 		if (self instanceof Schema) return self;
 
 		return new Schema(getStructParams(self));
+	}
+
+	/**
+	 * Annotates a schema: the same schema (its parser and node), with
+	 * `annotations` added after its own. A later annotation for a key wins over
+	 * an earlier one. Annotations describe the schema they are on: every other
+	 * operation builds a schema with none, so `map(annotate(s, …), f)` has no
+	 * annotations of its own.
+	 *
+	 * @param annotations - The annotations to add, each made by calling its key
+	 * @returns The schema with the annotations added
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { unwrap } from "@sekhmet/enum/option/mini";
+	 * import { Ok, unwrap as unwrapResult } from "@sekhmet/enum/result/mini";
+	 * import { annotation, Schema, title } from "@sekhmet/schema/core";
+	 *
+	 * const text = new Schema({ parse: (input: string) => Ok(input) });
+	 * const name = text.annotate([title("Name"), title("Full name")]);
+	 *
+	 * assertEquals(unwrapResult(name.parseSync("Ada")), "Ada");
+	 * assertEquals(unwrap(annotation({ schema: name, key: title })), "Full name");
+	 * ```
+	 * @see {@link mini.annotate}
+	 */
+	annotate(annotations: readonly mini.Annotation[]): Schema<I, O, E> {
+		return Schema.fromMini(mini.annotate(this, annotations));
 	}
 
 	/**

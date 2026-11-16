@@ -316,8 +316,12 @@ Every main `Schema` has exactly these methods: the shape modifiers
 `.orElse`, `.inspect`, `.inspectErr`, `.preprocess`; and `.parse`,
 `.parseSync`, `.parseAsync` (`parseSync` returns enum's main `Result`).
 Since #31 it also has one getter, `.with`, whose `SchemaWith` holds the
-[algebra](#algebra-31)'s methods.
+[algebra](#algebra-31)'s methods, and since #32 one more method,
+`.annotate([...])`, which adds typed annotations to a schema.
 
+- _Superseded by #32 (2026-11-16):_ the list above without `.annotate`.
+  Annotating is a method because it keeps the schema (its parser and node)
+  and only adds metadata, as `.optional()` keeps its value.
 - _Superseded by #30 (2026-11-16):_ #28 fixed the transforms at `.map`,
   `.mapErr`, `.pipe` and `.filter`. The rule is unchanged otherwise: checks
   stay options, and only the modifiers, transforms and parsing are methods.

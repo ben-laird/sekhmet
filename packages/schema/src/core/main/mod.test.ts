@@ -54,6 +54,7 @@ Deno.test("Schema has exactly the modifier, transform and parsing methods", () =
 	// algebra namespace's getter, only
 	assertEquals(methods, [
 		"andThen",
+		"annotate",
 		"array",
 		"filter",
 		"inspect",

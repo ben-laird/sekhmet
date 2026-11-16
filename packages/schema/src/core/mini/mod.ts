@@ -11,7 +11,12 @@
 export {
 	type Annotation,
 	type AnnotationKey,
+	type AnnotationOptions,
+	annotate,
+	annotation,
 	annotationKey,
+	description,
+	title,
 } from "./annotation.ts";
 export {
 	Custom,
