@@ -29,7 +29,10 @@ and a verdict. Exit codes:
    installed as `globalThis.Deno = { test, noColor: true }`. Loading the file
    registers its tests; the harness then runs them in order. It supports every
    `Deno.test` call form, `ignore`, `only` (which fails the run, as in Deno), and
-   nested async `t.step` (a failed or un-awaited step fails its parent).
+   nested async `t.step` (a failed or un-awaited step fails its parent). A
+   test is judged once, when its body ends: a step still running then is
+   reported failed as not awaited, and nothing it does later changes the
+   report.
 3. **Run.** Each runtime runs `suite.js` and hands back a JSON report, which is
    validated (Zod) and summarized:
    - **node, bun:** `node run.mjs <report.json>` / `bun run.mjs <report.json>`.
