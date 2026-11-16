@@ -7,7 +7,12 @@
 	},
 	"files": {
 		"ignoreUnknown": true,
-		"includes": ["**", "!coverage", "!.claude/worktrees", "!.claude/settings.local.json"]
+		"includes": [
+			"**",
+			"!coverage",
+			"!.claude/worktrees",
+			"!.claude/settings.local.json"
+		]
 	},
 	"formatter": {
 		"enabled": true,
