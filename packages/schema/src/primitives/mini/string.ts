@@ -44,9 +44,11 @@ export interface StringSchemaOptions {
  * parseSync(schema, true); // Ok("true")
  * ```
  */
-export function string({
-	coerce = false,
-}: StringSchemaOptions = {}): Schema<unknown, string, TypeError> {
+export function string(
+	options?: StringSchemaOptions,
+): Schema<unknown, string, TypeError> {
+	const coerce = options?.coerce ?? false;
+
 	return new Schema((input) => {
 		if (typeof input !== "string") {
 			if (coerce) {

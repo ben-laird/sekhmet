@@ -50,6 +50,22 @@ details a message or a UI needs:
 Every issue carries the `input` it rejected. `formatIssue(issue)` renders a
 default English message; the Standard adapter uses it.
 
+Each variant holds one details object, built by a constructor of the same name
+(`InvalidType({ input, expected })`):
+
+- `InvalidType` derives `received` from the input with `typeName`, which tells
+  `null`, arrays, dates, `NaN` (`"nan"`), `±Infinity` (`"infinity"`) and
+  invalid dates apart. `expected` is a free type name (`"string"`, `"object"`).
+- `InvalidValue.expected` lists the allowed values; `InvalidFormat` has a
+  `format` name and an optional `pattern`.
+- `TooSmall`, `TooBig` and `NotMultipleOf` are discriminated by `origin`, which
+  fixes the bound's type: `bigint` for `"bigint"`, `Date` for `"date"`, and a
+  `number` (a value, a length or a size) for `"number"`, `"string"`, `"array"`,
+  `"set"` and `"map"`.
+- `UnknownKey` has the `key`, and the value under it as `input`.
+- `InvalidUnion.branches` is each branch's failure as `Issues<unknown>`, in
+  branch order: a branch's errors need not be `SchemaIssue`s.
+
 ### Generic `E` stays
 
 A user-written schema may still fail with any `E`. Only built-in schemas fix

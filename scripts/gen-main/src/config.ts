@@ -18,14 +18,29 @@ export interface WrapTarget {
 	readonly mappers?: readonly (string | undefined)[];
 }
 
-/** One feature whose main entrypoint is generated from its mini barrel. */
-export interface Feature {
+/** What every generated feature declares, with or without a primary class. */
+export interface FeatureBase {
 	/** The public entrypoint the main module backs (e.g. `@sekhmet/enum/option`). */
 	readonly entrypoint: string;
 	/** The mini barrel, relative to the repository root. */
 	readonly mini: string;
 	/** The generated main module, relative to the repository root. */
 	readonly output: string;
+	/** Other features' main classes that top-level return types convert to. */
+	readonly wraps?: readonly WrapTarget[];
+	/** Curried mini functions whose method takes the returned function's parameters. */
+	readonly uncurry?: readonly string[];
+	/** Mini exports left out of main (e.g. names that clash in a kitchen-sink barrel). */
+	readonly omit?: readonly string[];
+	/** A runnable example for the module doc (doc-tested). */
+	readonly example?: string;
+}
+
+/**
+ * A feature whose mini barrel exports a class: main extends it, with each
+ * `self`-first function as a method.
+ */
+export interface ClassFeature extends FeatureBase {
 	/** The mini class the main class extends; `self` parameters of this type become `this`. */
 	readonly primary: string;
 	/**
@@ -36,14 +51,28 @@ export interface Feature {
 	readonly construct: "variant" | "params";
 	/** The primary's mapper per type argument; see {@linkcode WrapTarget.mappers}. */
 	readonly mappers?: readonly (string | undefined)[];
-	/** Other features' main classes that top-level return types convert to. */
-	readonly wraps?: readonly WrapTarget[];
-	/** Curried mini functions whose method takes the returned function's parameters. */
-	readonly uncurry?: readonly string[];
-	/** Mini exports left out of main (e.g. names that clash in a kitchen-sink barrel). */
-	readonly omit?: readonly string[];
-	/** A runnable example for the module doc (doc-tested). */
-	readonly example?: string;
+}
+
+/**
+ * A feature with no class of its own, such as a set of constructors for
+ * another feature's class: main re-declares each function whose return
+ * names a wrap target so it returns the main class, and re-exports the rest.
+ */
+export interface FunctionFeature extends FeatureBase {
+	/** Absent: the feature has no primary class. */
+	readonly primary?: never;
+	/** Absent: there is no primary class to rebuild. */
+	readonly construct?: never;
+	/** Absent: there is no primary class to map. */
+	readonly mappers?: never;
+}
+
+/** One feature whose main entrypoint is generated from its mini barrel. */
+export type Feature = ClassFeature | FunctionFeature;
+
+/** Whether a feature has a primary class for main to extend. */
+export function isClassFeature(feature: Feature): feature is ClassFeature {
+	return feature.primary !== undefined;
 }
 
 const OPTION: WrapTarget = {
@@ -56,6 +85,11 @@ const RESULT: WrapTarget = {
 	from: "../../result/main/mod.ts",
 	mappers: ["map", "mapErr"],
 };
+const SCHEMA_MAPPERS: readonly (string | undefined)[] = [
+	undefined,
+	"map",
+	"mapErr",
+];
 
 /** Every generated main entrypoint. */
 export const FEATURES: readonly Feature[] = [
@@ -230,6 +264,47 @@ export const FEATURES: readonly Feature[] = [
 			");",
 			"",
 			"assertEquals(results, [Ok(42)]);",
+		].join("\n"),
+	},
+	{
+		entrypoint: "@sekhmet/schema/core",
+		mini: "packages/schema/src/core/mini/mod.ts",
+		output: "packages/schema/src/core/main/mod.ts",
+		primary: "Schema",
+		construct: "params",
+		mappers: SCHEMA_MAPPERS,
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";',
+			'import { Schema } from "@sekhmet/schema/core";',
+			"",
+			"const digits = new Schema((input: string) =>",
+			'\t/^\\d+$/.test(input) ? Ok(input) : Err("not digits"),',
+			");",
+			"const doubled = digits.map(Number).map((n) => n * 2);",
+			"",
+			'assertEquals(unwrap(doubled.parseSync("21")), 42);',
+		].join("\n"),
+	},
+	{
+		entrypoint: "@sekhmet/schema/primitives",
+		mini: "packages/schema/src/primitives/mini/mod.ts",
+		output: "packages/schema/src/primitives/main/mod.ts",
+		wraps: [
+			{
+				type: "Schema",
+				from: "../../core/main/mod.ts",
+				mappers: SCHEMA_MAPPERS,
+			},
+		],
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { unwrap } from "@sekhmet/enum/result/mini";',
+			'import { string } from "@sekhmet/schema/primitives";',
+			"",
+			"const length = string().map((text) => text.length);",
+			"",
+			'assertEquals(unwrap(length.parseSync("four")), 4);',
 		].join("\n"),
 	},
 ];
