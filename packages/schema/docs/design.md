@@ -150,6 +150,46 @@ Declarative, Zod-style schemas built from other schemas: `object`, `array`,
 - **Types:** `Input<S>`, `Output<S>` (alias `Infer<S>`) and `ErrorOf<S>`
   extract a schema's type parameters.
 
+### As built (#24)
+
+Where the implementation in `src/composites/` refines or departs from the
+list above, and why:
+
+- **`enumOf`, not `enum`:** `enum` is a reserved word. `oneOf` was rejected
+  because JSON Schema's `oneOf` is a union of schemas, not of values.
+- **Inputs are typed only when a child's is.** A composite's input is
+  `unknown` when every child accepts `unknown`; otherwise it is the mapped
+  type of the children's inputs (`ObjectInput`, `ArrayInput`, `TupleInput`,
+  `RecordInput`). A `union`'s input is the _intersection_ of its options',
+  since every option is tried with the same value.
+- **Errors:** containers fail with `Issues<Flatten<E…> | SchemaIssue>`; a
+  `union` fails with `Issues<SchemaIssue>` (one `InvalidUnion` at the root,
+  holding each option's issues); `enumOf` is a leaf and fails with a bare
+  `SchemaIssue`.
+- **Optional fields** are those whose output includes `undefined` (built with
+  `optional`). A missing key is parsed as `undefined` and left out of the
+  output; a key present as `undefined` is kept.
+- **`array` length checks are `minItems` / `maxItems`** (JSON Schema's
+  names), so they don't collide with the string checks in the kitchen-sink
+  barrel. They also report alongside element issues when the input is an
+  array of the wrong length.
+- **`tuple` has no rest element.** Extra elements fail with `TooBig`; a
+  variable-length tail is an `array`. A rest form can be added as a second
+  parameter later without breaking `tuple(items)`.
+- **`discriminatedUnion(key, { value: schema })`** maps each discriminant
+  (a string) to the schema for that case, rather than reading literal
+  schemas out of each option's shape: it needs no schema introspection. The
+  output carries the discriminant whether or not the option declares it.
+- **`.strict()` chains, but its result doesn't yet have the core methods.**
+  `object` returns an `ObjectSchema` (a `Schema` whose parser remembers its
+  shape), and the generated main `ObjectSchema` has `strict()`,
+  `passthrough()` and `strip()` methods. gen-main can only make it extend
+  the _mini_ `ObjectSchema`, so `object({…}).strict().parseSync(x)` does not
+  type-check yet; `parseSync(object({…}).strict(), x)` does. Making a
+  feature's main class extend another feature's main class (`Schema`) is an
+  open gen-main design question, shared with check methods such as
+  `string().minLength(3)`.
+
 ## Standard Schema adapter
 
 Both directions, in `src/standard/`:

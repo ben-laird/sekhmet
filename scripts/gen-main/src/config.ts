@@ -339,4 +339,33 @@ export const FEATURES: readonly Feature[] = [
 			'assertEquals(unwrap(length.parseSync("four")), 4);',
 		].join("\n"),
 	},
+	{
+		entrypoint: "@sekhmet/schema/composites",
+		mini: "packages/schema/src/composites/mini/mod.ts",
+		output: "packages/schema/src/composites/main/mod.ts",
+		primary: "ObjectSchema",
+		construct: "params",
+		wraps: [
+			{
+				type: "Schema",
+				from: "../../core/main/mod.ts",
+				mappers: SCHEMA_MAPPERS,
+			},
+		],
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { Ok, unwrap } from "@sekhmet/enum/result/mini";',
+			'import { array, object } from "@sekhmet/schema/composites";',
+			'import { parseSync } from "@sekhmet/schema/core/mini";',
+			'import { Schema } from "@sekhmet/schema/core";',
+			"",
+			"const text = new Schema((input: unknown) => Ok(String(input)));",
+			"const user = object({ name: text, tags: array(text) }).strict();",
+			"",
+			'assertEquals(unwrap(parseSync(user, { name: "Ada", tags: [] })), {',
+			'\tname: "Ada",',
+			"\ttags: [],",
+			"});",
+		].join("\n"),
+	},
 ];

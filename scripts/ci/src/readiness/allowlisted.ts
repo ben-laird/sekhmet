@@ -59,6 +59,11 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 		"Result",
 	),
 	privateTypeRef(
+		"schema/src/composites/mini/object.ts",
+		'ObjectSchema["struct"]',
+		"struct",
+	),
+	privateTypeRef(
 		"schema/src/core/main/mod.ts",
 		"Schema.prototype.parse",
 		"Result",
