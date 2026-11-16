@@ -11,6 +11,7 @@ import {
 	coverageSummaryCommand,
 	dvValidateCommand,
 	EXIT_CODES,
+	gateFilesCommand,
 	jsrDryRunCommand,
 	main,
 	readinessCommand,
@@ -154,6 +155,57 @@ Deno.test("biomeCiCommand fails on a badly formatted file and passes on a clean 
 		// Then: the bad file fails the check (no silent exit 0); the clean one passes
 		assertEquals(badOutput.success, false);
 		assertEquals(goodOutput.success, true);
+	} finally {
+		await Deno.remove(dir, { recursive: true });
+	}
+});
+
+Deno.test("ciSteps runs Biome and deno check over the files git does not ignore", () => {
+	for (const run of RUNS) {
+		// Given: the CI steps for a run
+		const steps = ciSteps(run);
+
+		// When: finding the Biome and type-check steps
+		const biome = steps.find((step) => step.name === "Biome Check");
+		const check = steps.find((step) => step.name === "Deno Check");
+
+		// Then: both go through the git-listed file wrapper
+		assertEquals(biome?.command, gateFilesCommand({ tool: "biome" }));
+		assertEquals(check?.command, gateFilesCommand({ tool: "check" }));
+	}
+});
+
+Deno.test("gateFilesCommand ignores gitignored scratch but fails other broken files", async () => {
+	// Given: a git repo whose gitignored playground/ holds a badly formatted,
+	// ill-typed file, next to a clean tracked one
+	const dir = await Deno.makeTempDir({ prefix: "ci-gate-files-" });
+	const git = (...args: string[]) =>
+		new Deno.Command("git", { args, cwd: dir, stdin: "null" }).output();
+	const broken = "export const  n: number = 'x'\n";
+	await git("init", "--quiet");
+	await Deno.writeTextFile(`${dir}/.gitignore`, "/playground/\n");
+	await Deno.writeTextFile(`${dir}/good.ts`, "export const n: number = 1;\n");
+	await git("add", ".gitignore", "good.ts");
+	await Deno.mkdir(`${dir}/playground`);
+	await Deno.writeTextFile(`${dir}/playground/scratch.ts`, broken);
+	const run = (tool: "biome" | "check") =>
+		spawnCommand({ command: gateFilesCommand({ tool, root: dir }) }).output();
+
+	try {
+		// When: running each gate tool
+		const [biome, check] = [await run("biome"), await run("check")];
+
+		// Then: the scratch never reaches either tool
+		assertEquals(biome.success, true, new TextDecoder().decode(biome.stderr));
+		assertEquals(check.success, true, new TextDecoder().decode(check.stderr));
+
+		// When: the same broken file is an untracked file git does not ignore
+		await Deno.writeTextFile(`${dir}/new.ts`, broken);
+		const [biomeNew, checkNew] = [await run("biome"), await run("check")];
+
+		// Then: both tools fail it, before it is ever staged
+		assertEquals(biomeNew.success, false);
+		assertEquals(checkNew.success, false);
 	} finally {
 		await Deno.remove(dir, { recursive: true });
 	}

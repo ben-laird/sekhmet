@@ -7,6 +7,7 @@ import {
 	type StepTimeout,
 	type WorkflowStep,
 } from "@/mod.ts";
+import type { GateTool } from "@/src/gate-files.ts";
 import {
 	greenMarkerPath,
 	hooksPath,
@@ -18,6 +19,8 @@ import {
 	greenRunDecision,
 	hooksWarning,
 } from "@/src/green-run.ts";
+
+export type { GateTool };
 
 /**
  * Exit codes for CI workflow failures.
@@ -156,6 +159,36 @@ export function biomeCiCommand({
 }
 
 /**
+ * A gate tool run over the files git does not ignore (see `gate-files.ts`),
+ * so gitignored scratch in `playground/` never fails the gate while the
+ * editor's Biome and language server still cover it.
+ *
+ * @param options.tool - `biome` for `biome ci`, `check` for `deno check`
+ * @param options.root - The git checkout to list (default: the working directory)
+ * @returns The command to run
+ */
+export function gateFilesCommand({
+	tool,
+	root,
+}: {
+	tool: GateTool;
+	root?: string;
+}): StepCommand {
+	return {
+		program: "deno",
+		args: [
+			"run",
+			"--no-prompt",
+			"--allow-env",
+			"--allow-run=git,deno",
+			fromFileUrl(new URL("./gate-files.ts", import.meta.url)),
+			tool,
+			...(root === undefined ? [] : ["--root", root]),
+		],
+	};
+}
+
+/**
  * A publish-readiness run (see `readiness.ts`):
  * - `doc-lint`: `deno doc --lint` per workspace member over its export set,
  *   which is what JSR documents
@@ -234,13 +267,13 @@ export function ciSteps({ isCI, isAI, coverageDir }: CIRun): WorkflowStep[] {
 			name: "Deno Check",
 			exitCode: EXIT_CODES.DENO_CHECK_FAILED,
 
-			command: { program: "deno", args: ["check"] },
+			command: gateFilesCommand({ tool: "check" }),
 		},
 		{
 			name: "Biome Check",
 			exitCode: EXIT_CODES.BIOME_CHECK_FAILED,
 
-			command: biomeCiCommand(),
+			command: gateFilesCommand({ tool: "biome" }),
 		},
 		{
 			name: "Documentation Lint",
