@@ -197,15 +197,20 @@ export function cancel<I, T, E>(self: Fiber<I, T, E>): void {
 	});
 }
 
+/**
+ * Runs every finalizer, isolating each one: a throw is logged and the rest
+ * still run. Logging, not rethrowing, keeps a faulty joiner from escaping
+ * into the scheduler or the caller of cancel.
+ */
 function runFinalizers<T, E>(
 	finalizers: Finalizer<T, E>[],
 	result: FiberResult<T, E>,
 ): void {
-	try {
-		for (const finalizer of finalizers) {
+	for (const finalizer of finalizers) {
+		try {
 			finalizer(result);
+		} catch (err: unknown) {
+			console.error("Fiber finalizer threw:", err);
 		}
-	} catch (err: unknown) {
-		console.error({ err });
 	}
 }

@@ -235,13 +235,15 @@ function complete<I, T, E>(
 		Complete: () => {},
 	});
 
+	// Each finalizer is isolated: a throw is logged and the rest still run.
+	// Rethrowing here would escape into the scheduler's turn and wedge it.
 	function runFinalizers(finalizers: Finalizer<T, E>[]): void {
-		try {
-			for (const finalizer of finalizers) {
+		for (const finalizer of finalizers) {
+			try {
 				finalizer(result);
+			} catch (err: unknown) {
+				console.error("Fiber finalizer threw:", err);
 			}
-		} catch (err: unknown) {
-			console.error({ err });
 		}
 	}
 }

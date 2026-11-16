@@ -2,6 +2,7 @@ import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
+import { stub } from "@std/testing/mock";
 import type { FiberResult } from "@/src/fiber/mini/fiber-error.ts";
 import { Scheduler } from "@/src/scheduler/scheduler.ts";
 import { sync } from "@/src/scheduler/schedules.ts";
@@ -804,6 +805,50 @@ Deno.test("a finalizer that cancels its completing fiber does not change the res
 	const late: FiberResult<number, never>[] = [];
 	join(fiber, (result) => late.push(result));
 	assertEquals(late, [Ok(1)]);
+});
+
+Deno.test("completion isolates throwing finalizers and logs each throw", () => {
+	// Given: a fiber with two throwing joiners around a healthy one
+	using errorLog = stub(console, "error");
+	let resume:
+		| ((c: Continuation<EffectResult<number, never>>) => void)
+		| undefined;
+	const runtime = new Runtime({
+		input: undefined,
+		config: { scheduler: new Scheduler({ schedule: sync() }) },
+	});
+	const fiber = fork(
+		runtime,
+		new Effect<void, number, never>(() =>
+			Async((resolve) => {
+				resume = resolve;
+			}),
+		),
+	);
+	const first = new Error("first finalizer failed");
+	const second = new Error("second finalizer failed");
+	const seen: string[] = [];
+	join(fiber, () => {
+		seen.push("first");
+		throw first;
+	});
+	join(fiber, (result) => {
+		seen.push(`healthy:${match(result)({ Ok: (v) => v, Err: () => -1 })}`);
+	});
+	join(fiber, () => {
+		seen.push("second");
+		throw second;
+	});
+
+	// When: the fiber completes
+	resume?.(Ready(Ok(1)));
+
+	// Then: every joiner ran in order and each throw was logged
+	assertEquals(seen, ["first", "healthy:1", "second"]);
+	assertEquals(
+		errorLog.calls.map((call) => call.args.at(-1)),
+		[first, second],
+	);
 });
 
 Deno.test("an async step that resolves synchronously completes the fiber", () => {

@@ -292,26 +292,33 @@ Deno.test("a cancelled fiber ignores a late async resolution", () => {
 	assertEquals(seen, [Err(Cancelled<never>())]);
 });
 
-Deno.test("cancel() with a throwing finalizer logs and skips later finalizers", () => {
-	// Given: a suspended fiber with a throwing joiner before a healthy one
+Deno.test("cancel() isolates throwing finalizers and logs each throw", () => {
+	// Given: a suspended fiber with two throwing joiners around a healthy one
 	using errorLog = stub(console, "error");
 	const control = controlledEffect<number>();
 	const fiber = fork(runtimeWith(sync()), control.effect);
 	const order: string[] = [];
+	const first = new Error("first finalizer failed");
+	const second = new Error("second finalizer failed");
 	join(fiber, () => {
-		order.push("thrower");
-		throw new Error("finalizer failed");
+		order.push("first");
+		throw first;
 	});
 	join(fiber, () => order.push("healthy"));
+	join(fiber, () => {
+		order.push("second");
+		throw second;
+	});
 
 	// When: cancelling it
 	cancel(fiber);
 
-	// Then: the error is logged, the later joiner is skipped, the fiber is done
-	// QUESTION: one throwing finalizer silently starves every later joiner.
-	// Should each finalizer be isolated so the rest still run?
-	assertEquals(order, ["thrower"]);
-	assertEquals(errorLog.calls.length, 1);
+	// Then: every joiner ran in order, each throw was logged, the fiber is done
+	assertEquals(order, ["first", "healthy", "second"]);
+	assertEquals(
+		errorLog.calls.map((call) => call.args.at(-1)),
+		[first, second],
+	);
 	assertEquals(stateOf(fiber), "Complete");
 });
 
