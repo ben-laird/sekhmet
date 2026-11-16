@@ -86,8 +86,9 @@ Packages (`packages/`):
   `ordering` built on it
 - `@sekhmet/matrix`: `matrix()` builds the Cartesian product of value arrays for
   parameterized tests
-- `@sekhmet/panic`: `Panic` error, `panic()`/`panicWithoutCause()`, panic hooks
-  and a metadata registry
+- `@sekhmet/panic`: `Panic` error, `panic()`/`panicWithoutCause()`, a Rust-style
+  panic runtime (`definePanicRuntime()`: a reporting hook plus `catchUnwind`
+  boundaries, no global state) and a metadata registry
 - `@sekhmet/primordials`: foundation primitives (`Struct`, `Subtle`, `block`,
   `define`)
 - `@sekhmet/vow`: `Vow`, a synchronous promise-like value built on `Enum`
