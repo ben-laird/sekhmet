@@ -1,4 +1,10 @@
 /**
+ * The {@linkcode matrix} function and its {@linkcode Matrix} and {@linkcode MatrixCase} types.
+ *
+ * @module
+ */
+
+/**
  * A test case represented as a record of string keys to unknown values.
  */
 export type MatrixCase = Record<string, unknown>;
@@ -24,26 +30,28 @@ export type Matrix<T extends MatrixCase> = {
  * @returns An array of all possible combinations
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import { matrix } from "@sekhmet/matrix";
+ * import { assertEquals } from "@std/assert";
+ *
  * const cases = matrix({
  *   browser: ["chrome", "firefox", "safari"],
  *   viewport: ["mobile", "desktop"],
  *   theme: ["light", "dark"],
  * });
  *
- * // Results in 12 test cases (3 * 2 * 2):
- * // [
- * //   { browser: "chrome", viewport: "mobile", theme: "light" },
- * //   { browser: "chrome", viewport: "mobile", theme: "dark" },
- * //   { browser: "chrome", viewport: "desktop", theme: "light" },
- * //   ...
- * // ]
+ * // 12 cases (3 * 2 * 2); the first key varies slowest
+ * assertEquals(cases.length, 12);
+ * assertEquals(cases.slice(0, 3), [
+ *   { browser: "chrome", viewport: "mobile", theme: "light" },
+ *   { browser: "chrome", viewport: "mobile", theme: "dark" },
+ *   { browser: "chrome", viewport: "desktop", theme: "light" },
+ * ]);
  *
- * for (const testCase of cases) {
- *   Deno.test(`${testCase.browser} - ${testCase.viewport} - ${testCase.theme}`, () => {
- *     // ... run test with this combination
- *   });
- * }
+ * // In a test file, register one test per case:
+ * // for (const { browser, viewport, theme } of cases) {
+ * //   Deno.test(`${browser} - ${viewport} - ${theme}`, () => { ... });
+ * // }
  * ```
  */
 export function matrix<T extends MatrixCase>(definition: Matrix<T>): T[] {
