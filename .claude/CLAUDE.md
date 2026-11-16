@@ -103,7 +103,9 @@ Scripts (`scripts/`, unpublished):
   (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
   `.github/workflows/docs.yml`)
 - `@sekhmet/playground`: `deno task play:notebook` starts a Jupyter notebook
-  in the gitignored `playground/` (see CONTRIBUTING.md, "Playground")
+  in the gitignored `playground/`, and `deno task play:link <target>` links
+  `playground/` to a worktree's (or any checkout's) packages for the editor
+  (see CONTRIBUTING.md, "Playground")
 
 ### Core Design Principles
 
