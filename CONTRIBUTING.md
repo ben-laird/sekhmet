@@ -100,18 +100,24 @@ Before contributing:
 
 ### Playground
 
-`playground/` at the repository root is gitignored and excluded from every
-check `deno task ci` runs, so keep scratch scripts and notebooks there. Imports
-of `@sekhmet/*` resolve to the checked-out source, so you are always playing
-with the current branch:
+`playground/` at the repository root is gitignored and never checked by
+`deno task ci`, so keep scratch scripts and notebooks there. Your editor still
+covers it: the Deno language server (hovers, completions, type errors) and
+Biome (formatting, lint, organize imports) both see the folder. Imports of
+`@sekhmet/*` resolve to the checked-out source, so you are always playing with
+the current branch:
 
 ```bash
 deno run playground/try.ts         # any script that imports @sekhmet/*
-deno run --check playground/try.ts # type-check it too
+deno check playground/try.ts       # type-check it
+deno task fmt playground/          # format and lint-fix it with Biome
 ```
 
-`deno check playground/…` reports "No matching files found", because the
-folder is excluded; `deno run --check` checks it anyway.
+The gate stays off it in three ways: Biome and `deno check` run over the files
+git does not ignore (`scripts/ci/gate-files.ts`), `deno lint` and `deno test`
+exclude it in `deno.json` (`lint.exclude`, `test.exclude`), and the
+publish-readiness scans skip it. `deno.json`'s `lint.exclude` also turns off
+Deno's lint diagnostics for it in the editor; Biome's lint still runs there.
 
 - **`deno task play`** opens `deno repl` with every package's public features
   imported as globals and prints a table of what loaded. It reads each
