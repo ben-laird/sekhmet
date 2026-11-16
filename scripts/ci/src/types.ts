@@ -94,7 +94,10 @@ export interface WorkflowStep {
 	condition?: StepCondition;
 	/** Names of other steps that must complete before this step runs */
 	dependsOn?: string[];
-	/** If true, workflow continues even if this step fails (defaults to false) */
+	/**
+	 * If true, this step failing does not fail the workflow (defaults to false).
+	 * Dependents still see the step as failed, so "success" dependents are blocked.
+	 */
 	continueOnError?: boolean;
 	/** Whether to show command output (boolean or function based on step status) */
 	showOutput?: boolean | ((status: StepStatus) => boolean);

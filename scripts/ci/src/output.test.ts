@@ -35,10 +35,90 @@ const results = new Map<string, StepResult>([
 	["Optional", { name: "Optional", status: "skipped" }],
 ]);
 
+function ranOrNot(name: string): StepResult {
+	const result = results.get(name);
+	if (!result) throw new Error(`no fixture result for ${name}`);
+	return result;
+}
+
+// Cleanup fails but has continueOnError; its dependent still sees the failure
+const cleanupSteps: WorkflowStep[] = [
+	{ name: "Deno Lint", exitCode: 1, command },
+	{ name: "Cleanup", exitCode: 8, continueOnError: true, command },
+	{ name: "After cleanup", exitCode: 9, dependsOn: ["Cleanup"], command },
+];
+const cleanupResults = new Map<string, StepResult>([
+	["Deno Lint", { name: "Deno Lint", status: "passed" }],
+	["Cleanup", { name: "Cleanup", status: "failed" }],
+	[
+		"After cleanup",
+		{ name: "After cleanup", status: "blocked", blockedBy: ["Cleanup"] },
+	],
+]);
+
+Deno.test("workflowExitCode does not fail the workflow for a failed continueOnError step", () => {
+	// Given: only a continueOnError step failed (its dependent is blocked)
+	// When: computing the workflow exit code
+	const exitCode = workflowExitCode({
+		steps: cleanupSteps,
+		results: cleanupResults,
+	});
+
+	// Then: the workflow succeeds
+	assertEquals(exitCode, 0);
+});
+
+Deno.test("workflowExitCode skips a continueOnError failure and reports the next real failure", () => {
+	// Given: a continueOnError failure declared before a plain failure
+	const mixedSteps: WorkflowStep[] = [
+		{ name: "Cleanup", exitCode: 8, continueOnError: true, command },
+		{ name: "Deno Test", exitCode: 5, command },
+	];
+	const mixed = new Map<string, StepResult>([
+		["Cleanup", { name: "Cleanup", status: "failed" }],
+		["Deno Test", { name: "Deno Test", status: "failed" }],
+	]);
+
+	// When: computing the workflow exit code
+	const exitCode = workflowExitCode({ steps: mixedSteps, results: mixed });
+
+	// Then: the plain failure's code
+	assertEquals(exitCode, 5);
+});
+
+Deno.test("formatAIOutput and formatStepStatusLine flag a continued failure", () => {
+	// Given: the continueOnError failure fixture
+	const [, cleanupStep] = cleanupSteps;
+	const cleanupResult = cleanupResults.get("Cleanup");
+	if (!cleanupStep || !cleanupResult) throw new Error("fixture missing");
+
+	// When: formatting for AI agents and for logs
+	const output = formatAIOutput(
+		cleanupSteps,
+		cleanupResults,
+		new TextDecoder(),
+	);
+	const line = stripAnsiCode(
+		formatStepStatusLine({ step: cleanupStep, result: cleanupResult }),
+	);
+
+	// Then: the workflow succeeds, the step is marked as continued, and its dependent is blocked
+	assertEquals(output.success, true);
+	assertEquals(output.exitCode, 0);
+	assertEquals(output.steps[1], {
+		name: "Cleanup",
+		status: "failed",
+		exitCode: 8,
+		continuedOnError: true,
+	});
+	assertEquals(output.steps[2]?.status, "blocked");
+	assertEquals(line, "[!] Cleanup (continueOnError: workflow not failed)");
+});
+
 Deno.test("formatStepStatusLine marks each status distinctly for console and GitHub Actions logs", () => {
 	// Given: one result of each status
-	const lines = [...results.values()].map((result) =>
-		stripAnsiCode(formatStepStatusLine(result)),
+	const lines = steps.map((step) =>
+		stripAnsiCode(formatStepStatusLine({ step, result: ranOrNot(step.name) })),
 	);
 
 	// When/Then: each line names the step and says why a non-run step did not run

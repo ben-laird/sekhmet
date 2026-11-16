@@ -14,6 +14,8 @@ export interface AIStepResult {
 	status: StepStatus;
 	/** The step's workflow exit code, present when the step failed */
 	exitCode?: number | undefined;
+	/** true when the step failed but has `continueOnError`, so the workflow did not fail */
+	continuedOnError?: boolean | undefined;
 	/** The unhealthy dependencies that blocked the step, present when blocked */
 	blockedBy?: string[] | undefined;
 	/** Standard output from the step */
@@ -26,7 +28,7 @@ export interface AIStepResult {
  * JSON output for the entire workflow in AI mode.
  */
 export interface AIWorkflowResult {
-	/** true if no step failed, false if any failed */
+	/** false if any step without `continueOnError` failed, else true */
 	success: boolean;
 	/** The process exit code: 0, or the first failed step's exit code */
 	exitCode: number;
@@ -52,7 +54,7 @@ function resultFor(
  * The exit code a workflow ends with: `0` when no step failed, otherwise the
  * `exitCode` of the first failed step in declaration order (default `1`).
  * Blocked and skipped steps never set the code; the failure that blocked them
- * already has.
+ * already has. A failed `continueOnError` step does not fail the workflow.
  */
 export function workflowExitCode({
 	steps,
@@ -62,7 +64,8 @@ export function workflowExitCode({
 	results: Map<string, StepResult>;
 }): number {
 	for (const step of steps) {
-		if (resultFor(step, results).status === "failed") {
+		const failed = resultFor(step, results).status === "failed";
+		if (failed && !step.continueOnError) {
 			return step.exitCode ?? 1;
 		}
 	}
@@ -73,13 +76,22 @@ export function workflowExitCode({
  * Renders the one-line status of a step for console and GitHub Actions logs,
  * e.g. `[-] Show coverage report (blocked: "Deno Test" failed or was blocked)`.
  */
-export function formatStepStatusLine(result: StepResult): string {
+export function formatStepStatusLine({
+	step,
+	result,
+}: {
+	step: WorkflowStep;
+	result: StepResult;
+}): string {
 	switch (result.status) {
 		case "passed": {
 			return `${green("[x]")} ${result.name}`;
 		}
 		case "failed": {
-			return `${red("[!]")} ${result.name}`;
+			const continued = step.continueOnError
+				? ` ${yellow("(continueOnError: workflow not failed)")}`
+				: "";
+			return `${red("[!]")} ${result.name}${continued}`;
 		}
 		case "skipped": {
 			return `${cyan("[ ]")} ${result.name} ${gray("(skipped: condition not met)")}`;
@@ -106,7 +118,7 @@ export async function formatWorkflowOutput(
 	for (const step of steps) {
 		const result = resultFor(step, results);
 
-		console.log(formatStepStatusLine(result));
+		console.log(formatStepStatusLine({ step, result }));
 
 		if (result.status !== "passed" && result.status !== "failed") continue;
 
@@ -160,6 +172,7 @@ export function formatAIOutput(
 			}
 			case "failed": {
 				aiStep.exitCode = step.exitCode ?? 1;
+				if (step.continueOnError) aiStep.continuedOnError = true;
 				break;
 			}
 			case "passed": {
