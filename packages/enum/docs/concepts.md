@@ -88,6 +88,23 @@ if (option.isNone()) {
 }
 ```
 
+`Ordering` has no type parameters, so its guards narrow only the variant and
+the value stays an `Ordering`. A guard that covers two kinds narrows to both:
+after `isLe`, a `match` needs only the `Less` and `Equal` arms.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { match } from "@sekhmet/enum/core/mini";
+import { compareNumbers } from "@sekhmet/enum/ordering";
+
+const ordering = compareNumbers(1, 2);
+if (ordering.isLe()) {
+	const strict = match(ordering)({ Less: () => true, Equal: () => false }); // no Greater arm
+	assertEquals(strict, true);
+	assertEquals(ordering.reverse().isGe(), true); // still an Ordering
+}
+```
+
 ## Matching
 
 `match(value)(arms)` calls the arm for the value's kind with the variant's value
