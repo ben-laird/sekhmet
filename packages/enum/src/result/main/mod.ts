@@ -7,6 +7,22 @@
  *
  * Generated from `../mini/mod.ts` by `deno task gen:main`; edit the mini source, then regenerate.
  *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, type Result } from "@sekhmet/enum/result";
+ *
+ * const parse = (text: string): Result<number, string> =>
+ * 	Number.isNaN(Number(text)) ? Err("not a number") : Ok(Number(text));
+ *
+ * const doubled = parse("21")
+ * 	.map((n) => n * 2)
+ * 	.ok() // a main Option
+ * 	.unwrapOr(0);
+ *
+ * assertEquals(doubled, 42);
+ * ```
+ *
  * @module
  */
 

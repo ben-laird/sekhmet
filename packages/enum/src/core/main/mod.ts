@@ -7,6 +7,22 @@
  *
  * Generated from `../mini/mod.ts` by `deno task gen:main`; edit the mini source, then regenerate.
  *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Enum, type Split } from "@sekhmet/enum/core";
+ *
+ * type Shape = Split<{ Circle: [radius: number]; Square: [side: number] }>;
+ *
+ * const shape = new Enum<Shape>("Square", 3);
+ * const area = shape.match({
+ * 	Circle: (radius) => Math.PI * radius ** 2,
+ * 	Square: (side) => side ** 2,
+ * });
+ *
+ * assertEquals(area, 9);
+ * ```
+ *
  * @module
  */
 

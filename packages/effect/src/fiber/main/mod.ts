@@ -7,6 +7,28 @@
  *
  * Generated from `../mini/mod.ts` by `deno task gen:main`; edit the mini source, then regenerate.
  *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Success } from "@sekhmet/effect/effect";
+ * import { fork } from "@sekhmet/effect/fiber";
+ * import { Runtime } from "@sekhmet/effect/runtime";
+ * import { Scheduler, sync } from "@sekhmet/effect/scheduler";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ *
+ * const runtime = new Runtime({
+ * 	input: undefined,
+ * 	config: { scheduler: new Scheduler({ schedule: sync() }) },
+ * });
+ *
+ * const results: unknown[] = [];
+ * fork(runtime, Success(21).map((n) => n * 2)).join((result) =>
+ * 	results.push(result),
+ * );
+ *
+ * assertEquals(results, [Ok(42)]);
+ * ```
+ *
  * @module
  */
 

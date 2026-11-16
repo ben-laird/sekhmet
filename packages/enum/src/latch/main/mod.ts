@@ -7,6 +7,18 @@
  *
  * Generated from `../mini/mod.ts` by `deno task gen:main`; edit the mini source, then regenerate.
  *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Active, type Latch } from "@sekhmet/enum/latch";
+ *
+ * const connection: Latch<string, string> = Active("socket");
+ * connection.deactivate("closed by peer");
+ *
+ * assertEquals(connection.isActive(), false);
+ * assertEquals(connection.inactive().unwrap(), "closed by peer");
+ * ```
+ *
  * @module
  */
 

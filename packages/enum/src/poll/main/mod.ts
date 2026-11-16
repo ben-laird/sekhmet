@@ -7,6 +7,15 @@
  *
  * Generated from `../mini/mod.ts` by `deno task gen:main`; edit the mini source, then regenerate.
  *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Pending, Ready } from "@sekhmet/enum/poll";
+ *
+ * assertEquals(Ready(2).map((n) => n + 1).isReady(), true);
+ * assertEquals(Pending<number>().map((n) => n + 1).isReady(), false);
+ * ```
+ *
  * @module
  */
 

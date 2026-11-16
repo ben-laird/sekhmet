@@ -7,6 +7,25 @@
  *
  * Generated from `../mini/mod.ts` by `deno task gen:main`; edit the mini source, then regenerate.
  *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { compareNumbers, compareStrings } from "@sekhmet/enum/ordering";
+ *
+ * const people = [
+ * 	{ name: "Bea", age: 30 },
+ * 	{ name: "Al", age: 30 },
+ * 	{ name: "Cy", age: 25 },
+ * ];
+ * people.sort((a, b) =>
+ * 	compareNumbers(a.age, b.age)
+ * 		.andThen(compareStrings(a.name, b.name))
+ * 		.toNumber(),
+ * );
+ *
+ * assertEquals(people.map((p) => p.name), ["Cy", "Al", "Bea"]);
+ * ```
+ *
  * @module
  */
 
