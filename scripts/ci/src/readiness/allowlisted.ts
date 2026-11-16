@@ -9,7 +9,6 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	// READMEs and README fixes come with the docs work
 	missingReadme("matrix"),
 	missingReadme("panic"),
-	missingReadme("vow"),
 
 	// Cross-package types (Struct, Enum, Split, Result) in public signatures
 	// that the package does not re-export; how to resolve them is undecided
