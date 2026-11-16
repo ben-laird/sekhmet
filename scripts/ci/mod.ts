@@ -2,6 +2,9 @@
 
 export { spawnCommand } from "./src/step.ts";
 export type {
+	BlockedStepResult,
+	RanStepResult,
+	SkippedStepResult,
 	StepCommand,
 	StepCondition,
 	StepContext,
