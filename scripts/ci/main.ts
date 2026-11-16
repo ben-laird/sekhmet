@@ -177,6 +177,8 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 				program: "deno",
 				args: [
 					"test",
+					// Also type-checks and runs the code blocks in JSDoc and in every
+					// markdown file (READMEs, docs/), unless fenced as `ignore`
 					"--doc",
 					"--parallel",
 					"--no-prompt",
