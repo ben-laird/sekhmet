@@ -1,5 +1,6 @@
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 
 /**
@@ -23,10 +24,12 @@ import { Schema } from "@/src/core/mini/schema.ts";
  * ```
  */
 export function undefined_(): Schema<unknown, undefined, SchemaIssue> {
-	return new Schema(
-		(input): Result<undefined, SchemaIssue> =>
-			input === undefined
-				? Ok(input)
-				: Err(InvalidType({ input, expected: "undefined" })),
-	);
+	return new Schema({
+		parse: (input): Result<undefined, SchemaIssue> => {
+			if (input === undefined) return Ok(input);
+
+			return Err(InvalidType({ input, expected: "undefined" }));
+		},
+		node: new SchemaNode("Leaf", { type: "undefined" }),
+	});
 }

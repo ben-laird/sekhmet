@@ -82,9 +82,11 @@ export function brand<I, O, E, const B extends string>(
  * the root, carrying each branch's issues in order. Both sides get the same
  * input, so the input type is the intersection of theirs, as for `union`.
  *
- * Chains nest: `or({ left: or({ left: a, right: b }), right: c })` is
- * `union([union([a, b]), c])`, so its `InvalidUnion` holds the inner
- * union's as its first branch.
+ * Chains flatten: a side that is an un-annotated `union` (from `union` or
+ * another `or`, read from its node) contributes its options, so
+ * `or({ left: or({ left: a, right: b }), right: c })` is
+ * `union([a, b, c])`, with one `InvalidUnion` of three branches. A union
+ * with annotations is kept whole, as one branch.
  *
  * @template I - The left schema's input type
  * @template O - The left schema's output type
@@ -97,9 +99,10 @@ export function brand<I, O, E, const B extends string>(
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
+ * import { union } from "@sekhmet/enum/core/mini/exit";
  * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
  * import { or } from "@sekhmet/schema/algebra";
- * import { entries, formatIssue, parseAsync, parseSync } from "@sekhmet/schema/core/mini";
+ * import { entries, parseAsync, parseSync } from "@sekhmet/schema/core/mini";
  * import { boolean, number, string } from "@sekhmet/schema/primitives/mini";
  *
  * const scalar = or({ left: or({ left: string(), right: number() }), right: boolean() });
@@ -107,7 +110,8 @@ export function brand<I, O, E, const B extends string>(
  * assertEquals(unwrap(parseSync(scalar, true)), true);
  *
  * const [{ error }] = entries(unwrapErr(await parseAsync(scalar, null)));
- * assertEquals(formatIssue(error), "Invalid input: no union branch matched");
+ * const details = union(error);
+ * assertEquals("branches" in details ? details.branches.length : 0, 3);
  * ```
  */
 export function or<I, O, E, J, P, F>(
@@ -128,6 +132,8 @@ export function or<I, O, E, J, P, F>(
  * state of a `Map`, `Set` or `Date` (a frozen `Map` still `set`s), and a
  * class instance can't be copied without bypassing its constructor. A
  * `Map` or `Set` output is still typed as a `ReadonlyMap` or `ReadonlySet`.
+ *
+ * The schema records a `Readonly` node over `self`.
  *
  * @template I - The input type
  * @template O - The output type

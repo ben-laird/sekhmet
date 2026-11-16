@@ -156,24 +156,28 @@ Deno.test("fromStandard makes each Standard issue an Issues entry", async (t) =>
 });
 
 /** A sekhmet schema failing with `Issues<SchemaIssue>` at nested paths. */
-const tagged = new Schema((input: unknown) =>
-	Array.isArray(input) && input.length > 0
-		? Ok(input.length)
-		: Err(
-				issues([
-					{ path: ["tags"], error: InvalidType({ input, expected: "array" }) },
-					{
-						path: ["tags", 0],
-						error: TooSmall({
-							input,
-							origin: "array",
-							minimum: 1,
-							inclusive: true,
-						}),
-					},
-				]),
-			),
-);
+const tagged = new Schema({
+	parse: (input: unknown) =>
+		Array.isArray(input) && input.length > 0
+			? Ok(input.length)
+			: Err(
+					issues([
+						{
+							path: ["tags"],
+							error: InvalidType({ input, expected: "array" }),
+						},
+						{
+							path: ["tags", 0],
+							error: TooSmall({
+								input,
+								origin: "array",
+								minimum: 1,
+								inclusive: true,
+							}),
+						},
+					]),
+				),
+});
 
 Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
 	await t.step("outputs are preserved", async () => {
@@ -210,9 +214,11 @@ Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
 
 	await t.step("a root SchemaIssue stays at the root", async () => {
 		// Given: a schema failing with a single SchemaIssue, round-tripped
-		const single = new Schema<unknown, never, SchemaIssue>((input) =>
-			Err(InvalidType({ input, expected: "string" })),
-		);
+		const single = new Schema<unknown, never, SchemaIssue>({
+			parse: (input) => {
+				return Err(InvalidType({ input, expected: "string" }));
+			},
+		});
 		const schema = fromStandard(toStandard({ schema: single }));
 
 		// When: parsing
@@ -237,13 +243,14 @@ Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
 
 	await t.step("async stays async", async () => {
 		// Given: an asynchronous schema, round-tripped
-		const delayed = new Schema((input: unknown) =>
-			Promise.resolve(
-				typeof input === "number"
-					? Ok(input)
-					: Err(InvalidType({ input, expected: "number" })),
-			),
-		);
+		const delayed = new Schema({
+			parse: (input: unknown) =>
+				Promise.resolve(
+					typeof input === "number"
+						? Ok(input)
+						: Err(InvalidType({ input, expected: "number" })),
+				),
+		});
 		const schema = fromStandard(toStandard({ schema: delayed }));
 
 		// When: parsing

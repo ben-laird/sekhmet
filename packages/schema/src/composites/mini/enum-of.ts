@@ -1,5 +1,6 @@
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { InvalidValue, type SchemaIssue } from "@/src/core/mini/issue.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 import type { Literal } from "@/src/primitives/mini/literal.ts";
 
@@ -48,9 +49,12 @@ export function enumOf<const T extends readonly [Literal, ...Literal[]]>(
 ): Schema<unknown, T[number], SchemaIssue> {
 	const isAllowed = oneOf<T[number]>(values);
 
-	return new Schema((input: unknown) =>
-		isAllowed(input)
-			? Ok(input)
-			: Err(InvalidValue({ input, expected: values })),
-	);
+	return new Schema({
+		parse: (input: unknown) => {
+			if (isAllowed(input)) return Ok(input);
+
+			return Err(InvalidValue({ input, expected: values }));
+		},
+		node: new SchemaNode("Leaf", { type: "enum", values }),
+	});
 }

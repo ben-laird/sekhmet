@@ -369,10 +369,15 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   top level) returns the main class. The result goes through the class's
   static `fromMini`, which returns the value unchanged when it already is a
   main instance (so methods that return `self` keep its identity) and
-  otherwise returns a main view that shares the mini instance's struct params,
-  so a change through either is visible through both (Struct-based classes
-  pass the params to the constructor; Enum-based ones are built from the
-  variant and then rebound to the same params through the `struct` symbol).
+  otherwise returns a main view built from the mini instance's struct params
+  (Struct-based classes pass the params to the constructor; Enum-based ones
+  are built from the variant and then rebound to the same params through the
+  `struct` symbol). Most views share the params object, so a change through
+  either is visible through both. A class whose constructor builds its own
+  params object, such as schema's `Schema` (whose constructor takes a
+  `SchemaInit` and fills in its defaults), copies them instead: the view holds
+  the same `parse`, `node` and `annotations`, and since these are immutable
+  the copy can't be observed.
 - **Rule: conversions to another feature's type return that feature's main
   class.** In main, chaining never drops back to mini, even across types:
   `Some(1).okOr("e")` is a main `Result`, `Ok(1).ok()` a main `Option`,

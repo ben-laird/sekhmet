@@ -21,15 +21,18 @@ import {
 import { array } from "./array.ts";
 import { object } from "./object.ts";
 
-const count: Schema<unknown, number, "not a number"> = new Schema((input) =>
-	typeof input === "number" ? Ok(input) : Err("not a number"),
-);
-const laterCount: Schema<unknown, number, "not a number"> = new Schema(
-	(input) =>
-		Promise.resolve(
+const count: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
+		return typeof input === "number" ? Ok(input) : Err("not a number");
+	},
+});
+const laterCount: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
+		return Promise.resolve(
 			typeof input === "number" ? Ok(input) : Err("not a number"),
-		),
-);
+		);
+	},
+});
 
 Deno.test("array parses every element", () => {
 	// Given: an array of numbers
@@ -153,7 +156,7 @@ Deno.test("array infers its input, output and error types", () => {
 	// Given: arrays of a loose and a typed element schema
 	const counts = array({ item: count });
 	const lengths = array({
-		item: new Schema((input: string) => Ok(input.length)),
+		item: new Schema({ parse: (input: string) => Ok(input.length) }),
 	});
 	const bounded = array({ item: count, minItems: 1 });
 

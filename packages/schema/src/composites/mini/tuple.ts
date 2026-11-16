@@ -4,6 +4,7 @@ import {
 	fromError,
 	type Issues,
 } from "@/src/core/mini/issues.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import {
 	type AnySchema,
 	type ErrorOf,
@@ -83,6 +84,21 @@ export type TupleError<T extends readonly AnySchema[]> = Issues<
 	Flatten<ErrorOf<T[number]>> | SchemaIssue
 >;
 
+/** The issue of a tuple input longer than its elements, if it is. */
+function tooLong({
+	input,
+	maximum,
+}: {
+	input: readonly unknown[];
+	maximum: number;
+}): Issues<SchemaIssue> | undefined {
+	if (input.length <= maximum) return undefined;
+
+	return fromError(
+		TooBig({ input, origin: "array", maximum, inclusive: true }),
+	);
+}
+
 /**
  * Creates a schema for fixed-length arrays: element `i` is parsed by
  * `items[i]`, and every failing element is reported at its index.
@@ -104,12 +120,16 @@ export type TupleError<T extends readonly AnySchema[]> = Issues<
  * import { tuple } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) =>
- * 	typeof input === "string" ? Ok(input) : Err("not text"),
- * );
- * const count = new Schema((input: unknown) =>
- * 	typeof input === "number" ? Ok(input) : Err("not a number"),
- * );
+ * const text = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "string" ? Ok(input) : Err("not text");
+ * 	},
+ * });
+ * const count = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" ? Ok(input) : Err("not a number");
+ * 	},
+ * });
  *
  * assertEquals(unwrap(parseSync(tuple([text, count]), ["apples", 3])), ["apples", 3]);
  * ```
@@ -120,25 +140,18 @@ export function tuple<const T extends readonly AnySchema[]>(
 export function tuple(
 	items: readonly Child[],
 ): Schema<unknown, unknown, Issues<unknown>> {
-	return new Schema((input: unknown): Parsed => {
-		if (!isArray(input)) return invalidType({ input, expected: "array" });
+	return new Schema({
+		parse: (input: unknown): Parsed => {
+			if (!isArray(input)) return invalidType({ input, expected: "array" });
 
-		return compose({
-			pending: items.map((child, index) =>
-				run({ key: index, child, value: input[index] }),
-			),
-			extra:
-				input.length > items.length
-					? fromError(
-							TooBig({
-								input,
-								origin: "array",
-								maximum: items.length,
-								inclusive: true,
-							}),
-						)
-					: undefined,
-			build: (outputs) => outputs.map(([, output]) => output),
-		});
+			return compose({
+				pending: items.map((child, index) =>
+					run({ key: index, child, value: input[index] }),
+				),
+				extra: tooLong({ input, maximum: items.length }),
+				build: (outputs) => outputs.map(([, output]) => output),
+			});
+		},
+		node: new SchemaNode("Tuple", { items }),
 	});
 }

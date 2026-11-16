@@ -3,7 +3,7 @@ import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertInstanceOf } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import type { Branded } from "@/src/algebra/main/mod.ts";
-import { object } from "@/src/composites/main/mod.ts";
+import { object, union } from "@/src/composites/main/mod.ts";
 import { boolean, number, string } from "@/src/primitives/main/mod.ts";
 import {
 	type ErrorOf,
@@ -12,6 +12,7 @@ import {
 	type Input,
 	type Issues,
 	isSchemaIssue,
+	nodeOf,
 	type Output,
 	ParseError,
 	Schema,
@@ -20,9 +21,11 @@ import {
 	TooSmall,
 } from "./mod.ts";
 
-const digits = new Schema((input: string) =>
-	/^\d+$/.test(input) ? Ok(Number(input)) : Err("not digits"),
-);
+const digits = new Schema({
+	parse: (input: string) => {
+		return /^\d+$/.test(input) ? Ok(Number(input)) : Err("not digits");
+	},
+});
 
 Deno.test("parseSync returns enum's main Result, so its methods chain", () => {
 	// Given: a schema that accepts digit strings
@@ -51,6 +54,7 @@ Deno.test("Schema has exactly the modifier, transform and parsing methods", () =
 	// algebra namespace's getter, only
 	assertEquals(methods, [
 		"andThen",
+		"annotate",
 		"array",
 		"filter",
 		"inspect",
@@ -78,6 +82,21 @@ Deno.test("SchemaWith has exactly the algebra methods", () => {
 	// When: listing its own methods
 	// Then: they are or, brand and readonly, only
 	assertEquals(methods, ["brand", "or", "readonly"]);
+});
+
+Deno.test("union([a, b]).with.or(c) is union([a, b, c])", async () => {
+	// Given: a main union extended with .with.or, and the flat union
+	const [a, b, c] = [string(), number(), boolean()];
+	const extended = union([a, b]).with.or(c);
+	const flat = union([a, b, c]);
+
+	// When: both reject a value
+	const found = unwrapErr(await extended.parseAsync(null));
+
+	// Then: they fail alike (one InvalidUnion of three branches) and record
+	// the same node
+	assertEquals(found, unwrapErr(await flat.parseAsync(null)));
+	assertEquals(nodeOf(extended), nodeOf(flat));
 });
 
 Deno.test(".with's methods return main Schemas that keep chaining", async () => {
@@ -114,8 +133,8 @@ Deno.test(".with's methods return main Schemas that keep chaining", async () => 
 
 Deno.test(".with.or infers the right schema's types", () => {
 	// Given: schemas with typed inputs
-	const left = new Schema((input: { a: string }) => Ok(input.a));
-	const right = new Schema((input: { b: number }) => Ok(input.b));
+	const left = new Schema({ parse: (input: { a: string }) => Ok(input.a) });
+	const right = new Schema({ parse: (input: { b: number }) => Ok(input.b) });
 
 	// When: or-ing them through the namespace
 	const either = left.with.or(right);
@@ -130,9 +149,11 @@ Deno.test(".with.or infers the right schema's types", () => {
 
 Deno.test("SchemaWith is covariant in its output, like the Schema it holds", () => {
 	// Given: a namespace of a schema with a narrow output
-	const narrow: SchemaWith<unknown, "a", never> = new Schema((_: unknown) =>
-		Ok("a" as const),
-	).with;
+	const narrow: SchemaWith<unknown, "a", never> = new Schema({
+		parse: (_: unknown) => {
+			return Ok("a" as const);
+		},
+	}).with;
 
 	// When: widening it, and narrowing a wide one
 	const wide: SchemaWith<unknown, string, unknown> = narrow;

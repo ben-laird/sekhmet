@@ -1,7 +1,8 @@
 import { Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
-import { acceptNull, type Child, type ChildParsed, wrap } from "./collect.ts";
+import { acceptNull, type Child, type ChildParsed } from "./collect.ts";
 
 /**
  * Makes a schema's value optional: it also accepts `undefined`, which it
@@ -23,7 +24,7 @@ import { acceptNull, type Child, type ChildParsed, wrap } from "./collect.ts";
  * import { array, optional } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) => Ok(String(input)));
+ * const text = new Schema({ parse: (input: unknown) => Ok(String(input)) });
  * const gaps = array({ item: optional(text) });
  *
  * assertEquals(unwrap(parseSync(gaps, ["a", undefined])), ["a", undefined]);
@@ -33,16 +34,15 @@ export function optional<I, O, E>(
 	self: Schema<I, O, E>,
 ): Schema<I | undefined, O | undefined, E>;
 export function optional(self: Child): Child {
-	const parser = getStructParams(self);
+	const parser = getStructParams(self).parse;
 
-	return wrap({
-		modifier: "optional",
-		inner: self,
-		parser: (input): ChildParsed => {
+	return new Schema({
+		parse: (input): ChildParsed => {
 			if (input === undefined) return Ok(undefined);
 
 			return parser(input);
 		},
+		node: new SchemaNode("Optional", { inner: self }),
 	});
 }
 
@@ -63,7 +63,7 @@ export function optional(self: Child): Child {
  * import { nullable } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) => Ok(String(input)));
+ * const text = new Schema({ parse: (input: unknown) => Ok(String(input)) });
  *
  * assertEquals(unwrap(parseSync(nullable(text), null)), null);
  * ```
@@ -106,5 +106,8 @@ export function nullable(self: Child): Child {
  * ```
  */
 export function lazy<I, O, E>(getter: () => Schema<I, O, E>): Schema<I, O, E> {
-	return new Schema((input) => getStructParams(getter())(input));
+	return new Schema({
+		parse: (input) => getStructParams(getter()).parse(input),
+		node: new SchemaNode("Lazy", { getter }),
+	});
 }

@@ -1,5 +1,6 @@
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { InvalidValue, type SchemaIssue } from "@/src/core/mini/issue.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 
 /** A value a {@linkcode literal} schema can match: any primitive. */
@@ -52,10 +53,12 @@ export function literal<const T extends Literal>(
 ): Schema<unknown, T, SchemaIssue> {
 	const isValue = sameAs(value);
 
-	return new Schema(
-		(input): Result<T, SchemaIssue> =>
-			isValue(input)
-				? Ok(input)
-				: Err(InvalidValue({ input, expected: [value] })),
-	);
+	return new Schema({
+		parse: (input): Result<T, SchemaIssue> => {
+			if (isValue(input)) return Ok(input);
+
+			return Err(InvalidValue({ input, expected: [value] }));
+		},
+		node: new SchemaNode("Leaf", { type: "literal", value }),
+	});
 }

@@ -2,6 +2,7 @@ import { match, union as unionValue } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { InvalidUnion, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { fromError, type Issues, toIssues } from "@/src/core/mini/issues.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { map as mapPotential } from "@/src/core/mini/potential.ts";
 import {
 	type AnySchema,
@@ -54,12 +55,16 @@ export type UnionInput<T extends readonly AnySchema[]> = {
  * import { union } from "@sekhmet/schema/composites/mini";
  * import { entries, formatIssue, parseAsync, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) =>
- * 	typeof input === "string" ? Ok(input) : Err("not text"),
- * );
- * const count = new Schema((input: unknown) =>
- * 	typeof input === "number" ? Ok(input) : Err("not a number"),
- * );
+ * const text = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "string" ? Ok(input) : Err("not text");
+ * 	},
+ * });
+ * const count = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" ? Ok(input) : Err("not a number");
+ * 	},
+ * });
  * const textOrCount = union([text, count]);
  *
  * assertEquals(unwrap(parseSync(textOrCount, 3)), 3);
@@ -72,28 +77,32 @@ export function union<const T extends readonly [AnySchema, ...AnySchema[]]>(
 	options: T,
 ): Schema<UnionInput<T>, Output<T[number]>, Issues<SchemaIssue>>;
 export function union(
-	options: readonly Child[],
+	options: readonly [Child, ...Child[]],
 ): Schema<unknown, unknown, Issues<unknown>> {
-	return new Schema((input: unknown): Parsed => {
-		const attempt = (
-			index: number,
-			failures: readonly Issues<unknown>[],
-		): Parsed => {
-			const option = options[index];
-			if (option === undefined) {
-				return Err(fromError(InvalidUnion({ input, branches: failures })));
-			}
+	return new Schema({
+		parse: (input: unknown): Parsed => {
+			const attempt = (
+				index: number,
+				failures: readonly Issues<unknown>[],
+			): Parsed => {
+				const option = options[index];
+				if (option === undefined) {
+					return Err(fromError(InvalidUnion({ input, branches: failures })));
+				}
 
-			return unionValue(
-				mapPotential(parse(option, input), (result) =>
-					match(result)({
-						Ok: (output): Parsed => Ok(output),
-						Err: (error) => attempt(index + 1, [...failures, toIssues(error)]),
-					}),
-				),
-			);
-		};
+				return unionValue(
+					mapPotential(parse(option, input), (result) =>
+						match(result)({
+							Ok: (output): Parsed => Ok(output),
+							Err: (error) =>
+								attempt(index + 1, [...failures, toIssues(error)]),
+						}),
+					),
+				);
+			};
 
-		return attempt(0, []);
+			return attempt(0, []);
+		},
+		node: new SchemaNode("Union", { options }),
 	});
 }

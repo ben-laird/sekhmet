@@ -1138,12 +1138,12 @@ function renderClass({
 	});
 	const fromMiniDoc = renderJsDoc({
 		jsDoc: {
-			doc: `Views a mini {@linkcode mini.${primary}} as a main \`${primary}\`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.`,
+			doc: `Views a mini {@linkcode mini.${primary}} as a main \`${primary}\`, returning it unchanged when it already is one. The view is built from the mini instance's struct params, so it sees the same state.`,
 			tags: [
 				{ kind: "param", name: "self", doc: `The ${primary} to convert` },
 				{
 					kind: "return",
-					doc: `A main \`${primary}\` sharing \`self\`'s state`,
+					doc: `A main \`${primary}\` built from \`self\`'s params`,
 				},
 			],
 		},

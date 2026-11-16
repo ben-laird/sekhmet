@@ -6,9 +6,11 @@ import { entries } from "@/src/core/mini/issues.ts";
 import { parseSync } from "@/src/core/mini/schema.ts";
 import { array, object, optional } from "./mod.ts";
 
-const text = new Schema((input: unknown) =>
-	typeof input === "string" ? Ok(input) : Err("not text"),
-);
+const text = new Schema({
+	parse: (input: unknown) => {
+		return typeof input === "string" ? Ok(input) : Err("not text");
+	},
+});
 
 Deno.test("object returns a main Schema, so core methods chain", async () => {
 	// Given: a strict main object schema

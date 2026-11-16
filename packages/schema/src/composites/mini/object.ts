@@ -1,5 +1,6 @@
 import { type SchemaIssue, UnknownKey } from "@/src/core/mini/issue.ts";
 import { type Flatten, type Issues, issues } from "@/src/core/mini/issues.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import {
 	type AnySchema,
 	type ErrorOf,
@@ -342,9 +343,11 @@ function planOf([key, entry]: [string, Entry]): Plan {
  * import { object } from "@sekhmet/schema/composites/mini";
  * import { entries, parseAsync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) =>
- * 	typeof input === "string" ? Ok(input) : Err("not text"),
- * );
+ * const text = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "string" ? Ok(input) : Err("not text");
+ * 	},
+ * });
  * const user = object({
  * 	shape: { name: text, address: object({ shape: { zip: text } }) },
  * });
@@ -410,35 +413,40 @@ export function object(options: {
 	const unknownKeys = options.unknownKeys ?? "strip";
 	const plans = Object.entries(shape).map(planOf);
 
-	return new Schema((input: unknown): Parsed => {
-		if (!isRecord(input)) return invalidType({ input, expected: "object" });
+	return new Schema({
+		parse: (input: unknown): Parsed => {
+			if (!isRecord(input)) return invalidType({ input, expected: "object" });
 
-		const undeclared = Object.keys(input).filter(
-			(key) => !Object.hasOwn(shape, key),
-		);
-		const pending = plans.flatMap(({ key, schema, missing }): Pending[] => {
-			if (Object.hasOwn(input, key)) {
-				return [run({ key, child: schema, value: input[key] })];
-			}
+			const undeclared = Object.keys(input).filter(
+				(key) => !Object.hasOwn(shape, key),
+			);
+			const pending = plans.flatMap(({ key, schema, missing }): Pending[] => {
+				if (Object.hasOwn(input, key)) {
+					return [run({ key, child: schema, value: input[key] })];
+				}
 
-			if (missing === undefined) return [];
+				if (missing === undefined) return [];
 
-			return [run({ key, child: missing, value: undefined })];
-		});
+				return [run({ key, child: missing, value: undefined })];
+			});
 
-		return compose({
-			pending,
-			extra:
-				unknownKeys === "strict"
-					? unknownKeyIssues({ input, keys: undeclared })
-					: undefined,
-			build: (outputs) =>
-				Object.fromEntries([
-					...outputs,
-					...(unknownKeys === "passthrough"
-						? undeclared.map((key) => [key, input[key]])
-						: []),
-				]),
-		});
+			const reported = unknownKeys === "strict" ? undeclared : [];
+			const kept = unknownKeys === "passthrough" ? undeclared : [];
+
+			return compose({
+				pending,
+				extra: unknownKeyIssues({ input, keys: reported }),
+				build: (outputs) => {
+					return Object.fromEntries([
+						...outputs,
+						...kept.map((key) => [key, input[key]]),
+					]);
+				},
+			});
+		},
+		node: new SchemaNode("Object", {
+			shape,
+			unknownKeys: options.unknownKeys,
+		}),
 	});
 }

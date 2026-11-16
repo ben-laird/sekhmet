@@ -93,9 +93,11 @@ export type {
  * import { array } from "@sekhmet/schema/composites";
  * import { entries, parseAsync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const positive = new Schema((input: unknown) =>
- * 	typeof input === "number" && input > 0 ? Ok(input) : Err("not positive"),
- * );
+ * const positive = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" && input > 0 ? Ok(input) : Err("not positive");
+ * 	},
+ * });
  * const found = unwrapErr(await parseAsync(array({ item: positive }), [1, -2, 3, 0]));
  *
  * assertEquals(entries(found).map(({ path }) => path), [[1], [3]]);
@@ -107,7 +109,7 @@ export type {
  * import { array } from "@sekhmet/schema/composites";
  * import { entries, formatIssue, parseAsync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const anything = new Schema((input: unknown) => Ok(input));
+ * const anything = new Schema({ parse: (input: unknown) => Ok(input) });
  * const pair = array({ item: anything, minItems: 1, maxItems: 2 });
  * const [{ error }] = entries(unwrapErr(await parseAsync(pair, [1, 2, 3])));
  *
@@ -143,9 +145,11 @@ export function array<I, O, E>(
  * import { discriminatedUnion, object } from "@sekhmet/schema/composites";
  * import { entries, formatIssue, parseAsync, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const size = new Schema((input: unknown) =>
- * 	typeof input === "number" ? Ok(input) : Err("not a size"),
- * );
+ * const size = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" ? Ok(input) : Err("not a size");
+ * 	},
+ * });
  * const shape = discriminatedUnion({
  * 	key: "kind",
  * 	options: {
@@ -260,7 +264,7 @@ export function lazy<I, O, E>(
  * import { nullable } from "@sekhmet/schema/composites";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) => Ok(String(input)));
+ * const text = new Schema({ parse: (input: unknown) => Ok(String(input)) });
  *
  * assertEquals(unwrap(parseSync(nullable(text), null)), null);
  * ```
@@ -290,7 +294,7 @@ export function nullable<I, O, E>(
  * import { array, optional } from "@sekhmet/schema/composites";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) => Ok(String(input)));
+ * const text = new Schema({ parse: (input: unknown) => Ok(String(input)) });
  * const gaps = array({ item: optional(text) });
  *
  * assertEquals(unwrap(parseSync(gaps, ["a", undefined])), ["a", undefined]);
@@ -338,9 +342,11 @@ export function optional<I, O, E>(
  * import { object } from "@sekhmet/schema/composites";
  * import { entries, parseAsync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) =>
- * 	typeof input === "string" ? Ok(input) : Err("not text"),
- * );
+ * const text = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "string" ? Ok(input) : Err("not text");
+ * 	},
+ * });
  * const user = object({
  * 	shape: { name: text, address: object({ shape: { zip: text } }) },
  * });
@@ -423,10 +429,12 @@ export function object<
  * import { record } from "@sekhmet/schema/composites";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const name = new Schema((input: string) => Ok(input));
- * const score = new Schema((input: unknown) =>
- * 	typeof input === "number" ? Ok(input) : Err("not a score"),
- * );
+ * const name = new Schema({ parse: (input: string) => Ok(input) });
+ * const score = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" ? Ok(input) : Err("not a score");
+ * 	},
+ * });
  * const scores = record({ key: name, value: score });
  *
  * assertEquals(unwrap(parseSync(scores, { ada: 3 })), { ada: 3 });
@@ -462,12 +470,16 @@ export function record<KO extends PropertyKey, KE, VI, VO, VE>(
  * import { tuple } from "@sekhmet/schema/composites";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) =>
- * 	typeof input === "string" ? Ok(input) : Err("not text"),
- * );
- * const count = new Schema((input: unknown) =>
- * 	typeof input === "number" ? Ok(input) : Err("not a number"),
- * );
+ * const text = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "string" ? Ok(input) : Err("not text");
+ * 	},
+ * });
+ * const count = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" ? Ok(input) : Err("not a number");
+ * 	},
+ * });
  *
  * assertEquals(unwrap(parseSync(tuple([text, count]), ["apples", 3])), ["apples", 3]);
  * ```
@@ -494,12 +506,16 @@ export function tuple<const T extends readonly AnySchema[]>(
  * import { union } from "@sekhmet/schema/composites";
  * import { entries, formatIssue, parseAsync, parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
- * const text = new Schema((input: unknown) =>
- * 	typeof input === "string" ? Ok(input) : Err("not text"),
- * );
- * const count = new Schema((input: unknown) =>
- * 	typeof input === "number" ? Ok(input) : Err("not a number"),
- * );
+ * const text = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "string" ? Ok(input) : Err("not text");
+ * 	},
+ * });
+ * const count = new Schema({
+ * 	parse: (input: unknown) => {
+ * 		return typeof input === "number" ? Ok(input) : Err("not a number");
+ * 	},
+ * });
  * const textOrCount = union([text, count]);
  *
  * assertEquals(unwrap(parseSync(textOrCount, 3)), 3);

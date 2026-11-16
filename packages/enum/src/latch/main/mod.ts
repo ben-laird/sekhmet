@@ -73,10 +73,10 @@ export type { LatchVariants } from "../mini/mod.ts";
  */
 export class Latch<out A, out I> extends mini.Latch<A, I> {
 	/**
-	 * Views a mini {@linkcode mini.Latch} as a main `Latch`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
+	 * Views a mini {@linkcode mini.Latch} as a main `Latch`, returning it unchanged when it already is one. The view is built from the mini instance's struct params, so it sees the same state.
 	 *
 	 * @param self - The Latch to convert
-	 * @returns A main `Latch` sharing `self`'s state
+	 * @returns A main `Latch` built from `self`'s params
 	 */
 	static fromMini<A, I>(self: mini.Latch<A, I>): Latch<A, I> {
 		if (self instanceof Latch) return self;

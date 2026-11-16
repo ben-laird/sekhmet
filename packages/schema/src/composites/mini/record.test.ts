@@ -16,18 +16,23 @@ import {
 import { enumOf } from "./enum-of.ts";
 import { record } from "./record.ts";
 
-const name: Schema<string, string, "too long"> = new Schema((input) =>
-	input.length <= 3 ? Ok(input) : Err("too long"),
-);
-const count: Schema<unknown, number, "not a number"> = new Schema((input) =>
-	typeof input === "number" ? Ok(input) : Err("not a number"),
-);
-const laterCount: Schema<unknown, number, "not a number"> = new Schema(
-	(input) =>
-		Promise.resolve(
+const name: Schema<string, string, "too long"> = new Schema({
+	parse: (input) => {
+		return input.length <= 3 ? Ok(input) : Err("too long");
+	},
+});
+const count: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
+		return typeof input === "number" ? Ok(input) : Err("not a number");
+	},
+});
+const laterCount: Schema<unknown, number, "not a number"> = new Schema({
+	parse: (input) => {
+		return Promise.resolve(
 			typeof input === "number" ? Ok(input) : Err("not a number"),
-		),
-);
+		);
+	},
+});
 
 Deno.test("record parses every key and value", () => {
 	// Given: a record from short names to numbers
@@ -58,7 +63,9 @@ Deno.test("record reports failing keys and values at their key", async () => {
 
 Deno.test("record outputs the key schema's output as the key", () => {
 	// Given: a record whose key schema upper-cases
-	const upper = new Schema((input: string) => Ok(input.toUpperCase()));
+	const upper = new Schema({
+		parse: (input: string) => Ok(input.toUpperCase()),
+	});
 	const scores = record({ key: upper, value: count });
 
 	// When: parsing an object

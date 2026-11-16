@@ -202,12 +202,15 @@ function numberSchema(
 	const mode = options.coerce ?? false;
 
 	return leaf({
+		details: { type: "number", options },
 		read: (input) => {
 			const value = coerceNumber({ input, mode });
 
-			return value === undefined
-				? Err(InvalidType({ input, expected: "number" }))
-				: Ok(value);
+			if (value === undefined) {
+				return Err(InvalidType({ input, expected: "number" }));
+			}
+
+			return Ok(value);
 		},
 		inspections: [inspectNumber(options)],
 	});

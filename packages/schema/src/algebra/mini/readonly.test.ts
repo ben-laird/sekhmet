@@ -6,6 +6,7 @@ import {
 	assertStrictEquals,
 } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
+import { children, nodeOf, SchemaNode } from "@/src/core/mini/node.ts";
 import {
 	type ErrorOf,
 	type Input,
@@ -19,7 +20,7 @@ import { type ReadonlyOutput, readonly } from "./readonly.ts";
 
 /** Passes its input through, typed as `T`: the caller's value is the output. */
 function identity<T>(): Schema<T, T, never> {
-	return new Schema((input: T) => Ok(input));
+	return new Schema({ parse: (input: T) => Ok(input) });
 }
 
 Deno.test("readonly freezes a copy of a plain object, never the input", () => {
@@ -107,9 +108,9 @@ Deno.test("readonly passes primitives, Maps, Dates and class instances through",
 
 Deno.test("readonly keeps failures and the parse's Potential", async () => {
 	// Given: a readonly sync schema that fails, and a readonly async one
-	const failing = readonly(new Schema((_: unknown) => Err("nope")));
+	const failing = readonly(new Schema({ parse: (_: unknown) => Err("nope") }));
 	const later = readonly(
-		new Schema((input: number[]) => Promise.resolve(Ok(input))),
+		new Schema({ parse: (input: number[]) => Promise.resolve(Ok(input)) }),
 	);
 
 	// When: parsing with each
@@ -125,7 +126,9 @@ Deno.test("readonly keeps failures and the parse's Potential", async () => {
 
 Deno.test("readonly types: only the output changes", () => {
 	// Given: a readonly schema of objects
-	const frozen = readonly(new Schema((input: string) => Ok({ name: input })));
+	const frozen = readonly(
+		new Schema({ parse: (input: string) => Ok({ name: input }) }),
+	);
 
 	// When: reading its types
 	// Then: the input and error are kept, and the output is Readonly
@@ -157,4 +160,16 @@ Deno.test("ReadonlyOutput maps each kind of output", () => {
 			readonly string[] | { readonly a: number } | undefined
 		>
 	>(true);
+});
+
+Deno.test("readonly records a Readonly node over its schema", () => {
+	// Given: a schema
+	const anything = new Schema({ parse: (input: unknown) => Ok(input) });
+
+	// When: making it read-only
+	const node = nodeOf(readonly(anything));
+
+	// Then: the node wraps the schema itself, not a map of it
+	assertEquals(node, new SchemaNode("Readonly", { inner: anything }));
+	assertStrictEquals(children(node)[0], anything);
 });

@@ -4,6 +4,7 @@ import {
 	InvalidValue,
 	type SchemaIssue,
 } from "@/src/core/mini/issue.ts";
+import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 import { STRINGBOOL_FALSY, STRINGBOOL_TRUTHY, wordReader } from "./words.ts";
 
@@ -78,15 +79,21 @@ export function stringbool(
 		...(options?.falsy ?? STRINGBOOL_FALSY),
 	];
 
-	return new Schema((input): Result<boolean, SchemaIssue> => {
-		if (typeof input !== "string") {
-			return Err(InvalidType({ input, expected: "string" }));
-		}
+	return new Schema({
+		parse: (input): Result<boolean, SchemaIssue> => {
+			if (typeof input !== "string") {
+				return Err(InvalidType({ input, expected: "string" }));
+			}
 
-		const value = read(input);
+			const value = read(input);
 
-		return value === undefined
-			? Err(InvalidValue({ input, expected }))
-			: Ok(value);
+			if (value === undefined) return Err(InvalidValue({ input, expected }));
+
+			return Ok(value);
+		},
+		node: new SchemaNode("Leaf", {
+			type: "stringbool",
+			options: options ?? {},
+		}),
 	});
 }

@@ -91,10 +91,14 @@ export function date(
 	options?: DateSchemaOptions,
 ): Schema<unknown, Date, SchemaIssue> {
 	return leaf({
-		read: (input) =>
-			input instanceof Date && !Number.isNaN(input.getTime())
-				? Ok(input)
-				: Err(InvalidType({ input, expected: "date" })),
+		details: { type: "date", options: options ?? {} },
+		read: (input) => {
+			if (input instanceof Date && !Number.isNaN(input.getTime())) {
+				return Ok(input);
+			}
+
+			return Err(InvalidType({ input, expected: "date" }));
+		},
 		inspections: [
 			...when({ option: options?.min, inspect: minimum }),
 			...when({ option: options?.max, inspect: maximum }),
