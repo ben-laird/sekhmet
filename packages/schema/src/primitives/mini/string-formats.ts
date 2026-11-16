@@ -70,7 +70,7 @@ function isLeapYear(year: number): boolean {
 	return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
 
-function daysInMonth(year: number, month: number): number {
+function daysInMonth({ year, month }: { year: number; month: number }): number {
 	if (month === 2) return isLeapYear(year) ? 29 : 28;
 
 	return [4, 6, 9, 11].includes(month) ? 30 : 31;
@@ -85,7 +85,7 @@ function isIsoDate(value: string): boolean {
 
 	const [y, m, d] = [Number(year), Number(month), Number(day)];
 
-	return m >= 1 && m <= 12 && d >= 1 && d <= daysInMonth(y, m);
+	return m >= 1 && m <= 12 && d >= 1 && d <= daysInMonth({ year: y, month: m });
 }
 
 function isIsoTime(value: string): boolean {

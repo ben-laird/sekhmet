@@ -178,10 +178,13 @@ export interface ObjectOptions<S extends Shape, U extends UnknownKeys> {
 }
 
 /** The issues for each undeclared key of a strict object. */
-function unknownKeyIssues(
-	input: Readonly<Record<PropertyKey, unknown>>,
-	keys: readonly string[],
-): Issues<SchemaIssue> | undefined {
+function unknownKeyIssues({
+	input,
+	keys,
+}: {
+	input: Readonly<Record<PropertyKey, unknown>>;
+	keys: readonly string[];
+}): Issues<SchemaIssue> | undefined {
 	const [first, ...rest] = keys.map((key) => ({
 		path: [key],
 		error: UnknownKey({ key, input: input[key] }),
@@ -273,7 +276,7 @@ export function object(options: {
 			pending,
 			extra:
 				unknownKeys === "strict"
-					? unknownKeyIssues(input, undeclared)
+					? unknownKeyIssues({ input, keys: undeclared })
 					: undefined,
 			build: (outputs) =>
 				Object.fromEntries([

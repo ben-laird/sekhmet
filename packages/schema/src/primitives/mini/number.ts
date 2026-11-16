@@ -203,7 +203,7 @@ function numberSchema(
 
 	return leaf({
 		read: (input) => {
-			const value = coerceNumber(input, mode);
+			const value = coerceNumber({ input, mode });
 
 			return value === undefined
 				? Err(InvalidType({ input, expected: "number" }))

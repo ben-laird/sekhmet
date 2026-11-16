@@ -338,5 +338,9 @@ argument (`map(self, mapping)` is `.map(mapping)`):
 - `Issues` construction: `issues(entries)`, `prefix({ issues, path })`,
   `concat(list)` (see [`Issues<E>`](#issuese-located-collected-errors)).
 - `toStandard({ schema, toIssue? })`.
+- Internal helpers follow the rule too (`coerceNumber({ input, mode })`,
+  `unknownKeyIssues({ input, keys })`). A type guard can't narrow a
+  destructured property, so the literal guards are curried instead
+  (`sameAs(value)(input)`, `oneOf(values)(input)`).
 - Left receiver-first: `mapPotential(potential, mapping)`, `Potential`'s map,
   as the enum package's own `map(self, f)` is.

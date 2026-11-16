@@ -3,14 +3,16 @@ import { InvalidValue, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 import type { Literal } from "@/src/primitives/mini/literal.ts";
 
-/** Whether `input` is one of `values` (SameValueZero, so `NaN` matches). */
-function isOneOf<T extends Literal>(
+/**
+ * A guard for one of `values` (SameValueZero, so `NaN` matches). Curried, so
+ * each call takes one parameter and the guard narrows `input`.
+ */
+function oneOf<T extends Literal>(
 	values: readonly T[],
-	input: unknown,
-): input is T {
+): (input: unknown) => input is T {
 	const allowed: readonly unknown[] = values;
 
-	return allowed.includes(input);
+	return (input): input is T => allowed.includes(input);
 }
 
 /**
@@ -44,8 +46,10 @@ function isOneOf<T extends Literal>(
 export function enumOf<const T extends readonly [Literal, ...Literal[]]>(
 	values: T,
 ): Schema<unknown, T[number], SchemaIssue> {
+	const isAllowed = oneOf<T[number]>(values);
+
 	return new Schema((input: unknown) =>
-		isOneOf<T[number]>(values, input)
+		isAllowed(input)
 			? Ok(input)
 			: Err(InvalidValue({ input, expected: values })),
 	);
