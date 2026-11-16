@@ -33,7 +33,7 @@ export async function runWorkflow(
 		if (adapter.isAI) {
 			const aiResult = formatAIOutput(steps, results, decoder);
 			console.log(JSON.stringify(aiResult, null, 2));
-			Deno.exit(aiResult.success ? 0 : 1);
+			Deno.exit(aiResult.exitCode);
 		}
 
 		// Standard mode: format and display results

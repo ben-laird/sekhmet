@@ -18,6 +18,10 @@ export const EXIT_CODES = {
 	TESTS_FAILED: 5,
 	/** Exit code when coverage report generation fails */
 	COVERAGE_FAILED: 6,
+	/** Exit code when Deno type checking fails */
+	DENO_CHECK_FAILED: 7,
+	/** Exit code when removing local coverage data fails */
+	CLEANUP_FAILED: 8,
 } as const;
 
 /**
@@ -37,6 +41,8 @@ export interface CIEnvironment {
  * - Testing with coverage
  * - Coverage reporting
  * - Local cleanup of coverage data
+ *
+ * Every step has its own entry in {@linkcode EXIT_CODES}.
  */
 export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 	return [
@@ -49,7 +55,7 @@ export function ciSteps({ isCI, isAI }: CIEnvironment): WorkflowStep[] {
 		},
 		{
 			name: "Deno Check",
-			exitCode: EXIT_CODES.DENO_LINT_FAILED,
+			exitCode: EXIT_CODES.DENO_CHECK_FAILED,
 
 			command: new Deno.Command("deno", { args: ["check"] }),
 		},
@@ -130,6 +136,7 @@ function cleanupStep(): WorkflowStep {
 		dependsOn: ["Show coverage report"],
 		continueOnError: true,
 		condition: "always",
+		exitCode: EXIT_CODES.CLEANUP_FAILED,
 
 		command: new Deno.Command("rm", { args: ["-r", "coverage"] }),
 	};

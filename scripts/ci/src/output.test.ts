@@ -74,14 +74,15 @@ Deno.test("workflowExitCode is zero when nothing failed, even if steps were skip
 	assertEquals(exitCode, 0);
 });
 
-Deno.test("formatAIOutput reports blocked and skipped steps", () => {
+Deno.test("formatAIOutput reports blocked and skipped steps, per-step exit codes and the workflow exit code", () => {
 	// Given: the results after a failed test step
 	// When: formatting for AI agents
 	const output = formatAIOutput(steps, results, new TextDecoder());
 
-	// Then: the workflow failed, and each step says what happened
+	// Then: the workflow failed with the test step's code, and each step says what happened
 	assertEquals(output, {
 		success: false,
+		exitCode: 5,
 		steps: [
 			{ name: "Deno Lint", status: "passed" },
 			{ name: "Deno Test", status: "failed", exitCode: 5 },

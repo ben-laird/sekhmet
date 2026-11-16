@@ -28,6 +28,8 @@ export interface AIStepResult {
 export interface AIWorkflowResult {
 	/** true if no step failed, false if any failed */
 	success: boolean;
+	/** The process exit code: 0, or the first failed step's exit code */
+	exitCode: number;
 	/** Results for each step in execution order */
 	steps: AIStepResult[];
 }
@@ -182,5 +184,5 @@ export function formatAIOutput(
 	});
 
 	const exitCode = workflowExitCode({ steps, results });
-	return { success: exitCode === 0, steps: stepResults };
+	return { success: exitCode === 0, exitCode, steps: stepResults };
 }

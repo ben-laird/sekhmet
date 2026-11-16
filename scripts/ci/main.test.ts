@@ -1,6 +1,12 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { ciSteps, EXIT_CODES, main } from "./main.ts";
 
+const ENVIRONMENTS = [
+	{ isCI: false, isAI: false },
+	{ isCI: false, isAI: true },
+	{ isCI: true, isAI: false },
+];
+
 Deno.test("EXIT_CODES are defined with unique values", () => {
 	// Given: EXIT_CODES constant
 	// Then: all exit codes should be defined and unique
@@ -10,10 +16,30 @@ Deno.test("EXIT_CODES are defined with unique values", () => {
 	assertEquals(EXIT_CODES.JSR_DRY_RUN_FAILED, 4);
 	assertEquals(EXIT_CODES.TESTS_FAILED, 5);
 	assertEquals(EXIT_CODES.COVERAGE_FAILED, 6);
+	assertEquals(EXIT_CODES.DENO_CHECK_FAILED, 7);
+	assertEquals(EXIT_CODES.CLEANUP_FAILED, 8);
 
 	const values = Object.values(EXIT_CODES);
 	const uniqueValues = new Set(values);
 	assertEquals(values.length, uniqueValues.size, "Exit codes should be unique");
+});
+
+Deno.test("ciSteps gives every step its own exit code", () => {
+	for (const environment of ENVIRONMENTS) {
+		// Given: the CI steps for an environment
+		const steps = ciSteps(environment);
+
+		// When: collecting each step's exit code
+		const codes = steps.map((step) => step.exitCode);
+
+		// Then: every step declares one, and no two steps share one
+		assertEquals(
+			codes.filter((code) => code === undefined).length,
+			0,
+			`steps without an exit code in ${JSON.stringify(environment)}`,
+		);
+		assertEquals(new Set(codes).size, steps.length);
+	}
 });
 
 Deno.test("ciSteps cleans up coverage data locally even after a failure, and keeps it in CI", () => {
