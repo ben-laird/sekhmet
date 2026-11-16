@@ -24,7 +24,11 @@ const alsoNow = resolved(2);
 const { vow: later, resolve } = vowWithResolver<number>();
 resolve(3);
 
-assertEquals(await Promise.all([wait(now), wait(alsoNow), wait(later)]), [1, 2, 3]);
+assertEquals(await Promise.all([wait(now), wait(alsoNow), wait(later)]), [
+	1,
+	2,
+	3,
+]);
 ```
 
 ## Resolution is synchronous
@@ -51,9 +55,8 @@ A vow resolves once. Calling its resolver again does nothing.
 
 ## Bridge to promises
 
-`wait` turns a vow into a promise. `fromPromise` goes the other way; since a
-vow cannot fail, the outcome is carried as a `Result` from
-`@sekhmet/enum/result`:
+`wait` turns a vow into a promise. `fromPromise` goes the other way; since a vow
+cannot fail, the outcome is carried as a `Result` from `@sekhmet/enum/result`:
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -64,9 +67,9 @@ const loaded = fromPromise(Promise.reject(new Error("offline")));
 const message = map(loaded, (result) =>
 	match(result)({
 		Ok: (value) => `loaded ${String(value)}`,
-		Err: (reason) => `failed: ${reason instanceof Error ? reason.message : String(reason)}`,
-	}),
-);
+		Err: (reason) =>
+			`failed: ${reason instanceof Error ? reason.message : String(reason)}`,
+	}));
 
 assertEquals(await wait(message), "failed: offline");
 ```

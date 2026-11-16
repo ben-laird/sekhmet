@@ -1,13 +1,11 @@
 # @sekhmet/enum
 
-Rust-style enums for TypeScript: an `Enum` base class whose variants are
-tuples, plus the types built on it: `Option`, `Result`, `Ordering`, `Latch`
-and `Poll`.
+Rust-style enums for TypeScript: an `Enum` base class whose variants are tuples,
+plus the types built on it: `Option`, `Result`, `Ordering`, `Latch` and `Poll`.
 
-Each value is a class instance holding one variant, `[kind]` or
-`[kind, value]`. You narrow it with type guards (`isolate`, `isSome`, `isOk`)
-or handle every variant with `match`, which TypeScript checks for
-exhaustiveness.
+Each value is a class instance holding one variant, `[kind]` or `[kind, value]`.
+You narrow it with type guards (`isolate`, `isSome`, `isOk`) or handle every
+variant with `match`, which TypeScript checks for exhaustiveness.
 
 ## Install
 
@@ -29,14 +27,14 @@ bunx jsr add @sekhmet/enum     # bun
 
 The package has no root export: import the feature you need.
 
-| Entrypoint              | What it holds                                |
-| ----------------------- | -------------------------------------------- |
-| `@sekhmet/enum/core`    | `Enum`, `Split`, `Isolate`, `Eliminate`      |
-| `@sekhmet/enum/option`  | `Option`: `Some(value)` or `None()`          |
-| `@sekhmet/enum/result`  | `Result`: `Ok(value)` or `Err(error)`        |
-| `@sekhmet/enum/ordering`| `Ordering`: `Less()`, `Equal()`, `Greater()` |
-| `@sekhmet/enum/latch`   | `Latch`: `Active(a)` or `Inactive(i)`        |
-| `@sekhmet/enum/poll`    | `Poll`: `Ready(value)` or `Pending()`        |
+| Entrypoint               | What it holds                                |
+| ------------------------ | -------------------------------------------- |
+| `@sekhmet/enum/core`     | `Enum`, `Split`, `Isolate`, `Eliminate`      |
+| `@sekhmet/enum/option`   | `Option`: `Some(value)` or `None()`          |
+| `@sekhmet/enum/result`   | `Result`: `Ok(value)` or `Err(error)`        |
+| `@sekhmet/enum/ordering` | `Ordering`: `Less()`, `Equal()`, `Greater()` |
+| `@sekhmet/enum/latch`    | `Latch`: `Active(a)` or `Inactive(i)`        |
+| `@sekhmet/enum/poll`     | `Poll`: `Ready(value)` or `Pending()`        |
 
 ## Main and mini
 
@@ -49,7 +47,12 @@ Every feature comes in two styles with the same behaviour:
 ```ts
 import { assertEquals } from "@std/assert";
 import { Some } from "@sekhmet/enum/option";
-import { filter, map, Some as MiniSome, unwrapOr } from "@sekhmet/enum/option/mini";
+import {
+	filter,
+	map,
+	Some as MiniSome,
+	unwrapOr,
+} from "@sekhmet/enum/option/mini";
 
 // Main: methods
 const main = Some(21)
@@ -58,14 +61,17 @@ const main = Some(21)
 	.unwrapOr(0);
 
 // Mini: functions
-const mini = unwrapOr(filter(map(MiniSome(21), (n) => n * 2), (n) => n > 40), 0);
+const mini = unwrapOr(
+	filter(map(MiniSome(21), (n) => n * 2), (n) => n > 40),
+	0,
+);
 
 assertEquals(main, 42);
 assertEquals(mini, 42);
 ```
 
-A main value is also a mini value, so mini functions accept it. A main
-method that returns another feature's type returns that feature's main class:
+A main value is also a mini value, so mini functions accept it. A main method
+that returns another feature's type returns that feature's main class:
 `Some(1).okOr("missing")` is a main `Result`.
 
 ## Option
@@ -79,7 +85,10 @@ function findUser(id: number): Option<{ name: string }> {
 }
 
 assertEquals(findUser(1).map((user) => user.name).unwrapOr("anonymous"), "Ada");
-assertEquals(findUser(2).map((user) => user.name).unwrapOr("anonymous"), "anonymous");
+assertEquals(
+	findUser(2).map((user) => user.name).unwrapOr("anonymous"),
+	"anonymous",
+);
 ```
 
 ## Result
@@ -90,11 +99,16 @@ import { Err, Ok, type Result } from "@sekhmet/enum/result";
 
 function parsePort(text: string): Result<number, string> {
 	const port = Number(text);
-	return Number.isInteger(port) && port > 0 ? Ok(port) : Err(`invalid port: ${text}`);
+	return Number.isInteger(port) && port > 0
+		? Ok(port)
+		: Err(`invalid port: ${text}`);
 }
 
 assertEquals(parsePort("8080").unwrapOr(80), 8080);
-assertEquals(parsePort("http").mapErr((e) => e.toUpperCase()).unwrapErr(), "INVALID PORT: HTTP");
+assertEquals(
+	parsePort("http").mapErr((e) => e.toUpperCase()).unwrapErr(),
+	"INVALID PORT: HTTP",
+);
 ```
 
 ## Ordering
@@ -109,7 +123,8 @@ const people = [
 ];
 
 people.sort((a, b) =>
-	compareNumbers(a.age, b.age).andThen(compareStrings(a.name, b.name)).toNumber(),
+	compareNumbers(a.age, b.age).andThen(compareStrings(a.name, b.name))
+		.toNumber()
 );
 
 assertEquals(people.map((p) => p.name), ["Al", "Bea"]);
@@ -165,4 +180,5 @@ assertEquals(area, 9);
 
 ## License
 
-MIT. See [LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/enum/LICENSE.md).
+MIT. See
+[LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/enum/LICENSE.md).

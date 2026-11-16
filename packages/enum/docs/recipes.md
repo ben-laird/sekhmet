@@ -21,8 +21,8 @@ assertEquals(fromNullable(env.HOST).unwrapOr("localhost"), "localhost");
 
 ## Wrap a function that throws
 
-Turn a throwing call into a `Result` once, at the edge, so the rest of the
-code handles failure as a value.
+Turn a throwing call into a `Result` once, at the edge, so the rest of the code
+handles failure as a value.
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -73,11 +73,19 @@ computes a fallback value from the error.
 import { assertEquals } from "@std/assert";
 import { Err, Ok, type Result } from "@sekhmet/enum/result";
 
-const fromCache = (key: string): Result<string, string> => Err(`cache miss: ${key}`);
-const fromDisk = (key: string): Result<string, string> => Ok(`${key} from disk`);
+const fromCache = (key: string): Result<string, string> =>
+	Err(`cache miss: ${key}`);
+const fromDisk = (key: string): Result<string, string> =>
+	Ok(`${key} from disk`);
 
-assertEquals(fromCache("a").orElse(() => fromDisk("a")).unwrap(), "a from disk");
-assertEquals(fromCache("b").unwrapOrElse((error) => `default (${error})`), "default (cache miss: b)");
+assertEquals(
+	fromCache("a").orElse(() => fromDisk("a")).unwrap(),
+	"a from disk",
+);
+assertEquals(
+	fromCache("b").unwrapOrElse((error) => `default (${error})`),
+	"default (cache miss: b)",
+);
 ```
 
 ## Combine two optional values
@@ -96,8 +104,8 @@ assertEquals(width.zipWith(None<number>(), (w, h) => w * h).unwrapOr(0), 0);
 ## Turn an `Option` of a `Result` inside out
 
 `transpose` swaps the layers: `Some(Ok(x))` becomes `Ok(Some(x))`, `None`
-becomes `Ok(None)`, and `Some(Err(e))` becomes `Err(e)`. It is a function, not
-a method, because its input is an option of a result.
+becomes `Ok(None)`, and `Some(Err(e))` becomes `Err(e)`. It is a function, not a
+method, because its input is an option of a result.
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -154,7 +162,7 @@ tasks.sort((x, y) =>
 	compareBy(x, y, (t) => t.priority)
 		.reverse()
 		.andThen(compareByString(x, y, (t) => t.title))
-		.toNumber(),
+		.toNumber()
 );
 
 assertEquals(tasks.map((t) => t.title), ["c", "a", "b"]);
@@ -162,15 +170,17 @@ assertEquals(tasks.map((t) => t.title), ["c", "a", "b"]);
 
 ## Model a connection with a `Latch`
 
-A `Latch` keeps two typed states and switches between them in place, which
-suits a resource held inside another object.
+A `Latch` keeps two typed states and switches between them in place, which suits
+a resource held inside another object.
 
 ```ts
 import { assertEquals } from "@std/assert";
 import { Active, type Latch } from "@sekhmet/enum/latch";
 
 class Session {
-	#state: Latch<{ token: string }, { reason: string }> = Active({ token: "t-1" });
+	#state: Latch<{ token: string }, { reason: string }> = Active({
+		token: "t-1",
+	});
 
 	logout(reason: string): void {
 		this.#state.deactivate({ reason });

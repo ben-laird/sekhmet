@@ -43,8 +43,8 @@ const runtime = new Runtime({
 ## 3. Run it and read the result
 
 `fork` starts the effect on a new fiber. `join` registers a callback that
-receives the fiber's result once it completes (immediately, if it already
-has). The result is a `Result`: `Ok(value)`, or `Err` holding a `FiberError`.
+receives the fiber's result once it completes (immediately, if it already has).
+The result is a `Result`: `Ok(value)`, or `Err` holding a `FiberError`.
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -102,7 +102,7 @@ const runtime = new Runtime({
 });
 
 const result = await new Promise<FiberResult<number, never>>((resolve) =>
-	fork(runtime, Success(1)).join(resolve),
+	fork(runtime, Success(1)).join(resolve)
 );
 
 assertEquals(result, Ok(1));
@@ -111,9 +111,9 @@ assertEquals(result, Ok(1));
 ## 5. Do asynchronous work
 
 An effect is a function from its input to a **continuation**. `Async` is the
-continuation for work that finishes later: it receives a `resolve` callback
-and may return a cleanup function, which runs if the fiber is cancelled
-while it waits.
+continuation for work that finishes later: it receives a `resolve` callback and
+may return a cleanup function, which runs if the fiber is cancelled while it
+waits.
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -129,7 +129,7 @@ const sleep = (ms: number) =>
 		Async((resolve) => {
 			const timer = setTimeout(() => resolve(Ready(Ok(ms))), ms);
 			return () => clearTimeout(timer); // runs on cancel
-		}),
+		})
 	);
 
 const runtime = new Runtime({
@@ -138,7 +138,7 @@ const runtime = new Runtime({
 });
 
 const result = await new Promise<FiberResult<number, never>>((resolve) =>
-	fork(runtime, sleep(10).map((ms) => ms * 2)).join(resolve),
+	fork(runtime, sleep(10).map((ms) => ms * 2)).join(resolve)
 );
 
 assertEquals(result, Ok(20));

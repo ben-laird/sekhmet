@@ -1,10 +1,10 @@
 # @sekhmet/effect
 
 A small effect system for TypeScript. An `Effect<I, T, E>` describes a
-computation that takes an input `I` and either succeeds with `T` or fails with
-a typed error `E`. Nothing runs until you `fork` the effect on a `Runtime`,
-which runs it on a lightweight **fiber** driven by a **scheduler** you choose.
-Fibers can be joined, cancelled (running cleanup), and composed concurrently.
+computation that takes an input `I` and either succeeds with `T` or fails with a
+typed error `E`. Nothing runs until you `fork` the effect on a `Runtime`, which
+runs it on a lightweight **fiber** driven by a **scheduler** you choose. Fibers
+can be joined, cancelled (running cleanup), and composed concurrently.
 
 ## Install
 
@@ -73,22 +73,25 @@ const runtime = new Runtime({
 });
 
 const results: unknown[] = [];
-join(fork(runtime, map(Success(1), (n) => n + 1)), (result) => results.push(result));
+join(
+	fork(runtime, map(Success(1), (n) => n + 1)),
+	(result) => results.push(result),
+);
 
 assertEquals(results, [Ok(2)]);
 ```
 
 ## Entrypoints
 
-| Entrypoint                    | What it holds                                                  |
-| ----------------------------- | -------------------------------------------------------------- |
-| `@sekhmet/effect`             | everything below (main style)                                  |
-| `@sekhmet/effect/effect`      | `Effect`, `Success`, `Failure`, `EffectError`                  |
-| `@sekhmet/effect/fiber`       | `Fiber`, `fork`, `FiberError`                                  |
-| `@sekhmet/effect/continuation`| `Ready`, `Async`, `Deferred`: the steps an effect returns      |
-| `@sekhmet/effect/runtime`     | `Runtime`: an effect's input and scheduler                     |
-| `@sekhmet/effect/scheduler`   | `Scheduler` and the `sync`, `microtask`, `macrotask`, `adaptive`, `throttled`, `batched` schedules |
-| `@sekhmet/effect/concurrency` | `zip` and `joinEffect`                                         |
+| Entrypoint                     | What it holds                                                                                      |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `@sekhmet/effect`              | everything below (main style)                                                                      |
+| `@sekhmet/effect/effect`       | `Effect`, `Success`, `Failure`, `EffectError`                                                      |
+| `@sekhmet/effect/fiber`        | `Fiber`, `fork`, `FiberError`                                                                      |
+| `@sekhmet/effect/continuation` | `Ready`, `Async`, `Deferred`: the steps an effect returns                                          |
+| `@sekhmet/effect/runtime`      | `Runtime`: an effect's input and scheduler                                                         |
+| `@sekhmet/effect/scheduler`    | `Scheduler` and the `sync`, `microtask`, `macrotask`, `adaptive`, `throttled`, `batched` schedules |
+| `@sekhmet/effect/concurrency`  | `zip` and `joinEffect`                                                                             |
 
 ## Learn more
 
@@ -99,4 +102,5 @@ assertEquals(results, [Ok(2)]);
 
 ## License
 
-MIT. See [LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/effect/LICENSE.md).
+MIT. See
+[LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/effect/LICENSE.md).

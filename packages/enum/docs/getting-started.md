@@ -1,8 +1,8 @@
 # Getting started
 
-This guide installs `@sekhmet/enum` and walks through `Option` and `Result`,
-the two types most code reaches for first. See the [overview](../README.md) for
-the full list of features.
+This guide installs `@sekhmet/enum` and walks through `Option` and `Result`, the
+two types most code reaches for first. See the [overview](../README.md) for the
+full list of features.
 
 ## Install
 
@@ -40,8 +40,8 @@ assertEquals(findName(2).isNone(), true);
 ```
 
 `unwrap()` returns the value or throws when there is none. Treat a throw as a
-bug (a panic), not as error handling: prefer `unwrapOr`, `unwrapOrElse`
-(on `Result`), `mapOr`, or a `match`.
+bug (a panic), not as error handling: prefer `unwrapOr`, `unwrapOrElse` (on
+`Result`), `mapOr`, or a `match`.
 
 ## An operation that can fail: `Result`
 
@@ -65,15 +65,21 @@ function checkAdult(age: number): Result<number, string> {
 
 // andThen chains steps that can each fail; the first Err wins
 assertEquals(parseAge("42").andThen(checkAdult).unwrapOr(0), 42);
-assertEquals(parseAge("12").andThen(checkAdult).unwrapErr(), "must be an adult");
-assertEquals(parseAge("x").andThen(checkAdult).unwrapErr(), "not a whole number: x");
+assertEquals(
+	parseAge("12").andThen(checkAdult).unwrapErr(),
+	"must be an adult",
+);
+assertEquals(
+	parseAge("x").andThen(checkAdult).unwrapErr(),
+	"not a whole number: x",
+);
 ```
 
 ## Handle every case: `match`
 
 To branch on the variant, use `match`. It takes one handler per variant, and
-TypeScript reports a missing one. `match` lives in the core feature and works
-on every enum:
+TypeScript reports a missing one. `match` lives in the core feature and works on
+every enum:
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -93,8 +99,8 @@ assertEquals(describe(Err("timeout")), "failed: timeout");
 
 ## Converting between them
 
-Methods that produce another feature's type return its main class, so the
-chain continues:
+Methods that produce another feature's type return its main class, so the chain
+continues:
 
 ```ts
 import { assertEquals } from "@std/assert";

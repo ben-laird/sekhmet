@@ -4,10 +4,9 @@ The small building blocks the other Sekhmet packages are made of:
 
 - `@sekhmet/primordials/struct`: `Struct`, a base class that keeps its data
   behind a symbol, and `getStructParams` to read it.
-- `@sekhmet/primordials/subtle`: `Subtle`, which hides a creator function
-  behind `useSubtle`.
-- `@sekhmet/primordials/scoping`: `block` and `define`, two expression
-  helpers.
+- `@sekhmet/primordials/subtle`: `Subtle`, which hides a creator function behind
+  `useSubtle`.
+- `@sekhmet/primordials/scoping`: `block` and `define`, two expression helpers.
 
 You rarely need this package directly unless you build your own Sekhmet-style
 types; the other packages depend on it for you.
@@ -58,7 +57,10 @@ import { Subtle, useSubtle } from "@sekhmet/primordials/subtle";
 
 const connect = new Subtle({ create: (url: string) => ({ url, open: true }) });
 
-assertEquals(useSubtle(connect, "wss://example.test"), { url: "wss://example.test", open: true });
+assertEquals(useSubtle(connect, "wss://example.test"), {
+	url: "wss://example.test",
+	open: true,
+});
 ```
 
 ## Scoping
@@ -86,8 +88,10 @@ assertEquals([label, config.port], ["afternoon", 8080]);
 
 - Guide: [concepts](docs/concepts.md), also on the
   [docs site](https://ben-laird.github.io/sekhmet/primordials/).
-- API reference: [jsr.io/@sekhmet/primordials](https://jsr.io/@sekhmet/primordials).
+- API reference:
+  [jsr.io/@sekhmet/primordials](https://jsr.io/@sekhmet/primordials).
 
 ## License
 
-MIT. See [LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/primordials/LICENSE.md).
+MIT. See
+[LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/primordials/LICENSE.md).

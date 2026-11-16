@@ -1,8 +1,7 @@
 # @sekhmet/matrix
 
-`matrix()` builds every combination of a set of values: the Cartesian product
-of a record of arrays, as an array of records. Use it to drive parameterized
-tests.
+`matrix()` builds every combination of a set of values: the Cartesian product of
+a record of arrays, as an array of records. Use it to drive parameterized tests.
 
 ## Install
 
@@ -42,8 +41,8 @@ assertEquals(cases, [
 ```
 
 The first key varies slowest and the last key fastest. The number of cases is
-the product of the array lengths, so a key with an empty array produces no
-cases at all.
+the product of the array lengths, so a key with an empty array produces no cases
+at all.
 
 In a test file, register one test per case:
 
@@ -68,4 +67,5 @@ for (const { a, b } of matrix({ a: [1, 2, 3], b: [10, 20] })) {
 
 ## License
 
-MIT. See [LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/matrix/LICENSE.md).
+MIT. See
+[LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/matrix/LICENSE.md).

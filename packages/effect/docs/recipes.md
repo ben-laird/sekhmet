@@ -48,7 +48,7 @@ function fromPromise<T>(start: () => Promise<T>): Effect<void, T, unknown> {
 				(value) => resolve(Ready(Ok(value))),
 				(reason: unknown) => resolve(Ready(Err(Failed(reason)))),
 			);
-		}),
+		})
 	);
 }
 
@@ -57,11 +57,19 @@ const runtime = new Runtime({
 	config: { scheduler: new Scheduler({ schedule: sync() }) },
 });
 const run = <T>(effect: Effect<void, T, unknown>) =>
-	new Promise<FiberResult<T, unknown>>((resolve) => fork(runtime, effect).join(resolve));
+	new Promise<FiberResult<T, unknown>>((resolve) =>
+		fork(runtime, effect).join(resolve)
+	);
 
-assertEquals(await run(fromPromise(() => Promise.resolve(3)).map((n) => n * 2)), Ok(6));
+assertEquals(
+	await run(fromPromise(() => Promise.resolve(3)).map((n) => n * 2)),
+	Ok(6),
+);
 // A rejection reaches the fiber as a typed failure
-assertEquals(await run(fromPromise(() => Promise.reject("offline"))), Err(FiberFailed("offline")));
+assertEquals(
+	await run(fromPromise(() => Promise.reject("offline"))),
+	Err(FiberFailed("offline")),
+);
 ```
 
 ## Cancel after a timeout
@@ -87,7 +95,7 @@ const sleep = (ms: number) =>
 				timersCleared++;
 				clearTimeout(timer);
 			};
-		}),
+		})
 	);
 
 const runtime = new Runtime({
@@ -96,7 +104,9 @@ const runtime = new Runtime({
 });
 
 const fiber = fork(runtime, sleep(10_000));
-const result = new Promise<FiberResult<string, never>>((resolve) => fiber.join(resolve));
+const result = new Promise<FiberResult<string, never>>((resolve) =>
+	fiber.join(resolve)
+);
 setTimeout(() => fiber.cancel(), 5);
 
 assertEquals(await result, Err(Cancelled()));
@@ -105,8 +115,8 @@ assertEquals(timersCleared, 1);
 
 ## Run two effects concurrently
 
-`zip` runs both on their own fibers and succeeds with both values. If one
-fails, the other is cancelled.
+`zip` runs both on their own fibers and succeeds with both values. If one fails,
+the other is cancelled.
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -123,7 +133,7 @@ const after = <T>(ms: number, value: T) =>
 		Async((resolve) => {
 			const timer = setTimeout(() => resolve(Ready(Ok(value))), ms);
 			return () => clearTimeout(timer);
-		}),
+		})
 	);
 
 const runtime = new Runtime({
@@ -131,12 +141,20 @@ const runtime = new Runtime({
 	config: { scheduler: new Scheduler({ schedule: sync() }) },
 });
 const run = <T>(effect: Effect<void, T, string>) =>
-	new Promise<FiberResult<T, string>>((resolve) => fork(runtime, effect).join(resolve));
+	new Promise<FiberResult<T, string>>((resolve) =>
+		fork(runtime, effect).join(resolve)
+	);
 
-assertEquals(await run(after(5, "user").zip(after(1, ["post"]))), Ok(["user", ["post"]]));
+assertEquals(
+	await run(after(5, "user").zip(after(1, ["post"]))),
+	Ok(["user", ["post"]]),
+);
 
 // The slow side is cancelled (its timer cleared) when the other fails
-assertEquals(await run(after(10_000, "user").zip(Failure("posts unavailable"))), Err(Failed("posts unavailable")));
+assertEquals(
+	await run(after(10_000, "user").zip(Failure("posts unavailable"))),
+	Err(Failed("posts unavailable")),
+);
 ```
 
 ## Pass dependencies as input
@@ -158,7 +176,7 @@ interface Deps {
 }
 
 const timestamp = new Effect<Deps, string, never>((deps) =>
-	Ready(Ok(new Date(deps.now()).toISOString())),
+	Ready(Ok(new Date(deps.now()).toISOString()))
 );
 
 const testRuntime = new Runtime<Deps>({
@@ -210,7 +228,10 @@ import { Runtime } from "@sekhmet/effect/runtime";
 const runtime = new Runtime({
 	input: undefined,
 	config: {
-		scheduler: new Scheduler({ schedule: adaptive({ busyThreshold: 32 }), stepBudget: 64 }),
+		scheduler: new Scheduler({
+			schedule: adaptive({ busyThreshold: 32 }),
+			stepBudget: 64,
+		}),
 		fiberConfig: { stepBudget: 256 },
 	},
 });

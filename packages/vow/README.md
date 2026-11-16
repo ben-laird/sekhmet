@@ -1,10 +1,10 @@
 # @sekhmet/vow
 
 `Vow` is a promise-like value that resolves **synchronously**. A vow is
-`Pending` until something resolves it, then `Resolved` with its value.
-Callbacks attached with `map` or `zip` run inside the `resolve` call, not on a
-later microtask, so a value flows through a chain of vows in one call stack.
-`wait` and `fromPromise` bridge to promises.
+`Pending` until something resolves it, then `Resolved` with its value. Callbacks
+attached with `map` or `zip` run inside the `resolve` call, not on a later
+microtask, so a value flows through a chain of vows in one call stack. `wait`
+and `fromPromise` bridge to promises.
 
 ## Install
 
@@ -48,22 +48,21 @@ assertEquals(await wait(total), 15);
 
 ## API
 
-`@sekhmet/vow` exports free functions; `@sekhmet/vow/mini` exports the same
-set.
+`@sekhmet/vow` exports free functions; `@sekhmet/vow/mini` exports the same set.
 
-| Export                    | Does                                                         |
-| ------------------------- | ------------------------------------------------------------ |
-| `new Vow(executor)`       | a vow the executor resolves, now or later                    |
-| `vowWithResolver()`       | a pending vow and the function that resolves it              |
-| `resolved(value)`         | a vow already resolved with `value`                          |
-| `map(vow, f)`             | a vow of `f(value)`                                          |
-| `zip(a, b)`, `zipWith(a, b, f)` | a vow of both values once both resolve                 |
-| `wait(vow)`               | a `Promise` of the value                                     |
-| `fromPromise(promise)`    | a vow of `Ok(value)` or `Err(reason)` once the promise settles |
+| Export                          | Does                                                           |
+| ------------------------------- | -------------------------------------------------------------- |
+| `new Vow(executor)`             | a vow the executor resolves, now or later                      |
+| `vowWithResolver()`             | a pending vow and the function that resolves it                |
+| `resolved(value)`               | a vow already resolved with `value`                            |
+| `map(vow, f)`                   | a vow of `f(value)`                                            |
+| `zip(a, b)`, `zipWith(a, b, f)` | a vow of both values once both resolve                         |
+| `wait(vow)`                     | a `Promise` of the value                                       |
+| `fromPromise(promise)`          | a vow of `Ok(value)` or `Err(reason)` once the promise settles |
 
-A vow resolves once; later calls to its resolver do nothing. If dependents
-throw while a vow resolves, the rest still run and the `resolve` call throws
-an `AggregateError` of their errors.
+A vow resolves once; later calls to its resolver do nothing. If dependents throw
+while a vow resolves, the rest still run and the `resolve` call throws an
+`AggregateError` of their errors.
 
 ## Learn more
 
@@ -73,4 +72,5 @@ an `AggregateError` of their errors.
 
 ## License
 
-MIT. See [LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/vow/LICENSE.md).
+MIT. See
+[LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/vow/LICENSE.md).
