@@ -106,7 +106,7 @@ sekhmet/
 │   ├── effect/       # Effect system (effects, fibers, runtime, scheduler)
 │   ├── enum/         # Enum framework (core, option, result, latch, poll, ordering)
 │   ├── matrix/       # Cartesian-product test case generation
-│   ├── panic/        # Panic errors and panic hooks
+│   ├── panic/        # Panic errors and the panic runtime (hook, catchUnwind)
 │   ├── primordials/  # Core primitives (Struct, Subtle, scoping helpers)
 │   └── vow/          # Synchronous promise-like values
 ├── scripts/          # Build and development scripts

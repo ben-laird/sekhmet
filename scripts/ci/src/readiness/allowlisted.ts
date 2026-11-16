@@ -6,9 +6,6 @@ import type { AllowlistEntry } from "./allowlist.ts";
  * gate). Never add an entry to get a new failure past the gate.
  */
 export const ALLOWLIST: readonly AllowlistEntry[] = [
-	// READMEs and README fixes come with the docs work
-	missingReadme("panic"),
-
 	// Cross-package types (Struct, Enum, Split, Result) in public signatures
 	// that the package does not re-export; how to resolve them is undecided
 	privateTypeRef(
@@ -57,22 +54,14 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("effect/src/scheduler/scheduler.ts", "SchedulerState", "Enum"),
 	privateTypeRef("enum/src/core/mini/core.ts", "Enum", "Struct"),
 	privateTypeRef(
-		"panic/src/mini/hook.ts",
-		'WithPanicHook["%%dg_call%%"]',
+		"panic/src/mini/runtime.ts",
+		'PanicRuntime["catchUnwind"]',
 		"Result",
 	),
 	privateTypeRef("vow/src/mini/core.ts", "Variants", "Split"),
 	privateTypeRef("vow/src/mini/core.ts", "Vow", "Enum"),
 	privateTypeRef("vow/src/mini/impl.ts", "fromPromise", "Result"),
 ];
-
-function missingReadme(name: string): AllowlistEntry {
-	return {
-		check: "package-files",
-		file: `packages/${name}/README.md`,
-		until: "#8",
-	};
-}
 
 function privateTypeRef(
 	file: string,

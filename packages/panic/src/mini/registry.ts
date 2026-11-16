@@ -1,8 +1,19 @@
+/**
+ * A registry that associates metadata with Panic instances, keyed by id.
+ *
+ * @module
+ */
+
 import type { Panic } from "./core.ts";
+
+/** Boxed so a stored `undefined` stays distinguishable from a missing entry. */
+interface Entry<M> {
+	readonly meta: M;
+}
 
 interface PanicMetadataRegistryParams<M, P> {
 	meta: (panic: P) => M;
-	registry: Map<string, M>;
+	registry: Map<string, Entry<M>>;
 }
 
 /**
@@ -16,25 +27,32 @@ interface PanicMetadataRegistryParams<M, P> {
  * @template P The type of Panic (defaults to Panic<unknown>)
  *
  * @example
- * ```ts ignore
+ * ```ts
+ * import {
+ *   definePanicRuntime,
+ *   Panic,
+ *   panic,
+ *   PanicMetadataRegistry,
+ * } from "@sekhmet/panic";
+ * import { assertEquals } from "@std/assert";
+ *
  * interface PanicMeta {
- *   handledAt: Date;
  *   handler: string;
  * }
  *
- * const registry = new PanicMetadataRegistry<PanicMeta>((panic) => ({
- *   handledAt: new Date(),
- *   handler: "errorBoundary",
+ * const registry = new PanicMetadataRegistry<PanicMeta>(() => ({
+ *   handler: "main",
  * }));
  *
- * try {
- *   // ... code that might panic
- * } catch (err) {
- *   if (err instanceof Panic) {
- *     const meta = registry.getOrInsert(err);
- *     console.log(`Handled at: ${meta.handledAt}`);
- *   }
- * }
+ * // Record every panic this runtime reports
+ * const runtime = definePanicRuntime();
+ * runtime.setHook(({ payload }) => {
+ *   if (payload instanceof Panic) registry.getOrInsert(payload);
+ * });
+ *
+ * runtime.catchUnwind(() => panic({ message: "bad state", cause: null }));
+ *
+ * assertEquals([...registry].map(([, meta]) => meta), [{ handler: "main" }]);
  * ```
  */
 export class PanicMetadataRegistry<
@@ -66,7 +84,7 @@ export class PanicMetadataRegistry<
 	 * @returns The metadata, or undefined if not registered
 	 */
 	get(panic: P): M | undefined {
-		return this.#params.registry.get(panic.id);
+		return this.#params.registry.get(panic.id)?.meta;
 	}
 
 	/**
@@ -78,7 +96,7 @@ export class PanicMetadataRegistry<
 	set(panic: P): this {
 		const { registry, meta } = this.#params;
 
-		registry.set(panic.id, meta(panic));
+		registry.set(panic.id, { meta: meta(panic) });
 
 		return this;
 	}
@@ -90,13 +108,16 @@ export class PanicMetadataRegistry<
 	 * @returns The metadata for the panic
 	 */
 	getOrInsert(panic: P): M {
-		if (!this.has(panic)) {
-			this.set(panic);
+		const { registry, meta } = this.#params;
+		const existing = registry.get(panic.id);
+		if (existing) {
+			return existing.meta;
 		}
 
-		// We know we just inserted or have previously inserted this panic,
-		// so the as-cast is safe to perform
-		return this.get(panic) as M;
+		const created = { meta: meta(panic) };
+		registry.set(panic.id, created);
+
+		return created.meta;
 	}
 
 	/**
@@ -131,8 +152,10 @@ export class PanicMetadataRegistry<
 	 *
 	 * @returns An iterator of [panicId, metadata] pairs
 	 */
-	entries(): MapIterator<[string, M]> {
-		return this.#params.registry.entries();
+	*entries(): Generator<[string, M], void, undefined> {
+		for (const [id, { meta }] of this.#params.registry) {
+			yield [id, meta];
+		}
 	}
 
 	/**
@@ -141,6 +164,6 @@ export class PanicMetadataRegistry<
 	 * @yields [panicId, metadata] pairs
 	 */
 	*[Symbol.iterator](): Generator<[string, M], void, undefined> {
-		yield* this.#params.registry;
+		yield* this.entries();
 	}
 }

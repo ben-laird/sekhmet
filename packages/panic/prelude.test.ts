@@ -1,4 +1,4 @@
-import { assertStrictEquals } from "@std/assert";
+import { assertEquals, assertStrictEquals } from "@std/assert";
 import * as prelude from "@/prelude.ts";
 import * as core from "@/src/mini/core.ts";
 
@@ -21,4 +21,13 @@ Deno.test("prelude re-exports the core panic primitives", () => {
 	assertStrictEquals(actual.Panic, expected.Panic);
 	assertStrictEquals(actual.panic, expected.panic);
 	assertStrictEquals(actual.panicWithoutCause, expected.panicWithoutCause);
+});
+
+Deno.test("prelude holds the panic primitives and nothing else", () => {
+	// Given: the prelude module
+	// When: listing its runtime exports
+	const names = Object.keys(prelude).sort();
+
+	// Then: only the primitives are there; the runtime lives in the main entrypoint
+	assertEquals(names, ["Panic", "panic", "panicWithoutCause"]);
 });
