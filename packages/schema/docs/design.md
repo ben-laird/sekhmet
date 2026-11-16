@@ -157,3 +157,30 @@ Both directions, in `src/standard/`:
 
 Sekhmet schemas do not carry `~standard` themselves: the adapter is the only
 bridge, so the core type stays free of the Standard shape.
+
+### As implemented (2026-11-16)
+
+The adapter targets `@standard-schema/spec` 1.1.0, whose types are copied
+into `src/standard/mini/spec.ts` (no dependency). Where the spec or the
+`Issues` model settled what this section left open:
+
+- **`validate` takes an optional second argument** (`{ libraryOptions }`) since
+  spec 1.1. `toStandard` accepts and ignores it: sekhmet schemas have no
+  vendor options. The `StandardJSONSchemaV1` extension is not implemented.
+- **`types` is type-only.** The spec marks it optional and inference-only, so
+  `toStandard` declares it in the return type and sets nothing at runtime.
+- **`toIssue` is per entry.** It takes `Flatten<E>`, not `E`: an
+  `Issues<MyError>` becomes one Standard issue per entry, like
+  `Issues<SchemaIssue>` does, instead of collapsing to one. It returns a
+  message or `{ message, path? }`; the entry's path is prepended to that
+  path. The requirement is enforced by overloads: without options, the error
+  type must be assignable to `SchemaIssue | Issues<SchemaIssue>`.
+- **An empty `issues` list** (a failure the spec's types allow but that says
+  nothing) becomes one root issue with `EMPTY_FAILURE_MESSAGE`, as `Issues` is
+  never empty.
+- **`StandardIssue`'s entry error is the original issue**, so vendor extras
+  (Zod's `code`, Valibot's `kind`) survive; its `path` is also normalised into
+  the entry's `path`.
+- **`toStandard` is not a `Schema` method.** Main methods come only from the
+  core feature's mini functions, so `schema.toStandard()` would need the
+  adapter in `src/core/`; it stays a function in its own feature.
