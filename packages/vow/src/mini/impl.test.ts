@@ -1,6 +1,7 @@
 import { union } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
-import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
+import { Err, Ok } from "@sekhmet/enum/result/mini/core";
+import { assertEquals, assertThrows } from "@std/assert";
 import type { Vow } from "@/src/mini/core.ts";
 import {
 	fromPromise,
@@ -244,43 +245,33 @@ Deno.test("wait() bridges a vow to a promise", async (t) => {
 	});
 });
 
-Deno.test("fromPromise() resolves once the promise fulfils", async () => {
+Deno.test("fromPromise() settles with Ok once the promise fulfils", async () => {
 	// Given: a promise under external control
 	const { promise, resolve } = Promise.withResolvers<number>();
 	const vow = fromPromise(promise);
 	const before = peek(vow);
 
-	// When: fulfilling the promise and letting it settle
+	// When: fulfilling the promise and letting the vow settle
 	resolve(7);
-	await promise;
+	const settled = await wait(vow);
 
-	// Then: the vow moves from Pending to Resolved
+	// Then: the vow moves from Pending to Resolved with Ok(value)
 	assertEquals(before, ["Pending"]);
-	assertEquals(peek(vow), ["Resolved", 7]);
+	assertEquals(settled, Ok(7));
+	assertEquals(peek(vow), ["Resolved", Ok(7)]);
 });
 
-Deno.test("fromPromise() stays pending when the promise rejects", async () => {
-	// Given: a rejecting promise and a listener for the unhandled rejection
+Deno.test("fromPromise() settles with Err once the promise rejects", async () => {
+	// Given: a promise under external control
 	const { promise, reject } = Promise.withResolvers<number>();
-	const { promise: unhandled, resolve: onUnhandled } =
-		Promise.withResolvers<unknown>();
-	const listener = (event: PromiseRejectionEvent) => {
-		event.preventDefault();
-		onUnhandled(event.reason);
-	};
-	globalThis.addEventListener("unhandledrejection", listener);
 	const vow = fromPromise(promise);
 
-	// When: rejecting the promise
+	// When: rejecting the promise and letting the vow settle
 	const reason = new Error("rejected");
 	reject(reason);
-	const leaked = await unhandled;
-	globalThis.removeEventListener("unhandledrejection", listener);
+	const settled = await wait(vow);
 
-	// Then: the vow never resolves and the rejection leaks unhandled
-	// QUESTION: Vow has no failure state, so a rejection is dropped and
-	// surfaces as an unhandled rejection. Is that the intended contract?
-	assertFalse(isolate(vow, "Resolved"));
-	assertEquals(leaked, reason);
-	assert(isolate(vow, "Pending"));
+	// Then: the vow resolves with Err(reason), and nothing leaks unhandled
+	assertEquals(settled, Err(reason));
+	assertEquals(peek(vow), ["Resolved", Err(reason)]);
 });
