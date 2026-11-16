@@ -52,10 +52,10 @@ export type {
  */
 export class Enum<out T extends mini.SomeVariant> extends mini.Enum<T> {
 	/**
-	 * Views a mini {@linkcode mini.Enum} as a main `Enum`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
+	 * Views a mini {@linkcode mini.Enum} as a main `Enum`, returning it unchanged when it already is one. The view is built from the mini instance's struct params, so it sees the same state.
 	 *
 	 * @param self - The Enum to convert
-	 * @returns A main `Enum` sharing `self`'s state
+	 * @returns A main `Enum` built from `self`'s params
 	 */
 	static fromMini<T extends mini.SomeVariant>(self: mini.Enum<T>): Enum<T> {
 		if (self instanceof Enum) return self;

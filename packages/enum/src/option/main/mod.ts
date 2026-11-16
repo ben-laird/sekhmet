@@ -48,10 +48,10 @@ export type { OptionVariants } from "../mini/mod.ts";
  */
 export class Option<out T> extends mini.Option<T> {
 	/**
-	 * Views a mini {@linkcode mini.Option} as a main `Option`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
+	 * Views a mini {@linkcode mini.Option} as a main `Option`, returning it unchanged when it already is one. The view is built from the mini instance's struct params, so it sees the same state.
 	 *
 	 * @param self - The Option to convert
-	 * @returns A main `Option` sharing `self`'s state
+	 * @returns A main `Option` built from `self`'s params
 	 */
 	static fromMini<T>(self: mini.Option<T>): Option<T> {
 		if (self instanceof Option) return self;

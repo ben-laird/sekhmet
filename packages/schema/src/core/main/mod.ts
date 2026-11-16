@@ -151,10 +151,10 @@ export {
  */
 export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	/**
-	 * Views a mini {@linkcode mini.Schema} as a main `Schema`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
+	 * Views a mini {@linkcode mini.Schema} as a main `Schema`, returning it unchanged when it already is one. The view is built from the mini instance's struct params, so it sees the same state.
 	 *
 	 * @param self - The Schema to convert
-	 * @returns A main `Schema` sharing `self`'s state
+	 * @returns A main `Schema` built from `self`'s params
 	 */
 	static fromMini<I, O, E>(self: mini.Schema<I, O, E>): Schema<I, O, E> {
 		if (self instanceof Schema) return self;
