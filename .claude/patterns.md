@@ -572,8 +572,8 @@ import { eliminate } from "@sekhmet/enum/core/mini/eliminate";
 // ✅ Good - import from mini barrel
 import { isolate, eliminate } from "@sekhmet/enum/core/mini";
 
-// ⚠️ Acceptable - import from main (larger bundle)
-import { isolate, eliminate } from "@sekhmet/enum/core";
+// ⚠️ Acceptable - import from main (larger bundle; methods on the Enum class)
+import { Enum } from "@sekhmet/enum/core";
 
 // ❌ Not available - @sekhmet/enum has no root export; import a feature subpath
 ```

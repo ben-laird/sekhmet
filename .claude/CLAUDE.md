@@ -142,7 +142,8 @@ package-name/
 
 **Export path convention**:
 
-- `@sekhmet/package` → full kitchen sink
+- `@sekhmet/package` → full kitchen sink, only where features don't collide
+  (enum and primordials have no root export; import a feature subpath)
 - `@sekhmet/package/feature` → full feature exports (main/mini or flat)
 - `@sekhmet/package/feature/mini` → tree-shakable feature exports (main/mini only)
 - `@sekhmet/package/feature/mini/function` → individual functions (main/mini only)
