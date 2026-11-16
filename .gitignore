@@ -165,8 +165,8 @@ nohup.out
 .DS_Store
 .AppleDouble
 .LSOverride
-Icon[
-]
+# Custom folder icons are named "Icon\r"; the brackets hold a literal CR, keep it
+Icon[]
 
 # Thumbnails
 ._*
