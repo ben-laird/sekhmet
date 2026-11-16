@@ -1190,7 +1190,7 @@ Deno.test("generateMain rejects borrows it can't resolve or attach", async (t) =
 			name: "it clashes with an own method",
 			borrowed: SHELF_SYMBOLS,
 			symbols: [ownWrap],
-			message: "wrap is already a method of Box",
+			message: "wrap is already a member of Box",
 			symbol: "wrap",
 		},
 		{
@@ -1293,6 +1293,280 @@ Deno.test("generateMain rejects borrows it can't resolve or attach", async (t) =
 			});
 
 			// Then: generation fails, naming the function at fault
+			assert(!result.ok);
+			assertEquals(
+				{ symbol: result.error.symbol, message: result.error.message },
+				{ symbol, message },
+			);
+		});
+	}
+});
+
+/** `pair<A, B>(options: PairOptions<A, B>): Box<[A, B]>`, filling `left`. */
+const PAIR = fn(
+	"pair",
+	signature({
+		typeParams: ["A", "B"],
+		params: [
+			param("options", {
+				kind: "ref",
+				name: "PairOptions",
+				args: [typeParam("A"), typeParam("B")],
+				resolution: { kind: "local" },
+			}),
+		],
+		returnType: named("Box", [
+			{ kind: "tuple", elements: [typeParam("A"), typeParam("B")] },
+		]),
+	}),
+);
+
+/** `interface PairOptions<A, B> { left: Box<A>; right: Box<B> }`. */
+const PAIR_OPTIONS: DocSymbol = {
+	name: "PairOptions",
+	declarations: [
+		{ kind: "other", typeOnly: true, properties: ["left", "right"] },
+	],
+};
+
+const METHOD_DOC = {
+	description: "Does it to this box.",
+	params: { label: "The label" },
+	returns: "A box",
+	example: "full(1).on.wrap();",
+};
+
+/** The shelf's wrap and pair, on an `.on` namespace (`BoxOn`). */
+const ON_SHELF: Borrow = {
+	...SHELF,
+	property: {
+		name: "on",
+		className: "BoxOn",
+		doc: {
+			description: "The shelf's methods for this box.",
+			returns: "This box's shelf methods",
+			example: "full(1).on;",
+		},
+	},
+	methods: [
+		{ name: "wrap", doc: METHOD_DOC },
+		{ name: "pair", field: "left", argument: "right", doc: METHOD_DOC },
+	],
+};
+
+/** Generates the box feature borrowing `borrow` from the shelf barrel. */
+function borrowingWith({
+	borrow,
+	borrowed = [WRAP, PAIR, LABEL, PAIR_OPTIONS],
+	symbols = [],
+	borrows = [borrow],
+}: {
+	borrow: Borrow;
+	borrowed?: readonly DocSymbol[];
+	symbols?: DocSymbol[];
+	borrows?: readonly Borrow[];
+}): ReturnType<typeof generateMain> {
+	return generateMain({
+		feature: { ...FEATURE, borrows },
+		symbols: [BOX_CLASS, ...symbols],
+		sources: SOURCES,
+		miniUrl: MINI_URL,
+		outputUrl: OUTPUT_URL,
+		borrowed: [{ borrow, url: SHELF_URL, symbols: borrowed }],
+	});
+}
+
+Deno.test("generateMain fills one options field with this and another with the argument", () => {
+	// Given: pair({ left, right }) borrowed onto the primary, filling left
+	const borrow: Borrow = {
+		...SHELF,
+		methods: [{ name: "pair", field: "left", argument: "right" }],
+	};
+
+	// When: generating
+	const result = borrowingWith({ borrow });
+
+	// Then: the method takes right, typed by indexing the options type, whose
+	// type parameters past the class's are the method's own
+	assert(result.ok);
+	assertStringIncludes(
+		result.value,
+		'pair<B>(right: shelf.PairOptions<T, B>["right"]): Box<[T, B]> {',
+	);
+	assertStringIncludes(
+		result.value,
+		"return Box.fromMini(shelf.pair({ left: this, right }));",
+	);
+});
+
+Deno.test("generateMain puts a borrow with a property on a namespace class", () => {
+	// Given: wrap and pair borrowed onto an `.on` namespace
+	const borrow = ON_SHELF;
+
+	// When: generating
+	const result = borrowingWith({ borrow });
+
+	// Then: the primary has a getter returning the namespace class, which
+	// holds the mini instance and calls each function with it
+	assert(result.ok);
+	const output = result.value;
+	assertStringIncludes(
+		output,
+		"get on(): BoxOn<T> {\n\t\treturn new BoxOn(this);",
+	);
+	assertStringIncludes(output, "export class BoxOn<out T> {");
+	assertStringIncludes(output, "readonly #self: mini.Box<T>;");
+	assertStringIncludes(output, "constructor(self: mini.Box<T>) {");
+	assertStringIncludes(
+		output,
+		"return Box.fromMini(shelf.wrap(this.#self, label));",
+	);
+	assertStringIncludes(
+		output,
+		"return Box.fromMini(shelf.pair({ left: this.#self, right }));",
+	);
+	assertStringIncludes(output, "The shelf's methods for this box.");
+	assertStringIncludes(output, "@param label - The label");
+	assertStringIncludes(
+		output,
+		"from `@pkg/shelf/mini` as methods of its `.on` namespace (`BoxOn`).",
+	);
+	assert(!output.includes("shelf.wrap(this, label)"));
+});
+
+Deno.test("generateMain leaves a namespace method's function examples alone", () => {
+	// Given: a box method whose example calls the namespaced wrap
+	const fill = fn(
+		"fill",
+		signature({
+			typeParams: ["A"],
+			params: [selfBox("A")],
+			returnType: keyword("void"),
+			jsDoc: example(
+				'```ts\nimport { wrap } from "@pkg/shelf/mini";\n\nwrap(full(1), "a");\n```',
+			),
+		}),
+	);
+
+	// When: generating with wrap on the namespace
+	const result = borrowingWith({ borrow: ON_SHELF, symbols: [fill] });
+
+	// Then: the call isn't rewritten into a method on the primary
+	assert(result.ok);
+	assertStringIncludes(result.value, 'wrap(full(1), "a");');
+});
+
+Deno.test("generateMain rejects namespaces and arguments it can't generate", async (t) => {
+	// Given: borrows that each break one rule
+	const onWith = (patch: Partial<Borrow>): Borrow => ({
+		...ON_SHELF,
+		...patch,
+	});
+	const ownOn = fn(
+		"on",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: keyword("void"),
+		}),
+	);
+	const boxOn: DocSymbol = {
+		name: "BoxOn",
+		declarations: [{ kind: "other", typeOnly: true }],
+	};
+	const cases: {
+		name: string;
+		borrow: Borrow;
+		borrows?: readonly Borrow[];
+		symbols?: DocSymbol[];
+		message: string;
+		symbol: string;
+	}[] = [
+		{
+			name: "a namespace method has no docs of its own",
+			borrow: onWith({ methods: [{ name: "wrap" }] }),
+			message:
+				"the borrows entry for wrap (@pkg/shelf) puts it on the `on` namespace, so it needs its own `doc`",
+			symbol: "wrap",
+		},
+		{
+			name: "argument without field",
+			borrow: { ...SHELF, methods: [{ name: "pair", argument: "right" }] },
+			message:
+				"the borrows entry for pair (@pkg/shelf) sets `argument` without `field`",
+			symbol: "pair",
+		},
+		{
+			name: "argument and field are the same",
+			borrow: {
+				...SHELF,
+				methods: [{ name: "pair", field: "left", argument: "left" }],
+			},
+			message:
+				"the borrows entry for pair (@pkg/shelf) fills `left` with both the receiver and the argument",
+			symbol: "pair",
+		},
+		{
+			name: "the options type doesn't declare the argument",
+			borrow: {
+				...SHELF,
+				methods: [{ name: "pair", field: "left", argument: "other" }],
+			},
+			message:
+				"the borrows entry for pair (@pkg/shelf) fills `other`, which pair's options type doesn't declare",
+			symbol: "pair",
+		},
+		{
+			name: "the options type's extra type parameters can't be inferred",
+			borrow: { ...SHELF, methods: [{ name: "pair", field: "left" }] },
+			message:
+				"a method filling `left` takes no arguments, so it can't infer B",
+			symbol: "pair",
+		},
+		{
+			name: "the getter clashes with an own method",
+			borrow: ON_SHELF,
+			symbols: [ownOn],
+			message: "on is already a member of Box",
+			symbol: "on",
+		},
+		{
+			name: "two borrows claim one getter",
+			borrow: ON_SHELF,
+			borrows: [ON_SHELF, ON_SHELF],
+			message: "on is already a member of Box",
+			symbol: "on",
+		},
+		{
+			name: "the class name is already a mini export",
+			borrow: ON_SHELF,
+			symbols: [boxOn],
+			message: "BoxOn is already a name in the generated module",
+			symbol: "BoxOn",
+		},
+		{
+			name: "a namespace lists a method twice",
+			borrow: onWith({
+				methods: [
+					{ name: "wrap", doc: METHOD_DOC },
+					{ name: "wrap", doc: METHOD_DOC },
+				],
+			}),
+			message: "wrap is already a member of BoxOn",
+			symbol: "wrap",
+		},
+	];
+
+	for (const { name, borrow, borrows, symbols, message, symbol } of cases) {
+		await t.step(name, () => {
+			// When: generating
+			const result = borrowingWith({
+				borrow,
+				...(borrows === undefined ? {} : { borrows }),
+				...(symbols === undefined ? {} : { symbols }),
+			});
+
+			// Then: generation fails, naming the member at fault
 			assert(!result.ok);
 			assertEquals(
 				{ symbol: result.error.symbol, message: result.error.message },

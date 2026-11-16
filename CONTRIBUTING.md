@@ -396,7 +396,20 @@ options object that the receiver fills (`array({ item })` becomes
 `.array()`, a method with no arguments). The generated module imports the
 barrel as a namespace, and borrowed examples are rewritten to method form.
 When the function's prose talks about parameters the method doesn't take, a
-borrow can give the method its own `doc` (description, returns, example).
+borrow can give the method its own `doc` (description, params, returns,
+example).
+
+A field method can also take one argument: `argument` names the other field
+of the options object that it fills (`or({ left, right })` with
+`field: "left", argument: "right"` becomes `.or(right)`). The argument is
+typed by indexing the options type (`OrOptions<I, O, E, J, P, F>["right"]`),
+whose type parameters past the class's become the method's own, so they are
+inferred from the argument. A borrow with a `property` (`name`, `className`,
+`doc`) puts its methods on a generated namespace class instead of the
+primary: the primary gets a getter `name` returning a `className` that
+holds the instance (`schema.with.or(other)`). Every namespace method needs
+its own `doc`, since the function's examples aren't rewritten for it, and
+gen-main rejects a getter, class or method name that is already taken.
 
 ### Infrastructure Code Conventions
 

@@ -12,6 +12,7 @@ export type {
 	FeatureBase,
 	FunctionFeature,
 	MethodDoc,
+	NamespaceProperty,
 	WrapTarget,
 } from "./src/config.ts";
 export { FEATURES, isClassFeature } from "./src/config.ts";

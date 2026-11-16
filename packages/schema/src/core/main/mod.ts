@@ -3,7 +3,7 @@
 /**
  * Main entrypoint for `@sekhmet/schema/core`: the method-chaining API.
  *
- * `Schema` here extends the mini `Schema` from `@sekhmet/schema/core/mini`, so its instances work with every mini function too. Each `self`-first mini function is a method, and functions whose mini form returns `Schema` return this main class, so calls chain. It also takes `array`, `optional`, `nullable` from `@sekhmet/schema/composites/mini` as methods.
+ * `Schema` here extends the mini `Schema` from `@sekhmet/schema/core/mini`, so its instances work with every mini function too. Each `self`-first mini function is a method, and functions whose mini form returns `Schema` return this main class, so calls chain. It also takes `array`, `optional`, `nullable` from `@sekhmet/schema/composites/mini` as methods. It also takes `or`, `brand`, `readonly` from `@sekhmet/schema/algebra/mini` as methods of its `.with` namespace (`SchemaWith`).
  *
  * Generated from `../mini/mod.ts` by `deno task gen:main`; edit the mini source, then regenerate.
  *
@@ -27,6 +27,7 @@
 import { Result } from "@sekhmet/enum/result";
 import type { Result as MiniResult } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
+import * as algebra from "../../algebra/mini/mod.ts";
 import * as composites from "../../composites/mini/mod.ts";
 import * as mini from "../mini/mod.ts";
 
@@ -559,5 +560,126 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 */
 	nullable(): Schema<I | null, O | null, E> {
 		return Schema.fromMini(composites.nullable(this));
+	}
+
+	/**
+	 * The schema algebra for this schema: `.with.or(other)`,
+	 * `.with.brand("Name")` and `.with.readonly()`, each returning a main
+	 * `Schema`, so calls keep chaining.
+	 *
+	 * @returns This schema's algebra methods
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import { number, string } from "@sekhmet/schema/primitives";
+	 *
+	 * const id = string().with.or(number()).map(String);
+	 *
+	 * assertEquals(unwrap(id.parseSync(7)), "7");
+	 * ```
+	 */
+	get with(): SchemaWith<I, O, E> {
+		return new SchemaWith(this);
+	}
+}
+
+/**
+ * The `.with` namespace of a main {@linkcode Schema}: `or`, `brand`, `readonly` from `@sekhmet/schema/algebra/mini`, as methods of the Schema it holds. Get one from `Schema.prototype.with`.
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { number, string } from "@sekhmet/schema/primitives";
+ *
+ * const id = string().with.or(number()).map(String);
+ *
+ * assertEquals(unwrap(id.parseSync(7)), "7");
+ * ```
+ */
+export class SchemaWith<I, O, E> {
+	readonly #self: mini.Schema<I, O, E>;
+
+	/**
+	 * Holds `self`, the Schema these methods act on.
+	 *
+	 * @param self - The Schema to act on
+	 */
+	constructor(self: mini.Schema<I, O, E>) {
+		this.#self = self;
+	}
+
+	/**
+	 * A schema that accepts what this schema or `right` accepts: this schema
+	 * is tried first, and `right` only when it fails; when both fail, it fails
+	 * with one `InvalidUnion` issue at the root. Chains nest:
+	 * `a.with.or(b).with.or(c)` is `union([union([a, b]), c])`.
+	 *
+	 * @param right - The schema to try when this one fails
+	 * @returns A schema for what either accepts
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import { boolean, number, string } from "@sekhmet/schema/primitives";
+	 *
+	 * const scalar = string().with.or(number()).with.or(boolean());
+	 *
+	 * assertEquals(unwrap(scalar.parseSync(true)), true);
+	 * ```
+	 * @see {@link algebra.or}
+	 */
+	or<J, P, F>(
+		right: algebra.OrOptions<I, O, E, J, P, F>["right"],
+	): Schema<I & J, O | P, mini.Issues<mini.SchemaIssue>> {
+		return Schema.fromMini(algebra.or({ left: this.#self, right }));
+	}
+
+	/**
+	 * This schema with its output branded `name`, a type-only brand: parsing
+	 * is the branded type's smart constructor. The output passes through
+	 * unchanged at runtime.
+	 *
+	 * @param name - The brand's name
+	 * @returns A schema whose output is branded `name`
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import type { Branded } from "@sekhmet/schema/algebra";
+	 * import { string } from "@sekhmet/schema/primitives";
+	 *
+	 * const userId = string({ minLength: 1 }).with.brand("UserId");
+	 * const id: Branded<string, "UserId"> = unwrap(userId.parseSync("u1"));
+	 *
+	 * assertEquals(id, "u1");
+	 * ```
+	 * @see {@link algebra.brand}
+	 */
+	brand<const B extends string>(name: B): Schema<I, algebra.Branded<O, B>, E> {
+		return Schema.fromMini(algebra.brand(this.#self, name));
+	}
+
+	/**
+	 * This schema with its array and plain object outputs replaced by frozen
+	 * shallow copies (never the value it produced, which may be the input).
+	 * Other values pass through unchanged.
+	 *
+	 * @returns A schema whose array and plain object outputs are frozen copies
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import { string } from "@sekhmet/schema/primitives";
+	 *
+	 * const tags = unwrap(string().array().with.readonly().parseSync(["a"]));
+	 *
+	 * assertEquals(Object.isFrozen(tags), true);
+	 * ```
+	 * @see {@link algebra.readonly}
+	 */
+	readonly(): Schema<I, algebra.ReadonlyOutput<O>, E> {
+		return Schema.fromMini(algebra.readonly(this.#self));
 	}
 }

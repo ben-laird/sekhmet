@@ -7,10 +7,12 @@
  * - `@sekhmet/schema/primitives/mini` - Primitive type schemas
  * - `@sekhmet/schema/composites/mini` - Composite schemas (objects, arrays, unions…)
  * - `@sekhmet/schema/standard/mini` - The Standard Schema adapter
+ * - `@sekhmet/schema/algebra/mini` - Schema algebra (combining schemas)
  *
  * @module
  */
 
+export * from "./src/algebra/main/mod.ts";
 export * from "./src/composites/main/mod.ts";
 export * from "./src/core/main/mod.ts";
 export * from "./src/primitives/main/mod.ts";

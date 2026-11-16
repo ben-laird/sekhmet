@@ -17,15 +17,17 @@ The package is not published yet.
 Each feature has two forms:
 
 - **Main** (`@sekhmet/schema/core`, `@sekhmet/schema/primitives`,
-  `@sekhmet/schema/composites`, `@sekhmet/schema/standard`): the
-  method-chaining API, `string().optional().map((s) => s?.length)`. Every
-  main `Schema` has the shape modifiers `.array()`, `.optional()` and
-  `.nullable()`, the transforms `.map`, `.mapErr`, `.pipe` and `.filter`, the
-  Result-style transforms `.andThen`, `.orElse`, `.inspect`, `.inspectErr`
-  and `.preprocess`, and `.parse`, `.parseSync` and `.parseAsync`. It is
-  generated from mini by `deno task gen:main`.
+  `@sekhmet/schema/composites`, `@sekhmet/schema/standard`,
+  `@sekhmet/schema/algebra`): the method-chaining API,
+  `string().optional().map((s) => s?.length)`. Every main `Schema` has the
+  shape modifiers `.array()`, `.optional()` and `.nullable()`, the transforms
+  `.map`, `.mapErr`, `.pipe` and `.filter`, the Result-style transforms
+  `.andThen`, `.orElse`, `.inspect`, `.inspectErr` and `.preprocess`,
+  `.parse`, `.parseSync` and `.parseAsync`, and the [algebra](#algebra)
+  behind `.with`. It is generated from mini by `deno task gen:main`.
 - **Mini** (`@sekhmet/schema/core/mini`, `@sekhmet/schema/primitives/mini`,
-  `@sekhmet/schema/composites/mini`, `@sekhmet/schema/standard/mini`):
+  `@sekhmet/schema/composites/mini`, `@sekhmet/schema/standard/mini`,
+  `@sekhmet/schema/algebra/mini`):
   tree-shakable functions, `map(string(), (s) => s.length)`, with a subpath per
   module (e.g. `@sekhmet/schema/core/mini/issue`).
 
@@ -168,6 +170,70 @@ assertEquals(unwrap(person.parseSync({ name: "Ada", middle: undefined })), {
 assertEquals(isErr(person.parseSync({ name: "Ada" })), true); // middle is missing
 ```
 
+## Algebra
+
+`@sekhmet/schema/algebra` combines and retypes whole schemas. On a main
+`Schema` they sit behind `.with`, and each returns a main `Schema`:
+
+- `.with.or(right)` (mini `or({ left, right })`) tries this schema, then
+  `right`: a `union` of the two.
+- `.with.brand("UserId")` (mini `brand(self, "UserId")`) brands the output
+  type `Branded<O, "UserId">`, so only a parsed value has it. The brand is
+  type-only: nothing changes at runtime.
+- `.with.readonly()` (mini `readonly(self)`) freezes a shallow copy of an
+  array or plain object output (never the input itself) and types it
+  `ReadonlyOutput<O>`.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { unwrap } from "@sekhmet/enum/result/mini";
+import type { Branded } from "@sekhmet/schema/algebra";
+import { number, string } from "@sekhmet/schema/primitives";
+
+type UserId = Branded<string, "UserId">;
+
+const userId = string().with.or(number()).map(String).with.brand("UserId");
+const ids = userId.array().with.readonly();
+
+const parsed: readonly UserId[] = unwrap(ids.parseSync(["u1", 2]));
+assertEquals<readonly string[]>(parsed, ["u1", "2"]);
+assertEquals(Object.isFrozen(parsed), true);
+```
+
+The shape reshapers are plain functions from one `object` shape to another:
+`pick({ shape, keys })`, `omit({ shape, keys })`, `partial(shape)` (every key
+optional) and `required(shape)` (every key required, an `.optional()` value
+still accepting `undefined`). Extend a shape with a spread, and declare a
+standalone shape `satisfies Shape` so its `key: "optional"` stays literal:
+
+```ts
+import { assertEquals } from "@std/assert";
+import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import { omit, partial } from "@sekhmet/schema/algebra";
+import { object, type Shape } from "@sekhmet/schema/composites";
+import { string } from "@sekhmet/schema/primitives";
+
+const account = {
+	name: string(),
+	password: string(),
+	nickname: { schema: string(), key: "optional" },
+} satisfies Shape;
+
+const visible = object({ shape: omit({ shape: account, keys: ["password"] }) });
+const patch = object({ shape: partial({ ...account, email: string() }) });
+
+assertEquals(unwrap(visible.parseSync({ name: "Ada", password: "x" })), {
+	name: "Ada",
+});
+assertEquals(unwrap(patch.parseSync({ email: "ada@example.com" })), {
+	email: "ada@example.com",
+});
+assertEquals(isErr(patch.parseSync({ name: undefined })), true);
+```
+
+There is no `and`: a shape spread, options, `filter` or `andThen` covers each
+use of an intersection.
+
 ## Standard Schema
 
 `@sekhmet/schema/standard` bridges to [Standard Schema](https://standardschema.dev)
@@ -208,5 +274,5 @@ core feature's mini functions, and the adapter lives in its own feature.
 ## Design
 
 [docs/design.md](./docs/design.md) records the accepted design: the error model
-(`SchemaIssue`, `Issues`), the primitives, the declarative composites and the
-Standard Schema adapter.
+(`SchemaIssue`, `Issues`), the primitives, the declarative composites, the
+Standard Schema adapter and the algebra.

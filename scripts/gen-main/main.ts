@@ -222,6 +222,7 @@ export async function main(args: string[]): Promise<number> {
 		if (check) {
 			stale.push(feature.output);
 		} else {
+			await Deno.mkdir(new URL(".", url), { recursive: true });
 			await Deno.writeTextFile(url, generated.value);
 			console.log(`wrote ${feature.output}`);
 		}
