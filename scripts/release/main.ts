@@ -164,16 +164,25 @@ async function release(force: boolean): Promise<Result<void, string>> {
 	const changelogs = await readChangelogs(
 		releasedPackages(unwrap(result)).map(({ path }) => path),
 	);
+	// Attempt every Release, so one gh failure cannot hide the others.
+	const failures: string[] = [];
 	for (const githubRelease of gitHubReleases({
 		result: unwrap(result),
 		changelogs,
 	})) {
 		const created = await createGitHubRelease(githubRelease);
-		if (isErr(created)) return Err(unwrapErr(created));
+		if (isErr(created)) {
+			failures.push(`${githubRelease.tag}: ${unwrapErr(created)}`);
+		}
 	}
-	return code === 0
+	if (code !== 0) {
+		failures.push(
+			`dv release exited ${code}; rerun the workflow with force to retry`,
+		);
+	}
+	return failures.length === 0
 		? Ok(undefined)
-		: Err(`dv release exited ${code}; rerun the workflow with force to retry`);
+		: Err(`\n  - ${failures.join("\n  - ")}`);
 }
 
 if (import.meta.main) {
