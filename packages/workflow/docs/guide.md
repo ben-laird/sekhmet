@@ -119,7 +119,9 @@ without what `absent` counts as absent:
 | `"undefined"`         | `undefined`            | `Exclude<T, undefined>` |
 | `"null"`              | `null`                 | `Exclude<T, null>`      |
 
-It tests only for `null` and `undefined`, never truthiness: `0`, `""`, `false`
+Leaving `absent` out and passing `absent: undefined` both mean `"nullish"`,
+in the type as at runtime. It tests only for `null` and `undefined`, never
+truthiness: `0`, `""`, `false`
 and `NaN` are present. Use `invariant` to assert truthiness.
 
 `satisfies(value, { predicate, expectedBehavior, issueUrl? })` returns `S`

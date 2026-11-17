@@ -234,3 +234,27 @@ Deno.test("a defined value rejects its input, then widens to it", () => {
 	// Then: the order changes nothing: only widening compiles
 	assertEquals([narrowed, widened], ["a", "a"]);
 });
+
+Deno.test("defined with absent explicitly undefined narrows as nullish", () => {
+	// Given: a value that may be null or undefined, and an undefined mode
+	const maybe: number | null | undefined = [1, null, undefined][0];
+	const thrown = assertThrows(() => {
+		defined(null, { absent: undefined, expectedBehavior: EXPECTED });
+	}, Panic);
+
+	// When: defined checks it with absent: undefined
+	const value = defined(maybe, {
+		absent: undefined,
+		expectedBehavior: EXPECTED,
+	});
+
+	// Then: the type and the runtime both treat it as "nullish"
+	assertType<IsExact<typeof value, number>>(true);
+	assert(isInvariantPanic(thrown));
+	assertEquals(thrown.cause.check, {
+		kind: "defined",
+		absent: "nullish",
+		value: null,
+	});
+	assertEquals(value, 1);
+});

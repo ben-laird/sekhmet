@@ -53,8 +53,8 @@ export function narrowed(value: string | undefined): string {
 
 export const present = (value: string | null | undefined): string => defined(value, { expectedBehavior: "it should be set", issueUrl: undefined });
 export const notNull = (value: string | null | undefined): string | undefined => defined(value, { absent: "null", expectedBehavior: "it should be set" });
-// With absent explicitly undefined (the default at runtime), nothing is narrowed
-export const unsure = (value: string | null): string | null => defined(value, { absent: undefined, expectedBehavior: "it should be set" });
+// absent: undefined means "nullish", in the type as at runtime
+export const unsure = (value: string | null | undefined): string => defined(value, { absent: undefined, expectedBehavior: "it should be set" });
 // @ts-expect-error "falsy" is not an absent mode
 export const falsy = (value: string | null): string => defined(value, { absent: "falsy", expectedBehavior: "it should be set" });
 

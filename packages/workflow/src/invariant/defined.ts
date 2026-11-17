@@ -17,20 +17,28 @@ import { violated } from "./violation.ts";
 export type DefinedAbsent = "nullish" | "undefined" | "null";
 
 /**
- * `T` without what `A` counts as absent: `NonNullable<T>` for `"nullish"`,
+ * `T` without what `A` counts as absent: `NonNullable<T>` for `"nullish"`
+ * (and for `undefined`, which means `"nullish"`),
  * `Exclude<T, undefined>` for `"undefined"` and `Exclude<T, null>` for
  * `"null"`.
  */
-export type DefinedValue<T, A extends DefinedAbsent> = A extends "undefined"
+export type DefinedValue<
+	T,
+	A extends DefinedAbsent | undefined,
+> = A extends "undefined"
 	? Exclude<T, undefined>
 	: A extends "null"
 		? Exclude<T, null>
 		: NonNullable<T>;
 
 /** What {@linkcode defined} is given besides the value. */
-export interface DefinedOptions<A extends DefinedAbsent = DefinedAbsent>
-	extends InvariantOptions {
-	/** What counts as absent; `"nullish"` when left out */
+export interface DefinedOptions<
+	A extends DefinedAbsent | undefined = DefinedAbsent,
+> extends InvariantOptions {
+	/**
+	 * What counts as absent; `"nullish"` when left out or `undefined`, in the
+	 * type as at runtime
+	 */
 	readonly absent?: A;
 }
 
@@ -78,7 +86,7 @@ export interface DefinedOptions<A extends DefinedAbsent = DefinedAbsent>
  * });
  * ```
  */
-export function defined<T, A extends DefinedAbsent = "nullish">(
+export function defined<T, A extends DefinedAbsent | undefined = "nullish">(
 	value: T,
 	options: DefinedOptions<A>,
 ): DefinedValue<T, A>;
