@@ -156,9 +156,9 @@ export function array(options: {
 			if (!isArray(input)) return invalidType({ input, expected: "array" });
 
 			return compose({
-				pending: input.map((value, index) =>
-					run({ key: index, child: item, value }),
-				),
+				pending: input.map((value, index) => {
+					return run({ key: index, child: item, value });
+				}),
 				extra: lengthIssue({ input, minItems, maxItems }),
 				build: (outputs) => outputs.map(([, output]) => output),
 			});

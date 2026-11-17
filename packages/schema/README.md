@@ -286,6 +286,7 @@ const signUp = object({
 		referrer: string()
 			.annotate([label("Who sent you?")])
 			.optional(),
+		// {}
 	},
 });
 

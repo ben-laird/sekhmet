@@ -145,9 +145,9 @@ export function tuple(
 			if (!isArray(input)) return invalidType({ input, expected: "array" });
 
 			return compose({
-				pending: items.map((child, index) =>
-					run({ key: index, child, value: input[index] }),
-				),
+				pending: items.map((child, index) => {
+					return run({ key: index, child, value: input[index] });
+				}),
 				extra: tooLong({ input, maximum: items.length }),
 				build: (outputs) => outputs.map(([, output]) => output),
 			});
