@@ -70,6 +70,7 @@ export type {
 	PotentialVariants,
 	RecordDetails,
 	ReservedViewKey,
+	ReservedViewNames,
 	SchemaInit,
 	SchemaIssueVariants,
 	SchemaNodeVariants,
@@ -123,6 +124,7 @@ export {
 	ParseSyncError,
 	Potential,
 	prefix,
+	RESERVED_VIEW_NAMES,
 	SchemaIssue,
 	SchemaNode,
 	Sync,
@@ -829,7 +831,11 @@ export class SchemaWith<
  * copied onto it, so the schema exposes its children typed as passed. A
  * view holds no state of its own; pass the same children the schema's node
  * holds. Use it with `custom()` nodes to give a composite of your own typed
- * children. A reserved key ({@linkcode ReservedViewKey}) is a type error.
+ * children. A reserved key ({@linkcode ReservedViewKey}) is a type error;
+ * since a view widened by assignment can still carry one, `viewed` also
+ * panics with a `TypeError` on a symbol key, a reserved name or
+ * `__proto__`, rather than let it replace the schema's params or shadow a
+ * method.
  *
  * @template I - The input type
  * @template O - The output type

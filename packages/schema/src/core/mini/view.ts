@@ -57,6 +57,76 @@ export type MainSchemaMember =
 export type ReservedViewKey = "schema" | symbol | MainSchemaMember;
 
 /**
+ * A record keyed by every reserved view key that is a name: the type of
+ * {@linkcode RESERVED_VIEW_NAMES}.
+ *
+ * @example
+ * ```ts
+ * import type { ReservedViewNames } from "@sekhmet/schema/core/mini/view";
+ *
+ * type Reserved = keyof ReservedViewNames; // "schema" | "map" | …
+ * ```
+ */
+export type ReservedViewNames = {
+	readonly [K in Exclude<ReservedViewKey, symbol>]: true;
+};
+
+/**
+ * The reserved view keys that are names: `schema` and every
+ * {@linkcode MainSchemaMember}, as a frozen record keyed by them. Its type
+ * names every one, so a name added to {@linkcode MainSchemaMember} must be
+ * added here, and {@linkcode viewed} panics on each at runtime.
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { RESERVED_VIEW_NAMES } from "@sekhmet/schema/core/mini/view";
+ *
+ * assertEquals(Object.hasOwn(RESERVED_VIEW_NAMES, "map"), true);
+ * assertEquals(Object.hasOwn(RESERVED_VIEW_NAMES, "shape"), false);
+ * ```
+ */
+export const RESERVED_VIEW_NAMES: ReservedViewNames =
+	Object.freeze<ReservedViewNames>({
+		schema: true,
+		andThen: true,
+		annotate: true,
+		array: true,
+		filter: true,
+		inspect: true,
+		inspectErr: true,
+		map: true,
+		mapErr: true,
+		nullable: true,
+		optional: true,
+		orElse: true,
+		parse: true,
+		parseAsync: true,
+		parseSync: true,
+		pipe: true,
+		preprocess: true,
+		with: true,
+	});
+
+/**
+ * Panics with a `TypeError` unless every own key of `view` may be a view's:
+ * not a symbol, not a reserved name ({@linkcode RESERVED_VIEW_NAMES}), and
+ * not `__proto__`, which `Object.assign` would set as the prototype. The
+ * types already reject these; a view widened by assignment can still carry
+ * them, and copying one would replace a schema's params or shadow a method.
+ */
+function assertViewKeys(view: object): void {
+	if (Object.getOwnPropertySymbols(view).length > 0) {
+		throw new TypeError("viewed: a view can't have symbol keys");
+	}
+	for (const key of Object.keys(view)) {
+		if (Object.hasOwn(RESERVED_VIEW_NAMES, key) || key === "__proto__") {
+			throw new TypeError(`viewed: "${key}" is reserved, not a view key`);
+		}
+	}
+}
+
+/**
  * A view's own properties, with every {@linkcode ReservedViewKey} left
  * out: `Omit<S, ReservedViewKey>` reads the view off a viewed schema.
  *
@@ -178,8 +248,9 @@ export interface ViewedOptions<I, O, E, V extends object> {
 	/** The schema's parser, node and annotations. */
 	readonly init: SchemaInit<I, O, E>;
 	/**
-	 * The view: its own properties are copied onto the schema. A reserved
-	 * key ({@linkcode ReservedViewKey}) is a type error.
+	 * The view: its own enumerable properties are copied onto the schema. A
+	 * reserved key ({@linkcode ReservedViewKey}) is a type error, and a
+	 * panic at runtime.
 	 */
 	readonly view: V & { readonly [K in ReservedViewKey]?: never };
 }
@@ -189,7 +260,11 @@ export interface ViewedOptions<I, O, E, V extends object> {
  * copied onto it, so the schema exposes its children typed as passed. A
  * view holds no state of its own; pass the same children the schema's node
  * holds. Use it with `custom()` nodes to give a composite of your own typed
- * children. A reserved key ({@linkcode ReservedViewKey}) is a type error.
+ * children. A reserved key ({@linkcode ReservedViewKey}) is a type error;
+ * since a view widened by assignment can still carry one, `viewed` also
+ * panics with a `TypeError` on a symbol key, a reserved name or
+ * `__proto__`, rather than let it replace the schema's params or shadow a
+ * method.
  *
  * @template I The input type
  * @template O The output type
@@ -222,5 +297,7 @@ export interface ViewedOptions<I, O, E, V extends object> {
 export function viewed<I, O, E, const V extends object>(
 	options: ViewedOptions<I, O, E, V>,
 ): Schema<I, O, E> & V {
+	assertViewKeys(options.view);
+
 	return Object.assign(new Schema(options.init), options.view);
 }

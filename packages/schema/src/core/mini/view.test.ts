@@ -4,11 +4,17 @@ import {
 	assertEquals,
 	assertInstanceOf,
 	assertStrictEquals,
+	assertThrows,
 } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { custom, nodeKind, nodeOf } from "./node.ts";
 import { type Output, parseSync, Schema } from "./schema.ts";
-import { type ViewOf, viewed } from "./view.ts";
+import {
+	RESERVED_VIEW_NAMES,
+	type ReservedViewKey,
+	type ViewOf,
+	viewed,
+} from "./view.ts";
 
 const text = new Schema({ parse: (input: string) => Ok(input) });
 const Labelled = nodeKind<{ readonly label: string }>({ name: "Labelled" });
@@ -59,18 +65,53 @@ Deno.test("viewed rejects reserved keys at the type level", () => {
 	const init = { parse: (input: string) => Ok(input) };
 
 	// When: viewing it under each reserved key
-	// Then: each is a type error
+	// Then: each is a type error, and a panic too
 	// @ts-expect-error `schema` marks a field entry
-	const asField = viewed({ init, view: { schema: text } });
+	assertThrows(() => viewed({ init, view: { schema: text } }), TypeError);
 	// @ts-expect-error a view can't shadow a main Schema method
-	const asMethod = viewed({ init, view: { map: text } });
+	assertThrows(() => viewed({ init, view: { map: text } }), TypeError);
 	// @ts-expect-error a view can't shadow the `with` getter
-	const asGetter = viewed({ init, view: { with: text } });
-	// @ts-expect-error a view has no symbol keys, as a schema keeps its params under one
-	const asParams = viewed({ init, view: { [struct]: text } });
+	assertThrows(() => viewed({ init, view: { with: text } }), TypeError);
+	// @ts-expect-error a view has no symbol keys: a schema keeps its params under one
+	assertThrows(() => viewed({ init, view: { [struct]: text } }), TypeError);
+});
 
-	assertInstanceOf(asField, Schema);
-	assertInstanceOf(asMethod, Schema);
-	assertInstanceOf(asGetter, Schema);
-	assertInstanceOf(asParams, Schema);
+Deno.test("viewed panics on a reserved key smuggled past the types by widening", async (t) => {
+	// Given: views widened by assignment, each hiding a reserved key
+	const evil = new Schema({ parse: (input: string) => Ok(input.length) });
+	const init = { parse: (input: string) => Ok(input) };
+	const cases: { name: string; view: { readonly label: string } }[] = [
+		{
+			name: "the struct symbol, replacing the parser",
+			view: { label: "x", [struct]: getStructParams(evil) },
+		},
+		{ name: "another symbol", view: { label: "x", [Symbol("s")]: 1 } },
+		{ name: "a main method", view: { label: "x", map: 1 } },
+		{ name: "the with getter", view: { label: "x", with: 1 } },
+		{ name: "schema", view: { label: "x", schema: text } },
+		{ name: "__proto__", view: JSON.parse('{"label":"x","__proto__":{}}') },
+	];
+
+	for (const { name, view } of cases) {
+		await t.step(name, () => {
+			// When: building a schema with it
+			// Then: it panics, rather than replace the params or a member
+			assertThrows(() => viewed({ init, view }), TypeError, "viewed:");
+		});
+	}
+});
+
+Deno.test("RESERVED_VIEW_NAMES names every reserved key that is a name", () => {
+	// Given: the runtime record of reserved names
+	const names = Object.keys(RESERVED_VIEW_NAMES);
+
+	// When: comparing it with the type of reserved keys
+	type Names = keyof typeof RESERVED_VIEW_NAMES;
+
+	// Then: its keys are exactly the string reserved keys, and it is frozen
+	assertType<IsExact<Names, Exclude<ReservedViewKey, symbol>>>(true);
+	assertEquals(names.length, 18);
+	assertEquals(Object.isFrozen(RESERVED_VIEW_NAMES), true);
+	// @ts-expect-error a view key that isn't reserved is no key of the record
+	assertEquals(RESERVED_VIEW_NAMES.shape, undefined);
 });
