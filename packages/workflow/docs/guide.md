@@ -99,11 +99,14 @@ assertEquals(thrown.cause, {
 
 ## Exhaustiveness with `unreachable`
 
-`UnreachableOptions.value` has type `never`, so `unreachable({ value })`
-compiles only where `value` has been narrowed to `never`. In the `default` of
-a `switch` over a union, that means every member is handled; add a member and
-the call becomes a compile error. Passing a value that is not narrowed is
-always a type error, as is passing `undefined`.
+`unreachable` has two overloads: one without a value (`UnreachableOptions`)
+and one whose `value` is required and typed `never`
+(`UnreachableValueOptions`). So `unreachable({ value })` compiles only where
+`value` has been narrowed to `never`. In the `default` of a `switch` over a
+union, that means every member is handled; add a member and the call becomes
+a compile error. Passing a value that is not narrowed is always a type error,
+as is passing `undefined` or `any`, whether or not your project turns on
+`exactOptionalPropertyTypes`.
 
 ## Rendering the impossible value
 
