@@ -127,9 +127,9 @@ export function format(name: StringFormat): Inspect<string> {
 
 	return (value) => {
 		if (test(value)) return undefined;
+		if (pattern === undefined)
+			return InvalidFormat({ input: value, format: name });
 
-		return pattern === undefined
-			? InvalidFormat({ input: value, format: name })
-			: InvalidFormat({ input: value, format: name, pattern });
+		return InvalidFormat({ input: value, format: name, pattern });
 	};
 }

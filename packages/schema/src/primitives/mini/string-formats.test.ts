@@ -1,4 +1,5 @@
 import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { block } from "@sekhmet/primordials/scoping";
 import { assertEquals } from "@std/assert";
 import { InvalidFormat, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { ParseError, parseSync, type Schema } from "@/src/core/mini/schema.ts";
@@ -32,14 +33,17 @@ function runTable(table: Table): void {
 			const result = parseSync(table.schema, input);
 
 			// Then: it fails naming the format (and its pattern, if any)
-			const issue =
-				table.pattern === undefined
-					? InvalidFormat({ input, format: table.format })
-					: InvalidFormat({
-							input,
-							format: table.format,
-							pattern: table.pattern,
-						});
+			const issue = block(() => {
+				if (table.pattern === undefined) {
+					return InvalidFormat({ input, format: table.format });
+				}
+
+				return InvalidFormat({
+					input,
+					format: table.format,
+					pattern: table.pattern,
+				});
+			});
 			assertEquals(result, Err(ParseError(issue)), input);
 		}
 	});

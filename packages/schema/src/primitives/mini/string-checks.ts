@@ -17,18 +17,25 @@ export type NormalizationForm = "NFC" | "NFD" | "NFKC" | "NFKD";
  * Basic Multilingual Plane counts as 2.
  */
 export function minLength(minimum: number): Inspect<string> {
-	return (value) =>
-		value.length >= minimum
-			? undefined
-			: TooSmall({ input: value, origin: "string", minimum, inclusive: true });
+	return (value) => {
+		if (value.length >= minimum) return undefined;
+
+		return TooSmall({
+			input: value,
+			origin: "string",
+			minimum,
+			inclusive: true,
+		});
+	};
 }
 
 /** Fails a string longer than `maximum` (in UTF-16 code units) with `TooBig`. */
 export function maxLength(maximum: number): Inspect<string> {
-	return (value) =>
-		value.length <= maximum
-			? undefined
-			: TooBig({ input: value, origin: "string", maximum, inclusive: true });
+	return (value) => {
+		if (value.length <= maximum) return undefined;
+
+		return TooBig({ input: value, origin: "string", maximum, inclusive: true });
+	};
 }
 
 /**
@@ -42,8 +49,9 @@ export function regex(pattern: RegExp): Inspect<string> {
 		pattern.flags.replace(/[gy]/g, ""),
 	);
 
-	return (value) =>
-		stateless.test(value)
-			? undefined
-			: InvalidFormat({ input: value, format: "regex", pattern });
+	return (value) => {
+		if (stateless.test(value)) return undefined;
+
+		return InvalidFormat({ input: value, format: "regex", pattern });
+	};
 }
