@@ -31,16 +31,21 @@ export type NotPromise<T> = T extends PromiseLike<unknown> ? never : T;
  * `PromiseLike` leaves `resolve` uncallable. Await the value first, then
  * resolve with it.
  *
- * As with `new Promise`, the first call wins and later ones are ignored. The
- * executor is synchronous and returns `undefined`, so an async executor,
- * whose rejection nothing would see and whose promise might never settle,
- * does not compile. A throw from the executor is not captured: the returned
- * promise rejects with the thrown value, uncaught (it is a bug, not an `E`),
- * unless the executor already settled it.
+ * As with `new Promise`, the first call wins and later ones are ignored, and
+ * the executor's return value is ignored. A synchronous throw from the
+ * executor is not captured: the returned promise rejects with the thrown
+ * value, uncaught (it is a bug, not an `E`), unless the executor already
+ * settled it.
+ *
+ * An async executor also behaves as it does with `new Promise`: what it
+ * returns is ignored, so a throw after its first `await` rejects a promise
+ * nobody handles, and unless it called `resolve` or `reject` first, the
+ * returned promise never settles. Keep the executor synchronous, and settle
+ * from the callbacks of whatever it starts.
  *
  * @template T - The success value type
  * @template E - The error type
- * @param executor - Runs at once, synchronously, with `resolve` and `reject`
+ * @param executor - Runs at once with `resolve` and `reject`
  * @returns A promise of `Ok` for a resolve or `Err` for a reject
  *
  * @example
@@ -50,10 +55,7 @@ export type NotPromise<T> = T extends PromiseLike<unknown> ? never : T;
  *
  * const later = (ms: number) => {
  * 	return promiseResult<number, string>((resolve, reject) => {
- * 		if (ms < 0) {
- * 			reject(`negative delay: ${ms}`);
- * 			return;
- * 		}
+ * 		if (ms < 0) return reject(`negative delay: ${ms}`);
  * 		setTimeout(() => resolve(ms), ms);
  * 	});
  * };
@@ -66,7 +68,7 @@ export function promiseResult<T, E>(
 	executor: (
 		resolve: (value: NotPromise<T>) => void,
 		reject: (error: E) => void,
-	) => undefined,
+	) => void,
 ): Promise<Result<T, E>> {
 	return new Promise((settle) => {
 		executor(

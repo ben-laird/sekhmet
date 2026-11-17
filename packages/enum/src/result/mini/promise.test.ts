@@ -158,18 +158,65 @@ Deno.test("promiseResult() rejects resolving with a thenable", () => {
 	});
 });
 
-Deno.test("promiseResult() rejects an executor that returns a value", () => {
-	// Given: a promise to settle from
-	const pending = Promise.resolve(1);
+Deno.test("promiseResult() accepts a void-returning executor", async () => {
+	// Given: an expression-bodied executor, as new Promise accepts
+	const promise = promiseResult<number, string>((resolve) => resolve(1));
 
-	// When / Then: an async executor does not compile, since its rejection
-	// would go unhandled and the promise might never settle
-	// @ts-expect-error the executor must return undefined, not a promise
-	void promiseResult<number, string>(() => pending.then(() => undefined));
+	// When: the promise settles
+	const result = await promise;
 
-	// When / Then: an expression body returning resolve's void does not compile
-	// @ts-expect-error the executor must return undefined, not void
-	void promiseResult<number, string>((resolve) => resolve(1));
+	// Then: it holds Ok of the value
+	assertEquals(result, Ok(1));
+});
+
+Deno.test("promiseResult() treats an async executor as new Promise does", async (t) => {
+	await t.step("one that resolves after an await settles", async () => {
+		// Given: an async executor resolving once a promise fulfills
+		const promise = promiseResult<number, string>(async (resolve) => {
+			resolve(await Promise.resolve(1));
+		});
+
+		// When: the promise settles
+		const result = await promise;
+
+		// Then: it holds Ok of the value
+		assertEquals(result, Ok(1));
+	});
+
+	await t.step({
+		name: "one that throws after an await never settles",
+		// Observing the lost rejection needs the web unhandledrejection event
+		ignore: typeof globalThis.addEventListener !== "function",
+		fn: async () => {
+			// Given: a listener catching the executor's lost rejection
+			const lost: unknown[] = [];
+			const onUnhandled = (event: PromiseRejectionEvent): void => {
+				lost.push(event.reason);
+				event.preventDefault();
+			};
+			globalThis.addEventListener("unhandledrejection", onUnhandled);
+			let timer: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				// When: an async executor throws after an await
+				const promise = promiseResult<number, string>(async () => {
+					await Promise.resolve();
+					throw new Error("lost");
+				});
+				const pending = new Promise<"pending">((resolve) => {
+					timer = setTimeout(() => resolve("pending"), 20);
+				});
+				const winner = await Promise.race([promise, pending]);
+
+				// Then: the promise is still pending, and the throw went unhandled
+				assertEquals(winner, "pending");
+				assertEquals(String(lost[0]), "Error: lost");
+			} finally {
+				clearTimeout(timer);
+				globalThis.removeEventListener("unhandledrejection", onUnhandled);
+			}
+		},
+	});
 });
 
 Deno.test("promiseResult()'s promise is covariant in its Result", async () => {
