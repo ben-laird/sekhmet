@@ -1,7 +1,8 @@
 /**
  * Workflow helpers: functions that mark the state of the code itself. `todo`
  * and `unimplemented` mark missing code, `unreachable` makes a `switch`
- * exhaustive, and `invariant` asserts what only a bug can break. Each panics
+ * exhaustive, and `invariant`, `invariantEqual`, `defined` and `satisfies`
+ * check what only a bug can break. Each panics
  * through `@sekhmet/panic` as `Panic (Todo)`, `Panic (Unimplemented)`,
  * `Panic (Unreachable)` or `Panic (Invariant)`, with a typed cause and a
  * type guard to recognize it.

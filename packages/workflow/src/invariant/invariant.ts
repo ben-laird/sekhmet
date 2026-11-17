@@ -7,12 +7,9 @@
  */
 
 import type { Panic } from "@sekhmet/panic/mini/core";
-import { guardedMessage, textField, urlField } from "../workflow-panic/read.ts";
-import {
-	issueLine,
-	messageLines,
-	WorkflowPanic,
-} from "../workflow-panic/workflow-panic.ts";
+import { WorkflowPanic } from "../workflow-panic/workflow-panic.ts";
+import type { DefinedAbsent } from "./defined.ts";
+import { violated } from "./violation.ts";
 
 /** What {@linkcode invariant} is given besides the condition. */
 export interface InvariantOptions {
@@ -25,10 +22,49 @@ export interface InvariantOptions {
 	readonly issueUrl?: URL;
 }
 
-/** The cause of the panic {@linkcode invariant} throws. */
+/**
+ * Which check broke an invariant, with the value(s) that broke it. `kind`
+ * names the check:
+ *
+ * - `"condition"`: {@linkcode invariant} was given a falsy `condition`.
+ * - `"defined"`: `defined` was given an absent `value`, by its `absent`.
+ * - `"satisfies"`: `satisfies`'s predicate rejected `value`.
+ * - `"equal"`: `invariantEqual` found `actual` unequal to `expected`; each
+ *   is present exactly when it could be read off the options.
+ */
+export type InvariantCheck =
+	| {
+			readonly kind: "condition";
+			/** The falsy condition that broke the invariant */
+			readonly condition: unknown;
+	  }
+	| {
+			readonly kind: "defined";
+			/** What counted as absent */
+			readonly absent: DefinedAbsent;
+			/** The absent value */
+			readonly value: null | undefined;
+	  }
+	| {
+			readonly kind: "satisfies";
+			/** The value the predicate rejected */
+			readonly value: unknown;
+	  }
+	| {
+			readonly kind: "equal";
+			/** The value the program computed, present when it could be read */
+			readonly actual?: unknown;
+			/** The value it should have computed, present when it could be read */
+			readonly expected?: unknown;
+	  };
+
+/**
+ * The cause of the panic {@linkcode invariant} and the other invariant checks
+ * throw. `check` says which check failed and keeps the offending value(s).
+ */
 export interface InvariantCause {
-	/** The falsy condition that broke the invariant */
-	readonly condition: unknown;
+	/** Which check failed, with the value(s) that failed it */
+	readonly check: InvariantCheck;
 	/** What the program should have done */
 	readonly expectedBehavior: string;
 	/** Where to report the bug, if given */
@@ -85,31 +121,16 @@ export function invariant(
 	if (condition) {
 		return;
 	}
-	const expectedBehavior =
-		textField({ from: options, key: "expectedBehavior" }) ?? NOT_GIVEN;
-	const issueUrl = urlField({ from: options, key: "issueUrl" });
-	throw new WorkflowPanic<InvariantCause>({
-		kind: "Invariant",
-		message: guardedMessage({
-			header: HEADER,
-			build: () => {
-				return messageLines([
-					HEADER,
-					`Expected behavior: ${expectedBehavior}`,
-					issueLine(issueUrl),
-				]);
-			},
-		}),
-		cause: { condition, expectedBehavior, issueUrl },
-	});
+	violated({ check: { kind: "condition", condition }, options });
 }
 
 /**
- * Whether `value` is the panic {@linkcode invariant} throws. It runs no Proxy
- * trap, and a `Panic` built by hand with the same name is not one.
+ * Whether `value` is the panic {@linkcode invariant} (or another invariant
+ * check) throws. It runs no Proxy trap, and a `Panic` built by hand with the
+ * same name is not one.
  *
  * @param value Any caught value
- * @returns True if `invariant` threw `value`, narrowing it to
+ * @returns True if an invariant check threw `value`, narrowing it to
  *   `Panic<InvariantCause>`
  *
  * @example
@@ -136,8 +157,3 @@ export function isInvariantPanic(
 ): value is Panic<InvariantCause> {
 	return WorkflowPanic.kindOf(value) === "Invariant";
 }
-
-const HEADER = "an invariant was violated";
-
-/** The expected behavior shown when an untyped caller gave none. */
-const NOT_GIVEN = "(not given)";
