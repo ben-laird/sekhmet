@@ -1575,3 +1575,201 @@ Deno.test("generateMain rejects namespaces and arguments it can't generate", asy
 		});
 	}
 });
+
+/** A feature whose Struct-based `Box` carries views, `AnyBox` being any box. */
+const VIEWING: Feature = {
+	...FEATURE,
+	construct: "params",
+	views: { any: "AnyBox" },
+};
+
+/** A `View<S>` type of the barrel. */
+const view = (arg: TypeNode): TypeNode => ({
+	kind: "ref",
+	name: "View",
+	args: [arg],
+	resolution: { kind: "local" },
+});
+
+/** `S extends Box<A>`, a type parameter standing for the exact receiver. */
+const exactParam: TypeParam = {
+	name: "S",
+	constraint: named("Box", [typeParam("A")]),
+	default: undefined,
+};
+
+/** A signature with type parameters declared in full (with constraints). */
+function constrainedSignature({
+	typeParams,
+	params,
+	returnType,
+}: {
+	typeParams: TypeParam[];
+	params: Param[];
+	returnType: TypeNode;
+}): FunctionDeclaration {
+	return { ...signature({ params, returnType }), typeParams };
+}
+
+/** `wrapped<A, S extends Box<A>>(self: S & Box<A>): Box<A> & View<S>`. */
+const WRAPPED = fn(
+	"wrapped",
+	constrainedSignature({
+		typeParams: [declare("A"), exactParam],
+		params: [
+			param("self", {
+				kind: "intersection",
+				types: [typeParam("S"), named("Box", [typeParam("A")])],
+			}),
+		],
+		returnType: {
+			kind: "intersection",
+			types: [named("Box", [typeParam("A")]), view(typeParam("S"))],
+		},
+	}),
+);
+
+Deno.test("generateMain gives a primary carrying views a fromMiniView that copies and checks", () => {
+	// Given: a feature whose primary carries views
+	const feature = VIEWING;
+
+	// When: generating
+	const output = source([], feature);
+
+	// Then: fromMiniView rebuilds from the params, copies the view, and
+	// panics on any other prototype than mini's or main's
+	assertStringIncludes(
+		output,
+		"static fromMiniView<T, V extends object>(self: mini.Box<T> & V): Box<T> & V {",
+	);
+	assertStringIncludes(
+		output,
+		"if (prototype !== Box.prototype && prototype !== mini.Box.prototype) {",
+	);
+	assertStringIncludes(output, "throw new TypeError(");
+	assertStringIncludes(
+		output,
+		"return Object.assign(new Box(getStructParams(self)), self);",
+	);
+});
+
+Deno.test("generateMain renders an exact receiver as this and converts its view", () => {
+	// Given: wrapped(self: S & Box<A>), returning Box<A> & View<S>
+	const symbols = [WRAPPED];
+
+	// When: generating with views
+	const output = source(symbols, VIEWING);
+
+	// Then: S is this, A is the class's T, and the result keeps its view
+	assertStringIncludes(output, "wrapped(): Box<T> & View<this> {");
+	assertStringIncludes(output, "return Box.fromMiniView(mini.wrapped(this));");
+});
+
+Deno.test("generateMain renders a receiver typed by the any alias as this", () => {
+	// Given: tag<S extends AnyBox>(self: S, label: string): S
+	const tag = fn(
+		"tag",
+		constrainedSignature({
+			typeParams: [
+				{ name: "S", constraint: named("AnyBox"), default: undefined },
+			],
+			params: [
+				param("self", typeParam("S")),
+				param("label", keyword("string")),
+			],
+			returnType: typeParam("S"),
+		}),
+	);
+
+	// When: generating with views
+	const output = source([tag], VIEWING);
+
+	// Then: the method returns this, unconverted
+	assertStringIncludes(output, "tag(label: string): this {");
+	assertStringIncludes(output, "return mini.tag(this, label);");
+});
+
+Deno.test("generateMain renders a field's receiver type parameter as this", () => {
+	// Given: stack<A, S extends Box<A>>(options: StackOptions<A, S>),
+	// returning Box<A[]> & View<S>, borrowed onto a viewing primary
+	const stack = fn(
+		"stack",
+		constrainedSignature({
+			typeParams: [declare("A"), exactParam],
+			params: [stackOptions(typeParam("A"), typeParam("S"))],
+			returnType: {
+				kind: "intersection",
+				types: [
+					named("Box", [{ kind: "array", element: typeParam("A") }]),
+					view(typeParam("S")),
+				],
+			},
+		}),
+	);
+
+	// When: generating
+	const result = borrowing({
+		borrowed: [WRAP, stack, LABEL, STACK_OPTIONS],
+		feature: { ...VIEWING, borrows: [SHELF] },
+	});
+
+	// Then: the receiver fills S, so it is this, not a method parameter
+	assert(result.ok);
+	assertStringIncludes(result.value, "stack(): Box<T[]> & View<this> {");
+	assertStringIncludes(
+		result.value,
+		"return Box.fromMiniView(shelf.stack({ item: this }));",
+	);
+});
+
+Deno.test("generateMain renders a namespace method's exact receiver as the mini type it holds", () => {
+	// Given: wrapped borrowed onto an `.on` namespace of a viewing primary
+	const borrow: Borrow = {
+		...ON_SHELF,
+		methods: [{ name: "wrapped", doc: METHOD_DOC }],
+	};
+
+	// When: generating
+	const result = generateMain({
+		feature: { ...VIEWING, borrows: [borrow] },
+		symbols: [BOX_CLASS],
+		sources: SOURCES,
+		miniUrl: MINI_URL,
+		outputUrl: OUTPUT_URL,
+		borrowed: [{ borrow, url: SHELF_URL, symbols: [WRAPPED] }],
+	});
+
+	// Then: S is the held mini Box, since the namespace isn't the receiver
+	assert(result.ok);
+	assertStringIncludes(result.value, "wrapped(): Box<T> & View<mini.Box<T>> {");
+	assertStringIncludes(
+		result.value,
+		"return Box.fromMiniView(shelf.wrapped(this.#self));",
+	);
+});
+
+Deno.test("generateMain takes the view receiver forms only with views", () => {
+	// Given: wrapped(self: S & Box<A>), in a feature without views
+	const feature: Feature = { ...FEATURE, construct: "params" };
+
+	// When: generating
+	const result = generate([WRAPPED], feature);
+
+	// Then: it isn't a method, and its intersection can't be converted
+	assert(!result.ok);
+	assertEquals(result.error.symbol, "wrapped");
+	assertStringIncludes(result.error.message, "Box.fromMiniView");
+});
+
+Deno.test("generateMain rejects views on an Enum-based primary", () => {
+	// Given: views on a primary rebuilt from its variant
+	const feature: Feature = { ...VIEWING, construct: "variant" };
+
+	// When: generating
+	const result = generate([], feature);
+
+	// Then: it fails, since a view is copied onto a Struct rebuilt from params
+	assert(!result.ok);
+	assertEquals(result.error.symbol, "Box");
+	assertStringIncludes(result.error.message, '`construct: "params"`');
+});

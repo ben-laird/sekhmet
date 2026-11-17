@@ -1,10 +1,10 @@
 import { Ok as MainOk, Result } from "@sekhmet/enum/result";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
-import { assertEquals, assertInstanceOf } from "@std/assert";
+import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import type { Branded } from "@/src/algebra/main/mod.ts";
 import { object, union } from "@/src/composites/main/mod.ts";
-import type * as mini from "@/src/core/mini/mod.ts";
+import * as mini from "@/src/core/mini/mod.ts";
 import { boolean, number, string } from "@/src/primitives/main/mod.ts";
 import {
 	type ErrorOf,
@@ -33,6 +33,40 @@ Deno.test("MainSchemaMember names exactly the members main adds to mini", () => 
 	// When: comparing what main adds with the names a view reserves
 	// Then: they are the same, so a view can shadow no main member
 	assertType<IsExact<Added, MainSchemaMember>>(true);
+});
+
+Deno.test("Schema.fromMiniView copies a view onto a main Schema, from mini or main", () => {
+	// Given: a mini and a main schema, each with a view
+	const text = mini.viewed({
+		init: { parse: (input: string) => Ok(input) },
+		view: { label: "text" },
+	});
+	const main = Object.assign(
+		new Schema({ parse: (input: string) => Ok(input) }),
+		{ label: "main" },
+	);
+
+	// When: viewing each as main
+	const fromMini = Schema.fromMiniView(text);
+	const fromMain = Schema.fromMiniView(main);
+
+	// Then: each is a new main Schema over the same params, with the view
+	assertEquals(fromMini.label, "text");
+	assertEquals(fromMain.label, "main");
+	assertEquals(fromMini.parseSync("a").unwrap(), "a");
+	assertEquals(fromMain === main, false);
+	assertInstanceOf(fromMini, Schema);
+	assertInstanceOf(fromMain, Schema);
+});
+
+Deno.test("Schema.fromMiniView panics on a subclass, which the copy would lose", () => {
+	// Given: an instance of a subclass of the mini Schema
+	class Tagged extends mini.Schema<string, string, never> {}
+	const tagged = new Tagged({ parse: (input: string) => Ok(input) });
+
+	// When: viewing it as main
+	// Then: it panics with a TypeError
+	assertThrows(() => Schema.fromMiniView(tagged), TypeError, "subclass");
 });
 
 const digits = new Schema({

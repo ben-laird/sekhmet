@@ -133,7 +133,6 @@ export {
 	typeName,
 	UnexpectedAsyncParse,
 	UnknownKey,
-	viewed,
 } from "../mini/mod.ts";
 
 /**
@@ -173,6 +172,26 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 		if (self instanceof Schema) return self;
 
 		return new Schema(getStructParams(self));
+	}
+
+	/**
+	 * Views a mini {@linkcode mini.Schema} with a view (own properties holding the children it was built from) as a main `Schema` with the same view: a new main instance over the same struct params, with `self`'s own properties copied on. Panics with a `TypeError` when `self` is an instance of any other class than mini's or main's `Schema` (a subclass would lose its behaviour in the copy).
+	 *
+	 * @template V - The view
+	 * @param self - The Schema to convert
+	 * @returns A main `Schema` over `self`'s params, with its view
+	 */
+	static fromMiniView<I, O, E, V extends object>(
+		self: mini.Schema<I, O, E> & V,
+	): Schema<I, O, E> & V {
+		const prototype: unknown = Object.getPrototypeOf(self);
+		if (prototype !== Schema.prototype && prototype !== mini.Schema.prototype) {
+			throw new TypeError(
+				"Schema.fromMiniView: expected a mini or main Schema, not an instance of a subclass",
+			);
+		}
+
+		return Object.assign(new Schema(getStructParams(self)), self);
 	}
 
 	/**
@@ -766,4 +785,44 @@ export class SchemaWith<I, O, E> {
 	readonly(): Schema<I, algebra.ReadonlyOutput<O>, E> {
 		return Schema.fromMini(algebra.readonly(this.#self));
 	}
+}
+
+/**
+ * A schema with a view: `new Schema(init)` with `view`'s own properties
+ * copied onto it, so the schema exposes its children typed as passed. A
+ * view holds no state of its own; pass the same children the schema's node
+ * holds. Use it with `custom()` nodes to give a composite of your own typed
+ * children. A reserved key ({@linkcode ReservedViewKey}) is a type error.
+ *
+ * @template I - The input type
+ * @template O - The output type
+ * @template E - The error type
+ * @template V - The view
+ * @param options - The schema's init, and its view
+ * @returns The schema, with the view's properties
+ * @example
+ * ```ts
+ * import { assertStrictEquals } from "@std/assert";
+ * import { getStructParams } from "@sekhmet/primordials/struct";
+ * import { custom, nodeKind } from "@sekhmet/schema/core";
+ * import { viewed } from "@sekhmet/schema/core";
+ * import { string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const Labelled = nodeKind<{ readonly label: string }>({ name: "Labelled" });
+ * const text = string();
+ * const labelled = viewed({
+ * 	init: {
+ * 		parse: getStructParams(text).parse,
+ * 		node: custom({ kind: Labelled, data: { label: "name" }, children: [text] }),
+ * 	},
+ * 	view: { text },
+ * });
+ *
+ * assertStrictEquals(labelled.text, text);
+ * ```
+ */
+export function viewed<I, O, E, const V extends object>(
+	options: mini.ViewedOptions<I, O, E, V>,
+): Schema<I, O, E> & V {
+	return Schema.fromMiniView(mini.viewed(options));
 }

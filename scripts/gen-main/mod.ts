@@ -13,6 +13,7 @@ export type {
 	FunctionFeature,
 	MethodDoc,
 	NamespaceProperty,
+	Views,
 	WrapTarget,
 } from "./src/config.ts";
 export { FEATURES, isClassFeature } from "./src/config.ts";
