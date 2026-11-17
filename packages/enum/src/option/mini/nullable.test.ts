@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { None, type Option, Some } from "./core.ts";
-import { maybe } from "./nullable.ts";
+import { maybe, type Present } from "./nullable.ts";
 
 /** Returns `value` typed as `T`, out of reach of control-flow narrowing. */
 function typed<T>(value: T): T {
@@ -134,6 +134,18 @@ Deno.test("maybe() with a widened mode keeps both possibilities", () => {
 
 	// Then: the Some type is the union of both modes' narrowings
 	assertType<IsExact<typeof option, Option<string | null | undefined>>>(true);
+});
+
+Deno.test("Present of a never mode is the nullish default's narrowing", () => {
+	// Given: a possibly absent type
+	type Value = string | null | undefined;
+
+	// When: it is narrowed by the never mode, which no value has at runtime
+	type Narrowed = Present<Value, never>;
+
+	// Then: it narrows like the "nullish" fallback, not to never
+	assertType<IsExact<Narrowed, string>>(true);
+	assertType<IsExact<Narrowed, Present<Value, "nullish">>>(true);
 });
 
 Deno.test("maybe() rejects unknown modes and narrowed reads", () => {

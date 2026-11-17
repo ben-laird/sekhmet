@@ -27,14 +27,20 @@ export type MaybeOptions<A extends Absent> = {
 /**
  * The type of `T` once the values that `A` counts as absent are removed.
  *
+ * A union of modes gives the union of their narrowings, since any of them
+ * may apply at runtime. `never`, which no mode can be at runtime, gives the
+ * `"nullish"` default that {@linkcode maybe} falls back to.
+ *
  * @template T - The possibly absent type
  * @template A - Which values count as absent
  */
-export type Present<T, A extends Absent> = A extends "undefined"
-	? Exclude<T, undefined>
-	: A extends "null"
-		? Exclude<T, null>
-		: NonNullable<T>;
+export type Present<T, A extends Absent> = [A] extends [never]
+	? NonNullable<T>
+	: A extends "undefined"
+		? Exclude<T, undefined>
+		: A extends "null"
+			? Exclude<T, null>
+			: NonNullable<T>;
 
 /**
  * Wraps a value in an `Option`: `None` when it is absent, `Some` otherwise.
@@ -64,18 +70,22 @@ export function maybe<T, A extends Absent = "nullish">(
 	value: T,
 	options?: MaybeOptions<A>,
 ): Option<Present<T, A>> {
-	const isPresent = presenceIn<T, A>(options?.absent ?? "nullish");
+	const isPresent = presenceIn<T, A>(options?.absent);
 	if (isPresent(value)) return Some(value);
 
 	return None();
 }
 
-/** The guard for the values that `absent` doesn't count as absent. */
+/**
+ * The guard for the values that mode `absent` doesn't count as absent. A
+ * missing mode is `"nullish"`, whose present values are present in every mode.
+ */
 function presenceIn<T, A extends Absent>(
-	absent: Absent,
+	absent: A | undefined,
 ): (value: T) => value is Present<T, A> {
 	return (value): value is Present<T, A> => {
 		switch (absent) {
+			case undefined:
 			case "nullish":
 				return value !== null && value !== undefined;
 			case "undefined":
