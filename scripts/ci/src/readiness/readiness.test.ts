@@ -78,6 +78,29 @@ Deno.test("staticFindings reports each kind of failure with its check", () => {
 	]);
 });
 
+Deno.test("staticFindings reports a todo call only in package src/", () => {
+	// Given: the same todo call in package source, a package test, a
+	// package's top-level module and a script
+	const call = 'import { todo as t } from "@sekhmet/workflow/todo";\nt();';
+	const files = cleanRepo();
+	files.set("packages/a/src/a.ts", call);
+	files.set(
+		"packages/a/src/a.test.ts",
+		`${call}\nDeno.test("a", () => {\n\t// Given: a\n\t// When: b\n\t// Then: c\n});`,
+	);
+	files.set("packages/b/mod.ts", `${call}\nexport const b = 1;`);
+	files.set("scripts/ci/x.ts", call);
+
+	// When: running the static checks
+	const findings = staticFindings(files);
+
+	// Then: only the package source is reported
+	assertEquals(
+		findings.map(({ check, file, line }) => [check, file, line]),
+		[["todo", "packages/a/src/a.ts", 2]],
+	);
+});
+
 Deno.test("docLintMembers covers packages and scripts but not the add templates", () => {
 	// Given: the ready repo's workspace
 	const workspace = readWorkspace(cleanRepo());
