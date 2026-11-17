@@ -72,7 +72,9 @@ Each cause is a plain object, typed and exported:
 
 - `TodoCause` and `UnimplementedCause`: `{ description, subtasks,
   trackingUrl }`, with `undefined` for an absent description or URL and `[]`
-  for an absent checklist.
+  for an absent checklist. The checklist is a frozen copy, with each
+  subtask's `complete` spelled out as `true` or `false`, so changing the
+  caller's array afterwards does not change the cause.
 - `UnreachableCause`: `{ value?, issueUrl }`; `value` is present exactly when
   one was passed.
 - `InvariantCause`: `{ condition, expectedBehavior, issueUrl }`, where
@@ -99,11 +101,14 @@ assertEquals(thrown.cause, {
 
 ## Exhaustiveness with `unreachable`
 
-`UnreachableOptions.value` has type `never`, so `unreachable({ value })`
-compiles only where `value` has been narrowed to `never`. In the `default` of
-a `switch` over a union, that means every member is handled; add a member and
-the call becomes a compile error. Passing a value that is not narrowed is
-always a type error, as is passing `undefined`.
+`unreachable` has two overloads: one without a value (`UnreachableOptions`)
+and one whose `value` is required and typed `never`
+(`UnreachableValueOptions`). So `unreachable({ value })` compiles only where
+`value` has been narrowed to `never`. In the `default` of a `switch` over a
+union, that means every member is handled; add a member and the call becomes
+a compile error. Passing a value that is not narrowed is always a type error,
+as is passing `undefined` or `any`, whether or not your project turns on
+`exactOptionalPropertyTypes`.
 
 ## Rendering the impossible value
 
@@ -112,17 +117,40 @@ be anything. It is rendered with a small, runtime-agnostic formatter that
 never throws:
 
 - strings are quoted, `-0` and BigInts (`10n`) are kept apart, symbols read as
-  `Symbol(tag)`, functions as `[Function: name]`;
-- objects and arrays are shown two levels deep and ten entries wide, with a
-  class instance prefixed by its class name, and cycles shown as `[Circular]`;
+  `Symbol(tag)`, functions as `[Function: name]`, errors as
+  `[TypeError: message]`;
+- objects, arrays, typed arrays, maps and sets are shown two levels deep and
+  ten entries wide, as `{ a: 1 }`, `[1, <empty>, 3]`,
+  `Uint8Array(3) [0, 0, 0]`, `Map(1) { "a" => 1 }` and `Set(1) { 1 }`, with a
+  class instance prefixed by its class name and cycles shown as `[Circular]`;
 - properties are read through their descriptors, so no getter runs (shown as
   `[Getter]`) and no `toJSON` or `toString` is called;
 - anything that still throws, such as a revoked Proxy, renders as
   `[unrenderable value]`.
 
-Text you pass (descriptions, URLs, the expected behavior) goes through
-`String`, falling back to the same formatter if that throws. Building a
-message never throws while panicking.
+Rendering is bounded, so a huge value cannot make a huge message or a slow
+panic: strings and keys are cut at 200 characters (`"aaa…"… 4999800 more
+chars`), lists are read by index and their hidden entries counted from their
+length, and at most a hundred keys of an object are examined. A Proxy's own
+`ownKeys` trap still runs once, at whatever cost it has.
+
+Text you pass (descriptions, subtasks, the expected behavior) goes through
+`String`, falling back to the same formatter if that throws, and is cut at a
+thousand characters. A todo message lists at most fifty subtasks, then
+`… N more subtasks`; the cause keeps them all.
+
+## Never throwing while panicking
+
+A helper runs when the program is already wrong, so it must throw its own
+panic and nothing else. Every option is read through a guard: an untyped
+caller's `null` options, a throwing getter, a hostile Proxy or a checklist
+that is not an array cannot replace the panic with another error.
+
+- a field that cannot be read renders as `[unrenderable value]`;
+- a checklist that is not an array counts as empty;
+- a URL that is not a `URL` is left out;
+- `invariant` given no expected behavior says `(not given)`;
+- if building the message still throws, the message is the header alone.
 
 ## Recognizing the panics
 
@@ -134,6 +162,13 @@ brand set when the helper throws, so:
 - a `Panic` built by hand with the same name and cause is not accepted;
 - each accepts only its own helper's panic: a todo panic is not an
   unimplemented one.
+
+The brand belongs to the class in one copy of `@sekhmet/workflow`, so a guard
+recognizes only panics thrown by that same copy, in the same realm. A panic
+from a second copy of the package (two versions in one dependency tree, say)
+or from another realm (an iframe, a worker, a `vm` context) fails every
+guard. Such a panic is still a `Panic` named `Panic (Todo)` and so on; to
+handle it, deduplicate the package, or fall back to its `name`.
 
 ```ts
 import { definePanicRuntime } from "@sekhmet/panic";
@@ -157,8 +192,18 @@ assertEquals(payload.cause.expectedBehavior, "false should be true");
 
 ## Keeping `todo` out of releases
 
-The publish-readiness step of `deno task ci` fails on a call to `todo`
-imported from `@sekhmet/workflow` (any subpath, under any alias, or through a
-namespace import) in non-test source under `packages/*/src`. Tests, the
-playground and `scripts/` may call it freely. `unimplemented`, `unreachable`
-and `invariant` are meant to ship and are never flagged.
+The publish-readiness step of `deno task ci` fails when a package's non-test
+source (its `src/` and its top-level modules alike) reaches `todo` from
+`@sekhmet/workflow`. It flags the import itself, not call sites, so every call
+shape is caught:
+
+- a value import binding `todo`, under any alias or quoted name;
+- a re-export of `todo`, or an `export *` of a module holding it;
+- `ns.todo`, `ns?.todo` or `ns["todo"]` through a namespace import;
+- a dynamic `import()` of a module holding `todo`.
+
+It recognizes the package by every specifier form: bare, `jsr:` (with a
+version), `npm:@jsr/sekhmet__workflow`, `https://jsr.io/@sekhmet/workflow/…`
+URLs, and relative paths into `packages/workflow`. Tests, the playground and
+`scripts/` may use `todo` freely. `unimplemented`, `unreachable` and
+`invariant` are meant to ship and are never flagged.

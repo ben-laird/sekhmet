@@ -9,8 +9,8 @@
  * - `publish-exclude`: the root `publish.exclude` keeps tests out of packages
  * - `given-when-then`: every test and step has Given/When/Then comments
  * - `specifiers`: `@sekhmet/*` imports in READMEs and JSDoc name real exports
- * - `todo`: package source under `src/` calls no `todo` from
- *   `@sekhmet/workflow`
+ * - `todo`: package source does not import, re-export or reach `todo`
+ *   from `@sekhmet/workflow`
  * - `doc-lint`: `deno doc --lint` over each package's export set
  * - `allowlist`: an allowlist entry that no longer matches a finding
  */

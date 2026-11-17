@@ -7,23 +7,29 @@
  */
 
 import type { Panic } from "@sekhmet/panic/mini/core";
-import { describeValue } from "../workflow-panic/describe.ts";
+import { describeValue, UNRENDERABLE } from "../workflow-panic/describe.ts";
+import { guardedMessage, readField, urlField } from "../workflow-panic/read.ts";
 import {
 	issueLine,
 	messageLines,
 	WorkflowPanic,
 } from "../workflow-panic/workflow-panic.ts";
 
-/** What {@linkcode unreachable} is given. Every part is optional. */
+/** What {@linkcode unreachable} is given without an impossible value. */
 export interface UnreachableOptions {
-	/**
-	 * The value that should be impossible here, narrowed to `never`. A value
-	 * of any other type is a compile error, which is what makes a `switch`
-	 * exhaustive.
-	 */
-	readonly value?: never;
 	/** Where to report the bug, such as the repository's issue tracker */
 	readonly issueUrl?: URL;
+}
+
+/**
+ * What {@linkcode unreachable} is given with the impossible value. `value` is
+ * required and typed `never`, so only a value narrowed to `never` compiles,
+ * which is what makes a `switch` exhaustive. Being required, it rejects
+ * `undefined` and `any` whether or not `exactOptionalPropertyTypes` is on.
+ */
+export interface UnreachableValueOptions extends UnreachableOptions {
+	/** The value that should be impossible here, narrowed to `never` */
+	readonly value: never;
 }
 
 /**
@@ -50,7 +56,8 @@ export interface UnreachableCause {
  * Please file an issue at https://example.com/issues
  * ```
  *
- * @param options The impossible value and an issue URL, both optional
+ * @param options An issue URL, optional; the overload taking
+ *   {@linkcode UnreachableValueOptions} also takes the impossible value
  * @returns Never; it always panics
  *
  * @example
@@ -82,23 +89,46 @@ export interface UnreachableCause {
  * assertEquals(thrown.cause.value, { kind: "triangle" });
  * ```
  */
-export function unreachable(options: UnreachableOptions = {}): never {
-	const { issueUrl } = options;
-	if (!("value" in options)) {
+export function unreachable(options?: UnreachableOptions): never;
+/**
+ * Panics as `Panic (Unreachable)`, keeping the impossible `value` in the
+ * cause and rendering it in the message. The call compiles only where
+ * `value` has been narrowed to `never`.
+ *
+ * @param options The impossible value, and an optional issue URL
+ * @returns Never; it always panics
+ */
+export function unreachable(options: UnreachableValueOptions): never;
+export function unreachable(
+	options: UnreachableOptions | UnreachableValueOptions = {},
+): never {
+	const issueUrl = urlField({ from: options, key: "issueUrl" });
+	const read = readField({ from: options, key: "value" });
+	if (read.kind === "absent") {
 		throw new WorkflowPanic<UnreachableCause>({
 			kind: "Unreachable",
-			message: messageLines([HEADER, issueLine(issueUrl)]),
+			message: guardedMessage({
+				header: HEADER,
+				build: () => messageLines([HEADER, issueLine(issueUrl)]),
+			}),
 			cause: { issueUrl },
 		});
 	}
-	const { value } = options;
+	const value = read.kind === "present" ? read.value : undefined;
 	throw new WorkflowPanic<UnreachableCause>({
 		kind: "Unreachable",
-		message: messageLines([
-			HEADER,
-			`Impossible value: ${describeValue(value)}`,
-			issueLine(issueUrl),
-		]),
+		message: guardedMessage({
+			header: HEADER,
+			build: () => {
+				const shown =
+					read.kind === "present" ? describeValue(read.value) : UNRENDERABLE;
+				return messageLines([
+					HEADER,
+					`Impossible value: ${shown}`,
+					issueLine(issueUrl),
+				]);
+			},
+		}),
 		cause: { value, issueUrl },
 	});
 }

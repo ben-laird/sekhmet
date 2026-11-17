@@ -7,7 +7,6 @@
  */
 
 import { Panic } from "@sekhmet/panic/mini/core";
-import { displayText } from "./describe.ts";
 
 /**
  * Which workflow helper threw a panic. It is also the panic's name, so the panic
@@ -59,5 +58,5 @@ export function issueLine(issueUrl: URL | undefined): string | undefined {
 	if (issueUrl === undefined) {
 		return undefined;
 	}
-	return `Please file an issue at ${displayText(issueUrl)}`;
+	return `Please file an issue at ${issueUrl.href}`;
 }

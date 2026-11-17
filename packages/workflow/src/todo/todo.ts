@@ -8,7 +8,13 @@
  */
 
 import type { Panic } from "@sekhmet/panic/mini/core";
-import { displayText } from "../workflow-panic/describe.ts";
+import {
+	flagField,
+	guardedMessage,
+	listField,
+	textField,
+	urlField,
+} from "../workflow-panic/read.ts";
 import {
 	messageLines,
 	WorkflowPanic,
@@ -38,7 +44,8 @@ export type UnimplementedOptions = TodoOptions;
 
 /**
  * The cause of the panic {@linkcode todo} throws: its options, with absent
- * parts as `undefined` and an absent checklist as `[]`.
+ * parts as `undefined` and an absent checklist as `[]`. The checklist is a
+ * frozen copy, so changing the caller's array later does not change it.
  */
 export interface TodoCause {
 	/** What is missing, if given */
@@ -54,7 +61,7 @@ export type UnimplementedCause = TodoCause;
 
 /**
  * Panics as `Panic (Todo)`: this code path is not written yet, but will be.
- * Use it as a placeholder while building; `deno task ci` rejects a call in
+ * Use it as a placeholder while building; `deno task ci` rejects importing it in
  * published package source.
  *
  * The message opens with a header line, then the description with its
@@ -208,14 +215,27 @@ function workPanic({
 	options: TodoOptions;
 }): WorkflowPanic<TodoCause> {
 	const cause: TodoCause = {
-		description: options.description,
-		subtasks: options.subtasks ?? [],
-		trackingUrl: options.trackingUrl,
+		description: textField({ from: options, key: "description" }),
+		subtasks: Object.freeze(
+			listField({ from: options, key: "subtasks" }).map(subtaskOf),
+		),
+		trackingUrl: urlField({ from: options, key: "trackingUrl" }),
 	};
 	return new WorkflowPanic({
 		kind,
-		message: workMessage({ kind, cause }),
+		message: guardedMessage({
+			header: HEADERS[kind],
+			build: () => workMessage({ kind, cause }),
+		}),
 		cause,
+	});
+}
+
+/** A frozen subtask copied out of the caller's checklist, read without throwing. */
+function subtaskOf(item: unknown): Subtask {
+	return Object.freeze({
+		description: textField({ from: item, key: "description" }) ?? "",
+		complete: flagField({ from: item, key: "complete" }),
 	});
 }
 
@@ -226,14 +246,19 @@ function workMessage({
 	kind: WorkKind;
 	cause: TodoCause;
 }): string {
+	const hidden = subtasks.length - MAX_SUBTASK_LINES;
 	return messageLines([
 		HEADERS[kind],
 		workLine({ kind, description, trackingUrl }),
-		...subtasks.map((subtask) => {
-			return `  - [${subtask.complete ? "x" : " "}] ${displayText(subtask.description)}`;
+		...subtasks.slice(0, MAX_SUBTASK_LINES).map((subtask) => {
+			return `  - [${subtask.complete ? "x" : " "}] ${subtask.description}`;
 		}),
+		hidden > 0 ? `  … ${hidden} more subtasks` : undefined,
 	]);
 }
+
+/** How many subtasks a message lists; the cause keeps them all. */
+const MAX_SUBTASK_LINES = 50;
 
 /** `Todo: <description> (tracked at <url>)`, `Tracked at <url>`, or nothing. */
 function workLine({
@@ -245,10 +270,10 @@ function workLine({
 	description: string | undefined;
 	trackingUrl: URL | undefined;
 }): string | undefined {
-	const url = trackingUrl === undefined ? undefined : displayText(trackingUrl);
+	const url = trackingUrl?.href;
 	if (description === undefined) {
 		return url === undefined ? undefined : `Tracked at ${url}`;
 	}
 	const suffix = url === undefined ? "" : ` (tracked at ${url})`;
-	return `${kind}: ${displayText(description)}${suffix}`;
+	return `${kind}: ${description}${suffix}`;
 }

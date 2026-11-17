@@ -7,7 +7,7 @@
  */
 
 import type { Panic } from "@sekhmet/panic/mini/core";
-import { displayText } from "../workflow-panic/describe.ts";
+import { guardedMessage, textField, urlField } from "../workflow-panic/read.ts";
 import {
 	issueLine,
 	messageLines,
@@ -85,14 +85,21 @@ export function invariant(
 	if (condition) {
 		return;
 	}
-	const { expectedBehavior, issueUrl } = options;
+	const expectedBehavior =
+		textField({ from: options, key: "expectedBehavior" }) ?? NOT_GIVEN;
+	const issueUrl = urlField({ from: options, key: "issueUrl" });
 	throw new WorkflowPanic<InvariantCause>({
 		kind: "Invariant",
-		message: messageLines([
-			"an invariant was violated",
-			`Expected behavior: ${displayText(expectedBehavior)}`,
-			issueLine(issueUrl),
-		]),
+		message: guardedMessage({
+			header: HEADER,
+			build: () => {
+				return messageLines([
+					HEADER,
+					`Expected behavior: ${expectedBehavior}`,
+					issueLine(issueUrl),
+				]);
+			},
+		}),
 		cause: { condition, expectedBehavior, issueUrl },
 	});
 }
@@ -129,3 +136,8 @@ export function isInvariantPanic(
 ): value is Panic<InvariantCause> {
 	return WorkflowPanic.kindOf(value) === "Invariant";
 }
+
+const HEADER = "an invariant was violated";
+
+/** The expected behavior shown when an untyped caller gave none. */
+const NOT_GIVEN = "(not given)";

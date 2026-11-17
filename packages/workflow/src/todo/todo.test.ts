@@ -110,11 +110,12 @@ Deno.test("todo's cause holds its options, with absent parts filled in", () => {
 	const full = assertThrows(() => todo({ description: "d", subtasks }));
 	const empty = assertThrows(() => todo());
 
-	// Then: the causes are plain objects, undefined and [] where absent
+	// Then: the causes are plain objects, undefined and [] where absent, and
+	// each subtask is copied with `complete` spelled out
 	assert(isTodoPanic(full) && isTodoPanic(empty));
 	assertEquals(full.cause, {
 		description: "d",
-		subtasks,
+		subtasks: [{ description: "a", complete: false }],
 		trackingUrl: undefined,
 	});
 	assertEquals(empty.cause, {
@@ -285,4 +286,55 @@ Deno.test("a todo panic widens to a Panic of unknown, never the reverse", () => 
 	// Then: only widening compiles
 	assertEquals([widened, widenedAgain].length, 2);
 	assertEquals(narrowed, wide);
+});
+
+Deno.test("todo lists at most fifty subtasks in its message", () => {
+	// Given: a hundred thousand subtasks
+	const subtasks = Array.from({ length: 100_000 }, (_, index) => {
+		return { description: `step ${index}` };
+	});
+
+	// When: todo runs
+	const thrown = assertThrows(() => todo({ subtasks }), Panic);
+
+	// Then: the message lists fifty and counts the rest; the cause keeps all
+	const lines = thrown.message.split("\n");
+	assertEquals(lines.length, 52);
+	assertEquals(lines[50], "  - [ ] step 49");
+	assertEquals(lines[51], "  … 99950 more subtasks");
+	assert(isTodoPanic(thrown));
+	assertEquals(thrown.cause.subtasks.length, 100_000);
+});
+
+Deno.test("todo cuts a huge description", () => {
+	// Given: a 5 MB description
+	const description = "d".repeat(5_000_000);
+
+	// When: todo runs
+	const thrown = assertThrows(() => todo({ description }), Panic);
+
+	// Then: the message holds the first thousand characters and a count
+	assertEquals(
+		thrown.message.split("\n")[1],
+		`Todo: ${"d".repeat(1000)}… 4999000 more chars`,
+	);
+});
+
+Deno.test("todo's checklist is a frozen copy of the caller's", () => {
+	// Given: a mutable checklist
+	const subtasks = [{ description: "a", complete: true }];
+
+	// When: todo panics, and the caller changes its array afterwards
+	const thrown = assertThrows(() => todo({ subtasks }), Panic);
+	subtasks.push({ description: "b", complete: false });
+	const first = subtasks[0];
+	if (first !== undefined) {
+		first.description = "changed";
+	}
+
+	// Then: the cause kept the checklist as it was, frozen
+	assert(isTodoPanic(thrown));
+	assertEquals(thrown.cause.subtasks, [{ description: "a", complete: true }]);
+	assert(Object.isFrozen(thrown.cause.subtasks));
+	assert(thrown.cause.subtasks.every((subtask) => Object.isFrozen(subtask)));
 });
