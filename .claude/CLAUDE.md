@@ -246,6 +246,16 @@ means:
 - **Prefer functions over classes** except when needed (like `Struct` or `Enum`)
 - **Pure functions over stateful logic**
 
+## Branches and Pull Requests
+
+Sekhmet follows GitHub Flow. `main` is protected by a ruleset: never push to
+it, not even a fast-forward. Every change lands through a pull request,
+merged by squash or rebase (no merge commits), once these required checks
+pass: `ci`, `validate` (dv-validate) and the seven compat `suite (…)` jobs.
+The only direct pusher is the release workflow, which pushes the
+`chore(release):` commit and tags with the `DV_PAT` secret. See
+CONTRIBUTING.md, "Pull Request Process".
+
 ## Commit Convention
 
 Follow **Conventional Commits** with package scopes:
