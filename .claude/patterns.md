@@ -412,6 +412,30 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   converts to (and theirs), so `@sekhmet/enum/option` also loads
   `@sekhmet/enum/result`'s main module. Use the mini entrypoints when bundle
   size matters.
+- **Views (`views` in the config).** A Struct-based primary can carry
+  _views_: own properties holding the children a value was built from
+  (schema's `object(…).shape`; see the schema design's "Typed sub-schemas
+  (#37)"). Its config entry sets `views: { any: "AnySchema" }`, naming the
+  mini alias every value is assignable to, and each wrap target of it sets
+  `views: true`. Then:
+  - main gets a static `fromMiniView`, which builds a main instance over the
+    same params and copies the value's own properties (the view) onto it.
+    It always copies (a main receiver's view comes along too) and panics
+    with a `TypeError` on any other prototype than mini's or main's class,
+    since a subclass would lose its behaviour in the copy;
+  - a returned intersection naming exactly one wrap target
+    (`Schema<I, O, E> & ObjectView<S>`) spells the target as main and
+    converts through `fromMiniView`; a second wrap target, or one whose type
+    arguments convert, fails generation;
+  - two more receiver forms keep the receiver's exact type, rendered
+    `this`: `self: S & Schema<A, B, C>` with `S extends Schema<A, B, C>`,
+    and `self: S` with `S extends AnySchema` (`annotate` returns `this`);
+    an options type parameter constrained to `Schema<A, B, C>` that a field
+    method's receiver fills (`array`'s `item`) is `this` too;
+  - a namespace class (`SchemaWith`) gets a `Self` type parameter bounded by
+    the _mini_ primary, which its getter fills with `this`; its methods
+    render the exact receiver as `Self`. The bound must stay mini: holding
+    the main class makes TypeScript's variance measurement circular (#31).
 - **Constructors and other free functions.** A function without `self` whose
   return needs converting (`Some`, `None`, `flatten`, `unzip`, `transpose`,
   `compareNumbers`, `fork`) is re-declared in main as a wrapper that returns
@@ -453,7 +477,13 @@ methods.
 - Name the receiver `self` and type it as the primary class with each of the
   class's type parameters passed as a distinct function type parameter
   (`self: Latch<A, I>`). Don't name another type parameter after one of the
-  class's.
+  class's, nor `Self` on a namespace method.
+- To return a view of the receiver, capture it exactly:
+  `self: S & Schema<I, O, E>` with `S extends Schema<I, O, E>` (TypeScript
+  infers both), never a generic `S extends AnySchema` with `Input<S>` in the
+  return (the conditional defers when `S` is `this`), and never a view type
+  parameter over an intersection (`self: Schema<I, O, E> & V` infers `V` as
+  the whole argument); only `fromMiniView` uses that form.
 - Annotate every return type (`isolatedDeclarations` already requires it).
 - Use plain or rest parameters; destructured or defaulted parameters are
   rejected.

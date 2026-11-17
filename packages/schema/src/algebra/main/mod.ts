@@ -25,6 +25,7 @@
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Issues } from "@/src/core/mini/issues.ts";
 import type { Schema as MiniSchema } from "@/src/core/mini/schema.ts";
+import type { ViewOf, WrapperView } from "@/src/core/mini/view.ts";
 import { Schema } from "../../core/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
@@ -44,15 +45,18 @@ export { BRAND, omit, partial, pick, required } from "../mini/mod.ts";
  * `Branded<O, name>`, so parsing with it is the branded type's smart
  * constructor. The output passes through unchanged at runtime; the brand is
  * type-only. The name is a value, not a type argument, so the schema's own
- * type parameters are still inferred.
+ * type parameters are still inferred. Since `brand` returns `self` itself,
+ * `self`'s view (`.shape`, `.inner`, …) stays on the result's type
+ * ({@linkcode ViewOf}).
  *
  * @template I - The input type
  * @template O - The output type
  * @template E - The error type
  * @template B - The brand's name
+ * @template S - The schema, exactly (with its own view)
  * @param self - The schema to brand
  * @param name - The brand's name
- * @returns A schema whose output is branded `name`
+ * @returns A schema whose output is branded `name`, with `self`'s view
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -68,11 +72,17 @@ export { BRAND, omit, partial, pick, required } from "../mini/mod.ts";
  * assertEquals(id, "4f3c1f9e-8f0a-4b8e-9a59-0a1b2c3d4e5f");
  * ```
  */
-export function brand<I, O, E, const B extends string>(
-	self: MiniSchema<I, O, E>,
+export function brand<
+	I,
+	O,
+	E,
+	const B extends string,
+	S extends MiniSchema<I, O, E>,
+>(
+	self: S & MiniSchema<I, O, E>,
 	name: B,
-): Schema<I, mini.Branded<O, B>, E> {
-	return Schema.fromMini(mini.brand(self, name));
+): Schema<I, mini.Branded<O, B>, E> & ViewOf<S> {
+	return Schema.fromMiniView(mini.brand(self, name));
 }
 
 /**
@@ -133,13 +143,16 @@ export function or<I, O, E, J, P, F>(
  * class instance can't be copied without bypassing its constructor. A
  * `Map` or `Set` output is still typed as a `ReadonlyMap` or `ReadonlySet`.
  *
- * The schema records a `Readonly` node over `self`.
+ * The schema records a `Readonly` node over `self`, and its view
+ * (`.inner`) is `self`, as passed.
  *
  * @template I - The input type
  * @template O - The output type
  * @template E - The error type
+ * @template S - The schema, exactly (with its own view)
  * @param self - The schema
- * @returns A schema whose array and plain object outputs are frozen copies
+ * @returns A schema whose array and plain object outputs are frozen copies,
+ * viewing `self`
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -156,8 +169,8 @@ export function or<I, O, E, J, P, F>(
  * assertEquals(Object.isFrozen(parsed), true);
  * ```
  */
-export function readonly<I, O, E>(
-	self: MiniSchema<I, O, E>,
-): Schema<I, mini.ReadonlyOutput<O>, E> {
-	return Schema.fromMini(mini.readonly(self));
+export function readonly<I, O, E, S extends MiniSchema<I, O, E>>(
+	self: S & MiniSchema<I, O, E>,
+): Schema<I, mini.ReadonlyOutput<O>, E> & WrapperView<S> {
+	return Schema.fromMiniView(mini.readonly(self));
 }

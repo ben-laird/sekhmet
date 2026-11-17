@@ -55,6 +55,7 @@ export type {
 	LeafDetails,
 	LimitOf,
 	Located,
+	MainSchemaMember,
 	MaybePromise,
 	NodeKind,
 	NonEmpty,
@@ -65,8 +66,10 @@ export type {
 	Parser,
 	ParseSyncErrorVariants,
 	PipeDetails,
+	PipeView,
 	PotentialVariants,
 	RecordDetails,
+	ReservedViewKey,
 	SchemaInit,
 	SchemaIssueVariants,
 	SchemaNodeVariants,
@@ -75,11 +78,15 @@ export type {
 	TooSmallDetails,
 	TransformDetails,
 	TransformStep,
+	TransformView,
 	TupleDetails,
 	TypeName,
 	UnionDetails,
 	UnknownKeyDetails,
+	ViewedOptions,
+	ViewOf,
 	WrapperDetails,
+	WrapperView,
 } from "../mini/mod.ts";
 export {
 	Annotation,
@@ -168,6 +175,26 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	}
 
 	/**
+	 * Views a mini {@linkcode mini.Schema} with a view (own properties holding the children it was built from) as a main `Schema` with the same view: a new main instance over the same struct params, with `self`'s own properties copied on. Panics with a `TypeError` when `self` is an instance of any other class than mini's or main's `Schema` (a subclass would lose its behaviour in the copy).
+	 *
+	 * @template V - The view
+	 * @param self - The Schema to convert
+	 * @returns A main `Schema` over `self`'s params, with its view
+	 */
+	static fromMiniView<I, O, E, V extends object>(
+		self: mini.Schema<I, O, E> & V,
+	): Schema<I, O, E> & V {
+		const prototype: unknown = Object.getPrototypeOf(self);
+		if (prototype !== Schema.prototype && prototype !== mini.Schema.prototype) {
+			throw new TypeError(
+				"Schema.fromMiniView: expected a mini or main Schema, not an instance of a subclass",
+			);
+		}
+
+		return Object.assign(new Schema(getStructParams(self)), self);
+	}
+
+	/**
 	 * Annotates a schema: the same schema (its parser and node), with
 	 * `annotations` added after its own. A later annotation for a key wins over
 	 * an earlier one. Annotations describe the schema they are on: every other
@@ -175,6 +202,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * annotations of its own. The exception is `brand`, which returns its
 	 * schema as is, so the annotations survive; a main view
 	 * (`Schema.fromMini`) is the same schema, not an operation, and keeps them.
+	 *
+	 * The result has `self`'s exact type: a copy with the same prototype (a
+	 * main `Schema` stays main) and the same own properties, so a composite's
+	 * view (`.shape`, `.inner`, …) survives annotating.
 	 *
 	 * @param annotations - The annotations to add, each made by calling its key
 	 * @returns The schema with the annotations added
@@ -193,8 +224,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.annotate}
 	 */
-	annotate(annotations: readonly mini.Annotation[]): Schema<I, O, E> {
-		return Schema.fromMini(mini.annotate(this, annotations));
+	annotate(annotations: readonly mini.Annotation[]): this {
+		return mini.annotate(this, annotations);
 	}
 
 	/**
@@ -211,7 +242,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * @template F - The error type `next` may add
 	 * @param next - The fallible transform for each successful output: a
 	 * {@linkcode Parser} from the output
-	 * @returns A new schema whose output is `next`'s, failing with either error
+	 * @returns A new schema whose output is `next`'s, failing with either error,
+	 * viewing `self` (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -230,8 +262,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.andThen}
 	 */
-	andThen<P, F>(next: mini.Parser<O, P, F>): Schema<I, P, E | F> {
-		return Schema.fromMini(mini.andThen(this, next));
+	andThen<P, F>(
+		next: mini.Parser<O, P, F>,
+	): Schema<I, P, E | F> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.andThen(this, next));
 	}
 
 	/**
@@ -243,7 +277,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 *
 	 * @template P - The filtered output type (must be a subtype of O)
 	 * @param options - The type guard predicate, and the error builder when it fails
-	 * @returns A new schema with filtered output
+	 * @returns A new schema with filtered output, viewing `self` (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -261,8 +295,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.filter}
 	 */
-	filter<P extends O>(options: mini.FilterOptions<O, E, P>): Schema<I, P, E> {
-		return Schema.fromMini(mini.filter(this, options));
+	filter<P extends O>(
+		options: mini.FilterOptions<O, E, P>,
+	): Schema<I, P, E> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.filter(this, options));
 	}
 
 	/**
@@ -274,7 +310,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * that throws panics: the throw is not caught.
 	 *
 	 * @param inspector - The side effect for each successful output
-	 * @returns A new schema with the same results as `self`
+	 * @returns A new schema with the same results as `self`, viewing it
+	 * (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -292,8 +329,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.inspect}
 	 */
-	inspect(inspector: (output: O) => void): Schema<I, O, E> {
-		return Schema.fromMini(mini.inspect(this, inspector));
+	inspect(
+		inspector: (output: O) => void,
+	): Schema<I, O, E> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.inspect(this, inspector));
 	}
 
 	/**
@@ -305,7 +344,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * panics: the throw is not caught.
 	 *
 	 * @param inspector - The side effect for each error
-	 * @returns A new schema with the same results as `self`
+	 * @returns A new schema with the same results as `self`, viewing it
+	 * (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -323,8 +363,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.inspectErr}
 	 */
-	inspectErr(inspector: (error: E) => void): Schema<I, O, E> {
-		return Schema.fromMini(mini.inspectErr(this, inspector));
+	inspectErr(
+		inspector: (error: E) => void,
+	): Schema<I, O, E> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.inspectErr(this, inspector));
 	}
 
 	/**
@@ -335,7 +377,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 *
 	 * @template P - The mapped output type
 	 * @param mapping - The transformation function
-	 * @returns A new schema with transformed output
+	 * @returns A new schema with transformed output, viewing `self` (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -349,8 +391,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.map}
 	 */
-	map<P>(mapping: (output: O) => P): Schema<I, P, E> {
-		return Schema.fromMini(mini.map(this, mapping));
+	map<P>(
+		mapping: (output: O) => P,
+	): Schema<I, P, E> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.map(this, mapping));
 	}
 
 	/**
@@ -361,7 +405,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 *
 	 * @template F - The mapped error type
 	 * @param mapping - The error transformation function
-	 * @returns A new schema with transformed errors
+	 * @returns A new schema with transformed errors, viewing `self` (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -376,8 +420,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.mapErr}
 	 */
-	mapErr<F>(mapping: (error: E) => F): Schema<I, O, F> {
-		return Schema.fromMini(mini.mapErr(this, mapping));
+	mapErr<F>(
+		mapping: (error: E) => F,
+	): Schema<I, O, F> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.mapErr(this, mapping));
 	}
 
 	/**
@@ -393,7 +439,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * @template F - The error type after recovery
 	 * @param recover - The fallback for each error: a {@linkcode Parser} from
 	 * the error
-	 * @returns A new schema that fails only with `recover`'s error
+	 * @returns A new schema that fails only with `recover`'s error, viewing
+	 * `self` (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -416,8 +463,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.orElse}
 	 */
-	orElse<F>(recover: mini.Parser<E, O, F>): Schema<I, O, F> {
-		return Schema.fromMini(mini.orElse(this, recover));
+	orElse<F>(
+		recover: mini.Parser<E, O, F>,
+	): Schema<I, O, F> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.orElse(this, recover));
 	}
 
 	/**
@@ -505,8 +554,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * If the first schema fails, the error is propagated without running the second schema.
 	 *
 	 * @template P - The final output type
+	 * @template N - The second schema, exactly (with its own view)
 	 * @param nextSchema - The second schema to apply to successful results
-	 * @returns A new schema representing the pipeline
+	 * @returns A new schema representing the pipeline, viewing both schemas
+	 * (`.inner`, `.next`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -524,8 +575,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.pipe}
 	 */
-	pipe<P>(nextSchema: mini.Schema<O, P, E>): Schema<I, P, E> {
-		return Schema.fromMini(mini.pipe(this, nextSchema));
+	pipe<P, N extends mini.Schema<O, P, E>>(
+		nextSchema: N & mini.Schema<O, P, E>,
+	): Schema<I, P, E> & mini.PipeView<this, N> {
+		return Schema.fromMiniView(mini.pipe(this, nextSchema));
 	}
 
 	/**
@@ -540,7 +593,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 *
 	 * @template J - The new input type
 	 * @param prepare - The transform from the new input to `self`'s input
-	 * @returns A new schema that accepts `prepare`'s input
+	 * @returns A new schema that accepts `prepare`'s input, viewing `self`
+	 * (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -562,8 +616,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.preprocess}
 	 */
-	preprocess<J>(prepare: (input: J) => mini.MaybePromise<I>): Schema<J, O, E> {
-		return Schema.fromMini(mini.preprocess(this, prepare));
+	preprocess<J>(
+		prepare: (input: J) => mini.MaybePromise<I>,
+	): Schema<J, O, E> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.preprocess(this, prepare));
 	}
 
 	/**
@@ -589,8 +645,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 		composites.ArrayInput<I>,
 		O[],
 		mini.Issues<mini.Flatten<E> | mini.SchemaIssue>
-	> {
-		return Schema.fromMini(composites.array({ item: this }));
+	> &
+		composites.ArrayView<this> {
+		return Schema.fromMiniView(composites.array({ item: this }));
 	}
 
 	/**
@@ -614,8 +671,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link composites.optional}
 	 */
-	optional(): Schema<I | undefined, O | undefined, E> {
-		return Schema.fromMini(composites.optional(this));
+	optional(): Schema<I | undefined, O | undefined, E> & mini.WrapperView<this> {
+		return Schema.fromMiniView(composites.optional(this));
 	}
 
 	/**
@@ -633,8 +690,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link composites.nullable}
 	 */
-	nullable(): Schema<I | null, O | null, E> {
-		return Schema.fromMini(composites.nullable(this));
+	nullable(): Schema<I | null, O | null, E> & mini.WrapperView<this> {
+		return Schema.fromMiniView(composites.nullable(this));
 	}
 
 	/**
@@ -654,7 +711,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * assertEquals(unwrap(id.parseSync(7)), "7");
 	 * ```
 	 */
-	get with(): SchemaWith<I, O, E> {
+	get with(): SchemaWith<I, O, E, this> {
 		return new SchemaWith(this);
 	}
 }
@@ -673,15 +730,20 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
  * assertEquals(unwrap(id.parseSync(7)), "7");
  * ```
  */
-export class SchemaWith<I, O, E> {
-	readonly #self: mini.Schema<I, O, E>;
+export class SchemaWith<
+	I,
+	O,
+	E,
+	Self extends mini.Schema<I, O, E> = mini.Schema<I, O, E>,
+> {
+	readonly #self: Self;
 
 	/**
 	 * Holds `self`, the Schema these methods act on.
 	 *
 	 * @param self - The Schema to act on
 	 */
-	constructor(self: mini.Schema<I, O, E>) {
+	constructor(self: Self) {
 		this.#self = self;
 	}
 
@@ -733,8 +795,10 @@ export class SchemaWith<I, O, E> {
 	 * ```
 	 * @see {@link algebra.brand}
 	 */
-	brand<const B extends string>(name: B): Schema<I, algebra.Branded<O, B>, E> {
-		return Schema.fromMini(algebra.brand(this.#self, name));
+	brand<const B extends string>(
+		name: B,
+	): Schema<I, algebra.Branded<O, B>, E> & mini.ViewOf<Self> {
+		return Schema.fromMiniView(algebra.brand(this.#self, name));
 	}
 
 	/**
@@ -755,7 +819,47 @@ export class SchemaWith<I, O, E> {
 	 * ```
 	 * @see {@link algebra.readonly}
 	 */
-	readonly(): Schema<I, algebra.ReadonlyOutput<O>, E> {
-		return Schema.fromMini(algebra.readonly(this.#self));
+	readonly(): Schema<I, algebra.ReadonlyOutput<O>, E> & mini.WrapperView<Self> {
+		return Schema.fromMiniView(algebra.readonly(this.#self));
 	}
+}
+
+/**
+ * A schema with a view: `new Schema(init)` with `view`'s own properties
+ * copied onto it, so the schema exposes its children typed as passed. A
+ * view holds no state of its own; pass the same children the schema's node
+ * holds. Use it with `custom()` nodes to give a composite of your own typed
+ * children. A reserved key ({@linkcode ReservedViewKey}) is a type error.
+ *
+ * @template I - The input type
+ * @template O - The output type
+ * @template E - The error type
+ * @template V - The view
+ * @param options - The schema's init, and its view
+ * @returns The schema, with the view's properties
+ * @example
+ * ```ts
+ * import { assertStrictEquals } from "@std/assert";
+ * import { getStructParams } from "@sekhmet/primordials/struct";
+ * import { custom, nodeKind } from "@sekhmet/schema/core";
+ * import { viewed } from "@sekhmet/schema/core";
+ * import { string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const Labelled = nodeKind<{ readonly label: string }>({ name: "Labelled" });
+ * const text = string();
+ * const labelled = viewed({
+ * 	init: {
+ * 		parse: getStructParams(text).parse,
+ * 		node: custom({ kind: Labelled, data: { label: "name" }, children: [text] }),
+ * 	},
+ * 	view: { text },
+ * });
+ *
+ * assertStrictEquals(labelled.text, text);
+ * ```
+ */
+export function viewed<I, O, E, const V extends object>(
+	options: mini.ViewedOptions<I, O, E, V>,
+): Schema<I, O, E> & V {
+	return Schema.fromMiniView(mini.viewed(options));
 }

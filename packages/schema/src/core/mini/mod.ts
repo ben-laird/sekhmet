@@ -126,3 +126,13 @@ export {
 	type SchemaParams,
 	UnexpectedAsyncParse,
 } from "./schema.ts";
+export {
+	type MainSchemaMember,
+	type PipeView,
+	type ReservedViewKey,
+	type TransformView,
+	type ViewedOptions,
+	type ViewOf,
+	viewed,
+	type WrapperView,
+} from "./view.ts";

@@ -14,6 +14,7 @@
 		"./core/mini/node": "./src/core/mini/node.ts",
 		"./core/mini/potential": "./src/core/mini/potential.ts",
 		"./core/mini/schema": "./src/core/mini/schema.ts",
+		"./core/mini/view": "./src/core/mini/view.ts",
 		"./primitives": "./src/primitives/main/mod.ts",
 		"./primitives/mini": "./src/primitives/mini/mod.ts",
 		"./primitives/mini/string": "./src/primitives/mini/string.ts",

@@ -1,6 +1,6 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
 	InvalidType,
@@ -130,4 +130,36 @@ Deno.test("discriminatedUnion infers a union narrowed by its key", () => {
 	assertType<
 		IsExact<ErrorOf<typeof shape>, Issues<"not a size" | SchemaIssue>>
 	>(true);
+});
+
+Deno.test("discriminatedUnion views its key and options, exactly as passed", () => {
+	// Given: the shape union declared above
+	// When: reading its view
+	const { key, options } = shape;
+
+	// Then: the key stays literal and each option keeps its own view
+	assertEquals(key, "kind");
+	assertStrictEquals(options.circle.shape.radius, size);
+	assertType<IsExact<typeof key, "kind">>(true);
+	assertType<IsExact<typeof options.square.shape.side, typeof size>>(true);
+	assertType<IsExact<Output<typeof options.square>, { side: number }>>(true);
+});
+
+Deno.test('a discriminatedUnion keyed "optional" is a required key of an object', () => {
+	// Given: a discriminated union whose view has key: "optional"
+	const keyed = discriminatedUnion({
+		key: "optional",
+		options: { yes: object({ shape: {} }) },
+	});
+
+	// When: using it as a shape's value
+	const holder = object({ shape: { value: keyed } });
+
+	// Then: its key is required, not read as a field entry's
+	assertType<IsExact<Output<typeof holder>, { value: { optional: "yes" } }>>(
+		true,
+	);
+	assertEquals(unwrap(parseSync(holder, { value: { optional: "yes" } })), {
+		value: { optional: "yes" },
+	});
 });

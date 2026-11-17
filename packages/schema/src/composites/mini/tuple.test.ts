@@ -1,6 +1,6 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
 	InvalidType,
@@ -138,4 +138,20 @@ Deno.test("tuple infers its input, output and error types", () => {
 		>
 	>(true);
 	assertType<IsExact<Input<typeof typed>, readonly [unknown, string]>>(true);
+});
+
+Deno.test("tuple views its element schemas, exactly as passed", () => {
+	// Given: element schemas, one wrapped
+	const maybeCount = optional(count);
+
+	// When: building a tuple of them
+	const pair = tuple([text, maybeCount]);
+
+	// Then: .items is the tuple passed, each element keeping its type
+	assertStrictEquals(pair.items[0], text);
+	assertStrictEquals(pair.items[1].inner, count);
+	assertType<
+		IsExact<typeof pair.items, readonly [typeof text, typeof maybeCount]>
+	>(true);
+	assertType<IsExact<Output<typeof pair>, [string, number | undefined]>>(true);
 });

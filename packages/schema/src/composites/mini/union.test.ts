@@ -1,6 +1,6 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { InvalidUnion, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import {
@@ -117,4 +117,20 @@ Deno.test("union infers its input, output and error types", () => {
 	assertType<IsExact<Output<typeof either>, string | number>>(true);
 	assertType<IsExact<ErrorOf<typeof either>, Issues<SchemaIssue>>>(true);
 	assertType<IsExact<Input<typeof typed>, string>>(true);
+});
+
+Deno.test("union views its options, exactly as passed", () => {
+	// Given: options, one an object with a view
+	const named = object({ shape: { name: text } });
+
+	// When: building a union of them
+	const either = union([named, count]);
+
+	// Then: .options is the tuple passed, each option keeping its type
+	assertStrictEquals(either.options[0].shape.name, text);
+	assertStrictEquals(either.options[1], count);
+	assertType<
+		IsExact<typeof either.options, readonly [typeof named, typeof count]>
+	>(true);
+	assertType<IsExact<Output<typeof either>, { name: string } | number>>(true);
 });

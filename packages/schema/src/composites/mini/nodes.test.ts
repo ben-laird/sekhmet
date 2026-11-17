@@ -178,3 +178,15 @@ Deno.test("withoutOptional sees through neither a transform nor a hand-written w
 	// Then: each parses undefined as itself, so both pass
 	assertEquals(parsed.unwrap(), { hidden: undefined, accepting: undefined });
 });
+
+Deno.test("an object's children are its schemas, even one with a `schema` property", () => {
+	// Given: a schema carrying a `schema` property, which a view can't have
+	// but plain JavaScript can still add
+	const disguised = Object.assign(string(), { schema: count });
+
+	// When: walking an object node holding it as a bare field
+	const node = nodeOf(object({ shape: { value: disguised } }));
+
+	// Then: the field's schema is the schema itself, not its property
+	assertStrictEquals(children(node)[0], disguised);
+});

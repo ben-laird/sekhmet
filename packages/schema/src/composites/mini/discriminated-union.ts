@@ -14,8 +14,9 @@ import {
 	type Input,
 	type Output,
 	parse,
-	Schema,
+	type Schema,
 } from "@/src/core/mini/schema.ts";
+import { viewed } from "@/src/core/mini/view.ts";
 import { type Child, invalidType, isRecord, type Parsed } from "./collect.ts";
 
 /**
@@ -132,6 +133,33 @@ export interface DiscriminatedUnionOptions<
 }
 
 /**
+ * A view of a discriminated union's key and options, as passed: each
+ * option's schema keeps its type (`shape.options.circle`).
+ *
+ * @template K The discriminant key
+ * @template M The options
+ *
+ * @example
+ * ```ts
+ * import { assertStrictEquals } from "@std/assert";
+ * import { discriminatedUnion, object } from "@sekhmet/schema/composites/mini";
+ * import { number } from "@sekhmet/schema/primitives/mini";
+ *
+ * const circle = object({ shape: { radius: number() } });
+ * const shape = discriminatedUnion({ key: "kind", options: { circle } });
+ *
+ * assertStrictEquals(shape.key, "kind");
+ * assertStrictEquals(shape.options.circle, circle);
+ * ```
+ */
+export interface DiscriminatedUnionView<K extends string, M> {
+	/** The key holding the discriminant, as passed. */
+	readonly key: K;
+	/** Each discriminant value's schema, as passed. */
+	readonly options: M;
+}
+
+/**
  * Creates a schema for a union of objects told apart by the string under
  * `key`: the value there picks the option that parses the whole object.
  * The output carries the discriminant, whether or not the option declares
@@ -142,11 +170,13 @@ export interface DiscriminatedUnionOptions<
  * `[key]`, listing the options' values. The chosen option's issues are
  * reported as it found them.
  *
+ * The result's view (`.key`, `.options`) is the declaration's, as passed.
+ *
  * @template K The discriminant key
  * @template M The options
  * @param declaration The key holding the discriminant, and each discriminant
  *   value's schema
- * @returns A schema for the union of `options`
+ * @returns A schema for the union of `options`, viewing `key` and `options`
  *
  * @example
  * ```ts
@@ -183,45 +213,51 @@ export function discriminatedUnion<const K extends string, M extends Options>(
 	DiscriminatedInput<K, M>,
 	DiscriminatedOutput<K, M>,
 	Issues<Flatten<ErrorOf<M[keyof M]>> | SchemaIssue>
->;
+> &
+	DiscriminatedUnionView<K, M>;
 export function discriminatedUnion(declaration: {
 	readonly key: string;
 	readonly options: Readonly<Record<string, Child>>;
-}): Schema<unknown, unknown, Issues<unknown>> {
+}): Schema<unknown, unknown, Issues<unknown>> &
+	DiscriminatedUnionView<string, Readonly<Record<string, Child>>> {
 	const { key, options } = declaration;
 
-	return new Schema({
-		parse: (input: unknown): Parsed => {
-			if (!isRecord(input)) return invalidType({ input, expected: "object" });
+	return viewed({
+		init: {
+			parse: (input: unknown): Parsed => {
+				if (!isRecord(input)) return invalidType({ input, expected: "object" });
 
-			const value = input[key];
-			const known = typeof value === "string" && Object.hasOwn(options, value);
-			const option = known ? options[value] : undefined;
-			if (typeof value !== "string" || option === undefined) {
-				return Err(
-					locate({
-						key,
-						error: InvalidValue({
-							input: value,
-							expected: Object.keys(options),
+				const value = input[key];
+				const known =
+					typeof value === "string" && Object.hasOwn(options, value);
+				const option = known ? options[value] : undefined;
+				if (typeof value !== "string" || option === undefined) {
+					return Err(
+						locate({
+							key,
+							error: InvalidValue({
+								input: value,
+								expected: Object.keys(options),
+							}),
 						}),
+					);
+				}
+
+				return union(
+					mapPotential(parse(option, input), (result) => {
+						return match(result)({
+							Ok: (output): Parsed => {
+								if (!isRecord(output)) return Ok(output);
+
+								return Ok({ ...output, [key]: value });
+							},
+							Err: (error) => Err(toIssues(error)),
+						});
 					}),
 				);
-			}
-
-			return union(
-				mapPotential(parse(option, input), (result) => {
-					return match(result)({
-						Ok: (output): Parsed => {
-							if (!isRecord(output)) return Ok(output);
-
-							return Ok({ ...output, [key]: value });
-						},
-						Err: (error) => Err(toIssues(error)),
-					});
-				}),
-			);
+			},
+			node: new SchemaNode("DiscriminatedUnion", { key, options }),
 		},
-		node: new SchemaNode("DiscriminatedUnion", { key, options }),
+		view: { key, options },
 	});
 }

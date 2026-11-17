@@ -1,9 +1,9 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
-import { entries, type Issues } from "@/src/core/mini/issues.ts";
+import { entries, type Flatten, type Issues } from "@/src/core/mini/issues.ts";
 import {
 	type ErrorOf,
 	type Input,
@@ -14,6 +14,7 @@ import {
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { enumOf } from "./enum-of.ts";
+import { optional } from "./modifiers.ts";
 import { record } from "./record.ts";
 
 const name: Schema<string, string, "too long"> = new Schema({
@@ -114,6 +115,37 @@ Deno.test("record infers its input, output and error types", () => {
 		IsExact<
 			ErrorOf<typeof scores>,
 			Issues<"too long" | "not a number" | SchemaIssue>
+		>
+	>(true);
+});
+
+Deno.test("record views its key and value schemas, and still infers every type", () => {
+	// Given: a literal key schema and a value schema with a view
+	const level = enumOf(["low", "high"]);
+	const scores = optional(count);
+
+	// When: building records from them
+	const byName = record({ key: name, value: count });
+	const byLevel = record({ key: level, value: scores });
+
+	// Then: .key and .value are the schemas passed, exactly, and the record's
+	// input, output and error are inferred as before
+	assertStrictEquals(byName.key, name);
+	assertStrictEquals(byLevel.value.inner, count);
+	assertType<IsExact<typeof byLevel.key, typeof level>>(true);
+	assertType<IsExact<typeof byLevel.value, typeof scores>>(true);
+	assertType<IsExact<Input<typeof byName>, unknown>>(true);
+	assertType<IsExact<Output<typeof byName>, Record<string, number>>>(true);
+	assertType<
+		IsExact<
+			Output<typeof byLevel>,
+			Partial<Record<"low" | "high", number | undefined>>
+		>
+	>(true);
+	assertType<
+		IsExact<
+			ErrorOf<typeof byName>,
+			Issues<Flatten<"too long" | "not a number"> | SchemaIssue>
 		>
 	>(true);
 });

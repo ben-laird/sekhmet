@@ -5,7 +5,8 @@ import {
 	type Issues,
 } from "@/src/core/mini/issues.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";
-import { Schema } from "@/src/core/mini/schema.ts";
+import type { Schema } from "@/src/core/mini/schema.ts";
+import { viewed } from "@/src/core/mini/view.ts";
 import {
 	type Child,
 	compose,
@@ -39,6 +40,7 @@ export type ArrayInput<I> = unknown extends I ? unknown : readonly I[];
  * @template I The element schema's input type
  * @template O The element schema's output type
  * @template E The element schema's error type
+ * @template S The element schema, exactly (with its own view)
  *
  * @example
  * ```ts
@@ -52,9 +54,14 @@ export type ArrayInput<I> = unknown extends I ? unknown : readonly I[];
  * };
  * ```
  */
-export interface ArrayOptions<I, O, E> {
+export interface ArrayOptions<
+	I,
+	O,
+	E,
+	S extends Schema<I, O, E> = Schema<I, O, E>,
+> {
 	/** The schema for each element. */
-	readonly item: Schema<I, O, E>;
+	readonly item: S & Schema<I, O, E>;
 	/**
 	 * The fewest elements allowed (inclusive); a shorter array fails with a
 	 * `TooSmall` issue (origin `"array"`) at the root.
@@ -65,6 +72,27 @@ export interface ArrayOptions<I, O, E> {
 	 * `TooBig` issue (origin `"array"`) at the root.
 	 */
 	readonly maxItems?: number;
+}
+
+/**
+ * A view of an array schema's element schema: `item` is the schema passed.
+ *
+ * @template S The element schema
+ *
+ * @example
+ * ```ts
+ * import { assertStrictEquals } from "@std/assert";
+ * import { array } from "@sekhmet/schema/composites/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const tag = string();
+ *
+ * assertStrictEquals(array({ item: tag }).item, tag);
+ * ```
+ */
+export interface ArrayView<S> {
+	/** The schema for each element, as passed. */
+	readonly item: S;
 }
 
 /** The length issue of an array, if its length is out of bounds. */
@@ -102,13 +130,15 @@ function lengthIssue({
  * the root, after any failing elements, so both are seen at once.
  *
  * The input is `unknown` when `item` accepts anything, and otherwise an
- * array of `item`'s input.
+ * array of `item`'s input. The result's view (`.item`) is `item`, as
+ * passed.
  *
  * @template I The element schema's input type
  * @template O The element schema's output type
  * @template E The element schema's error type
+ * @template S The element schema, exactly (with its own view)
  * @param options The element schema and the length bounds
- * @returns A schema for arrays of `item`
+ * @returns A schema for arrays of `item`, viewing `item`
  *
  * @example
  * ```ts
@@ -141,28 +171,32 @@ function lengthIssue({
  * assertEquals(formatIssue(error), "Too big: expected array to have <= 2 items");
  * ```
  */
-export function array<I, O, E>(
-	options: ArrayOptions<I, O, E>,
-): Schema<ArrayInput<I>, O[], Issues<Flatten<E> | SchemaIssue>>;
+export function array<I, O, E, S extends Schema<I, O, E>>(
+	options: ArrayOptions<I, O, E, S>,
+): Schema<ArrayInput<I>, O[], Issues<Flatten<E> | SchemaIssue>> & ArrayView<S>;
 export function array(options: {
 	readonly item: Child;
 	readonly minItems?: number;
 	readonly maxItems?: number;
-}): Schema<unknown, unknown, Issues<unknown>> {
+}): Schema<unknown, unknown, Issues<unknown>> & ArrayView<Child> {
 	const { item, minItems, maxItems } = options;
+	const parse = (input: unknown): Parsed => {
+		if (!isArray(input)) return invalidType({ input, expected: "array" });
 
-	return new Schema({
-		parse: (input: unknown): Parsed => {
-			if (!isArray(input)) return invalidType({ input, expected: "array" });
+		return compose({
+			pending: input.map((value, index) => {
+				return run({ key: index, child: item, value });
+			}),
+			extra: lengthIssue({ input, minItems, maxItems }),
+			build: (outputs) => outputs.map(([, output]) => output),
+		});
+	};
 
-			return compose({
-				pending: input.map((value, index) => {
-					return run({ key: index, child: item, value });
-				}),
-				extra: lengthIssue({ input, minItems, maxItems }),
-				build: (outputs) => outputs.map(([, output]) => output),
-			});
+	return viewed({
+		init: {
+			parse,
+			node: new SchemaNode("Array", { item, minItems, maxItems }),
 		},
-		node: new SchemaNode("Array", { item, minItems, maxItems }),
+		view: { item },
 	});
 }

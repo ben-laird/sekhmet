@@ -246,6 +246,53 @@ assertEquals(isErr(patch.parseSync({ name: undefined })), true);
 There is no `and`: a shape spread, options, `filter` or `andThen` covers each
 use of an intersection.
 
+## Typed sub-schemas
+
+A schema built from other schemas exposes them, typed exactly as you passed
+them: `object(…).shape`, `array(…).item` (and `.array().item`),
+`tuple(…).items`, `record(…).key` and `.value`, `union(…).options`,
+`discriminatedUnion(…).key` and `.options`, `.optional()`, `.nullable()` and
+`.with.readonly()`'s `.inner`, `lazy(…).getter`, every transform's `.inner`
+(`.map`, `.filter`, `.andThen`, …), and `.pipe(next)`'s `.inner` and
+`.next`. A field entry stays an entry (`.shape.age.schema`), a child keeps
+its own view, and `.with.brand()` and `.annotate()` keep the view they were
+called on:
+
+```ts
+import { assertEquals } from "@std/assert";
+import { unwrap } from "@sekhmet/enum/result/mini";
+import { partial } from "@sekhmet/schema/algebra";
+import { object } from "@sekhmet/schema/composites";
+import { title } from "@sekhmet/schema/core";
+import { number, string } from "@sekhmet/schema/primitives";
+
+const user = object({
+	shape: {
+		name: string({ minLength: 1 }),
+		age: { schema: number({ int: true }), key: "optional" },
+		tags: string().array(),
+	},
+}).annotate([title("User")]);
+
+assertEquals(unwrap(user.shape.name.parseSync("Ada")), "Ada");
+assertEquals(user.shape.age.key, "optional");
+assertEquals(unwrap(user.shape.tags.item.parseSync("admin")), "admin");
+
+// A transform's view is its receiver; the receiver's view is one step in.
+const named = user.map((value) => value.name).optional();
+assertEquals(named.inner.inner, user);
+
+// Reshape an existing object through its typed shape.
+const patch = object({ shape: partial(user.shape) });
+assertEquals(unwrap(patch.parseSync({})), {});
+```
+
+A view is own properties holding the same children the schema's node holds;
+it adds no state. Give a composite of your own typed children with
+`viewed({ init, view })` and a `custom()` node. A view can't use a main
+`Schema` member, `schema` or a symbol as a key. See
+[Typed sub-schemas](docs/design.md#typed-sub-schemas-37) in the design.
+
 ## Schemas describe themselves
 
 Every schema carries what it is as data, its `SchemaNode`, read with

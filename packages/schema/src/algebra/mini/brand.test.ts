@@ -1,5 +1,6 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { nodeOf } from "@/src/core/mini/node.ts";
@@ -12,6 +13,7 @@ import {
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
+import { viewed } from "@/src/core/mini/view.ts";
 import { BRAND, type Branded, brand } from "./brand.ts";
 
 /** Whether a `From` is assignable to a `To`. */
@@ -114,4 +116,20 @@ Deno.test("brand records no node: it returns its schema", () => {
 
 	// Then: the branded schema has the schema's own node
 	assertStrictEquals(nodeOf(branded), nodeOf(text));
+});
+
+Deno.test("brand keeps the schema's view, since it returns the schema itself", () => {
+	// Given: a schema with a view
+	const wrapped = viewed({
+		init: getStructParams(text),
+		view: { inner: text },
+	});
+
+	// When: branding it
+	const branded = brand(wrapped, "Wrapped");
+
+	// Then: the view stays on the result, beside the branded output
+	assertStrictEquals(branded.inner, text);
+	assertType<IsExact<typeof branded.inner, typeof text>>(true);
+	assertType<IsExact<Output<typeof branded>, Branded<string, "Wrapped">>>(true);
 });

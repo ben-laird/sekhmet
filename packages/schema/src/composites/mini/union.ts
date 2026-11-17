@@ -9,8 +9,9 @@ import {
 	type Input,
 	type Output,
 	parse,
-	Schema,
+	type Schema,
 } from "@/src/core/mini/schema.ts";
+import { viewed } from "@/src/core/mini/view.ts";
 import type { Child, Parsed } from "./collect.ts";
 
 /**
@@ -39,14 +40,38 @@ export type UnionInput<T extends readonly AnySchema[]> = {
 	: never;
 
 /**
+ * A view of a union schema's options: `options` is the tuple passed.
+ *
+ * @template T The option schemas
+ *
+ * @example
+ * ```ts
+ * import { assertStrictEquals } from "@std/assert";
+ * import { union } from "@sekhmet/schema/composites/mini";
+ * import { number, string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const text = string();
+ * const either = union([text, number()]);
+ *
+ * assertStrictEquals(either.options[0], text);
+ * ```
+ */
+export interface UnionView<T extends readonly AnySchema[]> {
+	/** The option schemas, in the order they are tried, as passed. */
+	readonly options: T;
+}
+
+/**
  * Creates a schema that accepts what any of `options` accepts. The options
  * are tried in order and the first that succeeds wins; later options are
  * not run. When none succeeds, the union fails with one `InvalidUnion`
  * issue at the root, carrying each option's issues in order.
  *
+ * The result's view (`.options`) is `options`, as passed.
+ *
  * @template T The option schemas
  * @param options The schemas to try, in order
- * @returns A schema for any of `options`
+ * @returns A schema for any of `options`, viewing `options`
  *
  * @example
  * ```ts
@@ -75,41 +100,45 @@ export type UnionInput<T extends readonly AnySchema[]> = {
  */
 export function union<const T extends readonly [AnySchema, ...AnySchema[]]>(
 	options: T,
-): Schema<UnionInput<T>, Output<T[number]>, Issues<SchemaIssue>>;
+): Schema<UnionInput<T>, Output<T[number]>, Issues<SchemaIssue>> & UnionView<T>;
 export function union(
 	options: readonly [Child, ...Child[]],
-): Schema<unknown, unknown, Issues<unknown>> {
-	return new Schema({
-		parse: (input: unknown): Parsed => {
-			const attempt = ({
-				index,
-				failures,
-			}: {
-				index: number;
-				failures: readonly Issues<unknown>[];
-			}): Parsed => {
-				const option = options[index];
-				if (option === undefined) {
-					return Err(fromError(InvalidUnion({ input, branches: failures })));
-				}
+): Schema<unknown, unknown, Issues<unknown>> &
+	UnionView<readonly [Child, ...Child[]]> {
+	return viewed({
+		init: {
+			parse: (input: unknown): Parsed => {
+				const attempt = ({
+					index,
+					failures,
+				}: {
+					index: number;
+					failures: readonly Issues<unknown>[];
+				}): Parsed => {
+					const option = options[index];
+					if (option === undefined) {
+						return Err(fromError(InvalidUnion({ input, branches: failures })));
+					}
 
-				return unionValue(
-					mapPotential(parse(option, input), (result) => {
-						return match(result)({
-							Ok: (output): Parsed => Ok(output),
-							Err: (error) => {
-								return attempt({
-									index: index + 1,
-									failures: [...failures, toIssues(error)],
-								});
-							},
-						});
-					}),
-				);
-			};
+					return unionValue(
+						mapPotential(parse(option, input), (result) => {
+							return match(result)({
+								Ok: (output): Parsed => Ok(output),
+								Err: (error) => {
+									return attempt({
+										index: index + 1,
+										failures: [...failures, toIssues(error)],
+									});
+								},
+							});
+						}),
+					);
+				};
 
-			return attempt({ index: 0, failures: [] });
+				return attempt({ index: 0, failures: [] });
+			},
+			node: new SchemaNode("Union", { options }),
 		},
-		node: new SchemaNode("Union", { options }),
+		view: { options },
 	});
 }

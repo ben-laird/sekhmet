@@ -133,6 +133,8 @@ interface Module {
 	readonly wrapNames: ReadonlySet<string>;
 	/** Each wrap target's mapper per type argument (for nested conversion). */
 	readonly mappers: ReadonlyMap<string, readonly (string | undefined)[]>;
+	/** The wrap targets whose main class has a `fromMiniView` static. */
+	readonly views: ReadonlySet<string>;
 	readonly localNames: ReadonlySet<string>;
 	readonly sources: ReadonlyMap<string, string>;
 	readonly outputUrl: string;
@@ -300,6 +302,7 @@ function needsConversion({
 			render: () => "",
 			wrapTarget: (inner) => wrapTargetOf(wrapNames, inner),
 			mappers: () => [],
+			views: () => true,
 		},
 	});
 
@@ -319,15 +322,129 @@ function signaturesOf(symbol: DocSymbol): FunctionDeclaration[] {
 		: functions;
 }
 
-function isSelfOfPrimary(primary: string, param: Param | undefined): boolean {
-	if (param?.kind !== "identifier" || param.name !== "self") return false;
-	const type = param.type;
-	if (type?.kind !== "ref" || type.resolution.kind === "typeParam")
+/** A type reference. */
+type RefNode = Extract<TypeNode, { kind: "ref" }>;
+
+/**
+ * How a signature's first parameter takes the receiver:
+ * - `plain`: `self: Primary<A, B, C>`
+ * - `exact`: `self: S & Primary<A, B, C>` with `S extends Primary<A, B, C>`,
+ *   keeping the receiver's exact type `S` (with views)
+ * - `any`: `self: S` with `S extends` the views' `any` alias, as `S`
+ */
+type ReceiverForm =
+	| { readonly kind: "plain"; readonly type: RefNode }
+	| { readonly kind: "exact"; readonly type: RefNode; readonly param: string }
+	| { readonly kind: "any"; readonly param: string };
+
+/** Whether `type` names the class `name` (not a type parameter). */
+function namesClass(type: TypeNode | undefined, name: string): type is RefNode {
+	if (type?.kind !== "ref" || type.resolution.kind === "typeParam") {
 		return false;
+	}
 
 	return (
-		originalName({ name: type.name, resolution: type.resolution }) === primary
+		originalName({ name: type.name, resolution: type.resolution }) === name
 	);
+}
+
+/** The signature's own type parameter `type` names bare, if it names one. */
+function ownTypeParam({
+	signature,
+	type,
+}: {
+	signature: FunctionDeclaration;
+	type: TypeNode | undefined;
+}): TypeParam | undefined {
+	if (type?.kind !== "ref" || type.resolution.kind !== "typeParam") {
+		return undefined;
+	}
+	if (type.args.length > 0) return undefined;
+
+	return signature.typeParams.find((tp) => tp.name === type.name);
+}
+
+/** The type parameter names a reference passes, when each is one bare. */
+function bareArgs(type: RefNode): string[] | undefined {
+	const names = type.args.flatMap((arg) => {
+		const bare =
+			arg.kind === "ref" &&
+			arg.resolution.kind === "typeParam" &&
+			arg.args.length === 0;
+		return bare ? [arg.name] : [];
+	});
+
+	return names.length === type.args.length ? names : undefined;
+}
+
+/**
+ * Whether `typeParam` is constrained to the primary applied to exactly
+ * `args` (`S extends Primary<A, B, C>`): it stands for a receiver.
+ */
+function constrainedToPrimary({
+	feature,
+	typeParam,
+	args,
+}: {
+	feature: ClassFeature;
+	typeParam: TypeParam;
+	args: readonly string[];
+}): boolean {
+	const { constraint } = typeParam;
+	if (!namesClass(constraint, feature.primary)) return false;
+	const passed = bareArgs(constraint);
+
+	return (
+		passed !== undefined &&
+		passed.length === args.length &&
+		passed.every((name, i) => name === args[i])
+	);
+}
+
+/** How a signature takes the receiver as `self`, or `undefined` if it doesn't. */
+function receiverFormOf({
+	feature,
+	signature,
+}: {
+	feature: Feature;
+	signature: FunctionDeclaration;
+}): ReceiverForm | undefined {
+	if (!isClassFeature(feature)) return undefined;
+	const [param] = signature.params;
+	if (param?.kind !== "identifier" || param.name !== "self") return undefined;
+	const { type } = param;
+	if (namesClass(type, feature.primary)) return { kind: "plain", type };
+	if (feature.views === undefined) return undefined;
+
+	const bare = ownTypeParam({ signature, type });
+	if (bare !== undefined) {
+		const { constraint } = bare;
+		const isAny =
+			constraint?.kind === "ref" &&
+			constraint.resolution.kind !== "typeParam" &&
+			originalName({
+				name: constraint.name,
+				resolution: constraint.resolution,
+			}) === feature.views.any;
+
+		return isAny ? { kind: "any", param: bare.name } : undefined;
+	}
+
+	if (type?.kind !== "intersection" || type.types.length !== 2) {
+		return undefined;
+	}
+	const [first, second] = type.types;
+	const exact = ownTypeParam({ signature, type: first });
+	const args = namesClass(second, feature.primary)
+		? bareArgs(second)
+		: undefined;
+	if (exact === undefined || args === undefined) return undefined;
+	if (!namesClass(second, feature.primary)) return undefined;
+	if (!constrainedToPrimary({ feature, typeParam: exact, args })) {
+		return undefined;
+	}
+
+	return { kind: "exact", type: second, param: exact.name };
 }
 
 /** A signature with the tuple labels `deno doc` dropped restored from source. */
@@ -482,6 +599,22 @@ interface Receiver {
 /** How a namespace class's methods reach the primary instance it holds. */
 const NAMESPACE_SELF = "this.#self";
 
+/**
+ * The type parameter of a namespace class of a primary carrying views that
+ * holds the receiver's exact type (`SchemaWith<I, O, E, Self>`), so its
+ * methods keep the receiver's view.
+ */
+const NAMESPACE_SELF_TYPE = "Self";
+
+/**
+ * The exact receiver's type, as a method spells it: `this` on the primary
+ * class, and on a namespace class its `Self` type parameter. Only a primary
+ * carrying views has exact receivers, and so a `Self`.
+ */
+function exactReceiverType(receiver: Receiver): string {
+	return receiver.self === NAMESPACE_SELF ? NAMESPACE_SELF_TYPE : "this";
+}
+
 interface MethodHead {
 	readonly head: string;
 	readonly body: string;
@@ -502,6 +635,7 @@ function convertContextFor({
 		render: (type) => renderType({ type, context }),
 		wrapTarget: (type) => wrapTargetOf(module.wrapNames, type),
 		mappers: (target) => module.mappers.get(target) ?? [],
+		views: (target) => module.views.has(target),
 	};
 }
 
@@ -513,8 +647,11 @@ function generatorStar(conversion: Conversion): string {
 /**
  * Maps the type parameters a receiver's type passes, in order, to the
  * primary class's: `self: Schema<A, B, C>` renames `A`, `B`, `C` to the
- * class's `I`, `O`, `E`. An options type may pass more (`extra`), which
- * stay the method's own.
+ * class's `I`, `O`, `E`. A type parameter standing for the exact receiver
+ * (see {@linkcode ReceiverForm}) is renamed to `selfType`. An options type
+ * may pass more (`extra`), which stay the method's own, except one
+ * constrained to `Primary<A, B, C>`: the receiver fills it, so it is
+ * `selfType` too.
  */
 function receiverRename({
 	module,
@@ -523,6 +660,7 @@ function receiverRename({
 	param,
 	classParams,
 	extra,
+	selfType,
 }: {
 	module: Module;
 	name: string;
@@ -530,10 +668,14 @@ function receiverRename({
 	param: Param | undefined;
 	classParams: readonly TypeParam[];
 	extra: boolean;
+	selfType: string;
 }): Generated<Map<string, string>> {
 	const { feature } = module;
 	const label = `\`${param?.name ?? "self"}\``;
-	const type = param?.type;
+	const form = extra ? undefined : receiverFormOf({ feature, signature });
+	if (form?.kind === "any") return ok(new Map([[form.param, selfType]]));
+
+	const type = form === undefined ? param?.type : form.type;
 	if (type?.kind !== "ref") {
 		return failure({
 			feature,
@@ -541,6 +683,58 @@ function receiverRename({
 			message: `${label} must be typed as the primary class`,
 		});
 	}
+	const renamed = classRename({
+		module,
+		name,
+		signature,
+		label,
+		type,
+		classParams,
+		extra,
+	});
+	if (!renamed.ok) return renamed;
+	const rename = renamed.value;
+	if (form?.kind === "exact") rename.set(form.param, selfType);
+	if (!extra || !isClassFeature(feature) || feature.views === undefined) {
+		return ok(rename);
+	}
+
+	const receiverArgs = bareArgs(type)?.slice(0, classParams.length) ?? [];
+	for (const arg of type.args.slice(classParams.length)) {
+		const filled = ownTypeParam({ signature, type: arg });
+		if (filled === undefined) continue;
+		if (
+			constrainedToPrimary({ feature, typeParam: filled, args: receiverArgs })
+		) {
+			rename.set(filled.name, selfType);
+		}
+	}
+
+	return ok(rename);
+}
+
+/**
+ * Renames the type parameters a receiver's type (`Primary<A, B, C>`, or an
+ * options type passing them first) passes to the class's.
+ */
+function classRename({
+	module,
+	name,
+	signature,
+	label,
+	type,
+	classParams,
+	extra,
+}: {
+	module: Module;
+	name: string;
+	signature: FunctionDeclaration;
+	label: string;
+	type: RefNode;
+	classParams: readonly TypeParam[];
+	extra: boolean;
+}): Generated<Map<string, string>> {
+	const { feature } = module;
 	const passed = type.args.length;
 	if (passed < classParams.length || (!extra && passed > classParams.length)) {
 		return failure({
@@ -638,6 +832,7 @@ function methodHead({
 		param: self,
 		classParams,
 		extra: field !== undefined,
+		selfType: exactReceiverType(receiver),
 	});
 	if (!renamed.ok) return renamed;
 	const rename = renamed.value;
@@ -680,7 +875,9 @@ function methodHead({
 			? [...ownParams, ...returnType.typeParams]
 			: ownParams;
 
-	const clash = methodTypeParams.find((tp) => classNames.has(tp.name));
+	const reserved = new Set(classNames);
+	if (receiver.self === NAMESPACE_SELF) reserved.add(NAMESPACE_SELF_TYPE);
+	const clash = methodTypeParams.find((tp) => reserved.has(tp.name));
 	if (clash !== undefined) {
 		return failure({
 			feature,
@@ -1019,9 +1216,11 @@ function classHeader({
 
 /** The getter on the primary class that returns a namespace's class. */
 function renderGetter({
+	feature,
 	namespace,
 	header,
 }: {
+	feature: ClassFeature;
 	namespace: NamespaceProperty;
 	header: ClassHeader;
 }): Member {
@@ -1040,8 +1239,25 @@ function renderGetter({
 
 	return {
 		name,
-		source: `${jsDoc}\tget ${name}(): ${className}${header.applied} {\n\t\treturn new ${className}(this);\n\t}\n`,
+		source: `${jsDoc}\tget ${name}(): ${className}${namespaceApplied({ feature, header })} {\n\t\treturn new ${className}(this);\n\t}\n`,
 	};
+}
+
+/**
+ * The type arguments a primary's getter passes its namespace class: the
+ * primary's own, then `this` when the primary carries views.
+ */
+function namespaceApplied({
+	feature,
+	header,
+}: {
+	feature: ClassFeature;
+	header: ClassHeader;
+}): string {
+	if (feature.views === undefined) return header.applied;
+	const args = header.applied.slice(1, -1);
+
+	return args === "" ? "<this>" : `<${args}, this>`;
 }
 
 /**
@@ -1083,11 +1299,17 @@ function renderNamespaceClass({
 	});
 	// The mini type: holding the main class, whose getter returns this one, makes
 	// TypeScript's variance measurement circular and order-dependent (unsound).
-	const self = `mini.${primary}${header.applied}`;
+	// With views, the exact receiver is a type parameter bounded by it instead.
+	const held = `mini.${primary}${header.applied}`;
+	const self = feature.views === undefined ? held : NAMESPACE_SELF_TYPE;
+	const typeParams =
+		feature.views === undefined
+			? header.typeParams
+			: `${header.typeParams === "" ? "<" : `${header.typeParams.slice(0, -1)}, `}${NAMESPACE_SELF_TYPE} extends ${held} = ${held}>`;
 	const opening = `\treadonly #self: ${self};\n\n${constructorDoc}\tconstructor(self: ${self}) {\n\t\tthis.#self = self;\n\t}\n`;
 	const body = [opening, ...methods.map((method) => method.source)].join("\n");
 
-	return `${classDoc}export class ${className}${header.typeParams} {\n${body}}\n`;
+	return `${classDoc}export class ${className}${typeParams} {\n${body}}\n`;
 }
 
 function renderClass({
@@ -1160,11 +1382,59 @@ function renderClass({
 
 	const body = [
 		fromMini,
+		...(feature.views === undefined
+			? []
+			: [renderFromMiniView({ feature, context, applied })]),
 		...methods.map((method) => method.source),
 		...getters.map((getter) => getter.source),
 	].join("\n");
 
 	return `${classDoc}export class ${primary}${classTypeParams} extends mini.${primary}${applied} {\n${body}}\n`;
+}
+
+/**
+ * The `fromMiniView` static of a primary carrying views: a main instance
+ * built from a mini one's params, with its own properties (the view)
+ * copied on. It always copies, so a main receiver's view comes along too,
+ * and it panics on any other prototype than mini's or main's: a subclass
+ * would lose its own behaviour in the copy.
+ */
+function renderFromMiniView({
+	feature,
+	context,
+	applied,
+}: {
+	feature: ClassFeature;
+	context: RenderContext;
+	applied: string;
+}): string {
+	const { primary } = feature;
+	const doc = renderJsDoc({
+		jsDoc: {
+			doc: `Views a mini {@linkcode mini.${primary}} with a view (own properties holding the children it was built from) as a main \`${primary}\` with the same view: a new main instance over the same struct params, with \`self\`'s own properties copied on. Panics with a \`TypeError\` when \`self\` is an instance of any other class than mini's or main's \`${primary}\` (a subclass would lose its behaviour in the copy).`,
+			tags: [
+				{ kind: "template", name: "V", doc: "The view" },
+				{ kind: "param", name: "self", doc: `The ${primary} to convert` },
+				{
+					kind: "return",
+					doc: `A main \`${primary}\` over \`self\`'s params, with its view`,
+				},
+			],
+		},
+		context,
+		indent: "\t",
+	});
+	const typeArgs = applied.slice(1, -1);
+	const params =
+		typeArgs === "" ? "V extends object" : `${typeArgs}, V extends object`;
+	const check = [
+		"const prototype: unknown = Object.getPrototypeOf(self);",
+		`if (prototype !== ${primary}.prototype && prototype !== mini.${primary}.prototype) {`,
+		`\tthrow new TypeError("${primary}.fromMiniView: expected a mini or main ${primary}, not an instance of a subclass");`,
+		"}",
+	].join("\n\t\t");
+
+	return `${doc}\tstatic fromMiniView<${params}>(self: mini.${primary}${applied} & V): ${primary}${applied} & V {\n\t\t${check}\n\n\t\treturn Object.assign(new ${primary}(getStructParams(self)), self);\n\t}\n`;
 }
 
 /** Where a borrow's methods go, as the module doc says it. */
@@ -1396,7 +1666,7 @@ function borrowedFunction({
 		);
 	}
 	const selfFirst = signatures.every((sig) => {
-		return isSelfOfPrimary(feature.primary, sig.params[0]);
+		return receiverFormOf({ feature, signature: sig }) !== undefined;
 	});
 	if (field === undefined && !selfFirst) {
 		return fail(
@@ -1600,7 +1870,7 @@ function renderClasses({
 		return [{ borrow, namespace: property }];
 	});
 	const getters = namespaces.map(({ namespace }) => {
-		return renderGetter({ namespace, header });
+		return renderGetter({ feature, namespace, header });
 	});
 	const classes = namespaces.map(({ borrow, namespace }) => {
 		return renderNamespaceClass({
@@ -1628,6 +1898,16 @@ export function generateMain(input: GenerateInput): Generated<string> {
 
 	const primary = primaryOf({ feature, symbols });
 	if (!primary.ok) return primary;
+	if (isClassFeature(feature) && feature.views !== undefined) {
+		if (feature.construct !== "params") {
+			return failure({
+				feature,
+				symbol: feature.primary,
+				message:
+					'`views` needs `construct: "params"`: a view is copied onto a Struct rebuilt from its params',
+			});
+		}
+	}
 
 	const wrapNames = new Set([
 		...(isClassFeature(feature) ? [feature.primary] : []),
@@ -1653,11 +1933,9 @@ export function generateMain(input: GenerateInput): Generated<string> {
 
 		const signatures = signaturesOf(symbol);
 		if (signatures.length > 0) {
-			const selfFirst = signatures.map(
-				(sig) =>
-					isClassFeature(feature) &&
-					isSelfOfPrimary(feature.primary, sig.params[0]),
-			);
+			const selfFirst = signatures.map((sig) => {
+				return receiverFormOf({ feature, signature: sig }) !== undefined;
+			});
 			if (selfFirst.every(Boolean)) {
 				methodSymbols.push(symbol);
 				continue;
@@ -1730,6 +2008,14 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		omitted,
 		wrapNames,
 		mappers,
+		views: new Set([
+			...(isClassFeature(feature) && feature.views !== undefined
+				? [feature.primary]
+				: []),
+			...(feature.wraps ?? []).flatMap((target) => {
+				return target.views === true ? [target.type] : [];
+			}),
+		]),
 		sources,
 		outputUrl,
 		typeImports: new Map(),

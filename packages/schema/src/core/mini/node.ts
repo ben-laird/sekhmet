@@ -21,7 +21,7 @@ import type { Literal } from "@/src/primitives/mini/literal.ts";
 import type { NumberSchemaOptions } from "@/src/primitives/mini/number.ts";
 import type { StringSchemaOptions } from "@/src/primitives/mini/string.ts";
 import type { StringboolOptions } from "@/src/primitives/mini/stringbool.ts";
-import type { AnySchema } from "./schema.ts";
+import { type AnySchema, Schema } from "./schema.ts";
 
 /**
  * The details of a `Leaf` node: which built-in leaf schema it is, told apart
@@ -522,9 +522,15 @@ export function nodeOf(schema: AnySchema): SchemaNode {
 	return getStructParams(schema).node;
 }
 
-/** The schema of a shape's value: the schema itself, or a field entry's. */
+/**
+ * The schema of a shape's value: the schema itself, or a field entry's. A
+ * schema is told apart with `instanceof`, as `object` does, so a schema
+ * with a view is never read as a field entry.
+ */
 function fieldSchema(entry: Shape[string]): AnySchema {
-	return "schema" in entry ? entry.schema : entry;
+	if (entry instanceof Schema) return entry;
+
+	return entry.schema;
 }
 
 /**

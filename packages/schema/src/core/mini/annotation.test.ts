@@ -16,6 +16,7 @@ import {
 } from "./annotation.ts";
 import { nodeOf } from "./node.ts";
 import { map, parseSync, Schema } from "./schema.ts";
+import { viewed } from "./view.ts";
 
 const label = annotationKey<string>({ name: "label" });
 const order = annotationKey<number>({ name: "order" });
@@ -110,6 +111,37 @@ Deno.test("annotations survive a main view and the main method", () => {
 	// Then: the view keeps its annotations, and lookup sees through optional
 	assertEquals(unwrap(annotation({ schema: viewed, key: label })), "Mini");
 	assertEquals(unwrap(annotation({ schema: chained, key: label })), "Main");
+});
+
+Deno.test("annotate keeps the exact type, the view and the prototype", () => {
+	// Given: a mini and a main schema, each with a view
+	const miniViewed = viewed({
+		init: { parse: (input: string) => Ok(input) },
+		view: { child: text },
+	});
+	const mainViewed = MainSchema.fromMiniView(miniViewed);
+
+	// When: annotating each, with the function and the method
+	const miniLabelled = annotate(miniViewed, [label("Mini")]);
+	const mainLabelled = mainViewed.annotate([label("Main")]);
+
+	// Then: each is a copy of its exact type, with the view and the same
+	// prototype, and the original is unchanged
+	assertType<IsExact<typeof miniLabelled, typeof miniViewed>>(true);
+	assertType<IsExact<typeof mainLabelled, typeof mainViewed>>(true);
+	assertStrictEquals(miniLabelled.child, text);
+	assertStrictEquals(mainLabelled.child, text);
+	assertStrictEquals(
+		Object.getPrototypeOf(miniLabelled),
+		Object.getPrototypeOf(miniViewed),
+	);
+	assertStrictEquals(Object.getPrototypeOf(mainLabelled), MainSchema.prototype);
+	assertEquals(
+		unwrap(annotation({ schema: mainLabelled, key: label })),
+		"Main",
+	);
+	assertEquals(isNone(annotation({ schema: mainViewed, key: label })), true);
+	assertEquals(mainLabelled.parseSync("a").unwrap(), "a");
 });
 
 Deno.test("annotation is typed by its key, and a key checks its values", () => {

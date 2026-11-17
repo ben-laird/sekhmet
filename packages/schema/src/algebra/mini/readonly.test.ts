@@ -173,3 +173,15 @@ Deno.test("readonly records a Readonly node over its schema", () => {
 	assertEquals(node, new SchemaNode("Readonly", { inner: anything }));
 	assertStrictEquals(children(node)[0], anything);
 });
+
+Deno.test("readonly views the schema it freezes the output of", () => {
+	// Given: a schema
+	const items = identity<string[]>();
+
+	// When: making it readonly
+	const frozen = readonly(items);
+
+	// Then: .inner is the schema itself
+	assertStrictEquals(frozen.inner, items);
+	assertType<IsExact<typeof frozen.inner, typeof items>>(true);
+});

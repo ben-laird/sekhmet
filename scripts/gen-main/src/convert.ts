@@ -10,6 +10,9 @@
  * - the plain elements of a returned tuple (`[Option<T>, Option<U>]`)
  * - the yielded type of a returned `Generator`/`IterableIterator` whose return
  *   type is `void`, by re-yielding lazily
+ * - the one wrap target of a returned intersection with a view
+ *   (`Schema<I, O, E> & ObjectView<S>`), through the target's `fromMiniView`,
+ *   which keeps the view's own properties
  *
  * Everything else (parameters, unions, other generics) keeps its mini type.
  *
@@ -52,6 +55,8 @@ export interface ConvertContext {
 	readonly wrapTarget: (type: TypeNode) => string | undefined;
 	/** The main method mapping each type argument of a wrap target, if any. */
 	readonly mappers: (target: string) => readonly (string | undefined)[];
+	/** Whether a wrap target's main class has a `fromMiniView` static. */
+	readonly views: (target: string) => boolean;
 }
 
 const ITERABLES: ReadonlySet<string> = new Set([
@@ -108,6 +113,65 @@ function planValue({
 	return ok({
 		text,
 		apply: (expression) => `${target}.fromMini(${expression})${maps.join("")}`,
+	});
+}
+
+/**
+ * Plans a top-level intersection naming one wrap target, a mini class with a
+ * view (`Schema<I, O, E> & ObjectView<S>`): the target is spelled as its main
+ * class, the other members as they are, and the value is converted with the
+ * target's `fromMiniView`, which copies the view's own properties. An
+ * intersection naming no wrap target needs no conversion.
+ */
+function planIntersection({
+	type,
+	context,
+}: {
+	type: Extract<TypeNode, { kind: "intersection" }>;
+	context: ConvertContext;
+}): Result<Value, string> {
+	const targets = type.types.filter((member) => {
+		return context.wrapTarget(member) !== undefined;
+	});
+	const [member, ...others] = targets;
+	if (member === undefined) {
+		const text = type.types.map(context.render).join(" & ");
+
+		return ok({ text, apply: undefined });
+	}
+	const target = context.wrapTarget(member);
+	if (others.length > 0 || target === undefined) {
+		return err(
+			"an intersection may name one wrap target, the class its view is on",
+		);
+	}
+	if (!context.views(target)) {
+		return err(
+			`${target} & … needs ${target}.fromMiniView; set \`views\` on ${target}'s feature or wrap target`,
+		);
+	}
+
+	const nested = member.kind === "ref" ? member.args : [];
+	const converts = nested.some((arg) => {
+		const plannedArg = planValue({ type: arg, context, depth: 1 });
+		return !plannedArg.ok || plannedArg.value.apply !== undefined;
+	});
+	const planned = planValue({ type: member, context, depth: 0 });
+	if (!planned.ok) return planned;
+	if (converts) {
+		return err(
+			`${target}'s type arguments name a main class, which an intersection with its view can't convert`,
+		);
+	}
+	const text = type.types
+		.map((part) =>
+			part === member ? planned.value.text : context.render(part),
+		)
+		.join(" & ");
+
+	return ok({
+		text,
+		apply: (expression) => `${target}.fromMiniView(${expression})`,
 	});
 }
 
@@ -182,7 +246,10 @@ export function convertReturn({
 		}
 	}
 
-	const planned = planValue({ type, context, depth: 0 });
+	const planned =
+		type.kind === "intersection"
+			? planIntersection({ type, context })
+			: planValue({ type, context, depth: 0 });
 	if (!planned.ok) return planned;
 
 	const { text, apply } = planned.value;

@@ -16,6 +16,28 @@ export interface WrapTarget {
 	 * target nested in a type argument.
 	 */
 	readonly mappers?: readonly (string | undefined)[];
+	/**
+	 * Whether the class has a `fromMiniView` static (its feature sets
+	 * {@linkcode ClassFeature.views}), so a returned intersection with a
+	 * view (`Schema<I, O, E> & ObjectView<S>`) converts through it.
+	 */
+	readonly views?: boolean;
+}
+
+/**
+ * How a primary class carries views: own properties holding the children
+ * a value was built from (`Schema<I, O, E> & ObjectView<S>`). With it, main
+ * gets a `fromMiniView` static that copies a mini value's own properties
+ * onto a main one, returned intersections naming the primary convert
+ * through it, and two more receiver forms keep the receiver's exact type,
+ * rendered `this`: `self: S & Primary<A, B, C>` with
+ * `S extends Primary<A, B, C>`, and `self: S` with `S extends` the `any`
+ * alias. An options type's extra type parameter constrained to
+ * `Primary<A, B, C>` (what a field method's receiver fills) is `this` too.
+ */
+export interface Views {
+	/** The mini alias every value of the primary is assignable to (`AnySchema`). */
+	readonly any: string;
 }
 
 /** What every generated feature declares, with or without a primary class. */
@@ -133,6 +155,8 @@ export interface ClassFeature extends FeatureBase {
 	readonly mappers?: readonly (string | undefined)[];
 	/** Methods taken from other features' mini barrels. */
 	readonly borrows?: readonly Borrow[];
+	/** How the primary carries views (only with `construct: "params"`). */
+	readonly views?: Views;
 }
 
 /**
@@ -149,6 +173,8 @@ export interface FunctionFeature extends FeatureBase {
 	readonly mappers?: never;
 	/** Absent: there is no primary class to take methods. */
 	readonly borrows?: never;
+	/** Absent: there is no primary class to carry views. */
+	readonly views?: never;
 }
 
 /** One feature whose main entrypoint is generated from its mini barrel. */
@@ -503,6 +529,7 @@ export const FEATURES: readonly Feature[] = [
 		primary: "Schema",
 		construct: "params",
 		mappers: SCHEMA_MAPPERS,
+		views: { any: "AnySchema" },
 		wraps: [ENUM_RESULT],
 		// The shape modifiers belong to composites but read best chained.
 		borrows: [
@@ -558,6 +585,7 @@ export const FEATURES: readonly Feature[] = [
 				type: "Schema",
 				from: "../../core/main/mod.ts",
 				mappers: SCHEMA_MAPPERS,
+				views: true,
 			},
 		],
 		example: [
@@ -579,6 +607,7 @@ export const FEATURES: readonly Feature[] = [
 				type: "Schema",
 				from: "../../core/main/mod.ts",
 				mappers: SCHEMA_MAPPERS,
+				views: true,
 			},
 		],
 		example: [
@@ -608,6 +637,7 @@ export const FEATURES: readonly Feature[] = [
 				type: "Schema",
 				from: "../../core/main/mod.ts",
 				mappers: SCHEMA_MAPPERS,
+				views: true,
 			},
 		],
 		example: [
@@ -639,6 +669,7 @@ export const FEATURES: readonly Feature[] = [
 				type: "Schema",
 				from: "../../core/main/mod.ts",
 				mappers: SCHEMA_MAPPERS,
+				views: true,
 			},
 		],
 		example: [

@@ -5,7 +5,13 @@ import { assertType, type IsExact } from "@std/testing/types";
 import { number } from "@/src/primitives/mini/number.ts";
 import { string } from "@/src/primitives/mini/string.ts";
 import { is } from "./guard.ts";
-import { filter, parseSync, Schema } from "./schema.ts";
+import {
+	type ErrorOf,
+	filter,
+	type Output,
+	parseSync,
+	Schema,
+} from "./schema.ts";
 
 Deno.test("is narrows its input in an if", () => {
 	// Given: an unknown value and a guard from string()
@@ -85,7 +91,8 @@ Deno.test("is works as filter's predicate", () => {
 	const rejected = parseSync(text, 1);
 
 	// Then: the output is narrowed to string, and the number fails with the error
-	assertType<IsExact<typeof text, Schema<unknown, string, string>>>(true);
+	assertType<IsExact<Output<typeof text>, string>>(true);
+	assertType<IsExact<ErrorOf<typeof text>, string>>(true);
 	assertEquals(unwrap(accepted), "a");
 	assertEquals(union(unwrapErr(rejected)), "not text");
 });

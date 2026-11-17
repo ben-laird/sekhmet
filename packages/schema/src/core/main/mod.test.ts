@@ -1,9 +1,10 @@
 import { Ok as MainOk, Result } from "@sekhmet/enum/result";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
-import { assertEquals, assertInstanceOf } from "@std/assert";
+import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import type { Branded } from "@/src/algebra/main/mod.ts";
 import { object, union } from "@/src/composites/main/mod.ts";
+import * as mini from "@/src/core/mini/mod.ts";
 import { boolean, number, string } from "@/src/primitives/main/mod.ts";
 import {
 	type ErrorOf,
@@ -12,6 +13,7 @@ import {
 	type Input,
 	type Issues,
 	isSchemaIssue,
+	type MainSchemaMember,
 	nodeOf,
 	type Output,
 	ParseError,
@@ -20,6 +22,94 @@ import {
 	SchemaWith,
 	TooSmall,
 } from "./mod.ts";
+
+Deno.test("variance holds with views, checked narrowing-first (#31 was order-dependent)", () => {
+	// Given: schemas and namespaces with narrow and wide outputs, some with views
+	const narrowUser = object({
+		shape: {
+			name: new Schema({ parse: (_: unknown) => Ok<"a", never>("a") }),
+		},
+	});
+	const wideUser = object({ shape: { name: string() } });
+
+	// When: narrowing first, before any widening is checked
+	// @ts-expect-error a string output is not an "a" output
+	const narrowWith: SchemaWith<unknown, "a", never> = string().with;
+	// @ts-expect-error a string output is not an "a" output
+	const narrowSchema: Schema<unknown, "a", SchemaIssue> = string();
+	// @ts-expect-error a wide object's view is not a narrow one's
+	const narrowView: typeof narrowUser = wideUser;
+	// @ts-expect-error the namespace's Self is the receiver: a wide one isn't narrow
+	const narrowSelf: SchemaWith<
+		unknown,
+		{ name: "a" },
+		Issues<SchemaIssue>,
+		typeof narrowUser
+	> = wideUser.with;
+
+	// Then: only widening type-checks, for outputs, views and Self alike (a
+	// main Schema's error stays exact: filter's error builder returns it)
+	const narrowText = new Schema({ parse: (_: unknown) => Ok<"a", never>("a") });
+	const wideSchema: Schema<unknown, string, never> = narrowText;
+	const wideView: Schema<unknown, { name: string }, Issues<SchemaIssue>> & {
+		readonly shape: { readonly name: Schema<unknown, string, never> };
+	} = narrowUser;
+	const wideSelf: SchemaWith<unknown, { name: string }, unknown> =
+		narrowUser.with;
+	assertInstanceOf(narrowWith, SchemaWith);
+	assertInstanceOf(narrowSchema, Schema);
+	assertInstanceOf(narrowView, Schema);
+	assertInstanceOf(narrowSelf, SchemaWith);
+	assertInstanceOf(wideSchema, Schema);
+	assertInstanceOf(wideView, Schema);
+	assertInstanceOf(wideSelf, SchemaWith);
+});
+
+Deno.test("MainSchemaMember names exactly the members main adds to mini", () => {
+	// Given: the main and mini Schema types
+	type Added = Exclude<
+		keyof Schema<unknown, unknown, unknown>,
+		keyof mini.Schema<unknown, unknown, unknown>
+	>;
+
+	// When: comparing what main adds with the names a view reserves
+	// Then: they are the same, so a view can shadow no main member
+	assertType<IsExact<Added, MainSchemaMember>>(true);
+});
+
+Deno.test("Schema.fromMiniView copies a view onto a main Schema, from mini or main", () => {
+	// Given: a mini and a main schema, each with a view
+	const text = mini.viewed({
+		init: { parse: (input: string) => Ok(input) },
+		view: { label: "text" },
+	});
+	const main = Object.assign(
+		new Schema({ parse: (input: string) => Ok(input) }),
+		{ label: "main" },
+	);
+
+	// When: viewing each as main
+	const fromMini = Schema.fromMiniView(text);
+	const fromMain = Schema.fromMiniView(main);
+
+	// Then: each is a new main Schema over the same params, with the view
+	assertEquals(fromMini.label, "text");
+	assertEquals(fromMain.label, "main");
+	assertEquals(fromMini.parseSync("a").unwrap(), "a");
+	assertEquals(fromMain === main, false);
+	assertInstanceOf(fromMini, Schema);
+	assertInstanceOf(fromMain, Schema);
+});
+
+Deno.test("Schema.fromMiniView panics on a subclass, which the copy would lose", () => {
+	// Given: an instance of a subclass of the mini Schema
+	class Tagged extends mini.Schema<string, string, never> {}
+	const tagged = new Tagged({ parse: (input: string) => Ok(input) });
+
+	// When: viewing it as main
+	// Then: it panics with a TypeError
+	assertThrows(() => Schema.fromMiniView(tagged), TypeError, "subclass");
+});
 
 const digits = new Schema({
 	parse: (input: string) => {
@@ -270,4 +360,132 @@ Deno.test("the Result-style transforms chain as methods and take main Results", 
 	assertType<IsExact<Output<typeof halved>, number>>(true);
 	assertType<IsExact<ErrorOf<typeof halved>, string>>(true);
 	assertInstanceOf(halved, Schema);
+});
+
+Deno.test("each transform method views its receiver, exactly", () => {
+	// Given: a schema with a view of its own
+	const user = object({ shape: { name: string() } });
+
+	// When: transforming it each way, and piping it
+	const name = user.map((value) => value.name);
+	const checked = user.inspect(() => {});
+	const text = new Schema({
+		parse: (input: unknown) => Ok<string, string>(String(input)),
+	});
+	const piped = text.pipe(digits);
+
+	// Then: .inner is the receiver with its view, and .next the piped schema
+	assertEquals(name.inner, user);
+	assertEquals(piped.inner, text);
+	assertEquals(checked.inner.shape.name.parseSync("a").unwrap(), "a");
+	assertEquals(piped.next, digits);
+	assertType<IsExact<typeof name.inner, typeof user>>(true);
+	assertType<IsExact<typeof checked.inner, typeof user>>(true);
+	assertType<IsExact<typeof piped.next, typeof digits>>(true);
+	assertType<IsExact<Output<typeof piped>, number>>(true);
+});
+
+Deno.test("a transform's view holds the receiver's view, not its own", () => {
+	// Given: an object with a view
+	const user = object({ shape: { name: string() } });
+
+	// When: mapping it, then making the result optional
+	const maybeName = user.map((value) => value.name).optional();
+
+	// Then: the view reaches the object through each step, and no step
+	// claims the object's shape as its own
+	assertEquals(maybeName.inner.inner.shape.name.parseSync("a").unwrap(), "a");
+	// @ts-expect-error a mapped schema's view is .inner, not the receiver's .shape
+	assertEquals(user.map((value) => value.name).shape, undefined);
+});
+
+Deno.test("a long chain of transforms and modifiers type-checks, keeping every step", () => {
+	// Given: a long chain of .map and .optional steps
+	const chain = string()
+		.map((text) => text.length)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0);
+	// {}
+
+	// When: parsing with it, and walking its view back
+	const parsed = chain.parseSync("four").unwrap();
+	const optionalStep = chain.inner.inner.inner.inner.inner;
+
+	// Then: it parses through every step, and the view reaches back
+	assertEquals(parsed, 4);
+	assertType<IsExact<Output<typeof chain>, number>>(true);
+	assertEquals(optionalStep.parseSync(undefined).unwrap(), undefined);
+});
+
+Deno.test(".with keeps the receiver's view: readonly views it, brand keeps it", () => {
+	// Given: an object with a view
+	const user = object({ shape: { name: string() } });
+
+	// When: making it readonly and branding it through the namespace
+	const frozen = user.with.readonly();
+	const branded = user.with.brand("User");
+
+	// Then: readonly's .inner is the receiver, and brand keeps its .shape
+	assertEquals(frozen.inner, user);
+	assertEquals(branded.shape, user.shape);
+	assertType<IsExact<typeof frozen.inner, typeof user>>(true);
+	assertType<IsExact<typeof branded.shape, typeof user.shape>>(true);
+	assertType<
+		IsExact<Output<typeof branded>, Branded<{ name: string }, "User">>
+	>(true);
+	assertEquals(branded.shape.name.parseSync("a").unwrap(), "a");
+	assertInstanceOf(frozen, Schema);
+	assertInstanceOf(branded, Schema);
+});
+
+Deno.test("SchemaWith's Self defaults to the mini Schema, which every receiver widens to", () => {
+	// Given: the namespace of an object with a view
+	const user = object({ shape: { name: string() } });
+
+	// When: widening it to the namespace of any schema of its types
+	const plain: SchemaWith<
+		unknown,
+		{ name: string },
+		Issues<SchemaIssue>
+	> = user.with;
+
+	// Then: it type-checks, and its methods drop the view they can't see
+	const frozen = plain.readonly();
+	assertType<
+		IsExact<
+			typeof frozen.inner,
+			mini.Schema<unknown, { name: string }, Issues<SchemaIssue>>
+		>
+	>(true);
+	assertEquals(frozen.inner, user);
 });
