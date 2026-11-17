@@ -39,6 +39,30 @@ export function maxLength(maximum: number): Inspect<string> {
 }
 
 /**
+ * Fails a string that doesn't start with `prefix` with `InvalidFormat`
+ * (format `"starts-with"`). It compares UTF-16 code units, case-sensitively.
+ */
+export function startsWith(prefix: string): Inspect<string> {
+	return (value) => {
+		if (value.startsWith(prefix)) return undefined;
+
+		return InvalidFormat({ input: value, format: "starts-with" });
+	};
+}
+
+/**
+ * Fails a string that doesn't end with `suffix` with `InvalidFormat` (format
+ * `"ends-with"`). It compares UTF-16 code units, case-sensitively.
+ */
+export function endsWith(suffix: string): Inspect<string> {
+	return (value) => {
+		if (value.endsWith(suffix)) return undefined;
+
+		return InvalidFormat({ input: value, format: "ends-with" });
+	};
+}
+
+/**
  * Fails a string that doesn't match `pattern` with `InvalidFormat` (format
  * `"regex"`), carrying the pattern. The pattern's `g` and `y` flags are
  * ignored, so its `lastIndex` never makes a check stateful.

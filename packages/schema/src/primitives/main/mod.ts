@@ -308,8 +308,8 @@ export function number(
  * can.
  *
  * The options apply in this order: `coerce`, then the transforms `trim` and
- * `normalize`, then the checks `minLength`, `maxLength`, `format` and
- * `regex`, on the transformed string. The first check that fails is
+ * `normalize`, then the checks `minLength`, `maxLength`, `startsWith`,
+ * `endsWith`, `format` and `regex`, on the transformed string. The first check that fails is
  * reported.
  *
  * @param options - Coercion, transforms and checks
@@ -333,10 +333,12 @@ export function number(
  *
  * const email = string({ trim: true, minLength: 3, format: "email" });
  * const slug = string({ regex: /^[a-z0-9-]+$/ });
+ * const config = string({ startsWith: "config/", endsWith: ".json" });
  *
  * assertEquals(unwrap(parseSync(email, " ada@example.com ")), "ada@example.com");
  * assertEquals(isErr(parseSync(email, "ada@localhost")), true);
  * assertEquals(isErr(parseSync(slug, "Not a slug")), true);
+ * assertEquals(isErr(parseSync(config, "config/app.yaml")), true);
  * ```
  * @example
  * ```ts

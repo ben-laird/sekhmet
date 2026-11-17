@@ -97,6 +97,62 @@ Deno.test("regex ignores a global pattern's lastIndex", () => {
 	assertEquals(results, [Ok("a"), Ok("a"), Ok("a")]);
 });
 
+Deno.test("startsWith and endsWith accept a string with the prefix and suffix", () => {
+	// Given: a string that must start with "v" and end with ".json"
+	const schema = string({ startsWith: "v", endsWith: ".json" });
+
+	// When: parsing strings with both, and the bare affixes
+	// Then: they pass unchanged
+	assertEquals(parseSync(schema, "v1.json"), Ok("v1.json"));
+	assertEquals(parseSync(schema, "v.json"), Ok("v.json"));
+});
+
+Deno.test("startsWith and endsWith report InvalidFormat naming the check", () => {
+	// Given: a string that must start with "v" and end with ".json"
+	const schema = string({ startsWith: "v", endsWith: ".json" });
+
+	// When: parsing strings missing the prefix, the suffix, or both
+	// Then: each fails naming the first affix it lacks, prefix first
+	assertEquals(
+		parseSync(schema, "1.json"),
+		Err(ParseError(InvalidFormat({ input: "1.json", format: "starts-with" }))),
+	);
+	assertEquals(
+		parseSync(schema, "v1.yaml"),
+		Err(ParseError(InvalidFormat({ input: "v1.yaml", format: "ends-with" }))),
+	);
+	assertEquals(
+		parseSync(schema, "1.yaml"),
+		Err(ParseError(InvalidFormat({ input: "1.yaml", format: "starts-with" }))),
+	);
+});
+
+Deno.test("startsWith and endsWith compare code units, case-sensitively", () => {
+	// Given: a prefix in lower case, and an empty suffix
+	const schema = string({ startsWith: "http", endsWith: "" });
+
+	// When: parsing the prefix in upper case, and any string
+	// Then: the case matters, and an empty affix always passes
+	assertEquals(
+		parseSync(schema, "HTTP://x"),
+		Err(
+			ParseError(InvalidFormat({ input: "HTTP://x", format: "starts-with" })),
+		),
+	);
+	assertEquals(parseSync(schema, "http://x"), Ok("http://x"));
+});
+
+Deno.test("startsWith and endsWith see the trimmed string", () => {
+	// Given: a trimmed string with a prefix and a suffix
+	const schema = string({ trim: true, startsWith: "<", endsWith: ">" });
+
+	// When: parsing a padded tag
+	const result = parseSync(schema, "  <b>\n");
+
+	// Then: the affixes are checked after trimming
+	assertEquals(result, Ok("<b>"));
+});
+
 Deno.test("trim removes surrounding whitespace before the checks", () => {
 	// Given: a trimmed string of at least 1 character
 	const schema = string({ trim: true, minLength: 1 });
@@ -230,4 +286,58 @@ Deno.test("string's options don't change its types", () => {
 	assertType<IsExact<Input<typeof schema>, unknown>>(true);
 	assertType<IsExact<Output<typeof schema>, string>>(true);
 	assertType<IsExact<ErrorOf<typeof schema>, SchemaIssue>>(true);
+});
+
+Deno.test("checks report the first failure: lengths, then affixes, then format", () => {
+	// Given: a string with a length, a prefix, a suffix and a format
+	const schema = string({
+		maxLength: 20,
+		startsWith: "a",
+		endsWith: ".com",
+		format: "email",
+	});
+
+	// When: parsing strings failing several checks
+	// Then: the earliest check in the order is reported
+	assertEquals(
+		parseSync(schema, "b@example.org-and-more"),
+		Err(
+			ParseError(
+				TooBig({
+					input: "b@example.org-and-more",
+					origin: "string",
+					maximum: 20,
+					inclusive: true,
+				}),
+			),
+		),
+	);
+	assertEquals(
+		parseSync(schema, "b@example.org"),
+		Err(
+			ParseError(
+				InvalidFormat({ input: "b@example.org", format: "starts-with" }),
+			),
+		),
+	);
+	assertEquals(
+		parseSync(schema, "a@example.org"),
+		Err(
+			ParseError(
+				InvalidFormat({ input: "a@example.org", format: "ends-with" }),
+			),
+		),
+	);
+	assertEquals(
+		parseSync(schema, "a@.com"),
+		Err(
+			ParseError(
+				InvalidFormat({
+					input: "a@.com",
+					format: "email",
+					pattern: EMAIL_PATTERN,
+				}),
+			),
+		),
+	);
 });

@@ -68,3 +68,14 @@ Deno.test("a primitive built without options records {} as its options", () => {
 		assertEquals(nodeOf(schema), leafOf(details));
 	}
 });
+
+Deno.test("string keeps its affix options in its Leaf as passed", () => {
+	// Given: a string with a prefix and a suffix
+	const options = { startsWith: "v", endsWith: ".json" };
+
+	// When: reading its node
+	const node = nodeOf(string(options));
+
+	// Then: the Leaf holds the options as passed
+	assertEquals(node, leafOf({ type: "string", options }));
+});

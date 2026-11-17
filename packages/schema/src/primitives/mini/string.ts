@@ -5,10 +5,12 @@ import { leaf, when } from "./check.ts";
 import type { CoerceMode } from "./coerce.ts";
 import { coerceString } from "./convert.ts";
 import {
+	endsWith,
 	maxLength,
 	minLength,
 	type NormalizationForm,
 	regex,
+	startsWith,
 } from "./string-checks.ts";
 import { format, type StringFormat } from "./string-formats.ts";
 
@@ -55,6 +57,19 @@ export interface StringSchemaOptions {
 	 */
 	readonly maxLength?: number;
 
+	/**
+	 * A prefix the string must start with, failing with an `InvalidFormat`
+	 * issue of format `"starts-with"`. It compares UTF-16 code units,
+	 * case-sensitively, after the transforms.
+	 */
+	readonly startsWith?: string;
+
+	/**
+	 * A suffix the string must end with, failing with an `InvalidFormat` issue
+	 * of format `"ends-with"`. It compares like `startsWith`.
+	 */
+	readonly endsWith?: string;
+
 	/** A named format the string must be in (see {@linkcode StringFormat}). */
 	readonly format?: StringFormat;
 
@@ -77,8 +92,8 @@ export interface StringSchemaOptions {
  * can.
  *
  * The options apply in this order: `coerce`, then the transforms `trim` and
- * `normalize`, then the checks `minLength`, `maxLength`, `format` and
- * `regex`, on the transformed string. The first check that fails is
+ * `normalize`, then the checks `minLength`, `maxLength`, `startsWith`,
+ * `endsWith`, `format` and `regex`, on the transformed string. The first check that fails is
  * reported.
  *
  * @param options Coercion, transforms and checks
@@ -104,10 +119,12 @@ export interface StringSchemaOptions {
  *
  * const email = string({ trim: true, minLength: 3, format: "email" });
  * const slug = string({ regex: /^[a-z0-9-]+$/ });
+ * const config = string({ startsWith: "config/", endsWith: ".json" });
  *
  * assertEquals(unwrap(parseSync(email, " ada@example.com ")), "ada@example.com");
  * assertEquals(isErr(parseSync(email, "ada@localhost")), true);
  * assertEquals(isErr(parseSync(slug, "Not a slug")), true);
+ * assertEquals(isErr(parseSync(config, "config/app.yaml")), true);
  * ```
  *
  * @example
@@ -150,6 +167,8 @@ export function string(
 		inspections: [
 			...when({ option: options?.minLength, inspect: minLength }),
 			...when({ option: options?.maxLength, inspect: maxLength }),
+			...when({ option: options?.startsWith, inspect: startsWith }),
+			...when({ option: options?.endsWith, inspect: endsWith }),
 			...when({ option: options?.format, inspect: format }),
 			...when({ option: options?.regex, inspect: regex }),
 		],

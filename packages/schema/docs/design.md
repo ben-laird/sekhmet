@@ -262,17 +262,17 @@ example this document first gave.
 Every check and transform is an option of the schema it refines, the same in
 mini and main:
 
-| Schema                   | Options                                                                    |
-| ------------------------ | -------------------------------------------------------------------------- |
-| `number`                 | `coerce`, `nan`, `infinite`, `int`, `safe`, `min`, `max`, `multipleOf`     |
-| `string`                 | `coerce`, `trim`, `normalize`, `minLength`, `maxLength`, `format`, `regex` |
-| `bigint`                 | `min`, `max`, `multipleOf`                                                 |
-| `date`                   | `min`, `max`                                                               |
-| `boolean` / `stringbool` | `coerce` / `truthy`, `falsy`                                               |
-| `object`                 | `shape`, `unknownKeys` (`"strip"` by default, `"strict"`, `"passthrough"`) |
-| `array`                  | `item`, `minItems`, `maxItems`                                             |
-| `record`                 | `key`, `value`                                                             |
-| `discriminatedUnion`     | `key`, `options`                                                           |
+| Schema                   | Options                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `number`                 | `coerce`, `nan`, `infinite`, `int`, `safe`, `min`, `max`, `multipleOf`                                                   |
+| `string`                 | `coerce`, `trim`, `normalize`, `minLength`, `maxLength`, `startsWith`, `endsWith`, `format`, `regex` (affixes since #35) |
+| `bigint`                 | `min`, `max`, `multipleOf`                                                                                               |
+| `date`                   | `min`, `max`                                                                                                             |
+| `boolean` / `stringbool` | `coerce` / `truthy`, `falsy`                                                                                             |
+| `object`                 | `shape`, `unknownKeys` (`"strip"` by default, `"strict"`, `"passthrough"`)                                               |
+| `array`                  | `item`, `minItems`, `maxItems`                                                                                           |
+| `record`                 | `key`, `value`                                                                                                           |
+| `discriminatedUnion`     | `key`, `options`                                                                                                         |
 
 `tuple`, `union`, `enumOf`, `literal` and `lazy` keep their single
 positional parameter. The standalone `int`, `safe`, `multipleOf`, `min`,
@@ -296,7 +296,7 @@ gone; their logic is internal.
   then the checks on the transformed value. A primitive reports the first
   failing check, in a documented order: for `number`, `NaN`/`±Infinity`,
   `int`, `safe`, `min`, `max`, `multipleOf`; for `string`, `minLength`,
-  `maxLength`, `format`, `regex`. A check of a value after a `map` is a
+  `maxLength`, `startsWith`, `endsWith` (since #35), `format`, `regex`. A check of a value after a `map` is a
   `filter` (checks were once `self`-first and applied after a `map` too).
 - **Allowed means accepted** (owner decision, 2026-11-16): with `nan: true`,
   `NaN` passes without any other check, since none means anything for it.
@@ -614,3 +614,17 @@ module-level state.
   only ones.
 - **Later (not in this change):** `toJsonSchema` and Standard JSON Schema,
   reading nodes and annotations.
+
+## String options (#35)
+
+Implemented 2026-11-16, in
+`src/primitives/mini/string.ts`, `string-checks.ts` and `string-formats.ts`.
+Every new option is kept in the `Leaf` node as passed, like the rest (#32).
+
+- **`startsWith` and `endsWith`** take a literal prefix or suffix and fail
+  with `InvalidFormat`, of format `"starts-with"` or `"ends-with"`: kebab
+  case, as JSON Schema names its formats (`"date-time"`). They compare UTF-16
+  code units, case-sensitively, on the transformed string, and run after the
+  lengths and before `format` and `regex`, the cheap literal checks first.
+  The issue carries no `pattern`, since an affix is not a pattern; the
+  expected affix is in the schema's node.
