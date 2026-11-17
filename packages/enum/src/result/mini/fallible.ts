@@ -3,9 +3,10 @@
  *
  * Both mirror a plain `try`/`catch`/`finally`. A throw from `fn` becomes
  * `Err(parseErr(…))`, and `cleanup` runs last on every path. A throw from
- * `parseErr` or `cleanup` is not captured: it propagates as a panic, and a
- * throw from `cleanup` replaces whatever `fn` or `parseErr` produced, just
- * as a throw in a `finally` block does.
+ * `parseErr` or `cleanup` is not captured: the thrown value propagates
+ * uncaught (it is a bug, not an `E`), and a throw from `cleanup` replaces
+ * whatever `fn` or `parseErr` produced, just as a throw in a `finally` block
+ * does.
  *
  * The wrapper passes `fn` its arguments but not its `this`: wrap a method as
  * `fn: (...args) => object.method(...args)` or bind it first. `parseErr` and

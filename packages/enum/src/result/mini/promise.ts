@@ -34,9 +34,9 @@ export type NotPromise<T> = T extends PromiseLike<unknown> ? never : T;
  * As with `new Promise`, the first call wins and later ones are ignored. The
  * executor is synchronous and returns `undefined`, so an async executor,
  * whose rejection nothing would see and whose promise might never settle,
- * does not compile. A throw from the executor is not an `E`, so it is not
- * captured: it rejects the returned promise, as a panic, unless the executor
- * already settled it.
+ * does not compile. A throw from the executor is not captured: the returned
+ * promise rejects with the thrown value, uncaught (it is a bug, not an `E`),
+ * unless the executor already settled it.
  *
  * @template T - The success value type
  * @template E - The error type
