@@ -291,7 +291,7 @@ Deno.test("filter accepts values that pass the predicate", () => {
 
 	// When: filtering with the predicate
 	const filtered = filter(schema, {
-		error: new TypeError(),
+		error: () => new TypeError(),
 		predicate: isPositive,
 	});
 	const result = parseSync(filtered, 10);
@@ -313,7 +313,7 @@ Deno.test("filter rejects values that fail the predicate", () => {
 
 	// When: filtering with the predicate on a negative value
 	const filtered = filter(schema, {
-		error: new TypeError(),
+		error: () => new TypeError(),
 		predicate: isPositive,
 	});
 	const result = parseSync(filtered, -10);
@@ -332,6 +332,71 @@ Deno.test("filter rejects values that fail the predicate", () => {
 		}),
 		true,
 	);
+});
+
+Deno.test("filter builds its error from the rejected output", () => {
+	// Given: a filter whose error records the output it was built from
+	const schema = new Schema({
+		parse: (input: number) => Ok<number, string>(input),
+	});
+	const filtered = filter(schema, {
+		error: (n) => `${n} is not positive`,
+		predicate: (n): n is number => n > 0,
+	});
+
+	// When: parsing a value that fails the predicate
+	const result = parseSync(filtered, -10);
+
+	// Then: the error carries the rejected output
+	assertEquals(union(unwrapErr(result)), "-10 is not positive");
+});
+
+Deno.test("filter builds its error from the rejected output of an async schema", async () => {
+	// Given: an async schema, filtered with an error that records its output
+	const schema = new Schema({
+		parse: (input: number) => Promise.resolve(Ok<number, string>(input)),
+	});
+	const filtered = filter(schema, {
+		error: (n) => `${n} is not positive`,
+		predicate: (n): n is number => n > 0,
+	});
+
+	// When: parsing a value that fails the predicate
+	const result = await parseAsync(filtered, -10);
+
+	// Then: the error carries the rejected output
+	assertEquals(unwrapErr(result), "-10 is not positive");
+});
+
+Deno.test("filter does not build an error for an accepted output", async () => {
+	// Given: sync and async schemas, filtered with an error builder that counts its calls
+	const built: number[] = [];
+	const options = {
+		error: (n: number) => {
+			built.push(n);
+			return "not positive";
+		},
+		predicate: (n: number): n is number => n > 0,
+	};
+	const sync = filter(
+		new Schema({ parse: (input: number) => Ok<number, string>(input) }),
+		options,
+	);
+	const async = filter(
+		new Schema({
+			parse: (input: number) => Promise.resolve(Ok<number, string>(input)),
+		}),
+		options,
+	);
+
+	// When: parsing values that pass the predicate
+	const syncResult = parseSync(sync, 10);
+	const asyncResult = await parseAsync(async, 20);
+
+	// Then: both pass through, and the error builder was never called
+	assertEquals(unwrap(syncResult), 10);
+	assertEquals(unwrap(asyncResult), 20);
+	assertEquals(built, []);
 });
 
 Deno.test("Input, Output, Infer and ErrorOf extract a schema's types", () => {

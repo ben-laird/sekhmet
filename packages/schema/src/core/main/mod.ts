@@ -237,10 +237,11 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * Filters a schema's output using a type guard predicate.
 	 *
 	 * This creates a new schema that only succeeds if the original schema succeeds
-	 * AND the predicate returns true. A failed filter returns the given error.
+	 * AND the predicate returns true. A failed filter fails with the error
+	 * `options.error` builds from the rejected output.
 	 *
 	 * @template P - The filtered output type (must be a subtype of O)
-	 * @param options - The type guard predicate, and the error when it fails
+	 * @param options - The type guard predicate, and the error builder when it fails
 	 * @returns A new schema with filtered output
 	 * @example
 	 * ```ts
@@ -251,11 +252,11 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 *
 	 * const integer = new Schema({ parse: (input: number) => Ok<number, string>(input) });
 	 * const positive = integer.filter({
-	 * 	error: "not positive",
+	 * 	error: (n) => `${n} is not positive`,
 	 * 	predicate: (n): n is number => n > 0,
 	 * });
 	 *
-	 * assertEquals(union(unwrapErr(positive.parseSync(-1))), "not positive");
+	 * assertEquals(union(unwrapErr(positive.parseSync(-1))), "-1 is not positive");
 	 * ```
 	 * @see {@link mini.filter}
 	 */

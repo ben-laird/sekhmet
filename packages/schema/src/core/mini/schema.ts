@@ -548,7 +548,7 @@ export function pipe<I, O, E, P>(
 
 /**
  * How {@linkcode filter} checks an output: the type guard it must pass, and
- * the error it fails with otherwise.
+ * how to build the error from an output that fails it.
  *
  * @template O The output type
  * @template E The error type
@@ -557,16 +557,20 @@ export function pipe<I, O, E, P>(
  * @example
  * ```ts
  * import type { FilterOptions } from "@sekhmet/schema/core/mini";
+ * import { Custom, type SchemaIssue } from "@sekhmet/schema/core/mini/issue";
  *
- * const positive: FilterOptions<number, string, number> = {
- * 	error: "not positive",
+ * const positive: FilterOptions<number, SchemaIssue, number> = {
+ * 	error: (n) => Custom({ input: n, message: "not positive" }),
  * 	predicate: (n): n is number => n > 0,
  * };
  * ```
  */
 export interface FilterOptions<O, E, P extends O> {
-	/** The error a parse fails with when the output fails `predicate`. */
-	readonly error: E;
+	/**
+	 * Builds the error a parse fails with from the output that failed
+	 * `predicate`. It is not called when the output passes.
+	 */
+	readonly error: (output: O) => E;
 	/** The type guard each output must pass. */
 	readonly predicate: (output: O) => output is P;
 }
@@ -575,14 +579,15 @@ export interface FilterOptions<O, E, P extends O> {
  * Filters a schema's output using a type guard predicate.
  *
  * This creates a new schema that only succeeds if the original schema succeeds
- * AND the predicate returns true. A failed filter returns the given error.
+ * AND the predicate returns true. A failed filter fails with the error
+ * `options.error` builds from the rejected output.
  *
  * @template I The input type
  * @template O The original output type
  * @template E The error type
  * @template P The filtered output type (must be a subtype of O)
  * @param self The schema to filter
- * @param options The type guard predicate, and the error when it fails
+ * @param options The type guard predicate, and the error builder when it fails
  * @returns A new schema with filtered output
  *
  * @example
@@ -594,11 +599,11 @@ export interface FilterOptions<O, E, P extends O> {
  *
  * const integer = new Schema({ parse: (input: number) => Ok<number, string>(input) });
  * const positive = filter(integer, {
- * 	error: "not positive",
+ * 	error: (n) => `${n} is not positive`,
  * 	predicate: (n): n is number => n > 0,
  * });
  *
- * assertEquals(union(unwrapErr(parseSync(positive, -1))), "not positive");
+ * assertEquals(union(unwrapErr(parseSync(positive, -1))), "-1 is not positive");
  * ```
  */
 export function filter<I, O, E, P extends O>(
@@ -612,7 +617,9 @@ export function filter<I, O, E, P extends O>(
 		schema: self,
 		next: (result) => {
 			return match(result)<Result<P, E>>({
-				Ok: (output) => (predicate(output) ? Ok(output) : Err(error)),
+				Ok: (output) => {
+					return predicate(output) ? Ok(output) : Err(error(output));
+				},
 				Err: (failure) => Err(failure),
 			});
 		},
