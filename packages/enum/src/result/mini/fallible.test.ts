@@ -408,6 +408,50 @@ Deno.test("fallible() rejects mismatched arguments", () => {
 	});
 });
 
+Deno.test("fallible callbacks see the arguments as readonly", () => {
+	// Given: a function of an array
+	const fn = (xs: number[]): number => {
+		throw new Error(String(xs));
+	};
+
+	// When / Then: parseErr can't replace an argument cleanup will see
+	fallible({
+		fn,
+		parseErr: ({ args }) => {
+			// @ts-expect-error args is readonly
+			args[0] = [];
+			return 0;
+		},
+	});
+
+	// When / Then: neither can fallibleAsync's parseErr
+	fallibleAsync({
+		fn,
+		parseErr: ({ args }) => {
+			// @ts-expect-error args is readonly
+			args[0] = [];
+			return 0;
+		},
+	});
+});
+
+Deno.test("fallible() does not forward this to fn", () => {
+	// Given: a wrapped function that reports its this
+	const wrapped = fallible({
+		fn: function (this: unknown) {
+			return this;
+		},
+		parseErr: () => "e",
+	});
+	const receiver = { wrapped };
+
+	// When: it is called as a method
+	const result = receiver.wrapped();
+
+	// Then: fn ran without the receiver as its this
+	assertEquals(result, Ok(undefined));
+});
+
 Deno.test("fallible() rejects async callbacks", () => {
 	// Given: synchronous callbacks for the parts not under test
 	const fn = (n: number) => n;

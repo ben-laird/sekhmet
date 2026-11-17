@@ -7,6 +7,11 @@
  * throw from `cleanup` replaces whatever `fn` or `parseErr` produced, just
  * as a throw in a `finally` block does.
  *
+ * The wrapper passes `fn` its arguments but not its `this`: wrap a method as
+ * `fn: (...args) => object.method(...args)` or bind it first. `parseErr` and
+ * `cleanup` see the same arguments as `Readonly`, so `parseErr` can't change
+ * what `cleanup` sees.
+ *
  * @module
  */
 
@@ -25,9 +30,12 @@ export type FallibleOptions<A extends unknown[], U, E> = {
 	/** The function that may throw. */
 	fn: (...args: A) => NotPromise<U>;
 	/** Turns what `fn` threw, and the arguments it got, into the error. */
-	parseErr: (caught: { error: unknown; args: NoInfer<A> }) => NotPromise<E>;
+	parseErr: (caught: {
+		error: unknown;
+		args: Readonly<NoInfer<A>>;
+	}) => NotPromise<E>;
 	/** Runs after every call, whether `fn` returned or threw. */
-	cleanup?: (call: { args: NoInfer<A> }) => undefined;
+	cleanup?: (call: { args: Readonly<NoInfer<A>> }) => undefined;
 };
 
 /**
@@ -91,10 +99,10 @@ export type FallibleAsyncOptions<A extends unknown[], U, E> = {
 	/** Turns what `fn` threw or rejected with, and its arguments, into the error. */
 	parseErr: (caught: {
 		error: unknown;
-		args: NoInfer<A>;
+		args: Readonly<NoInfer<A>>;
 	}) => E | PromiseLike<E>;
 	/** Runs, and is awaited, after every call, whether `fn` settled or threw. */
-	cleanup?: (call: { args: NoInfer<A> }) => void | PromiseLike<void>;
+	cleanup?: (call: { args: Readonly<NoInfer<A>> }) => void | PromiseLike<void>;
 };
 
 /**
