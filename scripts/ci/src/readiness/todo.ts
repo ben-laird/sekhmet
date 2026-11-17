@@ -1,145 +1,256 @@
+import { dirname, join, normalize } from "@std/path/posix";
 import type { Finding } from "./finding.ts";
 import { lineAt, type SourceViews } from "./source.ts";
 
+/** The package that defines `todo`, which the check leaves alone. */
+export const WORKFLOW_PACKAGE = "@sekhmet/workflow";
+
+/** Where {@linkcode WORKFLOW_PACKAGE} lives in this repository. */
+export const WORKFLOW_DIR = "packages/workflow";
+
+/** The export subpaths of `@sekhmet/workflow` that hold `todo`. */
+const TODO_SUBPATHS: ReadonlySet<string> = new Set(["", "todo", "todo/todo"]);
+
+/** The files of `@sekhmet/workflow` that hold `todo`. */
+const TODO_FILES: ReadonlySet<string> = new Set([
+	"mod.ts",
+	"src/todo/mod.ts",
+	"src/todo/todo.ts",
+]);
+
 /**
- * How a module can name `@sekhmet/workflow`'s `todo`: by local names bound to
- * the function itself (`import { todo }`, `import { todo as t }`), or by
- * namespaces whose `todo` member it is (`import * as workflow`).
+ * A module of `@sekhmet/workflow` named by a specifier, and whether it
+ * holds `todo` (and so exposes it to a namespace or `export *`).
  */
-export interface TodoBindings {
-	/** Local names bound to `todo` */
-	names: string[];
-	/** Local namespace names whose `.todo` is `todo` */
-	namespaces: string[];
+export interface WorkflowModule {
+	/** Whether the module exports `todo` */
+	holdsTodo: boolean;
 }
 
-/** An `import … from "…"` statement, but not `import type`. */
-const IMPORT_FROM =
-	/\bimport\s+(?!type\b)([^;"'`]*?)\s*\bfrom\s*(["'])([^"'\n]+)\2/g;
+/**
+ * The `@sekhmet/workflow` module a specifier names, or `undefined` for any
+ * other module. It recognizes the bare and `jsr:` specifiers (with a
+ * version), `npm:@jsr/sekhmet__workflow`, `https://jsr.io/@sekhmet/workflow/…`
+ * URLs, and relative or `@/` paths that resolve into {@linkcode WORKFLOW_DIR}.
+ */
+export function workflowModule({
+	specifier,
+	path,
+	packageDir,
+}: {
+	specifier: string;
+	path: string;
+	packageDir: string;
+}): WorkflowModule | undefined {
+	const exported =
+		/^(?:jsr:)?@sekhmet\/workflow(?:@[^/]*)?(?:\/(.*))?$/.exec(specifier) ??
+		/^(?:npm:)?@jsr\/sekhmet__workflow(?:@[^/]*)?(?:\/(.*))?$/.exec(specifier);
+	if (exported !== null) {
+		const subpath = (exported[1] ?? "").replace(/^\.\/|\/$/g, "");
+		return { holdsTodo: TODO_SUBPATHS.has(subpath) };
+	}
+	const published =
+		/^https?:\/\/jsr\.io\/@sekhmet\/workflow\/[^/]+\/(.*)$/.exec(specifier);
+	if (published !== null) {
+		return { holdsTodo: TODO_FILES.has(published[1] ?? "") };
+	}
+	const local = localPath({ specifier, path, packageDir });
+	if (local?.startsWith(`${WORKFLOW_DIR}/`)) {
+		return { holdsTodo: TODO_FILES.has(local.slice(WORKFLOW_DIR.length + 1)) };
+	}
+	return undefined;
+}
 
+/** A relative or `@/` specifier as a repo-relative path. */
+function localPath({
+	specifier,
+	path,
+	packageDir,
+}: {
+	specifier: string;
+	path: string;
+	packageDir: string;
+}): string | undefined {
+	if (specifier.startsWith("./") || specifier.startsWith("../")) {
+		return normalize(join(dirname(path), specifier));
+	}
+	if (specifier.startsWith("@/")) {
+		return normalize(join(packageDir, specifier.slice(2)));
+	}
+	return undefined;
+}
+
+/** How a module reaches `todo`. */
+export type TodoUse =
+	| { kind: "import"; index: number }
+	| { kind: "re-export"; index: number }
+	| { kind: "namespace"; index: number; namespace: string }
+	| { kind: "dynamic-import"; index: number };
+
+const STRING = `"[^"\\n]*"|'[^'\\n]*'`;
 const IDENTIFIER = "[A-Za-z_$][\\w$]*";
 
-const NAMESPACE = new RegExp(`\\*\\s*as\\s+(${IDENTIFIER})`);
+/** `import <clause> from "<specifier>"`, the clause possibly quoting names. */
+const IMPORT_FROM = new RegExp(
+	`\\bimport\\s+(?!type\\b)((?:[^;"'\`]|${STRING})*?)\\s*\\bfrom\\s*(["'])([^"'\\n]+)\\2`,
+	"g",
+);
 
-const NAMED_TODO = new RegExp(`^todo(?:\\s+as\\s+(${IDENTIFIER}))?$`);
+/** `export { … } from "<specifier>"` and `export * [as ns] from "…"`. */
+const EXPORT_FROM = new RegExp(
+	`\\bexport\\s+(?!type\\b)(\\*(?:\\s*as\\s+${IDENTIFIER})?|\\{(?:[^}"'\`]|${STRING})*\\})\\s*from\\s*(["'])([^"'\\n]+)\\2`,
+	"g",
+);
+
+/** `import("<specifier>")`, a dynamic import of a literal specifier. */
+const DYNAMIC_IMPORT = /\bimport\s*\(\s*(["'])([^"'\n]+)\1/g;
+
+const NAMESPACE_IMPORT = new RegExp(`\\*\\s*as\\s+(${IDENTIFIER})`);
 
 /**
- * Whether a specifier names `@sekhmet/workflow` or one of its subpaths,
- * bare or as a `jsr:` specifier with an optional version.
+ * Every way a module reaches `@sekhmet/workflow`'s `todo`: a value import
+ * binding it (`import { todo }`, `{ todo as t }`, `{ "todo" as t }`), a
+ * re-export of it or of a module holding it, a dynamic import of a module
+ * holding it, and `ns.todo` or `ns["todo"]` through a namespace import.
+ * Flagging the import rather than call sites catches every call shape
+ * (`f = todo; f()`, `todo.call`, `(0, todo)()`).
  */
-export function isWorkflowSpecifier(specifier: string): boolean {
-	return /^(?:jsr:)?@sekhmet\/workflow(?:@[^/]*)?(?:\/.*)?$/.test(specifier);
-}
+export function todoUses({
+	views,
+	path,
+	packageDir,
+}: {
+	views: SourceViews;
+	path: string;
+	packageDir: string;
+}): TodoUse[] {
+	const uses: TodoUse[] = [];
+	const moduleOf = (specifier: string): WorkflowModule | undefined => {
+		return workflowModule({ specifier, path, packageDir });
+	};
 
-/**
- * The names a module binds to `@sekhmet/workflow`'s `todo`, read from its
- * value imports (type-only imports cannot be called).
- */
-export function todoBindings(views: SourceViews): TodoBindings {
-	const names: string[] = [];
-	const namespaces: string[] = [];
-	for (const [, clause = "", , specifier = ""] of views.code.matchAll(
-		IMPORT_FROM,
-	)) {
-		if (!isWorkflowSpecifier(specifier)) {
+	for (const match of views.code.matchAll(IMPORT_FROM)) {
+		const [, clause = "", , specifier = ""] = match;
+		const module = moduleOf(specifier);
+		if (module === undefined) {
 			continue;
 		}
-		const namespace = NAMESPACE.exec(clause)?.[1];
-		if (namespace !== undefined) {
-			namespaces.push(namespace);
+		if (namesTodo(clause)) {
+			uses.push({ kind: "import", index: match.index });
 		}
-		names.push(...namedTodos(clause));
+		const namespace = NAMESPACE_IMPORT.exec(clause)?.[1];
+		if (namespace !== undefined && module.holdsTodo) {
+			uses.push(...namespaceUses({ views, namespace }));
+		}
 	}
-	return { names, namespaces };
+	for (const match of views.code.matchAll(EXPORT_FROM)) {
+		const [, clause = "", , specifier = ""] = match;
+		const module = moduleOf(specifier);
+		const reExportsTodo = clause.startsWith("*")
+			? module?.holdsTodo === true
+			: module !== undefined && namesTodo(clause);
+		if (reExportsTodo) {
+			uses.push({ kind: "re-export", index: match.index });
+		}
+	}
+	for (const match of views.code.matchAll(DYNAMIC_IMPORT)) {
+		if (moduleOf(match[2] ?? "")?.holdsTodo === true) {
+			uses.push({ kind: "dynamic-import", index: match.index });
+		}
+	}
+	return uses.sort((a, b) => a.index - b.index);
 }
 
-/** The local names `{ … }` binds to `todo`, skipping `type` specifiers. */
-function namedTodos(clause: string): string[] {
-	const braces = /\{([^}]*)\}/.exec(clause)?.[1];
+/** Whether an import or export clause's `{ … }` names `todo`, skipping `type` ones. */
+function namesTodo(clause: string): boolean {
+	const braces = /\{([\s\S]*)\}/.exec(clause)?.[1];
 	if (braces === undefined) {
-		return [];
+		return false;
 	}
-	return braces.split(",").flatMap((part) => {
-		const match = NAMED_TODO.exec(part.trim());
-		if (match === null) {
-			return [];
-		}
-		return [match[1] ?? "todo"];
+	return braces.split(",").some((part) => {
+		return /^(?:todo|"todo"|'todo')(?:\s+as\s+\S+)?$/.test(part.trim());
+	});
+}
+
+/** `ns.todo`, `ns?.todo` and `ns["todo"]` in code (not comments). */
+function namespaceUses({
+	views,
+	namespace,
+}: {
+	views: SourceViews;
+	namespace: string;
+}): TodoUse[] {
+	const escaped = namespace.replace(/\$/g, "\\$");
+	const reference = new RegExp(
+		`(?<![\\w$.])${escaped}\\s*(?:\\?\\.\\s*todo\\b|\\.\\s*todo\\b|(?:\\?\\.)?\\[\\s*(["'])todo\\1\\s*\\])`,
+		"g",
+	);
+	return [...views.code.matchAll(reference)].map((match) => {
+		return { kind: "namespace", index: match.index, namespace };
 	});
 }
 
 /**
- * The indices of every call of `todo` through its bindings: `t(` for a bound
- * name and `ns.todo(` for a namespace. It reads the structure view, so calls
- * in comments and strings do not count, and `x.todo(` on another object is
- * not a call of a bound name.
- */
-export function todoCallIndices({
-	views,
-	bindings,
-}: {
-	views: SourceViews;
-	bindings: TodoBindings;
-}): number[] {
-	const callees = [
-		...bindings.names.map(escapeRegExp),
-		...bindings.namespaces.map((namespace) => {
-			return `${escapeRegExp(namespace)}\\s*\\.\\s*todo`;
-		}),
-	];
-	if (callees.length === 0) {
-		return [];
-	}
-	const call = new RegExp(
-		`(?<![\\w$.])(?:${callees.join("|")})\\s*(?:\\?\\.\\s*)?\\(`,
-		"g",
-	);
-	return [...views.structure.matchAll(call)].map(({ index }) => index);
-}
-
-/**
- * Whether the `todo` check covers a file: non-test TypeScript under a
- * package's `src/`. Tests, the playground and `scripts/` may call `todo`.
+ * Whether the `todo` check covers a file: non-test TypeScript anywhere in a
+ * package (its `mod.ts` included), except in `@sekhmet/workflow`, which
+ * defines `todo`. Tests, the playground and `scripts/` may use `todo`.
  */
 export function isTodoCheckedPath({
 	path,
 	packageDir,
+	packageName,
 }: {
 	path: string;
 	packageDir: string;
+	packageName: string | undefined;
 }): boolean {
 	return (
-		path.startsWith(`${packageDir}/src/`) &&
+		packageName !== WORKFLOW_PACKAGE &&
+		path.startsWith(`${packageDir}/`) &&
 		path.endsWith(".ts") &&
 		!path.endsWith(".test.ts")
 	);
 }
 
 /**
- * Package source calls no `todo` from `@sekhmet/workflow`: a placeholder for
- * unwritten code must not be published. One finding per call, on its line.
+ * Package source does not reach `todo` from `@sekhmet/workflow`: a
+ * placeholder for unwritten code must not be published. One finding per
+ * use, on its line.
  */
 export function checkTodo({
 	path,
 	text,
 	views,
+	packageDir,
 }: {
 	path: string;
 	text: string;
 	views: SourceViews;
+	packageDir: string;
 }): Finding[] {
-	const bindings = todoBindings(views);
-	return todoCallIndices({ views, bindings }).map((index) => {
+	return todoUses({ views, path, packageDir }).map((use) => {
 		return {
 			check: "todo",
 			file: path,
-			line: lineAt({ text, index }),
-			message:
-				"package source calls todo() from @sekhmet/workflow; write the code, or mark a deliberate gap with unimplemented(), before publishing",
+			line: lineAt({ text, index: use.index }),
+			message: `package source ${describeUse(use)}; write the code, or mark a deliberate gap with unimplemented(), before publishing`,
 		};
 	});
 }
 
-function escapeRegExp(text: string): string {
-	return text.replace(/[$]/g, "\\$&");
+function describeUse(use: TodoUse): string {
+	switch (use.kind) {
+		case "import": {
+			return "imports todo from @sekhmet/workflow";
+		}
+		case "re-export": {
+			return "re-exports todo from @sekhmet/workflow";
+		}
+		case "namespace": {
+			return `uses todo from @sekhmet/workflow through ${use.namespace}`;
+		}
+		case "dynamic-import": {
+			return "dynamically imports todo's module from @sekhmet/workflow";
+		}
+	}
 }

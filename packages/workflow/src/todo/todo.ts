@@ -60,7 +60,7 @@ export type UnimplementedCause = TodoCause;
 
 /**
  * Panics as `Panic (Todo)`: this code path is not written yet, but will be.
- * Use it as a placeholder while building; `deno task ci` rejects a call in
+ * Use it as a placeholder while building; `deno task ci` rejects importing it in
  * published package source.
  *
  * The message opens with a header line, then the description with its

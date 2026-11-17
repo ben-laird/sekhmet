@@ -184,8 +184,18 @@ assertEquals(payload.cause.expectedBehavior, "false should be true");
 
 ## Keeping `todo` out of releases
 
-The publish-readiness step of `deno task ci` fails on a call to `todo`
-imported from `@sekhmet/workflow` (any subpath, under any alias, or through a
-namespace import) in non-test source under `packages/*/src`. Tests, the
-playground and `scripts/` may call it freely. `unimplemented`, `unreachable`
-and `invariant` are meant to ship and are never flagged.
+The publish-readiness step of `deno task ci` fails when a package's non-test
+source (its `src/` and its top-level modules alike) reaches `todo` from
+`@sekhmet/workflow`. It flags the import itself, not call sites, so every call
+shape is caught:
+
+- a value import binding `todo`, under any alias or quoted name;
+- a re-export of `todo`, or an `export *` of a module holding it;
+- `ns.todo`, `ns?.todo` or `ns["todo"]` through a namespace import;
+- a dynamic `import()` of a module holding `todo`.
+
+It recognizes the package by every specifier form: bare, `jsr:` (with a
+version), `npm:@jsr/sekhmet__workflow`, `https://jsr.io/@sekhmet/workflow/…`
+URLs, and relative paths into `packages/workflow`. Tests, the playground and
+`scripts/` may use `todo` freely. `unimplemented`, `unreachable` and
+`invariant` are meant to ship and are never flagged.

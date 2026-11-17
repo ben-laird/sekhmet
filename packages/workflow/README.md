@@ -58,8 +58,8 @@ const thrown = assertThrows(() => exportReport([]));
 assert(String(thrown).startsWith("Panic (Todo): "));
 ```
 
-`deno task ci` fails on a `todo(` imported from `@sekhmet/workflow` in
-non-test package source, so a placeholder never ships. `unimplemented` may.
+`deno task ci` fails when non-test package source imports `todo` from
+`@sekhmet/workflow`, so a placeholder never ships. `unimplemented` may.
 
 ## `unreachable`
 

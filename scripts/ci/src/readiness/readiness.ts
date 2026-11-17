@@ -110,7 +110,7 @@ export function docLintMembers(workspace: Workspace): Member[] {
  * - the root manifest: `publish-exclude`
  * - every `*.test.ts`: `given-when-then`
  * - every `README.md`, and JSDoc in package source: `specifiers`
- * - non-test source under a package's `src/`: `todo`
+ * - non-test source of every package but `@sekhmet/workflow`: `todo`
  */
 export function staticFindings(files: WorkspaceFiles): Finding[] {
 	const workspace = readWorkspace(files);
@@ -160,9 +160,13 @@ export function staticFindings(files: WorkspaceFiles): Finding[] {
 		}
 		if (
 			owner !== undefined &&
-			isTodoCheckedPath({ path, packageDir: owner.dir })
+			isTodoCheckedPath({
+				path,
+				packageDir: owner.dir,
+				packageName: owner.manifest.name,
+			})
 		) {
-			findings.push(...checkTodo({ path, text, views }));
+			findings.push(...checkTodo({ path, text, views, packageDir: owner.dir }));
 		}
 	}
 
