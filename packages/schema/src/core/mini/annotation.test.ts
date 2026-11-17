@@ -15,7 +15,7 @@ import {
 	title,
 } from "./annotation.ts";
 import { nodeOf } from "./node.ts";
-import { map, parseSync, Schema } from "./schema.ts";
+import { map, type Output, parseSync, Schema } from "./schema.ts";
 import { viewed } from "./view.ts";
 
 const label = annotationKey<string>({ name: "label" });
@@ -113,7 +113,7 @@ Deno.test("annotations survive a main view and the main method", () => {
 	assertEquals(unwrap(annotation({ schema: chained, key: label })), "Main");
 });
 
-Deno.test("annotate keeps the exact type, the view and the prototype", () => {
+Deno.test("annotate keeps the view, on a new mini or main Schema", () => {
 	// Given: a mini and a main schema, each with a view
 	const miniViewed = viewed({
 		init: { parse: (input: string) => Ok(input) },
@@ -125,16 +125,14 @@ Deno.test("annotate keeps the exact type, the view and the prototype", () => {
 	const miniLabelled = annotate(miniViewed, [label("Mini")]);
 	const mainLabelled = mainViewed.annotate([label("Main")]);
 
-	// Then: each is a copy of its exact type, with the view and the same
-	// prototype, and the original is unchanged
-	assertType<IsExact<typeof miniLabelled, typeof miniViewed>>(true);
-	assertType<IsExact<typeof mainLabelled, typeof mainViewed>>(true);
+	// Then: each is a new Schema of its kind with the view, and the original
+	// is unchanged
+	assertType<IsExact<typeof miniLabelled.child, typeof text>>(true);
+	assertType<IsExact<typeof mainLabelled.child, typeof text>>(true);
+	assertType<IsExact<Output<typeof mainLabelled>, string>>(true);
 	assertStrictEquals(miniLabelled.child, text);
 	assertStrictEquals(mainLabelled.child, text);
-	assertStrictEquals(
-		Object.getPrototypeOf(miniLabelled),
-		Object.getPrototypeOf(miniViewed),
-	);
+	assertStrictEquals(Object.getPrototypeOf(miniLabelled), Schema.prototype);
 	assertStrictEquals(Object.getPrototypeOf(mainLabelled), MainSchema.prototype);
 	assertEquals(
 		unwrap(annotation({ schema: mainLabelled, key: label })),
@@ -142,6 +140,36 @@ Deno.test("annotate keeps the exact type, the view and the prototype", () => {
 	);
 	assertEquals(isNone(annotation({ schema: mainViewed, key: label })), true);
 	assertEquals(mainLabelled.parseSync("a").unwrap(), "a");
+});
+
+Deno.test("annotate works on frozen and subclassed schemas, typed as a Schema", () => {
+	// Given: a frozen main schema, and a subclass with private state
+	class Secret extends MainSchema<string, string, never> {
+		#count = 1;
+		get count(): number {
+			return this.#count;
+		}
+	}
+	const frozen = Object.freeze(MainSchema.fromMini(text));
+	const secret = new Secret({ parse: (input: string) => Ok(input) });
+
+	// When: annotating each, with the method and the function
+	const labelledFrozen = frozen.annotate([label("Frozen")]);
+	const labelledSecret = annotate(secret, [label("Secret")]);
+
+	// Then: each is a new, unfrozen Schema that parses and has the
+	// annotation; the subclass's type is not claimed
+	assertEquals(labelledFrozen.parseSync("a").unwrap(), "a");
+	assertEquals(Object.isFrozen(labelledFrozen), false);
+	assertEquals(
+		unwrap(annotation({ schema: labelledSecret, key: label })),
+		"Secret",
+	);
+	assertEquals(unwrapResult(parseSync(labelledSecret, "b")), "b");
+	assertEquals(secret.count, 1);
+	// @ts-expect-error the copy isn't a Secret: it has none of its private state
+	const forged: Secret = labelledSecret;
+	assertEquals(forged instanceof Secret, false);
 });
 
 Deno.test("annotation is typed by its key, and a key checks its values", () => {

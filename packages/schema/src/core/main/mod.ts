@@ -205,12 +205,15 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * schema as is, so the annotations survive; a main view
 	 * (`Schema.fromMini`) is the same schema, not an operation, and keeps them.
 	 *
-	 * The result has `self`'s exact type: a copy with the same prototype (a
-	 * main `Schema` stays main) and the same own properties, so a composite's
-	 * view (`.shape`, `.inner`, …) survives annotating.
+	 * The result is a new `Schema` over the same parser and node, with
+	 * `self`'s view (its own enumerable string-keyed properties: `.shape`,
+	 * `.inner`, …) copied on, so a composite's view survives annotating. It is
+	 * not a copy of `self`'s class: a subclass's private state and prototype
+	 * can't be copied, so the result is typed `Schema<I, O, E> & ViewOf<S>`,
+	 * not `S`. Main's `.annotate()` returns a main `Schema` the same way.
 	 *
 	 * @param annotations - The annotations to add, each made by calling its key
-	 * @returns The schema with the annotations added
+	 * @returns A new schema with the annotations added, and `self`'s view
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -226,8 +229,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.annotate}
 	 */
-	annotate(annotations: readonly mini.Annotation[]): this {
-		return mini.annotate(this, annotations);
+	annotate(
+		annotations: readonly mini.Annotation[],
+	): Schema<I, O, E> & mini.ViewOf<this> {
+		return Schema.fromMiniView(mini.annotate(this, annotations));
 	}
 
 	/**
