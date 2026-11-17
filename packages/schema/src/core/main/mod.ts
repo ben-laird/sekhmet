@@ -203,6 +203,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * schema as is, so the annotations survive; a main view
 	 * (`Schema.fromMini`) is the same schema, not an operation, and keeps them.
 	 *
+	 * The result has `self`'s exact type: a copy with the same prototype (a
+	 * main `Schema` stays main) and the same own properties, so a composite's
+	 * view (`.shape`, `.inner`, …) survives annotating.
+	 *
 	 * @param annotations - The annotations to add, each made by calling its key
 	 * @returns The schema with the annotations added
 	 * @example
@@ -220,8 +224,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.annotate}
 	 */
-	annotate(annotations: readonly mini.Annotation[]): Schema<I, O, E> {
-		return Schema.fromMini(mini.annotate(this, annotations));
+	annotate(annotations: readonly mini.Annotation[]): this {
+		return mini.annotate(this, annotations);
 	}
 
 	/**

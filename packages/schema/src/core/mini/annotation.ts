@@ -8,9 +8,9 @@
 import { union as variant } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { isSome, None, type Option, Some } from "@sekhmet/enum/option/mini";
-import { getStructParams } from "@sekhmet/primordials/struct";
+import { getStructParams, struct } from "@sekhmet/primordials/struct";
 import type { SchemaNode } from "./node.ts";
-import { type AnySchema, Schema } from "./schema.ts";
+import type { AnySchema } from "./schema.ts";
 
 /**
  * One annotation: a key and its value, of the key's type. Build one by
@@ -192,9 +192,11 @@ export const title: AnnotationKey<string> = annotationKey({ name: "title" });
  * schema as is, so the annotations survive; a main view
  * (`Schema.fromMini`) is the same schema, not an operation, and keeps them.
  *
- * @template I The input type
- * @template O The output type
- * @template E The error type
+ * The result has `self`'s exact type: a copy with the same prototype (a
+ * main `Schema` stays main) and the same own properties, so a composite's
+ * view (`.shape`, `.inner`, …) survives annotating.
+ *
+ * @template S The schema's type, kept exactly
  * @param self The schema to annotate
  * @param annotations The annotations to add, each made by calling its key
  * @returns The schema with the annotations added
@@ -213,16 +215,25 @@ export const title: AnnotationKey<string> = annotationKey({ name: "title" });
  * assertEquals(unwrap(annotation({ schema: name, key: title })), "Full name");
  * ```
  */
-export function annotate<I, O, E>(
-	self: Schema<I, O, E>,
+export function annotate<S extends AnySchema>(
+	self: S,
 	annotations: readonly Annotation[],
-): Schema<I, O, E> {
+): S;
+export function annotate(
+	self: AnySchema,
+	annotations: readonly Annotation[],
+): AnySchema {
 	const params = getStructParams(self);
-
-	return new Schema({
+	const copy: AnySchema = Object.create(
+		Object.getPrototypeOf(self),
+		Object.getOwnPropertyDescriptors(self),
+	);
+	copy[struct] = {
 		...params,
 		annotations: [...params.annotations, ...annotations],
-	});
+	};
+
+	return copy;
 }
 
 /**
