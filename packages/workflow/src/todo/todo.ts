@@ -44,7 +44,8 @@ export type UnimplementedOptions = TodoOptions;
 
 /**
  * The cause of the panic {@linkcode todo} throws: its options, with absent
- * parts as `undefined` and an absent checklist as `[]`.
+ * parts as `undefined` and an absent checklist as `[]`. The checklist is a
+ * frozen copy, so changing the caller's array later does not change it.
  */
 export interface TodoCause {
 	/** What is missing, if given */
@@ -215,7 +216,9 @@ function workPanic({
 }): WorkflowPanic<TodoCause> {
 	const cause: TodoCause = {
 		description: textField({ from: options, key: "description" }),
-		subtasks: listField({ from: options, key: "subtasks" }).map(subtaskOf),
+		subtasks: Object.freeze(
+			listField({ from: options, key: "subtasks" }).map(subtaskOf),
+		),
 		trackingUrl: urlField({ from: options, key: "trackingUrl" }),
 	};
 	return new WorkflowPanic({
@@ -228,12 +231,12 @@ function workPanic({
 	});
 }
 
-/** A subtask copied out of the caller's checklist, read without throwing. */
+/** A frozen subtask copied out of the caller's checklist, read without throwing. */
 function subtaskOf(item: unknown): Subtask {
-	return {
+	return Object.freeze({
 		description: textField({ from: item, key: "description" }) ?? "",
 		complete: flagField({ from: item, key: "complete" }),
-	};
+	});
 }
 
 function workMessage({

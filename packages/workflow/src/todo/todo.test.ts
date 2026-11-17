@@ -319,3 +319,22 @@ Deno.test("todo cuts a huge description", () => {
 		`Todo: ${"d".repeat(1000)}… 4999000 more chars`,
 	);
 });
+
+Deno.test("todo's checklist is a frozen copy of the caller's", () => {
+	// Given: a mutable checklist
+	const subtasks = [{ description: "a", complete: true }];
+
+	// When: todo panics, and the caller changes its array afterwards
+	const thrown = assertThrows(() => todo({ subtasks }), Panic);
+	subtasks.push({ description: "b", complete: false });
+	const first = subtasks[0];
+	if (first !== undefined) {
+		first.description = "changed";
+	}
+
+	// Then: the cause kept the checklist as it was, frozen
+	assert(isTodoPanic(thrown));
+	assertEquals(thrown.cause.subtasks, [{ description: "a", complete: true }]);
+	assert(Object.isFrozen(thrown.cause.subtasks));
+	assert(thrown.cause.subtasks.every((subtask) => Object.isFrozen(subtask)));
+});

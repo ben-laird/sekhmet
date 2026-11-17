@@ -72,8 +72,9 @@ Each cause is a plain object, typed and exported:
 
 - `TodoCause` and `UnimplementedCause`: `{ description, subtasks,
   trackingUrl }`, with `undefined` for an absent description or URL and `[]`
-  for an absent checklist. The checklist is a copy, with each subtask's
-  `complete` spelled out as `true` or `false`.
+  for an absent checklist. The checklist is a frozen copy, with each
+  subtask's `complete` spelled out as `true` or `false`, so changing the
+  caller's array afterwards does not change the cause.
 - `UnreachableCause`: `{ value?, issueUrl }`; `value` is present exactly when
   one was passed.
 - `InvariantCause`: `{ condition, expectedBehavior, issueUrl }`, where
@@ -161,6 +162,13 @@ brand set when the helper throws, so:
 - a `Panic` built by hand with the same name and cause is not accepted;
 - each accepts only its own helper's panic: a todo panic is not an
   unimplemented one.
+
+The brand belongs to the class in one copy of `@sekhmet/workflow`, so a guard
+recognizes only panics thrown by that same copy, in the same realm. A panic
+from a second copy of the package (two versions in one dependency tree, say)
+or from another realm (an iframe, a worker, a `vm` context) fails every
+guard. Such a panic is still a `Panic` named `Panic (Todo)` and so on; to
+handle it, deduplicate the package, or fall back to its `name`.
 
 ```ts
 import { definePanicRuntime } from "@sekhmet/panic";
