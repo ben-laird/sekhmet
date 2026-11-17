@@ -287,3 +287,35 @@ Deno.test("a todo panic widens to a Panic of unknown, never the reverse", () => 
 	assertEquals([widened, widenedAgain].length, 2);
 	assertEquals(narrowed, wide);
 });
+
+Deno.test("todo lists at most fifty subtasks in its message", () => {
+	// Given: a hundred thousand subtasks
+	const subtasks = Array.from({ length: 100_000 }, (_, index) => {
+		return { description: `step ${index}` };
+	});
+
+	// When: todo runs
+	const thrown = assertThrows(() => todo({ subtasks }), Panic);
+
+	// Then: the message lists fifty and counts the rest; the cause keeps all
+	const lines = thrown.message.split("\n");
+	assertEquals(lines.length, 52);
+	assertEquals(lines[50], "  - [ ] step 49");
+	assertEquals(lines[51], "  … 99950 more subtasks");
+	assert(isTodoPanic(thrown));
+	assertEquals(thrown.cause.subtasks.length, 100_000);
+});
+
+Deno.test("todo cuts a huge description", () => {
+	// Given: a 5 MB description
+	const description = "d".repeat(5_000_000);
+
+	// When: todo runs
+	const thrown = assertThrows(() => todo({ description }), Panic);
+
+	// Then: the message holds the first thousand characters and a count
+	assertEquals(
+		thrown.message.split("\n")[1],
+		`Todo: ${"d".repeat(1000)}… 4999000 more chars`,
+	);
+});

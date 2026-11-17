@@ -243,14 +243,19 @@ function workMessage({
 	kind: WorkKind;
 	cause: TodoCause;
 }): string {
+	const hidden = subtasks.length - MAX_SUBTASK_LINES;
 	return messageLines([
 		HEADERS[kind],
 		workLine({ kind, description, trackingUrl }),
-		...subtasks.map((subtask) => {
+		...subtasks.slice(0, MAX_SUBTASK_LINES).map((subtask) => {
 			return `  - [${subtask.complete ? "x" : " "}] ${subtask.description}`;
 		}),
+		hidden > 0 ? `  … ${hidden} more subtasks` : undefined,
 	]);
 }
+
+/** How many subtasks a message lists; the cause keeps them all. */
+const MAX_SUBTASK_LINES = 50;
 
 /** `Todo: <description> (tracked at <url>)`, `Tracked at <url>`, or nothing. */
 function workLine({

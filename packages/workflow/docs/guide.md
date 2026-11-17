@@ -116,16 +116,27 @@ be anything. It is rendered with a small, runtime-agnostic formatter that
 never throws:
 
 - strings are quoted, `-0` and BigInts (`10n`) are kept apart, symbols read as
-  `Symbol(tag)`, functions as `[Function: name]`;
-- objects and arrays are shown two levels deep and ten entries wide, with a
-  class instance prefixed by its class name, and cycles shown as `[Circular]`;
+  `Symbol(tag)`, functions as `[Function: name]`, errors as
+  `[TypeError: message]`;
+- objects, arrays, typed arrays, maps and sets are shown two levels deep and
+  ten entries wide, as `{ a: 1 }`, `[1, <empty>, 3]`,
+  `Uint8Array(3) [0, 0, 0]`, `Map(1) { "a" => 1 }` and `Set(1) { 1 }`, with a
+  class instance prefixed by its class name and cycles shown as `[Circular]`;
 - properties are read through their descriptors, so no getter runs (shown as
   `[Getter]`) and no `toJSON` or `toString` is called;
 - anything that still throws, such as a revoked Proxy, renders as
   `[unrenderable value]`.
 
+Rendering is bounded, so a huge value cannot make a huge message or a slow
+panic: strings and keys are cut at 200 characters (`"aaa…"… 4999800 more
+chars`), lists are read by index and their hidden entries counted from their
+length, and at most a hundred keys of an object are examined. A Proxy's own
+`ownKeys` trap still runs once, at whatever cost it has.
+
 Text you pass (descriptions, subtasks, the expected behavior) goes through
-`String`, falling back to the same formatter if that throws.
+`String`, falling back to the same formatter if that throws, and is cut at a
+thousand characters. A todo message lists at most fifty subtasks, then
+`… N more subtasks`; the cause keeps them all.
 
 ## Never throwing while panicking
 
