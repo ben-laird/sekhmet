@@ -1,20 +1,94 @@
 /**
  * Exercises `@sekhmet/workflow`: each helper panics through a panic runtime,
  * and its guard recognizes the payload, through the root and the subpaths.
+ * The 0.2.0 checks `defined`, `satisfies` and `invariantEqual` pass on good
+ * values and panic with their own `cause.check.kind` on bad ones.
  *
  * @module
  */
 
-import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+import { isOk } from "@sekhmet/enum/result/mini/predicates";
+import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { isTodoPanic, todo } from "@sekhmet/workflow";
 import { invariant, isInvariantPanic } from "@sekhmet/workflow/invariant";
+import { defined } from "@sekhmet/workflow/invariant/defined";
+import { invariantEqual } from "@sekhmet/workflow/invariant/invariant-equal";
+import { satisfies } from "@sekhmet/workflow/invariant/satisfies";
 import { isUnimplementedPanic, unimplemented } from "@sekhmet/workflow/todo";
 import {
 	isUnreachablePanic,
 	unreachable,
 } from "@sekhmet/workflow/unreachable/unreachable";
 import { expectEqual } from "../check.ts";
+
+function checkKind(payload: unknown): string | undefined {
+	return isInvariantPanic(payload) ? payload.cause.check.kind : undefined;
+}
+
+function exerciseChecks(): void {
+	const runtime = definePanicRuntime();
+	runtime.setHook(() => {});
+	const absent: string | null = JSON.parse("null");
+	expectEqual({
+		label: "defined returns a present value and keeps 0",
+		actual: unwrap(
+			runtime.catchUnwind(() => {
+				return [
+					defined("Ada", { expectedBehavior: "a name is set" }),
+					defined(0, { expectedBehavior: "a count is set" }),
+				];
+			}),
+		),
+		expected: ["Ada", 0],
+	});
+	const fromDefined = unwrapErr(
+		runtime.catchUnwind(() => {
+			return defined(absent, { expectedBehavior: "a name is set" });
+		}),
+	);
+
+	const isEven = (n: number): boolean => {
+		return n % 2 === 0;
+	};
+	expectEqual({
+		label: "satisfies returns an accepted value",
+		actual: unwrap(
+			runtime.catchUnwind(() => {
+				return satisfies(4, { predicate: isEven, expectedBehavior: "even" });
+			}),
+		),
+		expected: 4,
+	});
+	const fromSatisfies = unwrapErr(
+		runtime.catchUnwind(() => {
+			return satisfies(3, { predicate: isEven, expectedBehavior: "even" });
+		}),
+	);
+
+	const passedEqual = runtime.catchUnwind(() => {
+		invariantEqual({
+			actual: Number.NaN,
+			expected: Number.NaN,
+			expectedBehavior: "NaN is itself by Object.is",
+		});
+	});
+	const fromEqual = unwrapErr(
+		runtime.catchUnwind(() => {
+			invariantEqual({ actual: 1, expected: 2, expectedBehavior: "1 is 2" });
+		}),
+	);
+	expectEqual({
+		label: "each check panics with its own kind",
+		actual: [
+			isOk(passedEqual),
+			checkKind(fromDefined),
+			checkKind(fromSatisfies),
+			checkKind(fromEqual),
+		],
+		expected: [true, "defined", "satisfies", "equal"],
+	});
+}
 
 /** Runs the exercise. */
 export function exercise(): void {
@@ -90,4 +164,6 @@ export function exercise(): void {
 			"Panic (Invariant)",
 		],
 	});
+
+	exerciseChecks();
 }
