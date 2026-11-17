@@ -280,11 +280,14 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 *
 	 * This creates a new schema that only succeeds if the original schema succeeds
 	 * AND the predicate returns true. A failed filter fails with the error
-	 * `options.error` builds from the rejected output.
+	 * `options.error` builds from the rejected output, which adds to the
+	 * schema's own error type (`E | F`), as `andThen`'s does.
 	 *
 	 * @template P - The filtered output type (must be a subtype of O)
+	 * @template F - The error type the filter fails with
 	 * @param options - The type guard predicate, and the error builder when it fails
-	 * @returns A new schema with filtered output, viewing `self` (`.inner`)
+	 * @returns A new schema with filtered output, failing with either error,
+	 * viewing `self` (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -302,9 +305,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.filter}
 	 */
-	filter<P extends O>(
-		options: mini.FilterOptions<O, E, P>,
-	): Schema<I, P, E> & mini.TransformView<this> {
+	filter<P extends O, F>(
+		options: mini.FilterOptions<O, F, P>,
+	): Schema<I, P, E | F> & mini.TransformView<this> {
 		return Schema.fromMiniView(mini.filter(this, options));
 	}
 

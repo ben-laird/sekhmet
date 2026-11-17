@@ -47,13 +47,11 @@ Deno.test("variance holds with views, checked narrowing-first (#31 was order-dep
 		typeof narrowUser
 	> = wideUser.with;
 
-	// Then: only widening type-checks, for outputs, views and Self alike.
-	// (Widening one type parameter at a time: filter takes both O and E, so
-	// widening both at once is rejected; see the E variance test.)
+	// Then: only widening type-checks, for outputs, errors, views and Self
 	const narrowText = new Schema({ parse: (_: unknown) => Ok<"a", never>("a") });
-	const wideSchema: Schema<unknown, string, never> = narrowText;
-	const wideView: Schema<unknown, { name: string }, Issues<SchemaIssue>> & {
-		readonly shape: { readonly name: Schema<unknown, string, never> };
+	const wideSchema: Schema<unknown, string, unknown> = narrowText;
+	const wideView: Schema<unknown, { name: string }, unknown> & {
+		readonly shape: { readonly name: Schema<unknown, string, unknown> };
 	} = narrowUser;
 	const wideSelf: SchemaWith<unknown, { name: string }, unknown> =
 		narrowUser.with;
@@ -64,6 +62,68 @@ Deno.test("variance holds with views, checked narrowing-first (#31 was order-dep
 	assertInstanceOf(wideSchema, Schema);
 	assertInstanceOf(wideView, Schema);
 	assertInstanceOf(wideSelf, SchemaWith);
+});
+
+Deno.test("a main Schema is covariant in its output and error at once, in both orders", () => {
+	// Given: a schema with a narrow output and error, and one with wide ones
+	const narrow = new Schema({
+		parse: (input: unknown) => {
+			if (input === "a") return Ok<"a", "x">("a");
+
+			return Err<"a", "x">("x");
+		},
+	});
+	const wide = new Schema({
+		parse: (input: unknown) => {
+			if (typeof input === "string") return Ok<string, string>(input);
+
+			return Err<string, string>("not a string");
+		},
+	});
+
+	// When: narrowing first, then widening both, then narrowing again
+	// @ts-expect-error a string output and error are not "a" and "x"
+	const narrowedFirst: Schema<unknown, "a", "x"> = wide;
+	const widened: Schema<unknown, string, string> = narrow;
+	// @ts-expect-error a string output is not an "a" output
+	const narrowedOutput: Schema<unknown, "a", string> = wide;
+	// @ts-expect-error a string error is not an "x" error
+	const narrowedError: Schema<unknown, string, "x"> = wide;
+
+	// Then: inference is exact, widening both at once is accepted (filter's
+	// error adds to the schema's, so nothing takes O and E together), and
+	// narrowing either is rejected
+	assertType<IsExact<Output<typeof narrow>, "a">>(true);
+	assertType<IsExact<ErrorOf<typeof narrow>, "x">>(true);
+	assertInstanceOf(narrowedFirst, Schema);
+	assertInstanceOf(widened, Schema);
+	assertInstanceOf(narrowedOutput, Schema);
+	assertInstanceOf(narrowedError, Schema);
+});
+
+Deno.test("filter's error adds to the schema's, as andThen's does", () => {
+	// Given: a schema failing with "x"
+	const text = new Schema({
+		parse: (input: unknown) => {
+			if (typeof input === "string") return Ok<string, "x">(input);
+
+			return Err<string, "x">("x");
+		},
+	});
+
+	// When: filtering it with a check that fails with "empty"
+	const nonEmpty = text.filter({
+		error: () => "empty" as const,
+		predicate: (value): value is string => value !== "",
+	});
+
+	// Then: it fails with either error
+	assertType<IsExact<ErrorOf<typeof nonEmpty>, "x" | "empty">>(true);
+	assertEquals(nonEmpty.parseSync("").unwrapErr(), ParseError("empty"));
+	assertEquals(nonEmpty.parseSync(1).unwrapErr(), ParseError("x"));
+	// @ts-expect-error its error is not only the schema's own
+	const narrowed: Schema<unknown, string, "x"> = nonEmpty;
+	assertInstanceOf(narrowed, Schema);
 });
 
 Deno.test("a main Schema is covariant in its error, checked in both orders", () => {

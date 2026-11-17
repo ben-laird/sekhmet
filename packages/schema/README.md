@@ -66,7 +66,9 @@ Beyond `map` and `mapErr`, a schema chains like enum's `Result`: `andThen`
 runs a fallible transform on the output, `orElse` recovers from a failure,
 `inspect` and `inspectErr` tap a result without changing it, and `preprocess`
 transforms the input before parsing. A callback may return a promise, which
-makes the parse `Async`; a callback that throws panics.
+makes the parse `Async`; a callback that throws panics. Like `andThen`'s,
+`filter({ predicate, error })`'s error adds to the schema's: filtering a
+`Schema<I, O, E>` with an `error` returning `F` fails with `E | F`.
 
 ```ts
 import { assertEquals } from "@std/assert";

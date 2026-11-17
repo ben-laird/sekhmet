@@ -564,10 +564,11 @@ export function pipe<
 
 /**
  * How {@linkcode filter} checks an output: the type guard it must pass, and
- * how to build the error from an output that fails it.
+ * how to build the error from an output that fails it. The error is the
+ * filter's own: it adds to the schema's, as `andThen`'s does.
  *
  * @template O The output type
- * @template E The error type
+ * @template F The error type the filter fails with
  * @template P The filtered output type (a subtype of O)
  *
  * @example
@@ -581,12 +582,12 @@ export function pipe<
  * };
  * ```
  */
-export interface FilterOptions<O, E, P extends O> {
+export interface FilterOptions<O, F, P extends O> {
 	/**
 	 * Builds the error a parse fails with from the output that failed
 	 * `predicate`. It is not called when the output passes.
 	 */
-	readonly error: (output: O) => E;
+	readonly error: (output: O) => F;
 	/** The type guard each output must pass. */
 	readonly predicate: (output: O) => output is P;
 }
@@ -596,16 +597,19 @@ export interface FilterOptions<O, E, P extends O> {
  *
  * This creates a new schema that only succeeds if the original schema succeeds
  * AND the predicate returns true. A failed filter fails with the error
- * `options.error` builds from the rejected output.
+ * `options.error` builds from the rejected output, which adds to the
+ * schema's own error type (`E | F`), as `andThen`'s does.
  *
  * @template I The input type
  * @template O The original output type
  * @template E The error type
  * @template P The filtered output type (must be a subtype of O)
+ * @template F The error type the filter fails with
  * @template S The schema, exactly (with its own view)
  * @param self The schema to filter
  * @param options The type guard predicate, and the error builder when it fails
- * @returns A new schema with filtered output, viewing `self` (`.inner`)
+ * @returns A new schema with filtered output, failing with either error,
+ *   viewing `self` (`.inner`)
  *
  * @example
  * ```ts
@@ -623,17 +627,17 @@ export interface FilterOptions<O, E, P extends O> {
  * assertEquals(union(unwrapErr(parseSync(positive, -1))), "-1 is not positive");
  * ```
  */
-export function filter<I, O, E, P extends O, S extends Schema<I, O, E>>(
+export function filter<I, O, E, P extends O, F, S extends Schema<I, O, E>>(
 	self: S & Schema<I, O, E>,
-	options: FilterOptions<O, E, P>,
-): Schema<I, P, E> & TransformView<S> {
+	options: FilterOptions<O, F, P>,
+): Schema<I, P, E | F> & TransformView<S> {
 	const { error, predicate } = options;
 
 	return continueWith({
 		step: "filter",
 		schema: self,
 		next: (result) => {
-			return match(result)<Result<P, E>>({
+			return match(result)<Result<P, E | F>>({
 				Ok: (output) => {
 					return predicate(output) ? Ok(output) : Err(error(output));
 				},

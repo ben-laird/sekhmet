@@ -419,6 +419,13 @@ argument (`map(self, mapping)` is `.map(mapping)`):
   - _Superseded by #33 (2026-11-16):_ `error` was a constant `E`. Every issue
     carries the input it rejected, and a constant can't know it, so a filter
     couldn't build a correct `Custom` issue.
+  - _Superseded by #37 (2026-11-16, owner decision):_ #33's builder returned
+    the schema's own `E`, `(output: O) => E`. It now returns the filter's own
+    error, `(output: O) => F`, which adds to the schema's as `andThen`'s
+    does: `filter<I, O, E, P extends O, F>(self, { predicate, error }):
+    Schema<I, P, E | F>` (main `.filter({ … })`). Taking `O` and `E` in one
+    callback made a main `Schema` reject widening its output and error at
+    once; now it is covariant in both together, which variance tests pin.
 - `Issues` construction: `issues(entries)`, `prefix({ issues, path })`,
   `concat(list)` (see [`Issues<E>`](#issuese-located-collected-errors)).
 - `toStandard({ schema, toIssue? })`.
