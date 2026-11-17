@@ -72,7 +72,7 @@ Deno.test("each transform records a Transform node of its step over self", () =>
 		[
 			"filter",
 			filter(text, {
-				error: "not text",
+				error: () => "not text",
 				predicate: (value): value is string => value !== "",
 			}),
 		],

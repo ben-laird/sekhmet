@@ -396,7 +396,12 @@ argument (`map(self, mapping)` is `.map(mapping)`):
 
 - `filter(self, { error, predicate })` is `.filter({ error, predicate })`. It
   took `(self, error, filtering)` until a review of #28 caught that the
-  method then took two positional arguments.
+  method then took two positional arguments. `error` builds the error from
+  the rejected output, `(output: O) => E`, so a check can fail with
+  `Custom({ input: output, message })`.
+  - _Superseded by #33 (2026-11-16):_ `error` was a constant `E`. Every issue
+    carries the input it rejected, and a constant can't know it, so a filter
+    couldn't build a correct `Custom` issue.
 - `Issues` construction: `issues(entries)`, `prefix({ issues, path })`,
   `concat(list)` (see [`Issues<E>`](#issuese-located-collected-errors)).
 - `toStandard({ schema, toIssue? })`.
