@@ -34,9 +34,10 @@ import * as mini from "../mini/mod.ts";
 export type {
 	FallibleAsyncOptions,
 	FallibleOptions,
+	ResultSettlers,
 	ResultVariants,
 } from "../mini/mod.ts";
-export { fallible, fallibleAsync } from "../mini/mod.ts";
+export { fallible, fallibleAsync, promiseResult } from "../mini/mod.ts";
 
 /**
  * A type representing either a success value or an error.

@@ -1,0 +1,63 @@
+/**
+ * Building a promised `Result` from a `Promise`-style executor:
+ * `promiseResult`.
+ *
+ * @module
+ */
+
+import { Err, Ok, type Result } from "./core.ts";
+
+/**
+ * The callbacks {@linkcode promiseResult} hands its executor.
+ *
+ * @template T - The success value type
+ * @template E - The error type
+ */
+export type ResultSettlers<T, E> = {
+	/** Settles the promise with `Ok(value)`. */
+	resolve: (value: T) => void;
+	/** Settles the promise with `Err(error)`. */
+	reject: (error: E) => void;
+};
+
+/**
+ * Builds a `Promise<Result>` from an executor shaped like the `Promise`
+ * constructor's: calling `resolve(value)` settles it with `Ok(value)`, and
+ * `reject(error)` with `Err(error)`. The promise itself never rejects for
+ * either.
+ *
+ * As with `new Promise`, the first call wins and later ones are ignored. A
+ * throw from the executor is not an `E`, so it is not captured: it rejects
+ * the returned promise, as a panic, unless the executor already settled it.
+ *
+ * @template T - The success value type
+ * @template E - The error type
+ * @param executor - Runs at once with `resolve` and `reject`
+ * @returns A promise of `Ok` for a resolve or `Err` for a reject
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, promiseResult } from "@sekhmet/enum/result/mini";
+ *
+ * const later = (ms: number) => {
+ * 	return promiseResult<number, string>(({ resolve, reject }) => {
+ * 		if (ms < 0) return reject(`negative delay: ${ms}`);
+ * 		setTimeout(() => resolve(ms), ms);
+ * 	});
+ * };
+ *
+ * assertEquals(await later(1), Ok(1));
+ * assertEquals(await later(-1), Err("negative delay: -1"));
+ * ```
+ */
+export function promiseResult<T, E>(
+	executor: (settlers: ResultSettlers<T, E>) => void,
+): Promise<Result<T, E>> {
+	return new Promise((settle) => {
+		executor({
+			resolve: (value) => settle(Ok(value)),
+			reject: (error) => settle(Err(error)),
+		});
+	});
+}
