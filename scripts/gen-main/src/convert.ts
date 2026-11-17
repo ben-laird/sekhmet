@@ -172,16 +172,32 @@ function planIntersection({
 		);
 	}
 	const text = type.types
-		.map((part) =>
-			part === member ? planned.value.text : context.render(part),
-		)
+		.map((part) => {
+			if (part === member) return planned.value.text;
+
+			return context.render(part);
+		})
 		.join(" & ");
+	// {}
 
 	return ok({
 		text,
 		apply: (expression) => `${target}.fromMiniView(${expression})`,
 		target,
 	});
+}
+
+/** Plans a top-level return type: an intersection with a view, or a value. */
+function planTopLevel({
+	type,
+	context,
+}: {
+	type: TypeNode;
+	context: ConvertContext;
+}): Result<Value, string> {
+	if (type.kind === "intersection") return planIntersection({ type, context });
+
+	return planValue({ type, context, depth: 0 });
 }
 
 function isVoidLike(type: TypeNode | undefined): boolean {
@@ -255,10 +271,7 @@ export function convertReturn({
 		}
 	}
 
-	const planned =
-		type.kind === "intersection"
-			? planIntersection({ type, context })
-			: planValue({ type, context, depth: 0 });
+	const planned = planTopLevel({ type, context });
 	if (!planned.ok) return planned;
 
 	const { text, apply, target } = planned.value;

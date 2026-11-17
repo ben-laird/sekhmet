@@ -435,11 +435,11 @@ function receiverFormOf({
 	}
 	const [first, second] = type.types;
 	const exact = ownTypeParam({ signature, type: first });
-	const args = namesClass(second, feature.primary)
-		? bareArgs(second)
-		: undefined;
-	if (exact === undefined || args === undefined) return undefined;
-	if (!namesClass(second, feature.primary)) return undefined;
+	if (exact === undefined || !namesClass(second, feature.primary)) {
+		return undefined;
+	}
+	const args = bareArgs(second);
+	if (args === undefined) return undefined;
 	if (!constrainedToPrimary({ feature, typeParam: exact, args })) {
 		return undefined;
 	}
@@ -1343,6 +1343,29 @@ function namespaceApplied({
 }
 
 /**
+ * How a namespace class holds its receiver: as the mini primary, or, when
+ * the primary carries views, as a `Self` type parameter bounded by it.
+ */
+function namespaceHeld({
+	feature,
+	header,
+	held,
+}: {
+	feature: ClassFeature;
+	header: ClassHeader;
+	held: string;
+}): { self: string; typeParams: string } {
+	if (feature.views === undefined) {
+		return { self: held, typeParams: header.typeParams };
+	}
+	const bounded = `${NAMESPACE_SELF_TYPE} extends ${held} = ${held}`;
+	const own = header.typeParams.slice(1, -1);
+	const params = own === "" ? bounded : `${own}, ${bounded}`;
+
+	return { self: NAMESPACE_SELF_TYPE, typeParams: `<${params}>` };
+}
+
+/**
  * A namespace's class: it holds an instance of the primary, and each of its
  * methods calls a borrowed function with that instance.
  */
@@ -1383,11 +1406,7 @@ function renderNamespaceClass({
 	// TypeScript's variance measurement circular and order-dependent (unsound).
 	// With views, the exact receiver is a type parameter bounded by it instead.
 	const held = `mini.${primary}${header.applied}`;
-	const self = feature.views === undefined ? held : NAMESPACE_SELF_TYPE;
-	const typeParams =
-		feature.views === undefined
-			? header.typeParams
-			: `${header.typeParams === "" ? "<" : `${header.typeParams.slice(0, -1)}, `}${NAMESPACE_SELF_TYPE} extends ${held} = ${held}>`;
+	const { self, typeParams } = namespaceHeld({ feature, header, held });
 	const opening = `\treadonly #self: ${self};\n\n${constructorDoc}\tconstructor(self: ${self}) {\n\t\tthis.#self = self;\n\t}\n`;
 	const body = [opening, ...methods.map((method) => method.source)].join("\n");
 
@@ -1968,6 +1987,18 @@ function renderClasses({
 	return [renderClass({ module, ...primary, methods, getters }), ...classes];
 }
 
+/** The wrap targets, the primary included, whose main class has `fromMiniView`. */
+function viewTargets(feature: Feature): ReadonlySet<string> {
+	const targets = (feature.wraps ?? []).flatMap((target) => {
+		return target.views === true ? [target.type] : [];
+	});
+	if (!isClassFeature(feature) || feature.views === undefined) {
+		return new Set(targets);
+	}
+
+	return new Set([feature.primary, ...targets]);
+}
+
 /**
  * Generates a feature's main module from its mini barrel's symbols. The
  * output is valid TypeScript but not yet Biome-formatted.
@@ -2091,14 +2122,7 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		omitted,
 		wrapNames,
 		mappers,
-		views: new Set([
-			...(isClassFeature(feature) && feature.views !== undefined
-				? [feature.primary]
-				: []),
-			...(feature.wraps ?? []).flatMap((target) => {
-				return target.views === true ? [target.type] : [];
-			}),
-		]),
+		views: viewTargets(feature),
 		sources,
 		outputUrl,
 		typeImports: new Map(),
