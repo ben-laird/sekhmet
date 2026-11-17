@@ -26,6 +26,11 @@ export type NotPromise<T> = T extends PromiseLike<unknown> ? never : T;
  * a deliberate exception to the named-arguments rule, so that it reads
  * exactly like `new Promise((resolve, reject) => …)`.
  *
+ * Unlike `new Promise`'s, this `resolve` doesn't adopt a thenable: it would
+ * only wrap it in `Ok`, so it takes `NotPromise<T>`, and a `T` that is a
+ * `PromiseLike` leaves `resolve` uncallable. Await the value first, then
+ * resolve with it.
+ *
  * As with `new Promise`, the first call wins and later ones are ignored. The
  * executor is synchronous and returns `undefined`, so an async executor,
  * whose rejection nothing would see and whose promise might never settle,
@@ -59,7 +64,7 @@ export type NotPromise<T> = T extends PromiseLike<unknown> ? never : T;
  */
 export function promiseResult<T, E>(
 	executor: (
-		resolve: (value: T) => void,
+		resolve: (value: NotPromise<T>) => void,
 		reject: (error: E) => void,
 	) => undefined,
 ): Promise<Result<T, E>> {

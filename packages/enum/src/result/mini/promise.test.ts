@@ -140,6 +140,24 @@ Deno.test("promiseResult() rejects settling with the wrong type", () => {
 	});
 });
 
+Deno.test("promiseResult() rejects resolving with a thenable", () => {
+	// Given: a promise, which promiseResult's resolve would not adopt
+	const pending = Promise.resolve(1);
+
+	// When / Then: a promised T leaves resolve uncallable
+	void promiseResult<Promise<number>, string>((resolve) => {
+		// @ts-expect-error resolve takes NotPromise<T>, never for a promise
+		resolve(pending);
+	});
+
+	// Then: the awaited value resolves as usual
+	void promiseResult<number, string>((resolve) => {
+		void pending.then((value) => {
+			resolve(value);
+		});
+	});
+});
+
 Deno.test("promiseResult() rejects an executor that returns a value", () => {
 	// Given: a promise to settle from
 	const pending = Promise.resolve(1);
