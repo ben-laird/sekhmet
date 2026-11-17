@@ -1,7 +1,8 @@
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Flatten, Issues } from "@/src/core/mini/issues.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";
-import { Schema } from "@/src/core/mini/schema.ts";
+import type { Schema } from "@/src/core/mini/schema.ts";
+import { viewed } from "@/src/core/mini/view.ts";
 import {
 	type Child,
 	compose,
@@ -60,6 +61,8 @@ export type RecordOutput<K extends PropertyKey, V> = string extends K
  * @template VI The value schema's input type
  * @template VO The value schema's output type
  * @template VE The value schema's error type
+ * @template K The key schema, exactly (with its own view)
+ * @template V The value schema, exactly (with its own view)
  *
  * @example
  * ```ts
@@ -73,11 +76,46 @@ export type RecordOutput<K extends PropertyKey, V> = string extends K
  * };
  * ```
  */
-export interface RecordOptions<KO extends PropertyKey, KE, VI, VO, VE> {
+export interface RecordOptions<
+	KO extends PropertyKey,
+	KE,
+	VI,
+	VO,
+	VE,
+	K extends Schema<string, KO, KE> = Schema<string, KO, KE>,
+	V extends Schema<VI, VO, VE> = Schema<VI, VO, VE>,
+> {
 	/** The schema each own enumerable string key is parsed by. */
-	readonly key: Schema<string, KO, KE>;
+	readonly key: K & Schema<string, KO, KE>;
 	/** The schema each key's value is parsed by. */
-	readonly value: Schema<VI, VO, VE>;
+	readonly value: V & Schema<VI, VO, VE>;
+}
+
+/**
+ * A view of a record schema's key and value schemas, as passed.
+ *
+ * @template K The key schema
+ * @template V The value schema
+ *
+ * @example
+ * ```ts
+ * import { assertStrictEquals } from "@std/assert";
+ * import { record } from "@sekhmet/schema/composites/mini";
+ * import { number, string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const name = string();
+ * const score = number();
+ * const scores = record({ key: name, value: score });
+ *
+ * assertStrictEquals(scores.key, name);
+ * assertStrictEquals(scores.value, score);
+ * ```
+ */
+export interface RecordView<K, V> {
+	/** The schema each key is parsed by, as passed. */
+	readonly key: K;
+	/** The schema each value is parsed by, as passed. */
+	readonly value: V;
 }
 
 /**
@@ -92,8 +130,10 @@ export interface RecordOptions<KO extends PropertyKey, KE, VI, VO, VE> {
  * @template VI The value schema's input type
  * @template VO The value schema's output type
  * @template VE The value schema's error type
+ * @template K The key schema, exactly (with its own view)
+ * @template V The value schema, exactly (with its own view)
  * @param options The schema for each key and for each value
- * @returns A schema for records of `key` to `value`
+ * @returns A schema for records of `key` to `value`, viewing both
  *
  * @example
  * ```ts
@@ -113,43 +153,56 @@ export interface RecordOptions<KO extends PropertyKey, KE, VI, VO, VE> {
  * assertEquals(unwrap(parseSync(scores, { ada: 3 })), { ada: 3 });
  * ```
  */
-export function record<KO extends PropertyKey, KE, VI, VO, VE>(
-	options: RecordOptions<KO, KE, VI, VO, VE>,
+export function record<
+	KO extends PropertyKey,
+	KE,
+	VI,
+	VO,
+	VE,
+	K extends Schema<string, KO, KE>,
+	V extends Schema<VI, VO, VE>,
+>(
+	options: RecordOptions<KO, KE, VI, VO, VE, K, V>,
 ): Schema<
 	RecordInput<VI>,
 	RecordOutput<KO, VO>,
 	Issues<Flatten<KE | VE> | SchemaIssue>
->;
+> &
+	RecordView<K, V>;
 export function record(options: {
 	readonly key: Schema<string, PropertyKey, unknown>;
 	readonly value: Child;
-}): Schema<unknown, unknown, Issues<unknown>> {
+}): Schema<unknown, unknown, Issues<unknown>> &
+	RecordView<Schema<string, PropertyKey, unknown>, Child> {
 	const { key, value } = options;
 
-	return new Schema({
-		parse: (input: unknown): Parsed => {
-			if (!isRecord(input)) return invalidType({ input, expected: "object" });
+	return viewed({
+		init: {
+			parse: (input: unknown): Parsed => {
+				if (!isRecord(input)) return invalidType({ input, expected: "object" });
 
-			// Each key's own parse, then its value's: issues stay in key order.
-			const pending = Object.keys(input).flatMap((name) => [
-				run({ key: name, child: key, value: name }),
-				run({ key: name, child: value, value: input[name] }),
-			]);
+				// Each key's own parse, then its value's: issues stay in key order.
+				const pending = Object.keys(input).flatMap((name) => [
+					run({ key: name, child: key, value: name }),
+					run({ key: name, child: value, value: input[name] }),
+				]);
 
-			return compose({
-				pending,
-				extra: undefined,
-				build: (outputs) => {
-					return Object.fromEntries(
-						outputs.flatMap(([, outputKey], index) => {
-							if (index % 2 !== 0) return [];
+				return compose({
+					pending,
+					extra: undefined,
+					build: (outputs) => {
+						return Object.fromEntries(
+							outputs.flatMap(([, outputKey], index) => {
+								if (index % 2 !== 0) return [];
 
-							return [[outputKey, outputs[index + 1]?.[1]]];
-						}),
-					);
-				},
-			});
+								return [[outputKey, outputs[index + 1]?.[1]]];
+							}),
+						);
+					},
+				});
+			},
+			node: new SchemaNode("Record", { key, value }),
 		},
-		node: new SchemaNode("Record", { key, value }),
+		view: { key, value },
 	});
 }

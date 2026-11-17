@@ -9,16 +9,22 @@
  * @module
  */
 
-export { type ArrayInput, type ArrayOptions, array } from "./array.ts";
+export {
+	type ArrayInput,
+	type ArrayOptions,
+	type ArrayView,
+	array,
+} from "./array.ts";
 export {
 	type DiscriminatedInput,
 	type DiscriminatedOutput,
 	type DiscriminatedUnionOptions,
+	type DiscriminatedUnionView,
 	discriminatedUnion,
 	type Options,
 } from "./discriminated-union.ts";
 export { enumOf } from "./enum-of.ts";
-export { lazy, nullable, optional } from "./modifiers.ts";
+export { type LazyView, lazy, nullable, optional } from "./modifiers.ts";
 export {
 	type Field,
 	type FieldSchema,
@@ -27,6 +33,7 @@ export {
 	type ObjectInput,
 	type ObjectOptions,
 	type ObjectOutput,
+	type ObjectView,
 	object,
 	type Shape,
 	type UnknownKeys,
@@ -36,12 +43,14 @@ export {
 	type RecordInput,
 	type RecordOptions,
 	type RecordOutput,
+	type RecordView,
 	record,
 } from "./record.ts";
 export {
 	type TupleError,
 	type TupleInput,
 	type TupleOutput,
+	type TupleView,
 	tuple,
 } from "./tuple.ts";
-export { type UnionInput, union } from "./union.ts";
+export { type UnionInput, type UnionView, union } from "./union.ts";

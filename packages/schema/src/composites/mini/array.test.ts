@@ -1,6 +1,6 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
 	InvalidType,
@@ -172,4 +172,18 @@ Deno.test("array infers its input, output and error types", () => {
 	assertType<
 		IsExact<ErrorOf<typeof bounded>, Issues<"not a number" | SchemaIssue>>
 	>(true);
+});
+
+Deno.test("array views its element schema, exactly as passed", () => {
+	// Given: an element schema that is itself an object with a view
+	const point = object({ shape: { x: count } });
+
+	// When: building an array of it
+	const points = array({ item: point, minItems: 1 });
+
+	// Then: .item is the element schema, typed with its own view
+	assertStrictEquals(points.item, point);
+	assertStrictEquals(points.item.shape.x, count);
+	assertType<IsExact<typeof points.item, typeof point>>(true);
+	assertType<IsExact<Output<typeof points>, { x: number }[]>>(true);
 });

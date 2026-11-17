@@ -84,11 +84,15 @@ export type ViewOf<S> = Omit<S, ReservedViewKey>;
  *
  * @example
  * ```ts
- * import type { Schema } from "@sekhmet/schema/core/mini";
- * import type { WrapperView } from "@sekhmet/schema/core/mini/view";
+ * import { assertStrictEquals } from "@std/assert";
+ * import { nullable, optional } from "@sekhmet/schema/composites/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
  *
- * type Text = Schema<unknown, string, never>;
- * type MaybeText = Schema<unknown, string | undefined, never> & WrapperView<Text>;
+ * const text = string();
+ * const maybe = optional(text);
+ *
+ * assertStrictEquals(maybe.inner, text);
+ * assertStrictEquals(nullable(maybe).inner.inner, text);
  * ```
  */
 export interface WrapperView<S> {

@@ -5,13 +5,14 @@ import {
 	type Issues,
 } from "@/src/core/mini/issues.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";
-import {
-	type AnySchema,
-	type ErrorOf,
-	type Input,
-	type Output,
+import type {
+	AnySchema,
+	ErrorOf,
+	Input,
+	Output,
 	Schema,
 } from "@/src/core/mini/schema.ts";
+import { viewed } from "@/src/core/mini/view.ts";
 import {
 	type Child,
 	compose,
@@ -84,6 +85,28 @@ export type TupleError<T extends readonly AnySchema[]> = Issues<
 	Flatten<ErrorOf<T[number]>> | SchemaIssue
 >;
 
+/**
+ * A view of a tuple schema's element schemas: `items` is the tuple passed.
+ *
+ * @template T The element schemas
+ *
+ * @example
+ * ```ts
+ * import { assertStrictEquals } from "@std/assert";
+ * import { tuple } from "@sekhmet/schema/composites/mini";
+ * import { number, string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const name = string();
+ * const pair = tuple([name, number()]);
+ *
+ * assertStrictEquals(pair.items[0], name);
+ * ```
+ */
+export interface TupleView<T extends readonly AnySchema[]> {
+	/** The element schemas, as passed. */
+	readonly items: T;
+}
+
 /** The issue of a tuple input longer than its elements, if it is. */
 function tooLong({
 	input,
@@ -109,9 +132,11 @@ function tooLong({
  * element; use `array` for a variable-length tail. A non-array input fails
  * with an `InvalidType` issue at the root.
  *
+ * The result's view (`.items`) is `items`, as passed.
+ *
  * @template T The element schemas
  * @param items Each element's schema, in order
- * @returns A schema for tuples of `items`
+ * @returns A schema for tuples of `items`, viewing `items`
  *
  * @example
  * ```ts
@@ -136,22 +161,25 @@ function tooLong({
  */
 export function tuple<const T extends readonly AnySchema[]>(
 	items: T,
-): Schema<TupleInput<T>, TupleOutput<T>, TupleError<T>>;
+): Schema<TupleInput<T>, TupleOutput<T>, TupleError<T>> & TupleView<T>;
 export function tuple(
 	items: readonly Child[],
-): Schema<unknown, unknown, Issues<unknown>> {
-	return new Schema({
-		parse: (input: unknown): Parsed => {
-			if (!isArray(input)) return invalidType({ input, expected: "array" });
+): Schema<unknown, unknown, Issues<unknown>> & TupleView<readonly Child[]> {
+	return viewed({
+		init: {
+			parse: (input: unknown): Parsed => {
+				if (!isArray(input)) return invalidType({ input, expected: "array" });
 
-			return compose({
-				pending: items.map((child, index) => {
-					return run({ key: index, child, value: input[index] });
-				}),
-				extra: tooLong({ input, maximum: items.length }),
-				build: (outputs) => outputs.map(([, output]) => output),
-			});
+				return compose({
+					pending: items.map((child, index) => {
+						return run({ key: index, child, value: input[index] });
+					}),
+					extra: tooLong({ input, maximum: items.length }),
+					build: (outputs) => outputs.map(([, output]) => output),
+				});
+			},
+			node: new SchemaNode("Tuple", { items }),
 		},
-		node: new SchemaNode("Tuple", { items }),
+		view: { items },
 	});
 }

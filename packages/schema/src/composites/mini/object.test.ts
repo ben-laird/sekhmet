@@ -1,7 +1,12 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, isOk, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
-import { assert, assertEquals, assertFalse } from "@std/assert";
+import {
+	assert,
+	assertEquals,
+	assertFalse,
+	assertStrictEquals,
+} from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
 	InvalidType,
@@ -12,6 +17,7 @@ import { entries, type Issues } from "@/src/core/mini/issues.ts";
 import {
 	type ErrorOf,
 	type Input,
+	map,
 	type Output,
 	parse,
 	parseAsync,
@@ -406,4 +412,58 @@ Deno.test("a viewed schema with a `key` of its own is a required key, not a fiel
 	assertType<IsExact<Output<typeof holder>, { value: string }>>(true);
 	assertFalse(isOk(parseSync(holder, {})));
 	assertEquals(unwrap(parseSync(holder, { value: "a" })), { value: "a" });
+});
+
+Deno.test("object views its shape: all four field kinds keep their exact types", () => {
+	// Given: a shape with each field kind
+	const typedText = new Schema({ parse: (input: string) => Ok(input) });
+	const middle = optional(typedText);
+	const alias = optional(typedText);
+
+	// When: building the object
+	const person = object({
+		shape: {
+			name: typedText,
+			middle,
+			nickname: { schema: typedText, key: "optional" },
+			alias: { schema: alias, key: "optional" },
+		},
+	});
+
+	// Then: .shape is the shape passed, its field entries stay literal, and
+	// the output is unchanged
+	assertStrictEquals(person.shape.name, typedText);
+	assertStrictEquals(person.shape.middle.inner, typedText);
+	assertStrictEquals(person.shape.nickname.schema, typedText);
+	assertStrictEquals(person.shape.alias.schema.inner, typedText);
+	assertType<IsExact<typeof person.shape.nickname.key, "optional">>(true);
+	assertType<IsExact<typeof person.shape.alias.schema, typeof alias>>(true);
+	assertType<
+		IsExact<
+			Output<typeof person>,
+			{
+				name: string;
+				middle: string | undefined;
+				nickname?: string;
+				alias?: string | undefined;
+			}
+		>
+	>(true);
+});
+
+Deno.test("a view can't be forged, nor survive a transform in its type", () => {
+	// Given: a plain schema, and an object with a view
+	const plain = new Schema({ parse: (input: unknown) => Ok(input) });
+	const user = object({ shape: { name: text } });
+
+	// When: typing the plain schema as the object, and mapping the object
+	// @ts-expect-error a plain Schema has no view
+	const forged: typeof user = plain;
+	const mapped = map(user, (value) => value.name);
+
+	// Then: only the real view type-checks, and map's result has no shape
+	assertEquals(forged.shape, undefined);
+	// @ts-expect-error map's result is a transform: its own view is inner
+	assertEquals(mapped.shape, undefined);
+	assertStrictEquals(user.shape.name, text);
 });

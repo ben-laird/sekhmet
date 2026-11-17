@@ -1,6 +1,6 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import { entries, type Issues } from "@/src/core/mini/issues.ts";
@@ -127,4 +127,27 @@ Deno.test("lazy keeps the deferred schema's types", () => {
 	// When: reading its output type
 	// Then: it is the recursive Tree
 	assertType<IsExact<Output<typeof tree>, Tree>>(true);
+});
+
+Deno.test("optional, nullable and lazy view the schema they wrap, exactly as passed", () => {
+	// Given: a mini schema with a view, to wrap
+	const named = object({ shape: { name: text } });
+
+	// When: wrapping it each way
+	const maybe = optional(named);
+	const orNull = nullable(maybe);
+	const later = lazy(() => named);
+
+	// Then: each view is the schema passed, typed with its own view, and
+	// the mini child stays mini
+	assertStrictEquals(maybe.inner, named);
+	assertStrictEquals(orNull.inner.inner.shape.name, text);
+	assertStrictEquals(later.getter(), named);
+	assertType<IsExact<typeof maybe.inner, typeof named>>(true);
+	assertType<IsExact<typeof orNull.inner, typeof maybe>>(true);
+	assertType<IsExact<ReturnType<typeof later.getter>, typeof named>>(true);
+	assertEquals(Object.getPrototypeOf(maybe.inner), Schema.prototype);
+	assertType<
+		IsExact<Output<typeof orNull>, { name: string } | undefined | null>
+	>(true);
 });

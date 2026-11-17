@@ -620,8 +620,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 		composites.ArrayInput<I>,
 		O[],
 		mini.Issues<mini.Flatten<E> | mini.SchemaIssue>
-	> {
-		return Schema.fromMini(composites.array({ item: this }));
+	> &
+		composites.ArrayView<this> {
+		return Schema.fromMiniView(composites.array({ item: this }));
 	}
 
 	/**
@@ -645,8 +646,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link composites.optional}
 	 */
-	optional(): Schema<I | undefined, O | undefined, E> {
-		return Schema.fromMini(composites.optional(this));
+	optional(): Schema<I | undefined, O | undefined, E> & mini.WrapperView<this> {
+		return Schema.fromMiniView(composites.optional(this));
 	}
 
 	/**
@@ -664,8 +665,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link composites.nullable}
 	 */
-	nullable(): Schema<I | null, O | null, E> {
-		return Schema.fromMini(composites.nullable(this));
+	nullable(): Schema<I | null, O | null, E> & mini.WrapperView<this> {
+		return Schema.fromMiniView(composites.nullable(this));
 	}
 
 	/**

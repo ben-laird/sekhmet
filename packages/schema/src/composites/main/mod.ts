@@ -39,6 +39,7 @@ import type {
 	Schema as MiniSchema,
 	Output,
 } from "@/src/core/mini/schema.ts";
+import type { WrapperView } from "@/src/core/mini/view.ts";
 import type { Literal } from "@/src/primitives/mini/literal.ts";
 import { Schema } from "../../core/main/mod.ts";
 import * as mini from "../mini/mod.ts";
@@ -46,25 +47,32 @@ import * as mini from "../mini/mod.ts";
 export type {
 	ArrayInput,
 	ArrayOptions,
+	ArrayView,
 	DiscriminatedInput,
 	DiscriminatedOutput,
 	DiscriminatedUnionOptions,
+	DiscriminatedUnionView,
 	Field,
 	FieldSchema,
 	KeyPresence,
+	LazyView,
 	ObjectError,
 	ObjectInput,
 	ObjectOptions,
 	ObjectOutput,
+	ObjectView,
 	Options,
 	RecordInput,
 	RecordOptions,
 	RecordOutput,
+	RecordView,
 	Shape,
 	TupleError,
 	TupleInput,
 	TupleOutput,
+	TupleView,
 	UnionInput,
+	UnionView,
 	UnknownKeys,
 	WithOptionalKeys,
 } from "../mini/mod.ts";
@@ -79,13 +87,15 @@ export type {
  * the root, after any failing elements, so both are seen at once.
  *
  * The input is `unknown` when `item` accepts anything, and otherwise an
- * array of `item`'s input.
+ * array of `item`'s input. The result's view (`.item`) is `item`, as
+ * passed.
  *
  * @template I - The element schema's input type
  * @template O - The element schema's output type
  * @template E - The element schema's error type
+ * @template S - The element schema, exactly (with its own view)
  * @param options - The element schema and the length bounds
- * @returns A schema for arrays of `item`
+ * @returns A schema for arrays of `item`, viewing `item`
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -116,10 +126,11 @@ export type {
  * assertEquals(formatIssue(error), "Too big: expected array to have <= 2 items");
  * ```
  */
-export function array<I, O, E>(
-	options: mini.ArrayOptions<I, O, E>,
-): Schema<mini.ArrayInput<I>, O[], Issues<Flatten<E> | SchemaIssue>> {
-	return Schema.fromMini(mini.array(options));
+export function array<I, O, E, S extends MiniSchema<I, O, E>>(
+	options: mini.ArrayOptions<I, O, E, S>,
+): Schema<mini.ArrayInput<I>, O[], Issues<Flatten<E> | SchemaIssue>> &
+	mini.ArrayView<S> {
+	return Schema.fromMiniView(mini.array(options));
 }
 
 /**
@@ -133,11 +144,13 @@ export function array<I, O, E>(
  * `[key]`, listing the options' values. The chosen option's issues are
  * reported as it found them.
  *
+ * The result's view (`.key`, `.options`) is the declaration's, as passed.
+ *
  * @template K - The discriminant key
  * @template M - The options
  * @param declaration - The key holding the discriminant, and each discriminant
  * value's schema
- * @returns A schema for the union of `options`
+ * @returns A schema for the union of `options`, viewing `key` and `options`
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -176,8 +189,9 @@ export function discriminatedUnion<
 	mini.DiscriminatedInput<K, M>,
 	mini.DiscriminatedOutput<K, M>,
 	Issues<Flatten<ErrorOf<M[keyof M]>> | SchemaIssue>
-> {
-	return Schema.fromMini(mini.discriminatedUnion(declaration));
+> &
+	mini.DiscriminatedUnionView<K, M> {
+	return Schema.fromMiniView(mini.discriminatedUnion(declaration));
 }
 
 /**
@@ -217,12 +231,14 @@ export function enumOf<const T extends readonly [Literal, ...Literal[]]>(
  * Defers building a schema until it parses, so a schema can refer to
  * itself: recursive data such as trees. `getter` runs on every parse; the
  * types must be written out, since TypeScript can't infer a recursive one.
+ * The result's view (`.getter`) is `getter`, as passed.
  *
  * @template I - The input type
  * @template O - The output type
  * @template E - The error type
+ * @template S - The schema `getter` returns, exactly
  * @param getter - Returns the schema to parse with
- * @returns A schema that parses with `getter()`'s schema
+ * @returns A schema that parses with `getter()`'s schema, viewing `getter`
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -242,21 +258,22 @@ export function enumOf<const T extends readonly [Literal, ...Literal[]]>(
  * });
  * ```
  */
-export function lazy<I, O, E>(
-	getter: () => MiniSchema<I, O, E>,
-): Schema<I, O, E> {
-	return Schema.fromMini(mini.lazy(getter));
+export function lazy<I, O, E, S extends MiniSchema<I, O, E>>(
+	getter: () => S & MiniSchema<I, O, E>,
+): Schema<I, O, E> & mini.LazyView<S> {
+	return Schema.fromMiniView(mini.lazy(getter));
 }
 
 /**
  * Makes a schema also accept `null`, which it passes through without
- * running `self`.
+ * running `self`. The result's view (`.inner`) is `self`, as passed.
  *
  * @template I - The input type
  * @template O - The output type
  * @template E - The error type
+ * @template S - The schema, exactly (with its own view)
  * @param self - The schema
- * @returns A schema for `self`'s values or `null`
+ * @returns A schema for `self`'s values or `null`, viewing `self`
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -269,10 +286,10 @@ export function lazy<I, O, E>(
  * assertEquals(unwrap(parseSync(nullable(text), null)), null);
  * ```
  */
-export function nullable<I, O, E>(
-	self: MiniSchema<I, O, E>,
-): Schema<I | null, O | null, E> {
-	return Schema.fromMini(mini.nullable(self));
+export function nullable<I, O, E, S extends MiniSchema<I, O, E>>(
+	self: S & MiniSchema<I, O, E>,
+): Schema<I | null, O | null, E> & WrapperView<S> {
+	return Schema.fromMiniView(mini.nullable(self));
 }
 
 /**
@@ -282,11 +299,14 @@ export function nullable<I, O, E>(
  * `undefined`); declare a key optional with a field entry,
  * `{ schema, key: "optional" }`.
  *
+ * The result's view (`.inner`) is `self`, as passed.
+ *
  * @template I - The input type
  * @template O - The output type
  * @template E - The error type
+ * @template S - The schema, exactly (with its own view)
  * @param self - The schema
- * @returns A schema for `self`'s values or `undefined`
+ * @returns A schema for `self`'s values or `undefined`, viewing `self`
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -298,12 +318,13 @@ export function nullable<I, O, E>(
  * const gaps = array({ item: optional(text) });
  *
  * assertEquals(unwrap(parseSync(gaps, ["a", undefined])), ["a", undefined]);
+ * assertEquals(optional(text).inner, text);
  * ```
  */
-export function optional<I, O, E>(
-	self: MiniSchema<I, O, E>,
-): Schema<I | undefined, O | undefined, E> {
-	return Schema.fromMini(mini.optional(self));
+export function optional<I, O, E, S extends MiniSchema<I, O, E>>(
+	self: S & MiniSchema<I, O, E>,
+): Schema<I | undefined, O | undefined, E> & WrapperView<S> {
+	return Schema.fromMiniView(mini.optional(self));
 }
 
 /**
@@ -331,10 +352,13 @@ export function optional<I, O, E>(
  * A non-object input (including `null` and arrays) fails with an
  * `InvalidType` issue at the root.
  *
+ * The result's view (`.shape`) is the shape passed (see
+ * {@linkcode ObjectView}).
+ *
  * @template S - The object's shape
  * @template U - What the object does with undeclared keys
  * @param options - The fields, and what to do with undeclared keys
- * @returns A schema for objects of that shape
+ * @returns A schema for objects of that shape, viewing the shape
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -404,8 +428,9 @@ export function object<
 	U extends mini.UnknownKeys = "strip",
 >(
 	options: mini.ObjectOptions<S, U>,
-): Schema<mini.ObjectInput<S>, mini.ObjectOutput<S, U>, mini.ObjectError<S>> {
-	return Schema.fromMini(mini.object(options));
+): Schema<mini.ObjectInput<S>, mini.ObjectOutput<S, U>, mini.ObjectError<S>> &
+	mini.ObjectView<S> {
+	return Schema.fromMiniView(mini.object(options));
 }
 
 /**
@@ -420,8 +445,10 @@ export function object<
  * @template VI - The value schema's input type
  * @template VO - The value schema's output type
  * @template VE - The value schema's error type
+ * @template K - The key schema, exactly (with its own view)
+ * @template V - The value schema, exactly (with its own view)
  * @param options - The schema for each key and for each value
- * @returns A schema for records of `key` to `value`
+ * @returns A schema for records of `key` to `value`, viewing both
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -440,14 +467,23 @@ export function object<
  * assertEquals(unwrap(parseSync(scores, { ada: 3 })), { ada: 3 });
  * ```
  */
-export function record<KO extends PropertyKey, KE, VI, VO, VE>(
-	options: mini.RecordOptions<KO, KE, VI, VO, VE>,
+export function record<
+	KO extends PropertyKey,
+	KE,
+	VI,
+	VO,
+	VE,
+	K extends MiniSchema<string, KO, KE>,
+	V extends MiniSchema<VI, VO, VE>,
+>(
+	options: mini.RecordOptions<KO, KE, VI, VO, VE, K, V>,
 ): Schema<
 	mini.RecordInput<VI>,
 	mini.RecordOutput<KO, VO>,
 	Issues<Flatten<KE | VE> | SchemaIssue>
-> {
-	return Schema.fromMini(mini.record(options));
+> &
+	mini.RecordView<K, V> {
+	return Schema.fromMiniView(mini.record(options));
 }
 
 /**
@@ -460,9 +496,11 @@ export function record<KO extends PropertyKey, KE, VI, VO, VE>(
  * element; use `array` for a variable-length tail. A non-array input fails
  * with an `InvalidType` issue at the root.
  *
+ * The result's view (`.items`) is `items`, as passed.
+ *
  * @template T - The element schemas
  * @param items - Each element's schema, in order
- * @returns A schema for tuples of `items`
+ * @returns A schema for tuples of `items`, viewing `items`
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -486,8 +524,9 @@ export function record<KO extends PropertyKey, KE, VI, VO, VE>(
  */
 export function tuple<const T extends readonly AnySchema[]>(
 	items: T,
-): Schema<mini.TupleInput<T>, mini.TupleOutput<T>, mini.TupleError<T>> {
-	return Schema.fromMini(mini.tuple(items));
+): Schema<mini.TupleInput<T>, mini.TupleOutput<T>, mini.TupleError<T>> &
+	mini.TupleView<T> {
+	return Schema.fromMiniView(mini.tuple(items));
 }
 
 /**
@@ -496,9 +535,11 @@ export function tuple<const T extends readonly AnySchema[]>(
  * not run. When none succeeds, the union fails with one `InvalidUnion`
  * issue at the root, carrying each option's issues in order.
  *
+ * The result's view (`.options`) is `options`, as passed.
+ *
  * @template T - The option schemas
  * @param options - The schemas to try, in order
- * @returns A schema for any of `options`
+ * @returns A schema for any of `options`, viewing `options`
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -526,6 +567,7 @@ export function tuple<const T extends readonly AnySchema[]>(
  */
 export function union<const T extends readonly [AnySchema, ...AnySchema[]]>(
 	options: T,
-): Schema<mini.UnionInput<T>, Output<T[number]>, Issues<SchemaIssue>> {
-	return Schema.fromMini(mini.union(options));
+): Schema<mini.UnionInput<T>, Output<T[number]>, Issues<SchemaIssue>> &
+	mini.UnionView<T> {
+	return Schema.fromMiniView(mini.union(options));
 }

@@ -8,6 +8,7 @@ import {
 	type Output,
 	Schema,
 } from "@/src/core/mini/schema.ts";
+import { viewed } from "@/src/core/mini/view.ts";
 import {
 	type Child,
 	compose,
@@ -263,6 +264,32 @@ export interface ObjectOptions<S extends Shape, U extends UnknownKeys> {
 	readonly unknownKeys?: U;
 }
 
+/**
+ * A view of an object schema's fields: `shape` is the shape passed, so each
+ * field's schema, or its field entry, keeps its type
+ * (`user.shape.name`, `user.shape.age.schema`).
+ *
+ * @template S The object's shape
+ *
+ * @example
+ * ```ts
+ * import { assertStrictEquals } from "@std/assert";
+ * import { object } from "@sekhmet/schema/composites/mini";
+ * import { number, string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const name = string();
+ * const age = number();
+ * const user = object({ shape: { name, age: { schema: age, key: "optional" } } });
+ *
+ * assertStrictEquals(user.shape.name, name);
+ * assertStrictEquals(user.shape.age.schema, age);
+ * ```
+ */
+export interface ObjectView<S extends Shape> {
+	/** The fields, as passed. */
+	readonly shape: S;
+}
+
 /** The issues for each undeclared key of a strict object. */
 function unknownKeyIssues({
 	input,
@@ -334,10 +361,13 @@ function planOf([key, entry]: [string, Entry]): Plan {
  * A non-object input (including `null` and arrays) fails with an
  * `InvalidType` issue at the root.
  *
+ * The result's view (`.shape`) is the shape passed (see
+ * {@linkcode ObjectView}).
+ *
  * @template S The object's shape
  * @template U What the object does with undeclared keys
  * @param options The fields, and what to do with undeclared keys
- * @returns A schema for objects of that shape
+ * @returns A schema for objects of that shape, viewing the shape
  *
  * @example
  * ```ts
@@ -407,49 +437,53 @@ function planOf([key, entry]: [string, Entry]): Plan {
  */
 export function object<S extends Shape, U extends UnknownKeys = "strip">(
 	options: ObjectOptions<S, U>,
-): Schema<ObjectInput<S>, ObjectOutput<S, U>, ObjectError<S>>;
+): Schema<ObjectInput<S>, ObjectOutput<S, U>, ObjectError<S>> & ObjectView<S>;
 export function object(options: {
 	readonly shape: Readonly<Record<string, Entry>>;
 	readonly unknownKeys?: UnknownKeys;
-}): Schema<unknown, unknown, Issues<unknown>> {
+}): Schema<unknown, unknown, Issues<unknown>> & ObjectView<Shape> {
 	const { shape } = options;
 	const unknownKeys = options.unknownKeys ?? "strip";
 	const plans = Object.entries(shape).map(planOf);
+	const parse = (input: unknown): Parsed => {
+		if (!isRecord(input)) return invalidType({ input, expected: "object" });
 
-	return new Schema({
-		parse: (input: unknown): Parsed => {
-			if (!isRecord(input)) return invalidType({ input, expected: "object" });
+		const undeclared = Object.keys(input).filter(
+			(key) => !Object.hasOwn(shape, key),
+		);
+		const pending = plans.flatMap(({ key, schema, missing }): Pending[] => {
+			if (Object.hasOwn(input, key)) {
+				return [run({ key, child: schema, value: input[key] })];
+			}
 
-			const undeclared = Object.keys(input).filter(
-				(key) => !Object.hasOwn(shape, key),
-			);
-			const pending = plans.flatMap(({ key, schema, missing }): Pending[] => {
-				if (Object.hasOwn(input, key)) {
-					return [run({ key, child: schema, value: input[key] })];
-				}
+			if (missing === undefined) return [];
 
-				if (missing === undefined) return [];
+			return [run({ key, child: missing, value: undefined })];
+		});
 
-				return [run({ key, child: missing, value: undefined })];
-			});
+		const reported = unknownKeys === "strict" ? undeclared : [];
+		const kept = unknownKeys === "passthrough" ? undeclared : [];
 
-			const reported = unknownKeys === "strict" ? undeclared : [];
-			const kept = unknownKeys === "passthrough" ? undeclared : [];
+		return compose({
+			pending,
+			extra: unknownKeyIssues({ input, keys: reported }),
+			build: (outputs) => {
+				return Object.fromEntries([
+					...outputs,
+					...kept.map((key) => [key, input[key]]),
+				]);
+			},
+		});
+	};
 
-			return compose({
-				pending,
-				extra: unknownKeyIssues({ input, keys: reported }),
-				build: (outputs) => {
-					return Object.fromEntries([
-						...outputs,
-						...kept.map((key) => [key, input[key]]),
-					]);
-				},
-			});
+	return viewed({
+		init: {
+			parse,
+			node: new SchemaNode("Object", {
+				shape,
+				unknownKeys: options.unknownKeys,
+			}),
 		},
-		node: new SchemaNode("Object", {
-			shape,
-			unknownKeys: options.unknownKeys,
-		}),
+		view: { shape },
 	});
 }

@@ -1,8 +1,32 @@
 import { Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { SchemaNode } from "@/src/core/mini/node.ts";
-import { Schema } from "@/src/core/mini/schema.ts";
+import type { Schema } from "@/src/core/mini/schema.ts";
+import { viewed, type WrapperView } from "@/src/core/mini/view.ts";
 import { acceptNull, type Child, type ChildParsed } from "./collect.ts";
+
+/**
+ * A view of the schema a `lazy` schema defers to: `getter` is the function
+ * passed, typed to return that schema.
+ *
+ * @template S The schema `getter` returns
+ *
+ * @example
+ * ```ts
+ * import { assertStrictEquals } from "@std/assert";
+ * import { lazy } from "@sekhmet/schema/composites/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const text = string();
+ * const later = lazy(() => text);
+ *
+ * assertStrictEquals(later.getter(), text);
+ * ```
+ */
+export interface LazyView<S> {
+	/** The function returning the schema to parse with, as passed. */
+	readonly getter: () => S;
+}
 
 /**
  * Makes a schema's value optional: it also accepts `undefined`, which it
@@ -11,11 +35,14 @@ import { acceptNull, type Child, type ChildParsed } from "./collect.ts";
  * `undefined`); declare a key optional with a field entry,
  * `{ schema, key: "optional" }`.
  *
+ * The result's view (`.inner`) is `self`, as passed.
+ *
  * @template I The input type
  * @template O The output type
  * @template E The error type
+ * @template S The schema, exactly (with its own view)
  * @param self The schema
- * @returns A schema for `self`'s values or `undefined`
+ * @returns A schema for `self`'s values or `undefined`, viewing `self`
  *
  * @example
  * ```ts
@@ -28,33 +55,38 @@ import { acceptNull, type Child, type ChildParsed } from "./collect.ts";
  * const gaps = array({ item: optional(text) });
  *
  * assertEquals(unwrap(parseSync(gaps, ["a", undefined])), ["a", undefined]);
+ * assertEquals(optional(text).inner, text);
  * ```
  */
-export function optional<I, O, E>(
-	self: Schema<I, O, E>,
-): Schema<I | undefined, O | undefined, E>;
-export function optional(self: Child): Child {
+export function optional<I, O, E, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
+): Schema<I | undefined, O | undefined, E> & WrapperView<S>;
+export function optional(self: Child): Child & WrapperView<Child> {
 	const parser = getStructParams(self).parse;
 
-	return new Schema({
-		parse: (input): ChildParsed => {
-			if (input === undefined) return Ok(undefined);
+	return viewed({
+		init: {
+			parse: (input: unknown): ChildParsed => {
+				if (input === undefined) return Ok(undefined);
 
-			return parser(input);
+				return parser(input);
+			},
+			node: new SchemaNode("Optional", { inner: self }),
 		},
-		node: new SchemaNode("Optional", { inner: self }),
+		view: { inner: self },
 	});
 }
 
 /**
  * Makes a schema also accept `null`, which it passes through without
- * running `self`.
+ * running `self`. The result's view (`.inner`) is `self`, as passed.
  *
  * @template I The input type
  * @template O The output type
  * @template E The error type
+ * @template S The schema, exactly (with its own view)
  * @param self The schema
- * @returns A schema for `self`'s values or `null`
+ * @returns A schema for `self`'s values or `null`, viewing `self`
  *
  * @example
  * ```ts
@@ -68,23 +100,28 @@ export function optional(self: Child): Child {
  * assertEquals(unwrap(parseSync(nullable(text), null)), null);
  * ```
  */
-export function nullable<I, O, E>(
-	self: Schema<I, O, E>,
-): Schema<I | null, O | null, E>;
-export function nullable(self: Child): Child {
-	return acceptNull(self);
+export function nullable<I, O, E, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
+): Schema<I | null, O | null, E> & WrapperView<S>;
+export function nullable(self: Child): Child & WrapperView<Child> {
+	return viewed({
+		init: getStructParams(acceptNull(self)),
+		view: { inner: self },
+	});
 }
 
 /**
  * Defers building a schema until it parses, so a schema can refer to
  * itself: recursive data such as trees. `getter` runs on every parse; the
  * types must be written out, since TypeScript can't infer a recursive one.
+ * The result's view (`.getter`) is `getter`, as passed.
  *
  * @template I The input type
  * @template O The output type
  * @template E The error type
+ * @template S The schema `getter` returns, exactly
  * @param getter Returns the schema to parse with
- * @returns A schema that parses with `getter()`'s schema
+ * @returns A schema that parses with `getter()`'s schema, viewing `getter`
  *
  * @example
  * ```ts
@@ -105,9 +142,15 @@ export function nullable(self: Child): Child {
  * });
  * ```
  */
-export function lazy<I, O, E>(getter: () => Schema<I, O, E>): Schema<I, O, E> {
-	return new Schema({
-		parse: (input) => getStructParams(getter()).parse(input),
-		node: new SchemaNode("Lazy", { getter }),
+export function lazy<I, O, E, S extends Schema<I, O, E>>(
+	getter: () => S & Schema<I, O, E>,
+): Schema<I, O, E> & LazyView<S>;
+export function lazy(getter: () => Child): Child & LazyView<Child> {
+	return viewed({
+		init: {
+			parse: (input: unknown) => getStructParams(getter()).parse(input),
+			node: new SchemaNode("Lazy", { getter }),
+		},
+		view: { getter },
 	});
 }
