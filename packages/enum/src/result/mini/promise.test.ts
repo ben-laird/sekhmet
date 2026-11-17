@@ -6,7 +6,7 @@ import { promiseResult } from "./promise.ts";
 Deno.test("promiseResult() settles with the executor's outcome", async (t) => {
 	await t.step("resolve gives Ok", async () => {
 		// Given: an executor that resolves
-		const promise = promiseResult<number, string>(({ resolve }) => {
+		const promise = promiseResult<number, string>((resolve) => {
 			resolve(42);
 		});
 
@@ -19,7 +19,7 @@ Deno.test("promiseResult() settles with the executor's outcome", async (t) => {
 
 	await t.step("reject gives Err, and the promise still fulfills", async () => {
 		// Given: an executor that rejects
-		const promise = promiseResult<number, string>(({ reject }) => {
+		const promise = promiseResult<number, string>((_resolve, reject) => {
 			reject("nope");
 		});
 
@@ -32,7 +32,7 @@ Deno.test("promiseResult() settles with the executor's outcome", async (t) => {
 
 	await t.step("a later resolve settles it", async () => {
 		// Given: an executor that resolves asynchronously
-		const promise = promiseResult<string, never>(({ resolve }) => {
+		const promise = promiseResult<string, never>((resolve) => {
 			setTimeout(() => resolve("later"), 0);
 		});
 
@@ -60,7 +60,7 @@ Deno.test("promiseResult() settles with the executor's outcome", async (t) => {
 Deno.test("promiseResult() keeps the first settlement", async (t) => {
 	await t.step("a reject after a resolve is ignored", async () => {
 		// Given: an executor that resolves, then rejects
-		const promise = promiseResult<number, string>(({ resolve, reject }) => {
+		const promise = promiseResult<number, string>((resolve, reject) => {
 			resolve(1);
 			reject("late");
 		});
@@ -74,7 +74,7 @@ Deno.test("promiseResult() keeps the first settlement", async (t) => {
 
 	await t.step("a resolve after a reject is ignored", async () => {
 		// Given: an executor that rejects, then resolves
-		const promise = promiseResult<number, string>(({ resolve, reject }) => {
+		const promise = promiseResult<number, string>((resolve, reject) => {
 			reject("first");
 			resolve(1);
 		});
@@ -100,7 +100,7 @@ Deno.test("promiseResult() rejects when the executor throws", async (t) => {
 
 	await t.step("a throw after settling is ignored", async () => {
 		// Given: an executor that resolves, then throws
-		const promise = promiseResult<number, string>(({ resolve }) => {
+		const promise = promiseResult<number, string>((resolve) => {
 			resolve(1);
 			throw new Error("ignored");
 		});
@@ -115,8 +115,8 @@ Deno.test("promiseResult() rejects when the executor throws", async (t) => {
 
 Deno.test("promiseResult() types its Result from its type arguments", () => {
 	// Given: an executor with explicit types, and one without
-	const typed = promiseResult<number, string>(({ resolve }) => resolve(1));
-	const untyped = promiseResult(({ resolve }) => resolve(1));
+	const typed = promiseResult<number, string>((resolve) => resolve(1));
+	const untyped = promiseResult((resolve) => resolve(1));
 
 	// When / Then: the explicit types are kept, and the rest are unknown
 	assertType<IsExact<typeof typed, Promise<Result<number, string>>>>(true);
@@ -125,7 +125,7 @@ Deno.test("promiseResult() types its Result from its type arguments", () => {
 
 Deno.test("promiseResult() rejects settling with the wrong type", () => {
 	// Given: an executor typed for numbers and string errors
-	void promiseResult<number, string>(({ resolve, reject }) => {
+	void promiseResult<number, string>((resolve, reject) => {
 		// When / Then: resolving with a string does not compile
 		// @ts-expect-error resolve takes T, a number
 		resolve("1");
@@ -138,8 +138,8 @@ Deno.test("promiseResult() rejects settling with the wrong type", () => {
 
 Deno.test("promiseResult()'s promise is covariant in its Result", async () => {
 	// Given: a narrow promised Result and a wide one
-	const narrow = promiseResult<1, "e">(({ resolve }) => resolve(1));
-	const wide = promiseResult<number, string>(({ resolve }) => resolve(1));
+	const narrow = promiseResult<1, "e">((resolve) => resolve(1));
+	const wide = promiseResult<number, string>((resolve) => resolve(1));
 
 	// When / Then: widening is accepted
 	const widened: Promise<Result<number, string>> = narrow;

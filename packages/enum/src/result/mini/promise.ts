@@ -8,23 +8,14 @@
 import { Err, Ok, type Result } from "./core.ts";
 
 /**
- * The callbacks {@linkcode promiseResult} hands its executor.
- *
- * @template T - The success value type
- * @template E - The error type
- */
-export type ResultSettlers<T, E> = {
-	/** Settles the promise with `Ok(value)`. */
-	resolve: (value: T) => void;
-	/** Settles the promise with `Err(error)`. */
-	reject: (error: E) => void;
-};
-
-/**
  * Builds a `Promise<Result>` from an executor shaped like the `Promise`
  * constructor's: calling `resolve(value)` settles it with `Ok(value)`, and
  * `reject(error)` with `Err(error)`. The promise itself never rejects for
  * either.
+ *
+ * The executor takes `resolve` and `reject` positionally, not as one object:
+ * a deliberate exception to the named-arguments rule, so that it reads
+ * exactly like `new Promise((resolve, reject) => …)`.
  *
  * As with `new Promise`, the first call wins and later ones are ignored. A
  * throw from the executor is not an `E`, so it is not captured: it rejects
@@ -41,7 +32,7 @@ export type ResultSettlers<T, E> = {
  * import { Err, Ok, promiseResult } from "@sekhmet/enum/result/mini";
  *
  * const later = (ms: number) => {
- * 	return promiseResult<number, string>(({ resolve, reject }) => {
+ * 	return promiseResult<number, string>((resolve, reject) => {
  * 		if (ms < 0) return reject(`negative delay: ${ms}`);
  * 		setTimeout(() => resolve(ms), ms);
  * 	});
@@ -52,12 +43,12 @@ export type ResultSettlers<T, E> = {
  * ```
  */
 export function promiseResult<T, E>(
-	executor: (settlers: ResultSettlers<T, E>) => void,
+	executor: (resolve: (value: T) => void, reject: (error: E) => void) => void,
 ): Promise<Result<T, E>> {
 	return new Promise((settle) => {
-		executor({
-			resolve: (value) => settle(Ok(value)),
-			reject: (error) => settle(Err(error)),
-		});
+		executor(
+			(value) => settle(Ok(value)),
+			(error) => settle(Err(error)),
+		);
 	});
 }
