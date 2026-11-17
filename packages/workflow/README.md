@@ -137,7 +137,8 @@ Invariant checks that return the value, narrowed, so they fit inside an
 expression. `defined` removes what counts as absent: `null` and `undefined` by
 default, or only one of them with `absent: "undefined"` or `absent: "null"`.
 It never tests truthiness, so `0`, `""` and `false` are present. `satisfies`
-checks a predicate, and narrows when the predicate is a type guard.
+checks a predicate, and narrows when the predicate is a type guard, including
+one TypeScript infers, such as `(v) => v !== undefined`.
 
 ```ts
 import { defined, satisfies } from "@sekhmet/workflow/invariant";

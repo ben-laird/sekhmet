@@ -125,7 +125,12 @@ and `NaN` are present. Use `invariant` to assert truthiness.
 `satisfies(value, { predicate, expectedBehavior, issueUrl? })` returns `S`
 when `predicate` is a type guard `(value: T) => value is S`, and `T`
 otherwise. `T` is inferred from the value, so a guard over a wider type (say,
-`unknown`) still narrows. The predicate is called as a method of the options.
+`unknown`) still narrows. A predicate need not be written as a guard to
+narrow: TypeScript 5.5 and later infer `(v) => typeof v === "string"` or
+`(v) => v !== undefined` as type guards, so they narrow too. A discriminant
+check such as `(s) => s.kind === "circle"` is not inferred and leaves `T` as
+it is; annotate its return type (`s is Circle`) to narrow. The predicate is
+called as a method of the options.
 To reuse a check, wrap the call in a function.
 
 ## Causes

@@ -113,7 +113,7 @@ Deno.test("satisfies narrows to a type guard's type", () => {
 	// Given: a shape that should be a circle
 	const shape = widen<Shape>({ kind: "circle", r: 2 });
 
-	// When: satisfies checks it with a guard, and with a plain predicate
+	// When: satisfies checks it with a guard, and with a discriminant check
 	const circle = satisfies(shape, {
 		predicate: isCircle,
 		expectedBehavior: "a wheel should be a circle",
@@ -123,11 +123,33 @@ Deno.test("satisfies narrows to a type guard's type", () => {
 		expectedBehavior: "a wheel should be a circle",
 	});
 
-	// Then: the guard narrows; the plain predicate keeps the input type
+	// Then: the guard narrows; TypeScript infers no guard from a discriminant
+	// check, so it keeps the input type
 	assertType<IsExact<typeof circle, Circle>>(true);
 	assertType<IsExact<typeof unchanged, Shape>>(true);
 	assertEquals(circle.r, 2);
 	assertEquals(unchanged, circle);
+});
+
+Deno.test("satisfies narrows by a type guard TypeScript infers", () => {
+	// Given: values that may be a number, or undefined
+	const id = widen<string | number>("a1");
+	const name = widen<string | undefined>("Ada");
+
+	// When: satisfies checks them with inline predicates not written as guards
+	const text = satisfies(id, {
+		predicate: (value) => typeof value === "string",
+		expectedBehavior: "an ID should be a string",
+	});
+	const present = satisfies(name, {
+		predicate: (value) => value !== undefined,
+		expectedBehavior: "a user should have a name",
+	});
+
+	// Then: each narrows, since TypeScript 5.5 infers both as type guards
+	assertType<IsExact<typeof text, string>>(true);
+	assertType<IsExact<typeof present, string>>(true);
+	assertEquals([text, present], ["a1", "Ada"]);
 });
 
 Deno.test("satisfies infers the value's type from the value, not the predicate", () => {
