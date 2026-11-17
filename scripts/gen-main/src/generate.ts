@@ -600,22 +600,19 @@ interface Receiver {
 const NAMESPACE_SELF = "this.#self";
 
 /**
- * The type of the receiver a method passes: `this` on the primary class,
- * and on a namespace class the mini primary it holds.
+ * The type parameter of a namespace class of a primary carrying views that
+ * holds the receiver's exact type (`SchemaWith<I, O, E, Self>`), so its
+ * methods keep the receiver's view.
  */
-function heldType({
-	module,
-	receiver,
-	classParams,
-}: {
-	module: Module;
-	receiver: Receiver;
-	classParams: readonly TypeParam[];
-}): string {
-	if (receiver.self !== NAMESPACE_SELF) return "this";
-	const args = classParams.map((tp) => tp.name).join(", ");
+const NAMESPACE_SELF_TYPE = "Self";
 
-	return `mini.${module.feature.primary ?? ""}<${args}>`;
+/**
+ * The exact receiver's type, as a method spells it: `this` on the primary
+ * class, and on a namespace class its `Self` type parameter. Only a primary
+ * carrying views has exact receivers, and so a `Self`.
+ */
+function exactReceiverType(receiver: Receiver): string {
+	return receiver.self === NAMESPACE_SELF ? NAMESPACE_SELF_TYPE : "this";
 }
 
 interface MethodHead {
@@ -835,7 +832,7 @@ function methodHead({
 		param: self,
 		classParams,
 		extra: field !== undefined,
-		selfType: heldType({ module, receiver, classParams }),
+		selfType: exactReceiverType(receiver),
 	});
 	if (!renamed.ok) return renamed;
 	const rename = renamed.value;
@@ -878,7 +875,9 @@ function methodHead({
 			? [...ownParams, ...returnType.typeParams]
 			: ownParams;
 
-	const clash = methodTypeParams.find((tp) => classNames.has(tp.name));
+	const reserved = new Set(classNames);
+	if (receiver.self === NAMESPACE_SELF) reserved.add(NAMESPACE_SELF_TYPE);
+	const clash = methodTypeParams.find((tp) => reserved.has(tp.name));
 	if (clash !== undefined) {
 		return failure({
 			feature,
@@ -1217,9 +1216,11 @@ function classHeader({
 
 /** The getter on the primary class that returns a namespace's class. */
 function renderGetter({
+	feature,
 	namespace,
 	header,
 }: {
+	feature: ClassFeature;
 	namespace: NamespaceProperty;
 	header: ClassHeader;
 }): Member {
@@ -1238,8 +1239,25 @@ function renderGetter({
 
 	return {
 		name,
-		source: `${jsDoc}\tget ${name}(): ${className}${header.applied} {\n\t\treturn new ${className}(this);\n\t}\n`,
+		source: `${jsDoc}\tget ${name}(): ${className}${namespaceApplied({ feature, header })} {\n\t\treturn new ${className}(this);\n\t}\n`,
 	};
+}
+
+/**
+ * The type arguments a primary's getter passes its namespace class: the
+ * primary's own, then `this` when the primary carries views.
+ */
+function namespaceApplied({
+	feature,
+	header,
+}: {
+	feature: ClassFeature;
+	header: ClassHeader;
+}): string {
+	if (feature.views === undefined) return header.applied;
+	const args = header.applied.slice(1, -1);
+
+	return args === "" ? "<this>" : `<${args}, this>`;
 }
 
 /**
@@ -1281,11 +1299,17 @@ function renderNamespaceClass({
 	});
 	// The mini type: holding the main class, whose getter returns this one, makes
 	// TypeScript's variance measurement circular and order-dependent (unsound).
-	const self = `mini.${primary}${header.applied}`;
+	// With views, the exact receiver is a type parameter bounded by it instead.
+	const held = `mini.${primary}${header.applied}`;
+	const self = feature.views === undefined ? held : NAMESPACE_SELF_TYPE;
+	const typeParams =
+		feature.views === undefined
+			? header.typeParams
+			: `${header.typeParams === "" ? "<" : `${header.typeParams.slice(0, -1)}, `}${NAMESPACE_SELF_TYPE} extends ${held} = ${held}>`;
 	const opening = `\treadonly #self: ${self};\n\n${constructorDoc}\tconstructor(self: ${self}) {\n\t\tthis.#self = self;\n\t}\n`;
 	const body = [opening, ...methods.map((method) => method.source)].join("\n");
 
-	return `${classDoc}export class ${className}${header.typeParams} {\n${body}}\n`;
+	return `${classDoc}export class ${className}${typeParams} {\n${body}}\n`;
 }
 
 function renderClass({
@@ -1846,7 +1870,7 @@ function renderClasses({
 		return [{ borrow, namespace: property }];
 	});
 	const getters = namespaces.map(({ namespace }) => {
-		return renderGetter({ namespace, header });
+		return renderGetter({ feature, namespace, header });
 	});
 	const classes = namespaces.map(({ borrow, namespace }) => {
 		return renderNamespaceClass({

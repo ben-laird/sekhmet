@@ -1722,7 +1722,7 @@ Deno.test("generateMain renders a field's receiver type parameter as this", () =
 	);
 });
 
-Deno.test("generateMain renders a namespace method's exact receiver as the mini type it holds", () => {
+Deno.test("generateMain gives a viewing primary's namespace class a Self for the exact receiver", () => {
 	// Given: wrapped borrowed onto an `.on` namespace of a viewing primary
 	const borrow: Borrow = {
 		...ON_SHELF,
@@ -1739,13 +1739,54 @@ Deno.test("generateMain renders a namespace method's exact receiver as the mini 
 		borrowed: [{ borrow, url: SHELF_URL, symbols: [WRAPPED] }],
 	});
 
-	// Then: S is the held mini Box, since the namespace isn't the receiver
+	// Then: the getter passes this as the class's Self, which the class holds
+	// (bounded by the mini Box, never the main one, for sound variance), and
+	// S is Self
 	assert(result.ok);
-	assertStringIncludes(result.value, "wrapped(): Box<T> & View<mini.Box<T>> {");
+	const output = result.value;
+	assertStringIncludes(output, "get on(): BoxOn<T, this> {");
 	assertStringIncludes(
-		result.value,
+		output,
+		"export class BoxOn<out T, Self extends mini.Box<T> = mini.Box<T>> {",
+	);
+	assertStringIncludes(output, "readonly #self: Self;");
+	assertStringIncludes(output, "constructor(self: Self) {");
+	assertStringIncludes(output, "wrapped(): Box<T> & View<Self> {");
+	assertStringIncludes(
+		output,
 		"return Box.fromMiniView(shelf.wrapped(this.#self));",
 	);
+});
+
+Deno.test("generateMain rejects a namespace method type parameter named Self", () => {
+	// Given: a namespace method with its own type parameter Self
+	const borrow: Borrow = {
+		...ON_SHELF,
+		methods: [{ name: "selfish", doc: METHOD_DOC }],
+	};
+	const selfish = fn(
+		"selfish",
+		signature({
+			typeParams: ["A", "Self"],
+			params: [selfBox("A")],
+			returnType: named("Box", [typeParam("Self")]),
+		}),
+	);
+
+	// When: generating
+	const result = generateMain({
+		feature: { ...VIEWING, borrows: [borrow] },
+		symbols: [BOX_CLASS],
+		sources: SOURCES,
+		miniUrl: MINI_URL,
+		outputUrl: OUTPUT_URL,
+		borrowed: [{ borrow, url: SHELF_URL, symbols: [selfish] }],
+	});
+
+	// Then: it fails, since Self is the namespace class's own
+	assert(!result.ok);
+	assertEquals(result.error.symbol, "selfish");
+	assertStringIncludes(result.error.message, "type parameter Self shadows");
 });
 
 Deno.test("generateMain takes the view receiver forms only with views", () => {

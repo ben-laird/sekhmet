@@ -711,7 +711,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * assertEquals(unwrap(id.parseSync(7)), "7");
 	 * ```
 	 */
-	get with(): SchemaWith<I, O, E> {
+	get with(): SchemaWith<I, O, E, this> {
 		return new SchemaWith(this);
 	}
 }
@@ -730,15 +730,20 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
  * assertEquals(unwrap(id.parseSync(7)), "7");
  * ```
  */
-export class SchemaWith<I, O, E> {
-	readonly #self: mini.Schema<I, O, E>;
+export class SchemaWith<
+	I,
+	O,
+	E,
+	Self extends mini.Schema<I, O, E> = mini.Schema<I, O, E>,
+> {
+	readonly #self: Self;
 
 	/**
 	 * Holds `self`, the Schema these methods act on.
 	 *
 	 * @param self - The Schema to act on
 	 */
-	constructor(self: mini.Schema<I, O, E>) {
+	constructor(self: Self) {
 		this.#self = self;
 	}
 
@@ -792,7 +797,7 @@ export class SchemaWith<I, O, E> {
 	 */
 	brand<const B extends string>(
 		name: B,
-	): Schema<I, algebra.Branded<O, B>, E> & mini.ViewOf<mini.Schema<I, O, E>> {
+	): Schema<I, algebra.Branded<O, B>, E> & mini.ViewOf<Self> {
 		return Schema.fromMiniView(algebra.brand(this.#self, name));
 	}
 
@@ -814,8 +819,7 @@ export class SchemaWith<I, O, E> {
 	 * ```
 	 * @see {@link algebra.readonly}
 	 */
-	readonly(): Schema<I, algebra.ReadonlyOutput<O>, E> &
-		mini.WrapperView<mini.Schema<I, O, E>> {
+	readonly(): Schema<I, algebra.ReadonlyOutput<O>, E> & mini.WrapperView<Self> {
 		return Schema.fromMiniView(algebra.readonly(this.#self));
 	}
 }

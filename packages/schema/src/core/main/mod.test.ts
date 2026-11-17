@@ -23,6 +23,48 @@ import {
 	TooSmall,
 } from "./mod.ts";
 
+Deno.test("variance holds with views, checked narrowing-first (#31 was order-dependent)", () => {
+	// Given: schemas and namespaces with narrow and wide outputs, some with views
+	const narrowUser = object({
+		shape: {
+			name: new Schema({ parse: (_: unknown) => Ok<"a", never>("a") }),
+		},
+	});
+	const wideUser = object({ shape: { name: string() } });
+
+	// When: narrowing first, before any widening is checked
+	// @ts-expect-error a string output is not an "a" output
+	const narrowWith: SchemaWith<unknown, "a", never> = string().with;
+	// @ts-expect-error a string output is not an "a" output
+	const narrowSchema: Schema<unknown, "a", SchemaIssue> = string();
+	// @ts-expect-error a wide object's view is not a narrow one's
+	const narrowView: typeof narrowUser = wideUser;
+	// @ts-expect-error the namespace's Self is the receiver: a wide one isn't narrow
+	const narrowSelf: SchemaWith<
+		unknown,
+		{ name: "a" },
+		Issues<SchemaIssue>,
+		typeof narrowUser
+	> = wideUser.with;
+
+	// Then: only widening type-checks, for outputs, views and Self alike (a
+	// main Schema's error stays exact: filter's error builder returns it)
+	const narrowText = new Schema({ parse: (_: unknown) => Ok<"a", never>("a") });
+	const wideSchema: Schema<unknown, string, never> = narrowText;
+	const wideView: Schema<unknown, { name: string }, Issues<SchemaIssue>> & {
+		readonly shape: { readonly name: Schema<unknown, string, never> };
+	} = narrowUser;
+	const wideSelf: SchemaWith<unknown, { name: string }, unknown> =
+		narrowUser.with;
+	assertInstanceOf(narrowWith, SchemaWith);
+	assertInstanceOf(narrowSchema, Schema);
+	assertInstanceOf(narrowView, Schema);
+	assertInstanceOf(narrowSelf, SchemaWith);
+	assertInstanceOf(wideSchema, Schema);
+	assertInstanceOf(wideView, Schema);
+	assertInstanceOf(wideSelf, SchemaWith);
+});
+
 Deno.test("MainSchemaMember names exactly the members main adds to mini", () => {
 	// Given: the main and mini Schema types
 	type Added = Exclude<
@@ -403,4 +445,47 @@ Deno.test("a long chain of transforms and modifiers type-checks, keeping every s
 	assertEquals(parsed, 4);
 	assertType<IsExact<Output<typeof chain>, number>>(true);
 	assertEquals(optionalStep.parseSync(undefined).unwrap(), undefined);
+});
+
+Deno.test(".with keeps the receiver's view: readonly views it, brand keeps it", () => {
+	// Given: an object with a view
+	const user = object({ shape: { name: string() } });
+
+	// When: making it readonly and branding it through the namespace
+	const frozen = user.with.readonly();
+	const branded = user.with.brand("User");
+
+	// Then: readonly's .inner is the receiver, and brand keeps its .shape
+	assertEquals(frozen.inner, user);
+	assertEquals(branded.shape, user.shape);
+	assertType<IsExact<typeof frozen.inner, typeof user>>(true);
+	assertType<IsExact<typeof branded.shape, typeof user.shape>>(true);
+	assertType<
+		IsExact<Output<typeof branded>, Branded<{ name: string }, "User">>
+	>(true);
+	assertEquals(branded.shape.name.parseSync("a").unwrap(), "a");
+	assertInstanceOf(frozen, Schema);
+	assertInstanceOf(branded, Schema);
+});
+
+Deno.test("SchemaWith's Self defaults to the mini Schema, which every receiver widens to", () => {
+	// Given: the namespace of an object with a view
+	const user = object({ shape: { name: string() } });
+
+	// When: widening it to the namespace of any schema of its types
+	const plain: SchemaWith<
+		unknown,
+		{ name: string },
+		Issues<SchemaIssue>
+	> = user.with;
+
+	// Then: it type-checks, and its methods drop the view they can't see
+	const frozen = plain.readonly();
+	assertType<
+		IsExact<
+			typeof frozen.inner,
+			mini.Schema<unknown, { name: string }, Issues<SchemaIssue>>
+		>
+	>(true);
+	assertEquals(frozen.inner, user);
 });
