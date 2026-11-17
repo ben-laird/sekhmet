@@ -7,6 +7,7 @@ import { readonly } from "@/src/algebra/mini/readonly.ts";
 import { nullable, optional } from "@/src/composites/mini/modifiers.ts";
 import { Schema as MainSchema } from "@/src/core/main/mod.ts";
 import {
+	type AnnotationKey,
 	annotate,
 	annotation,
 	annotationKey,
@@ -124,6 +125,23 @@ Deno.test("annotation is typed by its key, and a key checks its values", () => {
 	assertType<IsExact<typeof position, Option<number>>>(true);
 	// @ts-expect-error a label is a string
 	label(1);
+});
+
+Deno.test("an annotation can't be forged, nor a key read at another type", () => {
+	// Given: a string key
+	const labelled = annotate(text, [label("Name")]);
+
+	// When: forging an annotation from an object literal, and narrowing or
+	// widening the key
+	// Then: each is a type error, and the real annotation reads back as is
+	// @ts-expect-error only calling a key builds an annotation
+	annotate(text, [{ key: label, value: 42 }]);
+	// @ts-expect-error keys are invariant: no narrower type
+	const narrow: AnnotationKey<"a"> = label;
+	// @ts-expect-error keys are invariant: no wider type
+	const wide: AnnotationKey<unknown> = label;
+	assertEquals([narrow, wide], [label, label]);
+	assertEquals(unwrap(annotation({ schema: labelled, key: label })), "Name");
 });
 
 Deno.test("description and title are well-known string keys", () => {

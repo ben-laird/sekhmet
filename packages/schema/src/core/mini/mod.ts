@@ -9,7 +9,7 @@
  */
 
 export {
-	type Annotation,
+	Annotation,
 	type AnnotationKey,
 	type AnnotationOptions,
 	annotate,
@@ -64,7 +64,7 @@ export {
 export {
 	type ArrayDetails,
 	type CustomDataOptions,
-	type CustomNodeDetails,
+	CustomNodeDetails,
 	type CustomOptions,
 	children,
 	custom,

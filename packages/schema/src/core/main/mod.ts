@@ -34,14 +34,12 @@ import * as composites from "../../composites/mini/mod.ts";
 import * as mini from "../mini/mod.ts";
 
 export type {
-	Annotation,
 	AnnotationKey,
 	AnnotationOptions,
 	AnySchema,
 	ArrayDetails,
 	CustomDataOptions,
 	CustomDetails,
-	CustomNodeDetails,
 	CustomOptions,
 	DiscriminatedUnionDetails,
 	ErrorOf,
@@ -84,10 +82,12 @@ export type {
 	WrapperDetails,
 } from "../mini/mod.ts";
 export {
+	Annotation,
 	Async,
 	annotation,
 	annotationKey,
 	Custom,
+	CustomNodeDetails,
 	children,
 	concat,
 	custom,
