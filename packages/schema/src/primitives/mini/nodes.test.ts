@@ -68,3 +68,41 @@ Deno.test("a primitive built without options records {} as its options", () => {
 		assertEquals(nodeOf(schema), leafOf(details));
 	}
 });
+
+Deno.test("string keeps its affix options in its Leaf as passed", () => {
+	// Given: a string with a prefix and a suffix
+	const options = { startsWith: "v", endsWith: ".json" };
+
+	// When: reading its node
+	const node = nodeOf(string(options));
+
+	// Then: the Leaf holds the options as passed
+	assertEquals(node, leafOf({ type: "string", options }));
+});
+
+Deno.test("string keeps a time format's options in its Leaf as passed", () => {
+	// Given: a date-time format with its options, and a bare time format
+	const spelled = {
+		format: { name: "date-time", precision: 3, offset: "allowed" },
+	} as const;
+	const bare = { format: "time" } as const;
+
+	// When: reading their nodes
+	// Then: each Leaf holds its format as passed, object or name
+	assertEquals(
+		nodeOf(string(spelled)),
+		leafOf({ type: "string", options: spelled }),
+	);
+	assertEquals(nodeOf(string(bare)), leafOf({ type: "string", options: bare }));
+});
+
+Deno.test("string keeps its case option in its Leaf as passed", () => {
+	// Given: a string converted to upper case
+	const options = { case: "upper" } as const;
+
+	// When: reading its node
+	const node = nodeOf(string(options));
+
+	// Then: the Leaf holds the options as passed
+	assertEquals(node, leafOf({ type: "string", options }));
+});

@@ -31,12 +31,16 @@ export type {
 	Bound,
 	CoerceMode,
 	DateSchemaOptions,
+	FractionalDigits,
+	LetterCase,
 	Literal,
 	NormalizationForm,
 	NumberSchemaOptions,
+	OffsetRule,
 	StringboolOptions,
 	StringFormat,
 	StringSchemaOptions,
+	TimeFormat,
 } from "../mini/mod.ts";
 export {
 	EMAIL_PATTERN,
@@ -307,10 +311,10 @@ export function number(
  * and symbols still fail. `coerce: "native"` converts anything `String()`
  * can.
  *
- * The options apply in this order: `coerce`, then the transforms `trim` and
- * `normalize`, then the checks `minLength`, `maxLength`, `format` and
- * `regex`, on the transformed string. The first check that fails is
- * reported.
+ * The options apply in this order: `coerce`, then the transforms `trim`,
+ * `normalize` and `case`, then the checks `minLength`, `maxLength`,
+ * `startsWith`, `endsWith`, `format` and `regex`, on the transformed string.
+ * The first check that fails is reported.
  *
  * @param options - Coercion, transforms and checks
  * @returns A schema that validates string inputs
@@ -333,10 +337,24 @@ export function number(
  *
  * const email = string({ trim: true, minLength: 3, format: "email" });
  * const slug = string({ regex: /^[a-z0-9-]+$/ });
+ * const config = string({ startsWith: "config/", endsWith: ".json" });
  *
  * assertEquals(unwrap(parseSync(email, " ada@example.com ")), "ada@example.com");
  * assertEquals(isErr(parseSync(email, "ada@localhost")), true);
  * assertEquals(isErr(parseSync(slug, "Not a slug")), true);
+ * assertEquals(isErr(parseSync(config, "config/app.yaml")), true);
+ * ```
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string } from "@sekhmet/schema/primitives";
+ *
+ * const handle = string({ trim: true, case: "lower", startsWith: "@" });
+ *
+ * assertEquals(unwrap(parseSync(handle, " @Ada ")), "@ada");
+ * assertEquals(isErr(parseSync(handle, "Ada")), true);
  * ```
  * @example
  * ```ts

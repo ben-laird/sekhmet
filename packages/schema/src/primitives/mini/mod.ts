@@ -19,10 +19,13 @@ export { never } from "./never.ts";
 export { null_ } from "./null.ts";
 export { type NumberSchemaOptions, number } from "./number.ts";
 export { type StringSchemaOptions, string } from "./string.ts";
-export type { NormalizationForm } from "./string-checks.ts";
+export type { LetterCase, NormalizationForm } from "./string-checks.ts";
 export {
 	EMAIL_PATTERN,
+	type FractionalDigits,
+	type OffsetRule,
 	type StringFormat,
+	type TimeFormat,
 	UUID_PATTERN,
 } from "./string-formats.ts";
 export {

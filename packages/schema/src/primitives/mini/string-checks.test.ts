@@ -15,7 +15,8 @@ import {
 	ParseError,
 	parseSync,
 } from "@/src/core/mini/schema.ts";
-import { string } from "./string.ts";
+import { type StringSchemaOptions, string } from "./string.ts";
+import type { LetterCase } from "./string-checks.ts";
 import { EMAIL_PATTERN } from "./string-formats.ts";
 
 Deno.test("minLength and maxLength bound a string's length inclusively", () => {
@@ -97,6 +98,62 @@ Deno.test("regex ignores a global pattern's lastIndex", () => {
 	assertEquals(results, [Ok("a"), Ok("a"), Ok("a")]);
 });
 
+Deno.test("startsWith and endsWith accept a string with the prefix and suffix", () => {
+	// Given: a string that must start with "v" and end with ".json"
+	const schema = string({ startsWith: "v", endsWith: ".json" });
+
+	// When: parsing strings with both, and the bare affixes
+	// Then: they pass unchanged
+	assertEquals(parseSync(schema, "v1.json"), Ok("v1.json"));
+	assertEquals(parseSync(schema, "v.json"), Ok("v.json"));
+});
+
+Deno.test("startsWith and endsWith report InvalidFormat naming the check", () => {
+	// Given: a string that must start with "v" and end with ".json"
+	const schema = string({ startsWith: "v", endsWith: ".json" });
+
+	// When: parsing strings missing the prefix, the suffix, or both
+	// Then: each fails naming the first affix it lacks, prefix first
+	assertEquals(
+		parseSync(schema, "1.json"),
+		Err(ParseError(InvalidFormat({ input: "1.json", format: "starts-with" }))),
+	);
+	assertEquals(
+		parseSync(schema, "v1.yaml"),
+		Err(ParseError(InvalidFormat({ input: "v1.yaml", format: "ends-with" }))),
+	);
+	assertEquals(
+		parseSync(schema, "1.yaml"),
+		Err(ParseError(InvalidFormat({ input: "1.yaml", format: "starts-with" }))),
+	);
+});
+
+Deno.test("startsWith and endsWith compare code units, case-sensitively", () => {
+	// Given: a prefix in lower case, and an empty suffix
+	const schema = string({ startsWith: "http", endsWith: "" });
+
+	// When: parsing the prefix in upper case, and any string
+	// Then: the case matters, and an empty affix always passes
+	assertEquals(
+		parseSync(schema, "HTTP://x"),
+		Err(
+			ParseError(InvalidFormat({ input: "HTTP://x", format: "starts-with" })),
+		),
+	);
+	assertEquals(parseSync(schema, "http://x"), Ok("http://x"));
+});
+
+Deno.test("startsWith and endsWith see the trimmed string", () => {
+	// Given: a trimmed string with a prefix and a suffix
+	const schema = string({ trim: true, startsWith: "<", endsWith: ">" });
+
+	// When: parsing a padded tag
+	const result = parseSync(schema, "  <b>\n");
+
+	// Then: the affixes are checked after trimming
+	assertEquals(result, Ok("<b>"));
+});
+
 Deno.test("trim removes surrounding whitespace before the checks", () => {
 	// Given: a trimmed string of at least 1 character
 	const schema = string({ trim: true, minLength: 1 });
@@ -140,6 +197,68 @@ Deno.test("trim runs before normalize, and both before the checks", () => {
 
 	// Then: the output is trimmed and normalized, and fits the length
 	assertEquals(result, Ok("fi"));
+});
+
+for (const { letterCase, input, expected } of [
+	{ letterCase: "lower", input: "Ada LOVELACE", expected: "ada lovelace" },
+	{ letterCase: "upper", input: "Ada lovelace", expected: "ADA LOVELACE" },
+	{ letterCase: "lower", input: "ÉCOLE", expected: "école" },
+	{ letterCase: "upper", input: "straße", expected: "STRASSE" },
+	{ letterCase: "lower", input: "I", expected: "i" },
+	{ letterCase: "upper", input: "123 -_", expected: "123 -_" },
+] as const) {
+	Deno.test(`case "${letterCase}" converts "${input}" to "${expected}"`, () => {
+		// Given: a string converted to a letter case
+		const schema = string({ case: letterCase });
+
+		// When: parsing a string in mixed case
+		const result = parseSync(schema, input);
+
+		// Then: it is converted by Unicode's default (not the locale's) mapping
+		assertEquals(result, Ok(expected));
+	});
+}
+
+Deno.test("case runs after trim and normalize, and before the checks", () => {
+	// Given: a trimmed, NFKC-normalized, upper-cased string with a prefix
+	const schema = string({
+		trim: true,
+		normalize: "NFKC",
+		case: "upper",
+		startsWith: "FI",
+		maxLength: 4,
+	});
+
+	// When: parsing a padded ligature word, and one without the prefix
+	// Then: the ligature expands, then uppers, and the checks see the result
+	assertEquals(parseSync(schema, "  ﬁne "), Ok("FINE"));
+	assertEquals(
+		parseSync(schema, "fun"),
+		Err(ParseError(InvalidFormat({ input: "FUN", format: "starts-with" }))),
+	);
+});
+
+Deno.test("case can change a string's length before the length checks", () => {
+	// Given: an upper-cased string of at most 5 code units
+	const schema = string({ case: "upper", maxLength: 5 });
+
+	// When: parsing a 5-letter word whose "ß" uppers to "SS"
+	const result = parseSync(schema, "straß");
+
+	// Then: the converted string is too long
+	assertEquals(
+		result,
+		Err(
+			ParseError(
+				TooBig({
+					input: "STRASS",
+					origin: "string",
+					maximum: 5,
+					inclusive: true,
+				}),
+			),
+		),
+	);
 });
 
 Deno.test("coercion runs before the transforms and checks", () => {
@@ -230,4 +349,72 @@ Deno.test("string's options don't change its types", () => {
 	assertType<IsExact<Input<typeof schema>, unknown>>(true);
 	assertType<IsExact<Output<typeof schema>, string>>(true);
 	assertType<IsExact<ErrorOf<typeof schema>, SchemaIssue>>(true);
+});
+
+Deno.test("case takes one of two letter cases", () => {
+	// Given: the case option's type
+	// When: reading it
+	// Then: it is "lower" or "upper", and nothing else
+	assertType<IsExact<LetterCase, "lower" | "upper">>(true);
+	assertType<IsExact<StringSchemaOptions["case"], LetterCase | undefined>>(
+		true,
+	);
+
+	// @ts-expect-error: title case is not a letter case
+	const title: StringSchemaOptions = { case: "title" };
+	assertEquals(title.case, "title");
+});
+
+Deno.test("checks report the first failure: lengths, then affixes, then format", () => {
+	// Given: a string with a length, a prefix, a suffix and a format
+	const schema = string({
+		maxLength: 20,
+		startsWith: "a",
+		endsWith: ".com",
+		format: "email",
+	});
+
+	// When: parsing strings failing several checks
+	// Then: the earliest check in the order is reported
+	assertEquals(
+		parseSync(schema, "b@example.org-and-more"),
+		Err(
+			ParseError(
+				TooBig({
+					input: "b@example.org-and-more",
+					origin: "string",
+					maximum: 20,
+					inclusive: true,
+				}),
+			),
+		),
+	);
+	assertEquals(
+		parseSync(schema, "b@example.org"),
+		Err(
+			ParseError(
+				InvalidFormat({ input: "b@example.org", format: "starts-with" }),
+			),
+		),
+	);
+	assertEquals(
+		parseSync(schema, "a@example.org"),
+		Err(
+			ParseError(
+				InvalidFormat({ input: "a@example.org", format: "ends-with" }),
+			),
+		),
+	);
+	assertEquals(
+		parseSync(schema, "a@.com"),
+		Err(
+			ParseError(
+				InvalidFormat({
+					input: "a@.com",
+					format: "email",
+					pattern: EMAIL_PATTERN,
+				}),
+			),
+		),
+	);
 });

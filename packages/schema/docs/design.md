@@ -117,6 +117,8 @@ A primitive accepts only its own type unless asked to coerce.
   `url`, `uuid`, `date`, `time`, `date-time`. `email` uses a pragmatic
   pattern (`EMAIL_PATTERN`), not RFC 5322; `url` is what `URL.canParse`
   accepts. They are options since #28: `string({ trim: true, format: "email" })`.
+  #35 added `case`, `startsWith`, `endsWith` and the time formats' options
+  (see [String options](#string-options-35)).
 - _Superseded by #28 (2026-11-16):_ checks were first built as `self`-first
   mini functions typed on the output they refine (`int(number())`,
   `min(number(), 0, { inclusive: false })`), and `number` had a `range`
@@ -262,17 +264,17 @@ example this document first gave.
 Every check and transform is an option of the schema it refines, the same in
 mini and main:
 
-| Schema                   | Options                                                                    |
-| ------------------------ | -------------------------------------------------------------------------- |
-| `number`                 | `coerce`, `nan`, `infinite`, `int`, `safe`, `min`, `max`, `multipleOf`     |
-| `string`                 | `coerce`, `trim`, `normalize`, `minLength`, `maxLength`, `format`, `regex` |
-| `bigint`                 | `min`, `max`, `multipleOf`                                                 |
-| `date`                   | `min`, `max`                                                               |
-| `boolean` / `stringbool` | `coerce` / `truthy`, `falsy`                                               |
-| `object`                 | `shape`, `unknownKeys` (`"strip"` by default, `"strict"`, `"passthrough"`) |
-| `array`                  | `item`, `minItems`, `maxItems`                                             |
-| `record`                 | `key`, `value`                                                             |
-| `discriminatedUnion`     | `key`, `options`                                                           |
+| Schema                   | Options                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `number`                 | `coerce`, `nan`, `infinite`, `int`, `safe`, `min`, `max`, `multipleOf`                                       |
+| `string`                 | `coerce`, `trim`, `normalize`, `case`, `minLength`, `maxLength`, `startsWith`, `endsWith`, `format`, `regex` |
+| `bigint`                 | `min`, `max`, `multipleOf`                                                                                   |
+| `date`                   | `min`, `max`                                                                                                 |
+| `boolean` / `stringbool` | `coerce` / `truthy`, `falsy`                                                                                 |
+| `object`                 | `shape`, `unknownKeys` (`"strip"` by default, `"strict"`, `"passthrough"`)                                   |
+| `array`                  | `item`, `minItems`, `maxItems`                                                                               |
+| `record`                 | `key`, `value`                                                                                               |
+| `discriminatedUnion`     | `key`, `options`                                                                                             |
 
 `tuple`, `union`, `enumOf`, `literal` and `lazy` keep their single
 positional parameter. The standalone `int`, `safe`, `multipleOf`, `min`,
@@ -289,15 +291,17 @@ gone; their logic is internal.
   plain inclusive counts, since an exclusive length is just the next count.
 - **`format` is a `StringFormat` literal union** named as `InvalidFormat`
   reports it and as JSON Schema names it: `"email"`, `"url"`, `"uuid"`,
-  `"date"`, `"time"`, `"date-time"`.
+  `"date"`, `"time"`, `"date-time"`. Since #35 a time format can also be a
+  `TimeFormat` object carrying its options.
 - **`normalize` names its form** (`normalize: "NFC"`), rather than taking
   `true` for NFC as well: one spelling per form.
-- **Order:** coercion first, then the transforms (`trim`, then `normalize`),
-  then the checks on the transformed value. A primitive reports the first
-  failing check, in a documented order: for `number`, `NaN`/`±Infinity`,
-  `int`, `safe`, `min`, `max`, `multipleOf`; for `string`, `minLength`,
-  `maxLength`, `format`, `regex`. A check of a value after a `map` is a
-  `filter` (checks were once `self`-first and applied after a `map` too).
+- **Order:** coercion first, then the transforms (`trim`, then `normalize`,
+  then `case`), then the checks on the transformed value. A primitive reports
+  the first failing check, in a documented order: for `number`,
+  `NaN`/`±Infinity`, `int`, `safe`, `min`, `max`, `multipleOf`; for `string`,
+  `minLength`, `maxLength`, `startsWith`, `endsWith`, `format`, `regex`
+  (`case`, `startsWith` and `endsWith` since #35). A check of a value after a
+  `map` is a `filter` (checks were once `self`-first and applied after a `map` too).
 - **Allowed means accepted** (owner decision, 2026-11-16): with `nan: true`,
   `NaN` passes without any other check, since none means anything for it.
   With `infinite: true`, `±Infinity` still meets `min` and `max`, which
@@ -647,3 +651,57 @@ Decisions (2026-11-16), in `src/core/mini/guard.ts`.
   programmer error and the guard throws a `TypeError` (the package's panics
   are plain `TypeError`/`RangeError` throws) rather than returning `false`,
   which would silently reject every value.
+
+## String options (#35)
+
+Implemented 2026-11-16, in
+`src/primitives/mini/string.ts`, `string-checks.ts` and `string-formats.ts`.
+Every new option is kept in the `Leaf` node as passed, like the rest (#32).
+
+- **`startsWith` and `endsWith`** take a literal prefix or suffix and fail
+  with `InvalidFormat`, of format `"starts-with"` or `"ends-with"`: kebab
+  case, as JSON Schema names its formats (`"date-time"`). They compare UTF-16
+  code units, case-sensitively, on the transformed string, and run after the
+  lengths and before `format` and `regex`, the cheap literal checks first.
+  The issue carries no `pattern`, since an affix is not a pattern; the
+  expected affix is in the schema's node.
+- **`case: "lower" | "upper"`** is a transform, like `trim` and `normalize`:
+  it never fails, and runs after them, so the order is coerce → trim →
+  normalize → case → checks. Normalizing first means a compatibility form
+  (`NFKC` turns `"ﬁ"` into `"fi"`) is cased too. The conversion is
+  `toLowerCase`/`toUpperCase`, Unicode's default mapping rather than the
+  runtime locale's, so a schema parses the same everywhere. It can change the
+  length (`"ß"` uppers to `"SS"`), which is why the length checks come after
+  it. A string literal union (`LetterCase`) rather than two booleans, so
+  `lower` and `upper` can't both be set.
+- **Time format options attach to the format.** `"time"` and `"date-time"`
+  take options as a `TimeFormat` in the `format` option itself:
+  `format: { name: "date-time", precision: 3, offset: "allowed" }`.
+  - `precision` (`FractionalDigits`, `0` to `9`) is the exact number of
+    fractional-second digits, and setting it makes the seconds required
+    (`0` is whole seconds). Left out, the seconds and any number of digits
+    are optional. The bound is `9`, nanoseconds, as `Temporal` keeps them; a
+    literal union makes `precision: 10` a type error, not a runtime one.
+  - `offset` (`OffsetRule`) is `"required"`, `"allowed"` or `"forbidden"`.
+    A local time is `offset: "forbidden"`; there is no separate `local`
+    flag, which could contradict the offset rule. Left out, it is
+    `"forbidden"` for `"time"` (an ISO partial time) and `"required"` for
+    `"date-time"` (RFC 3339), the bare names' behavior before #35.
+  - **Why in `format`, not a sibling `time` option:** a sibling could be set
+    with `format: "email"` or with no format, a combination that means
+    nothing; nested in the format, options exist only where they apply. The
+    bare name stays the short form of the object with every option left out
+    (`"time"` is `{ name: "time" }`), as a bare `Bound` value is the
+    inclusive `{ value, inclusive: true }`. The `Leaf` keeps whichever was
+    passed.
+  - **Grammar** (unchanged by the options): 24-hour `HH:MM`, seconds `00` to
+    `59` (no leap second: `23:59:60` fails), a `.` decimal mark only, an
+    offset of `Z` or `±HH:MM` with hours `00` to `23` (`-00:00` passes), and
+    an upper-case `T` and `Z`. A date-time's date must exist in the
+    calendar. The patterns are composed from regex literal fragments' `source`
+    (`/\d/.source`), so no escape is ever written twice; the archived
+    prototype wrote `\\d` inside regex literals, which matches a backslash
+    and a `d`, not a digit.
+  - The issue stays `InvalidFormat` naming `"time"` or `"date-time"`, with
+    no `pattern` (a date-time's calendar check isn't one); the options are
+    in the node.
