@@ -3,7 +3,7 @@
 This guide covers the helpers in `@sekhmet/workflow`: when to use each, the
 exact messages they panic with, their causes, and how to recognize them.
 
-All four panic through [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic). A panic means
+All of them panic through [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic). A panic means
 the program is wrong, never that input was bad: return a `Result` for an
 expected failure. Run your program inside a panic runtime
 (`definePanicRuntime()`) and its hook reports these panics like any other.
@@ -16,6 +16,8 @@ expected failure. Run your program inside a panic runtime
 | is deliberately not supported              | `unimplemented` |
 | cannot run unless the types lie            | `unreachable`   |
 | relies on a condition only a bug can break | `invariant`     |
+| relies on a value being present            | `defined`       |
+| relies on a value passing a predicate      | `satisfies`     |
 
 ## Messages
 
@@ -66,6 +68,43 @@ Please file an issue at https://example.com/issues
 Write `expectedBehavior` as a "should" statement about the program, so the
 message reads as what went wrong.
 
+### `defined` and `satisfies`
+
+Both use the `invariant` layout, with a line for the offending value, rendered
+like the impossible value of `unreachable`:
+
+```txt
+an invariant was violated
+Expected behavior: every item in the cart should have a price
+Absent value: undefined
+```
+
+```txt
+an invariant was violated
+Expected behavior: a quantity should be a positive integer
+Rejected value: -1
+```
+
+## Narrowing with `defined` and `satisfies`
+
+`defined(value, { absent?, expectedBehavior, issueUrl? })` returns `value`
+without what `absent` counts as absent:
+
+| `absent`              | Rejects                | Returns                 |
+| --------------------- | ---------------------- | ----------------------- |
+| `"nullish"` (default) | `null` and `undefined` | `NonNullable<T>`        |
+| `"undefined"`         | `undefined`            | `Exclude<T, undefined>` |
+| `"null"`              | `null`                 | `Exclude<T, null>`      |
+
+It tests only for `null` and `undefined`, never truthiness: `0`, `""`, `false`
+and `NaN` are present. Use `invariant` to assert truthiness.
+
+`satisfies(value, { predicate, expectedBehavior, issueUrl? })` returns `S`
+when `predicate` is a type guard `(value: T) => value is S`, and `T`
+otherwise. `T` is inferred from the value, so a guard over a wider type (say,
+`unknown`) still narrows. The predicate is called as a method of the options.
+To reuse a check, wrap the call in a function.
+
 ## Causes
 
 Each cause is a plain object, typed and exported:
@@ -79,8 +118,13 @@ Each cause is a plain object, typed and exported:
   one was passed.
 - `InvariantCause`: `{ check, expectedBehavior, issueUrl }`, where `check`
   says which check failed and keeps the value(s) that failed it, discriminated
-  by `check.kind`: `{ kind: "condition", condition }` holds the falsy
-  condition `invariant` was given.
+  by `check.kind`:
+  - `{ kind: "condition", condition }`: the falsy condition `invariant` was
+    given;
+  - `{ kind: "defined", absent, value }`: the absent `null` or `undefined`
+    `defined` was given, and what counted as absent;
+  - `{ kind: "satisfies", value }`: the value `satisfies`'s predicate
+    rejected.
 
 Options never reach the panic's name: it is always the helper's own, even when
 the options object carries extra fields at runtime.
@@ -151,13 +195,19 @@ that is not an array cannot replace the panic with another error.
 - a field that cannot be read renders as `[unrenderable value]`;
 - a checklist that is not an array counts as empty;
 - a URL that is not a `URL` is left out;
-- `invariant` given no expected behavior says `(not given)`;
+- an invariant check given no expected behavior says `(not given)`;
+- `defined` given an `absent` it does not know counts `null` and `undefined`
+  as absent;
+- `satisfies` given a predicate that is not a function panics, as if the
+  predicate rejected the value;
 - if building the message still throws, the message is the header alone.
 
 ## Recognizing the panics
 
 `isTodoPanic`, `isUnimplementedPanic`, `isUnreachablePanic` and
-`isInvariantPanic` narrow an `unknown` to `Panic<…Cause>`. They read a private
+`isInvariantPanic` narrow an `unknown` to `Panic<…Cause>`. `isInvariantPanic`
+accepts the panic of every invariant check (`invariant`, `defined` and
+`satisfies`); narrow further on `cause.check.kind`. They read a private
 brand set when the helper throws, so:
 
 - they run no Proxy trap, which keeps a hook that calls them from throwing;
@@ -207,5 +257,5 @@ shape is caught:
 It recognizes the package by every specifier form: bare, `jsr:` (with a
 version), `npm:@jsr/sekhmet__workflow`, `https://jsr.io/@sekhmet/workflow/…`
 URLs, and relative paths into `packages/workflow`. Tests, the playground and
-`scripts/` may use `todo` freely. `unimplemented`, `unreachable` and
-`invariant` are meant to ship and are never flagged.
+`scripts/` may use `todo` freely. `unimplemented`, `unreachable` and the
+invariant checks are meant to ship and are never flagged.

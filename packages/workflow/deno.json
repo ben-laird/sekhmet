@@ -6,7 +6,9 @@
 	"exports": {
 		".": "./mod.ts",
 		"./invariant": "./src/invariant/mod.ts",
+		"./invariant/defined": "./src/invariant/defined.ts",
 		"./invariant/invariant": "./src/invariant/invariant.ts",
+		"./invariant/satisfies": "./src/invariant/satisfies.ts",
 		"./todo": "./src/todo/mod.ts",
 		"./todo/todo": "./src/todo/todo.ts",
 		"./unreachable": "./src/unreachable/mod.ts",

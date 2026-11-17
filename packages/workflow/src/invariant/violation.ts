@@ -5,6 +5,7 @@
  * @module
  */
 
+import { describeValue } from "../workflow-panic/describe.ts";
 import { guardedMessage, textField, urlField } from "../workflow-panic/read.ts";
 import {
 	issueLine,
@@ -53,6 +54,12 @@ function checkLines(check: InvariantCheck): readonly string[] {
 	switch (check.kind) {
 		case "condition": {
 			return [];
+		}
+		case "defined": {
+			return [`Absent value: ${describeValue(check.value)}`];
+		}
+		case "satisfies": {
+			return [`Rejected value: ${describeValue(check.value)}`];
 		}
 	}
 }

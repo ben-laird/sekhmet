@@ -102,7 +102,8 @@ Packages (`packages/`):
 - `@sekhmet/vow`: `Vow`, a synchronous promise-like value built on `Enum`
 - `@sekhmet/workflow`: workflow helpers that panic through `@sekhmet/panic`:
   `todo`/`unimplemented`, `unreachable` (compile-time exhaustiveness) and
-  `invariant`, each with a typed cause and an `is…Panic` guard
+  the invariant checks `invariant`, `defined` and `satisfies`, each with a
+  typed cause and an `is…Panic` guard
 
 Scripts (`scripts/`, unpublished):
 

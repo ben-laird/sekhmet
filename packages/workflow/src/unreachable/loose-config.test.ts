@@ -13,7 +13,7 @@ const FIXTURE = (modules: {
 }): string => {
 	return `import { unreachable } from "${modules.unreachable}";
 import { todo, unimplemented } from "${modules.todo}";
-import { invariant } from "${modules.invariant}";
+import { defined, invariant, satisfies } from "${modules.invariant}";
 
 type Shape = { kind: "a" } | { kind: "b" };
 declare const anything: any;
@@ -50,6 +50,16 @@ export function narrowed(value: string | undefined): string {
 	invariant(value !== undefined, { expectedBehavior: "it should be set", issueUrl: undefined });
 	return value;
 }
+
+export const present = (value: string | null | undefined): string => defined(value, { expectedBehavior: "it should be set", issueUrl: undefined });
+export const notNull = (value: string | null | undefined): string | undefined => defined(value, { absent: "null", expectedBehavior: "it should be set" });
+// With absent explicitly undefined (the default at runtime), nothing is narrowed
+export const unsure = (value: string | null): string | null => defined(value, { absent: undefined, expectedBehavior: "it should be set" });
+// @ts-expect-error "falsy" is not an absent mode
+export const falsy = (value: string | null): string => defined(value, { absent: "falsy", expectedBehavior: "it should be set" });
+
+const isString = (value: unknown): value is string => typeof value === "string";
+export const checked = (value: string | number): string => satisfies(value, { predicate: isString, expectedBehavior: "it should be a string", issueUrl: undefined });
 `;
 };
 
@@ -77,7 +87,7 @@ Deno.test({
 				FIXTURE({
 					unreachable: import.meta.resolve("@/src/unreachable/unreachable.ts"),
 					todo: import.meta.resolve("@/src/todo/todo.ts"),
-					invariant: import.meta.resolve("@/src/invariant/invariant.ts"),
+					invariant: import.meta.resolve("@/src/invariant/mod.ts"),
 				}),
 			);
 

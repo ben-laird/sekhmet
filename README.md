@@ -10,15 +10,15 @@ with TypeScript's strictest settings, including `isolatedDeclarations`.
 
 ## Packages
 
-| Package                                                  | What it is                                                                                     |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [`@sekhmet/enum`](packages/enum/README.md)               | Rust-style enums: `Enum`, `Option`, `Result`, `Ordering`, `Latch` and `Poll`                   |
-| [`@sekhmet/effect`](packages/effect/README.md)           | Effects run on fibers: typed errors, schedulers, concurrency, cancellation with cleanup        |
-| [`@sekhmet/vow`](packages/vow/README.md)                 | `Vow`, a promise-like value that resolves synchronously                                        |
-| [`@sekhmet/matrix`](packages/matrix/README.md)           | `matrix()`, every combination of a set of values, for parameterized tests                      |
-| [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic)        | Rust-style panics: a reporting hook and a catchUnwind recovery boundary, with no global state  |
-| [`@sekhmet/primordials`](packages/primordials/README.md) | `Struct`, `Subtle`, `block` and `define`: the building blocks of the other packages            |
-| [`@sekhmet/workflow`](packages/workflow/README.md)       | `todo`, `unimplemented`, `unreachable` and `invariant`: panics that mark the state of the code |
+| Package                                                  | What it is                                                                                    |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [`@sekhmet/enum`](packages/enum/README.md)               | Rust-style enums: `Enum`, `Option`, `Result`, `Ordering`, `Latch` and `Poll`                  |
+| [`@sekhmet/effect`](packages/effect/README.md)           | Effects run on fibers: typed errors, schedulers, concurrency, cancellation with cleanup       |
+| [`@sekhmet/vow`](packages/vow/README.md)                 | `Vow`, a promise-like value that resolves synchronously                                       |
+| [`@sekhmet/matrix`](packages/matrix/README.md)           | `matrix()`, every combination of a set of values, for parameterized tests                     |
+| [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic)        | Rust-style panics: a reporting hook and a catchUnwind recovery boundary, with no global state |
+| [`@sekhmet/primordials`](packages/primordials/README.md) | `Struct`, `Subtle`, `block` and `define`: the building blocks of the other packages           |
+| [`@sekhmet/workflow`](packages/workflow/README.md)       | `todo`, `unreachable` and invariant checks: panics that mark the state of the code            |
 
 Guides for each package are on the
 [docs site](https://ben-laird.github.io/sekhmet/), and the API reference is on

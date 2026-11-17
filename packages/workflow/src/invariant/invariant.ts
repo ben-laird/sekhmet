@@ -8,6 +8,7 @@
 
 import type { Panic } from "@sekhmet/panic/mini/core";
 import { WorkflowPanic } from "../workflow-panic/workflow-panic.ts";
+import type { DefinedAbsent } from "./defined.ts";
 import { violated } from "./violation.ts";
 
 /** What {@linkcode invariant} is given besides the condition. */
@@ -26,12 +27,27 @@ export interface InvariantOptions {
  * names the check:
  *
  * - `"condition"`: {@linkcode invariant} was given a falsy `condition`.
+ * - `"defined"`: `defined` was given an absent `value`, by its `absent`.
+ * - `"satisfies"`: `satisfies`'s predicate rejected `value`.
  */
-export type InvariantCheck = {
-	readonly kind: "condition";
-	/** The falsy condition that broke the invariant */
-	readonly condition: unknown;
-};
+export type InvariantCheck =
+	| {
+			readonly kind: "condition";
+			/** The falsy condition that broke the invariant */
+			readonly condition: unknown;
+	  }
+	| {
+			readonly kind: "defined";
+			/** What counted as absent */
+			readonly absent: DefinedAbsent;
+			/** The absent value */
+			readonly value: null | undefined;
+	  }
+	| {
+			readonly kind: "satisfies";
+			/** The value the predicate rejected */
+			readonly value: unknown;
+	  };
 
 /**
  * The cause of the panic {@linkcode invariant} and the other invariant checks
