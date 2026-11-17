@@ -26,13 +26,16 @@ export type NotPromise<T> = T extends PromiseLike<unknown> ? never : T;
  * a deliberate exception to the named-arguments rule, so that it reads
  * exactly like `new Promise((resolve, reject) => …)`.
  *
- * As with `new Promise`, the first call wins and later ones are ignored. A
- * throw from the executor is not an `E`, so it is not captured: it rejects
- * the returned promise, as a panic, unless the executor already settled it.
+ * As with `new Promise`, the first call wins and later ones are ignored. The
+ * executor is synchronous and returns `undefined`, so an async executor,
+ * whose rejection nothing would see and whose promise might never settle,
+ * does not compile. A throw from the executor is not an `E`, so it is not
+ * captured: it rejects the returned promise, as a panic, unless the executor
+ * already settled it.
  *
  * @template T - The success value type
  * @template E - The error type
- * @param executor - Runs at once with `resolve` and `reject`
+ * @param executor - Runs at once, synchronously, with `resolve` and `reject`
  * @returns A promise of `Ok` for a resolve or `Err` for a reject
  *
  * @example
@@ -42,7 +45,10 @@ export type NotPromise<T> = T extends PromiseLike<unknown> ? never : T;
  *
  * const later = (ms: number) => {
  * 	return promiseResult<number, string>((resolve, reject) => {
- * 		if (ms < 0) return reject(`negative delay: ${ms}`);
+ * 		if (ms < 0) {
+ * 			reject(`negative delay: ${ms}`);
+ * 			return;
+ * 		}
  * 		setTimeout(() => resolve(ms), ms);
  * 	});
  * };
@@ -52,7 +58,10 @@ export type NotPromise<T> = T extends PromiseLike<unknown> ? never : T;
  * ```
  */
 export function promiseResult<T, E>(
-	executor: (resolve: (value: T) => void, reject: (error: E) => void) => void,
+	executor: (
+		resolve: (value: T) => void,
+		reject: (error: E) => void,
+	) => undefined,
 ): Promise<Result<T, E>> {
 	return new Promise((settle) => {
 		executor(

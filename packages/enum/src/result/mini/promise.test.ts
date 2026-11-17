@@ -115,8 +115,12 @@ Deno.test("promiseResult() rejects when the executor throws", async (t) => {
 
 Deno.test("promiseResult() types its Result from its type arguments", () => {
 	// Given: an executor with explicit types, and one without
-	const typed = promiseResult<number, string>((resolve) => resolve(1));
-	const untyped = promiseResult((resolve) => resolve(1));
+	const typed = promiseResult<number, string>((resolve) => {
+		resolve(1);
+	});
+	const untyped = promiseResult((resolve) => {
+		resolve(1);
+	});
 
 	// When / Then: the explicit types are kept, and the rest are unknown
 	assertType<IsExact<typeof typed, Promise<Result<number, string>>>>(true);
@@ -136,10 +140,28 @@ Deno.test("promiseResult() rejects settling with the wrong type", () => {
 	});
 });
 
+Deno.test("promiseResult() rejects an executor that returns a value", () => {
+	// Given: a promise to settle from
+	const pending = Promise.resolve(1);
+
+	// When / Then: an async executor does not compile, since its rejection
+	// would go unhandled and the promise might never settle
+	// @ts-expect-error the executor must return undefined, not a promise
+	void promiseResult<number, string>(() => pending.then(() => undefined));
+
+	// When / Then: an expression body returning resolve's void does not compile
+	// @ts-expect-error the executor must return undefined, not void
+	void promiseResult<number, string>((resolve) => resolve(1));
+});
+
 Deno.test("promiseResult()'s promise is covariant in its Result", async () => {
 	// Given: a narrow promised Result and a wide one
-	const narrow = promiseResult<1, "e">((resolve) => resolve(1));
-	const wide = promiseResult<number, string>((resolve) => resolve(1));
+	const narrow = promiseResult<1, "e">((resolve) => {
+		resolve(1);
+	});
+	const wide = promiseResult<number, string>((resolve) => {
+		resolve(1);
+	});
 
 	// When / Then: widening is accepted
 	const widened: Promise<Result<number, string>> = narrow;
