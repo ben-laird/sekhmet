@@ -302,6 +302,29 @@ if (isolate(node, "Object")) {
 assertEquals(labels, ["Full name", "Email", "Who sent you?"]);
 ```
 
+## Type guards
+
+`is(schema)` turns a schema into a type guard, `(input: I) => input is O & I`,
+for an `if`, `Array.prototype.filter`, or `filter({ predicate })`:
+
+```ts
+import { assertEquals } from "@std/assert";
+import { is } from "@sekhmet/schema/core";
+import { number } from "@sekhmet/schema/primitives";
+
+const values: (string | number)[] = ["a", 1, "b", 2];
+const numbers: number[] = values.filter(is(number()));
+
+assertEquals(numbers, [1, 2]);
+```
+
+A guard is sound only for a schema that doesn't transform (its output is the
+input itself). `string({ trim: true, maxLength: 1 })` accepts `" a "`, which is
+three characters long, and `number({ coerce: true })` accepts `"42"`, which the
+guard then calls a `number`. To use a transformed value, parse it and keep the
+output. A guard parses with `parseSync`, so a schema that parses
+asynchronously panics: an async schema can't answer a synchronous guard.
+
 ## Standard Schema
 
 `@sekhmet/schema/standard` bridges to [Standard Schema](https://standardschema.dev)
@@ -345,4 +368,5 @@ core feature's mini functions, and the adapter lives in its own feature.
 
 [docs/design.md](./docs/design.md) records the accepted design: the error model
 (`SchemaIssue`, `Issues`), the primitives, the declarative composites, the
-Standard Schema adapter, the algebra, and how schemas describe themselves.
+Standard Schema adapter, the algebra, how schemas describe themselves, and
+type guards.
