@@ -13,3 +13,10 @@ Rules learned from corrections in this repo. Each carries a one-line _why_.
   `--no-verify`. _Why: fixes were committed on a red gate twice during the
   0.1.0 prep, then three more times in one session, so the prose rule became a
   hook (#27, 2026-11-16)._
+- **Tests never provoke an unhandled rejection on purpose,** not even behind a
+  runtime guard. The compat shim reports one as an uncaught error on Bun,
+  workerd and the browsers, so a green `deno task ci` doesn't prove it's
+  portable. Document a lost rejection in TSDoc, and run
+  `deno task compat:test <runtime>` for any test that touches async error
+  paths. _Why: such a test passed the gate but failed five compat suites on
+  #45 (2026-11-17)._
