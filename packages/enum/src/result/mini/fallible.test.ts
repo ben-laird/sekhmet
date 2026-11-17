@@ -466,12 +466,41 @@ Deno.test("fallible() rejects async callbacks", () => {
 	fallible({ fn, parseErr: () => Promise.resolve("e") });
 
 	// When / Then: an async cleanup does not compile, since nothing awaits it
-	// @ts-expect-error cleanup must return undefined
+	// @ts-expect-error cleanup must not return a promise
 	fallible({ fn, parseErr, cleanup: () => Promise.resolve() });
 
 	// Then: the synchronous forms compile
 	const wrapped = fallible({ fn, parseErr, cleanup: () => {} });
 	assertEquals(wrapped(1), Ok(1));
+});
+
+Deno.test("fallible() accepts a cleanup returning void or a value", () => {
+	// Given: cleanups that log, by expression body and by reference, and one
+	// that returns a value
+	const logged: unknown[] = [];
+	const record = (entry: unknown): void => {
+		logged.push(entry);
+	};
+	function log({ args }: { args: readonly [number] }): void {
+		record(["log", ...args]);
+	}
+	const cleanups = [
+		({ args }: { args: readonly [number] }) => record(["inline", ...args]),
+		log,
+		() => 1,
+	];
+
+	// When: each wraps the same function and it is called
+	const results = cleanups.map((cleanup) => {
+		return fallible({ fn: (n: number) => n, parseErr: () => "e", cleanup })(7);
+	});
+
+	// Then: every one compiled, ran, and left the outcome alone
+	assertEquals(results, [Ok(7), Ok(7), Ok(7)]);
+	assertEquals(logged, [
+		["inline", 7],
+		["log", 7],
+	]);
 });
 
 Deno.test("fallible()'s wrapper is covariant in its Result", () => {

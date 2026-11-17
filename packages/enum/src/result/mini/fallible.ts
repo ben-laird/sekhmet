@@ -26,8 +26,9 @@ import type { NotPromise } from "./promise.ts";
  * @template A - The wrapped function's parameter list
  * @template U - The wrapped function's return type
  * @template E - The error type `parseErr` produces
+ * @template C - What `cleanup` returns, which is ignored unless it's a promise
  */
-export type FallibleOptions<A extends unknown[], U, E> = {
+export type FallibleOptions<A extends unknown[], U, E, C = void> = {
 	/** The function that may throw. */
 	fn: (...args: A) => NotPromise<U>;
 	/** Turns what `fn` threw, and the arguments it got, into the error. */
@@ -35,8 +36,11 @@ export type FallibleOptions<A extends unknown[], U, E> = {
 		error: unknown;
 		args: Readonly<NoInfer<A>>;
 	}) => NotPromise<E>;
-	/** Runs after every call, whether `fn` returned or threw. */
-	cleanup?: (call: { args: Readonly<NoInfer<A>> }) => undefined;
+	/**
+	 * Runs after every call, whether `fn` returned or threw. Its return value
+	 * is ignored, but it must not be a promise, which nothing would await.
+	 */
+	cleanup?: (call: { args: Readonly<NoInfer<A>> }) => NotPromise<C>;
 };
 
 /**
@@ -54,6 +58,7 @@ export type FallibleOptions<A extends unknown[], U, E> = {
  * @template A - The wrapped function's parameter list
  * @template U - The wrapped function's return type
  * @template E - The error type `parseErr` produces
+ * @template C - What `cleanup` returns, which is ignored unless it's a promise
  * @param options - The function, its error parser and an optional cleanup
  * @returns A function taking `fn`'s arguments and returning its outcome as a `Result`
  *
@@ -71,8 +76,8 @@ export type FallibleOptions<A extends unknown[], U, E> = {
  * assertEquals(parseJson("{"), Err("not JSON: {"));
  * ```
  */
-export function fallible<A extends unknown[], U, E>(
-	options: FallibleOptions<A, U, E>,
+export function fallible<A extends unknown[], U, E, C = void>(
+	options: FallibleOptions<A, U, E, C>,
 ): (...args: A) => Result<U, E> {
 	const { fn, parseErr, cleanup } = options;
 

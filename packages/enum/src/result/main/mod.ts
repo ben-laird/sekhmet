@@ -796,6 +796,7 @@ export function Err<T = never, E = unknown>(err: E): Result<T, E> {
  * @template A - The wrapped function's parameter list
  * @template U - The wrapped function's return type
  * @template E - The error type `parseErr` produces
+ * @template C - What `cleanup` returns, which is ignored unless it's a promise
  * @param options - The function, its error parser and an optional cleanup
  * @returns A function taking `fn`'s arguments and returning its outcome as a `Result`
  * @example
@@ -812,8 +813,8 @@ export function Err<T = never, E = unknown>(err: E): Result<T, E> {
  * assertEquals(parseJson("{"), Err("not JSON: {"));
  * ```
  */
-export function fallible<A extends unknown[], U, E>(
-	options: mini.FallibleOptions<A, U, E>,
+export function fallible<A extends unknown[], U, E, C = void>(
+	options: mini.FallibleOptions<A, U, E, C>,
 ): (...args: A) => Result<U, E> {
 	const $converted = mini.fallible(options);
 	return (...$args0) => {
