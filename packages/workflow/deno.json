@@ -1,0 +1,19 @@
+{
+	"name": "@sekhmet/workflow",
+	"version": "0.1.0",
+	"license": "MIT",
+
+	"exports": {
+		".": "./mod.ts",
+		"./invariant": "./src/invariant/mod.ts",
+		"./invariant/invariant": "./src/invariant/invariant.ts",
+		"./todo": "./src/todo/mod.ts",
+		"./todo/todo": "./src/todo/todo.ts",
+		"./unreachable": "./src/unreachable/mod.ts",
+		"./unreachable/unreachable": "./src/unreachable/unreachable.ts"
+	},
+
+	"imports": {
+		"@/": "./"
+	}
+}

@@ -100,6 +100,9 @@ Packages (`packages/`):
 - `@sekhmet/primordials`: foundation primitives (`Struct`, `Subtle`, `block`,
   `define`)
 - `@sekhmet/vow`: `Vow`, a synchronous promise-like value built on `Enum`
+- `@sekhmet/workflow`: workflow helpers that panic through `@sekhmet/panic`:
+  `todo`/`unimplemented`, `unreachable` (compile-time exhaustiveness) and
+  `invariant`, each with a typed cause and an `is…Panic` guard
 
 Scripts (`scripts/`, unpublished):
 
@@ -259,7 +262,7 @@ fix(@sekhmet/primordials): correct Struct type inference
 
 **Scopes**: Use package names: `@sekhmet/effect`, `@sekhmet/enum`,
 `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/vow`,
-and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`,
+`@sekhmet/workflow`, and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`,
 `@sekhmet/dv`, `@sekhmet/dv-plugin`, `@sekhmet/gen-main`, `@sekhmet/playground`,
 `@sekhmet/release` for scripts
 

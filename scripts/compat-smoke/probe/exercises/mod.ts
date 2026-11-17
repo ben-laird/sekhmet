@@ -16,4 +16,5 @@ export const EXERCISES: Exercises = {
 	"@sekhmet/panic": () => import("./panic.ts"),
 	"@sekhmet/primordials": () => import("./primordials.ts"),
 	"@sekhmet/vow": () => import("./vow.ts"),
+	"@sekhmet/workflow": () => import("./workflow.ts"),
 };

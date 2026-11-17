@@ -61,6 +61,19 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("vow/src/mini/core.ts", "Variants", "Split"),
 	privateTypeRef("vow/src/mini/core.ts", "Vow", "Enum"),
 	privateTypeRef("vow/src/mini/impl.ts", "fromPromise", "Result"),
+	// The workflow guards narrow to @sekhmet/panic's Panic<Cause> (#38)
+	privateTypeRef(
+		"workflow/src/invariant/invariant.ts",
+		"isInvariantPanic",
+		"Panic",
+	),
+	privateTypeRef("workflow/src/todo/todo.ts", "isTodoPanic", "Panic"),
+	privateTypeRef("workflow/src/todo/todo.ts", "isUnimplementedPanic", "Panic"),
+	privateTypeRef(
+		"workflow/src/unreachable/unreachable.ts",
+		"isUnreachablePanic",
+		"Panic",
+	),
 ];
 
 function privateTypeRef(

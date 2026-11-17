@@ -227,7 +227,8 @@ sekhmet/
 │   ├── matrix/       # Cartesian-product test case generation
 │   ├── panic/        # Panic errors and the panic runtime (hook, catchUnwind)
 │   ├── primordials/  # Core primitives (Struct, Subtle, scoping helpers)
-│   └── vow/          # Synchronous promise-like values
+│   ├── vow/          # Synchronous promise-like values
+│   └── workflow/     # Workflow helpers (todo, unimplemented, unreachable, invariant)
 ├── scripts/          # Build and development scripts
 │   ├── add/          # Package scaffolding tool (deno task add)
 │   ├── ci/           # CI workflow runner (deno task ci)
@@ -575,6 +576,7 @@ Use package names as scopes:
 - `@sekhmet/panic`
 - `@sekhmet/primordials`
 - `@sekhmet/vow`
+- `@sekhmet/workflow`
 - `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/playground` (scripts)
 - Or specific areas within packages
 
