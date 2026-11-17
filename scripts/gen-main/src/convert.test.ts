@@ -57,7 +57,7 @@ Deno.test("convertReturn maps wrap targets in each mapped type argument", () => 
 	assertEquals(planned.value.text, "Result<Option<mini.A>, Option<mini.B>>");
 	assertEquals(
 		body,
-		"return Result.fromMini(f()).map(($value0) => Option.fromMini($value0)).mapErr(($value0) => Option.fromMini($value0));",
+		"return Result.fromMini(f()).map(($value0) => { return Option.fromMini($value0); }).mapErr(($value0) => { return Option.fromMini($value0); });",
 	);
 });
 
@@ -164,7 +164,10 @@ Deno.test("convertReturn converts a promise's fulfilled value", () => {
 
 	// Then: the result converts once the promise fulfills
 	assertEquals(text, "Promise<Result<mini.A, mini.E>>");
-	assertEquals(body, "return f().then(($value0) => Result.fromMini($value0));");
+	assertEquals(
+		body,
+		"return f().then(($value0) => { return Result.fromMini($value0); });",
+	);
 });
 
 Deno.test("convertReturn converts what a returned function returns", () => {
@@ -193,7 +196,7 @@ Deno.test("convertReturn converts a returned function's promise", () => {
 	assertEquals(text, "(...args: mini.A) => Promise<Option<mini.A>>");
 	assertEquals(
 		body,
-		"const $converted = f();\nreturn (...$args0) => { return $converted(...$args0).then(($value1) => Option.fromMini($value1)); };",
+		"const $converted = f();\nreturn (...$args0) => { return $converted(...$args0).then(($value1) => { return Option.fromMini($value1); }); };",
 	);
 });
 
@@ -210,7 +213,7 @@ Deno.test("convertReturn converts functions and promises nested in a wrap target
 	// Then: each mapper converts its argument, reading the mapped value by name
 	assertEquals(
 		body,
-		"return Result.fromMini(f()).map(($value0) => (...$args1) => { return Option.fromMini($value0(...$args1)); }).mapErr(($value0) => $value0.then(($value1) => Option.fromMini($value1)));",
+		"return Result.fromMini(f()).map(($value0) => { return (...$args1) => { return Option.fromMini($value0(...$args1)); }; }).mapErr(($value0) => { return $value0.then(($value1) => { return Option.fromMini($value1); }); });",
 	);
 });
 

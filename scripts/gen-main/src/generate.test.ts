@@ -348,7 +348,7 @@ Deno.test("generateMain converts wrap targets nested in type arguments through m
 	assertStringIncludes(output, "nest(): Box<Box<T>> {");
 	assertStringIncludes(
 		output,
-		"return Box.fromMini(mini.nest(this)).map(($value0) => Box.fromMini($value0));",
+		"return Box.fromMini(mini.nest(this)).map(($value0) => { return Box.fromMini($value0); });",
 	);
 	assert(!missing.ok);
 	assertStringIncludes(missing.error.message, "no mapper");

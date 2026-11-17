@@ -126,7 +126,9 @@ function planPromise({
 
 	return ok({
 		text: `Promise<${text}>`,
-		apply: (expression) => `${expression}.then((${item}) => ${apply(item)})`,
+		apply: (expression) => {
+			return `${expression}.then(${arrow({ params: item, body: apply(item) })})`;
+		},
 		named: false,
 	});
 }
@@ -247,7 +249,7 @@ function planValue({
 			);
 		}
 		const item = local(`value${depth}`);
-		maps.push(`.${mapper}((${item}) => ${arg.apply(item)})`);
+		maps.push(`.${mapper}(${arrow({ params: item, body: arg.apply(item) })})`);
 	}
 
 	const text =

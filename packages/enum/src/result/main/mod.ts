@@ -859,7 +859,9 @@ export function fallibleAsync<A extends unknown[], U, E>(
 ): (...args: A) => Promise<Result<U, E>> {
 	const $converted = mini.fallibleAsync(options);
 	return (...$args0) => {
-		return $converted(...$args0).then(($value1) => Result.fromMini($value1));
+		return $converted(...$args0).then(($value1) => {
+			return Result.fromMini($value1);
+		});
 	};
 }
 
@@ -914,7 +916,7 @@ export function promiseResult<T, E>(
 		reject: (error: E) => void,
 	) => undefined,
 ): Promise<Result<T, E>> {
-	return mini
-		.promiseResult(executor)
-		.then(($value0) => Result.fromMini($value0));
+	return mini.promiseResult(executor).then(($value0) => {
+		return Result.fromMini($value0);
+	});
 }

@@ -867,9 +867,9 @@ export function unzip<T, U>(
 export function transpose<T, E>(
 	opt: mini.Option<MiniResult<T, E>>,
 ): Result<Option<T>, E> {
-	return Result.fromMini(mini.transpose(opt)).map(($value0) =>
-		Option.fromMini($value0),
-	);
+	return Result.fromMini(mini.transpose(opt)).map(($value0) => {
+		return Option.fromMini($value0);
+	});
 }
 
 /**
