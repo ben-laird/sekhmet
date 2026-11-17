@@ -551,6 +551,22 @@ Deno.test("validates type inference", () => {
 });
 ```
 
+### Exact, rejection and variance type tests
+
+`IsExact` alone is not enough for a public generic type. Write all three kinds
+(see CONTRIBUTING.md, "Type tests: exact, rejection and variance"):
+
+1. **Exact:** `assertType<IsExact<…>>(true)` for what it infers.
+2. **Rejection:** `// @ts-expect-error` on the one line that must not compile:
+   forging the type by hand, narrowing it, reading a member an operation
+   removed.
+3. **Variance:** assignment between instantiations, widening accepted and
+   narrowing rejected, in more than one order.
+
+Implementer briefs and reviews check all three. _Why: two reviews (2026-11-16)
+found a forgeable typed key and an order-dependent variance bug past 600+
+passing tests, nearly all `IsExact`._
+
 ### Nested step pattern for complex tests
 
 ```ts ignore

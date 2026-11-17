@@ -486,6 +486,46 @@ Deno.test("Feature behaves correctly", async (t) => {
 - Use descriptive test names that describe the behavior, not implementation
 - Group related assertions using `t.step()` for better test output
 
+#### Type tests: exact, rejection and variance
+
+A public generic type (and every API whose safety rests on its types) gets
+three kinds of type test, not just the first. `IsExact` checks a type in
+isolation; soundness bugs live in the relationships between types, which only
+the other two kinds see. _Why: two reviews of `@sekhmet/schema` (2026-11-16)
+found a forgeable typed key and an order-dependent variance bug that 600+
+passing tests, nearly all `IsExact`, had missed._
+
+1. **Exact**: what a construct infers, with `assertType<IsExact<…>>(true)`.
+2. **Rejection**: what must _not_ compile, with `// @ts-expect-error` on the
+   exact line that should fail (and a word on why). Forge the type by hand,
+   narrow it, read a member that an operation should have removed. Keep each
+   expected error on one line: a `@ts-expect-error` above a multi-line
+   expression may be satisfied by a different error.
+3. **Variance**: assignment between instantiations in both directions. Widening
+   is accepted and narrowing rejected, checked in more than one order, since
+   TypeScript caches variance and an order-dependent bug can hide behind the
+   first check.
+
+```ts ignore
+import { assertType, type IsExact } from "@std/testing/types";
+
+Deno.test("Schema's output is covariant", () => {
+	// Given: a schema of a narrow output, and one of a wide output
+	const narrow = literal("a");
+	const wide = string();
+
+	// When / Then: inference is exact
+	assertType<IsExact<Output<typeof narrow>, "a">>(true);
+
+	// Then: widening is accepted
+	const widened: Schema<unknown, string, SchemaIssue> = narrow;
+
+	// Then: narrowing is rejected
+	// @ts-expect-error a string schema is not an "a" schema
+	const narrowed: Schema<unknown, "a", SchemaIssue> = wide;
+});
+```
+
 ### Running Tests
 
 ```bash
