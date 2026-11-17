@@ -10,14 +10,15 @@ expected failure. Run your program inside a panic runtime
 
 ## Choosing a helper
 
-| The code…                                  | Use             |
-| ------------------------------------------ | --------------- |
-| is not written yet, but will be            | `todo`          |
-| is deliberately not supported              | `unimplemented` |
-| cannot run unless the types lie            | `unreachable`   |
-| relies on a condition only a bug can break | `invariant`     |
-| relies on a value being present            | `defined`       |
-| relies on a value passing a predicate      | `satisfies`     |
+| The code…                                  | Use              |
+| ------------------------------------------ | ---------------- |
+| is not written yet, but will be            | `todo`           |
+| is deliberately not supported              | `unimplemented`  |
+| cannot run unless the types lie            | `unreachable`    |
+| relies on a condition only a bug can break | `invariant`      |
+| relies on two values being equal           | `invariantEqual` |
+| relies on a value being present            | `defined`        |
+| relies on a value passing a predicate      | `satisfies`      |
 
 ## Messages
 
@@ -68,6 +69,17 @@ Please file an issue at https://example.com/issues
 Write `expectedBehavior` as a "should" statement about the program, so the
 message reads as what went wrong.
 
+### `invariantEqual`
+
+The `invariant` layout, with both values rendered:
+
+```txt
+an invariant was violated
+Expected behavior: every key should have a value
+Actual value: 1
+Expected value: 2
+```
+
 ### `defined` and `satisfies`
 
 Both use the `invariant` layout, with a line for the offending value, rendered
@@ -84,6 +96,15 @@ an invariant was violated
 Expected behavior: a quantity should be a positive integer
 Rejected value: -1
 ```
+
+## Equality in `invariantEqual`
+
+`invariantEqual({ actual, expected, expectedBehavior, issueUrl?, equals? })`
+compares with `Object.is` unless you pass `equals(actual, expected)`. So
+`NaN` equals `NaN`, `0` does not equal `-0`, and objects and arrays are equal
+only to themselves; pass `equals` to compare them by content or by a key.
+`actual` and `expected` share one type, so comparing a number with a string is
+a type error.
 
 ## Narrowing with `defined` and `satisfies`
 
@@ -124,7 +145,9 @@ Each cause is a plain object, typed and exported:
   - `{ kind: "defined", absent, value }`: the absent `null` or `undefined`
     `defined` was given, and what counted as absent;
   - `{ kind: "satisfies", value }`: the value `satisfies`'s predicate
-    rejected.
+    rejected;
+  - `{ kind: "equal", actual, expected }`: the two values `invariantEqual`
+    found unequal.
 
 Options never reach the panic's name: it is always the helper's own, even when
 the options object carries extra fields at runtime.
@@ -199,15 +222,16 @@ that is not an array cannot replace the panic with another error.
 - `defined` given an `absent` it does not know counts `null` and `undefined`
   as absent;
 - `satisfies` given a predicate that is not a function panics, as if the
-  predicate rejected the value;
+  predicate rejected the value, and `invariantEqual` given an `equals` that
+  is not a function panics, as if the values were unequal;
 - if building the message still throws, the message is the header alone.
 
 ## Recognizing the panics
 
 `isTodoPanic`, `isUnimplementedPanic`, `isUnreachablePanic` and
 `isInvariantPanic` narrow an `unknown` to `Panic<…Cause>`. `isInvariantPanic`
-accepts the panic of every invariant check (`invariant`, `defined` and
-`satisfies`); narrow further on `cause.check.kind`. They read a private
+accepts the panic of every invariant check (`invariant`, `invariantEqual`,
+`defined` and `satisfies`); narrow further on `cause.check.kind`. They read a private
 brand set when the helper throws, so:
 
 - they run no Proxy trap, which keeps a hook that calls them from throwing;

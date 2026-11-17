@@ -61,6 +61,12 @@ function checkLines(check: InvariantCheck): readonly string[] {
 		case "satisfies": {
 			return [`Rejected value: ${describeValue(check.value)}`];
 		}
+		case "equal": {
+			return [
+				`Actual value: ${describeValue(check.actual)}`,
+				`Expected value: ${describeValue(check.expected)}`,
+			];
+		}
 	}
 }
 

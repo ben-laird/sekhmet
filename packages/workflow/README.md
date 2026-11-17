@@ -2,8 +2,8 @@
 
 Helpers that mark the state of the code itself. `@sekhmet/workflow` gives you
 `todo` and `unimplemented` for code that does not exist, `unreachable` for code
-the types rule out, and `invariant`, `defined` and `satisfies` for what only
-a bug can break.
+the types rule out, and `invariant`, `invariantEqual`, `defined` and
+`satisfies` for what only a bug can break.
 
 Each one panics through [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic), so it is a
 `Panic` with its own name, a typed cause, and a type guard that recognizes it
@@ -15,6 +15,7 @@ in a panic hook or after `catchUnwind`:
 | `unimplemented(opts?)` | `Panic (Unimplemented)` | `UnimplementedCause` | `isUnimplementedPanic` |
 | `unreachable(opts?)`   | `Panic (Unreachable)`   | `UnreachableCause`   | `isUnreachablePanic`   |
 | `invariant(cond, o)`   | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
+| `invariantEqual(o)`    | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
 | `defined(value, o)`    | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
 | `satisfies(value, o)`  | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
 
@@ -115,6 +116,21 @@ function total(prices: ReadonlyMap<string, number>, item: string): number {
 assertEquals(total(new Map([["apple", 2]]), "apple"), 2);
 ```
 
+`invariantEqual` is Rust's `assert_eq!`: it panics showing both values when
+`actual` and `expected` differ by `Object.is`, or by the `equals` you pass.
+
+```ts
+import { invariantEqual } from "@sekhmet/workflow/invariant";
+
+const columns = ["name", "price"];
+const row = ["apple", "2"];
+invariantEqual({
+	actual: row.length,
+	expected: columns.length,
+	expectedBehavior: "every row should have a cell per column",
+});
+```
+
 ## `defined` and `satisfies`
 
 Invariant checks that return the value, narrowed, so they fit inside an
@@ -141,7 +157,7 @@ const pairs = satisfies(4, {
 assertEquals(pairs, 4);
 ```
 
-All three panic as `Panic (Invariant)`, and the cause's `check` says which
+All four panic as `Panic (Invariant)`, and the cause's `check` says which
 check failed and keeps the offending value.
 
 ## Recognizing them

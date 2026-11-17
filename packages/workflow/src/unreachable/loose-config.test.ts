@@ -13,7 +13,7 @@ const FIXTURE = (modules: {
 }): string => {
 	return `import { unreachable } from "${modules.unreachable}";
 import { todo, unimplemented } from "${modules.todo}";
-import { defined, invariant, satisfies } from "${modules.invariant}";
+import { defined, invariant, invariantEqual, satisfies } from "${modules.invariant}";
 
 type Shape = { kind: "a" } | { kind: "b" };
 declare const anything: any;
@@ -60,6 +60,10 @@ export const falsy = (value: string | null): string => defined(value, { absent: 
 
 const isString = (value: unknown): value is string => typeof value === "string";
 export const checked = (value: string | number): string => satisfies(value, { predicate: isString, expectedBehavior: "it should be a string", issueUrl: undefined });
+
+export const same = (a: number, b: number): void => invariantEqual({ actual: a, expected: b, equals: undefined, issueUrl: undefined, expectedBehavior: "they should match" });
+// @ts-expect-error a number never equals a string
+export const mixed = (a: number, b: string): void => invariantEqual({ actual: a, expected: b, expectedBehavior: "they should match" });
 `;
 };
 
