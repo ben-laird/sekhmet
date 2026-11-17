@@ -18,6 +18,7 @@ export {
 	description,
 	title,
 } from "./annotation.ts";
+export { is } from "./guard.ts";
 export {
 	Custom,
 	type CustomDetails,

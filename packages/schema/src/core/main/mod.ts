@@ -102,6 +102,7 @@ export {
 	InvalidUnion,
 	InvalidValue,
 	Issues,
+	is,
 	isIssues,
 	isSchemaIssue,
 	issues,

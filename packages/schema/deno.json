@@ -8,6 +8,7 @@
 		"./core": "./src/core/main/mod.ts",
 		"./core/mini": "./src/core/mini/mod.ts",
 		"./core/mini/annotation": "./src/core/mini/annotation.ts",
+		"./core/mini/guard": "./src/core/mini/guard.ts",
 		"./core/mini/issue": "./src/core/mini/issue.ts",
 		"./core/mini/issues": "./src/core/mini/issues.ts",
 		"./core/mini/node": "./src/core/mini/node.ts",
