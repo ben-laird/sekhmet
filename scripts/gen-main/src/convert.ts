@@ -14,8 +14,8 @@
  *   `.then` (`Promise<Result<T, E>>`)
  * - the return value of a non-generic function type in any converted position
  *   (`(...args: A) => Result<U, E>`), by wrapping the function so that each
- *   call converts; a returned function is bound to a name first, so the mini
- *   call still runs once
+ *   call converts; a returned function is bound to a name first, at every
+ *   level of a curried function, so each mini call still runs once
  *
  * Everything else (parameters, unions, other generics) keeps its mini type.
  *
@@ -136,18 +136,25 @@ function planFunction({
 	});
 	if (!planned.ok) return planned;
 
-	const { text, apply } = planned.value;
+	const { text, apply, named } = planned.value;
 	if (apply === undefined) return ok(unconverted({ type, context }));
 
 	const args = `args${depth}`;
+	const bound = `converted${depth}`;
 
-	// A braced body, so the wrapper stays bracketed however Biome wraps it
+	// A braced body, so the wrapper stays bracketed however Biome wraps it. A
+	// returned value that is itself `named` (a curried function) is bound once
+	// per call, so the outer call isn't deferred into, and repeated by, each
+	// inner call.
 	return ok({
 		text: context.render({ ...type, returnType: verbatim(text) }),
 		apply: (expression) => {
-			const call = apply(`${expression}(...${args})`);
+			const call = `${expression}(...${args})`;
+			if (named) {
+				return `(...${args}) => { const ${bound} = ${call}; return ${apply(bound)}; }`;
+			}
 
-			return `(...${args}) => { return ${call}; }`;
+			return `(...${args}) => { return ${apply(call)}; }`;
 		},
 		named: true,
 	});

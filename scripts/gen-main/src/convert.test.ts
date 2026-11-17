@@ -229,6 +229,45 @@ Deno.test("convertReturn leaves promises and functions of other types alone", ()
 	assertEquals(kinds, ["none", "none"]);
 });
 
+Deno.test("convertReturn calls each level of a curried function once", () => {
+	// Given: (...args: A) => (...args: A) => Result<A, E>
+	const type = fn(fn(ref("Result", [ref("A"), ref("E")])));
+
+	// When: planning it and rendering its body
+	const { body } = bodyOf(type);
+
+	// Then: each call binds its returned function before wrapping it, so the
+	// outer call runs once per outer call, not once per inner call
+	assertEquals(
+		body,
+		"const converted = f();\nreturn (...args0) => { const converted0 = converted(...args0); return (...args1) => { return Result.fromMini(converted0(...args1)); }; };",
+	);
+});
+
+Deno.test("convertReturn's curried wrapper runs each call once", () => {
+	// Given: a curried mini function counting its outer and inner calls
+	const calls = { outer: 0, inner: 0 };
+	const curried = () => {
+		calls.outer += 1;
+		return () => {
+			calls.inner += 1;
+			return calls.inner;
+		};
+	};
+	const { body } = bodyOf(fn(fn(ref("Result", [ref("A")]))));
+	const Result = { fromMini: (value: number) => value };
+	const wrap = new Function("f", "Result", body);
+
+	// When: the wrapper's outer function is called once and its result twice
+	const outer = wrap(() => curried, Result);
+	const inner = outer();
+	const results = [inner(), inner()];
+
+	// Then: the outer mini call ran once, and each inner call ran once
+	assertEquals(calls, { outer: 1, inner: 2 });
+	assertEquals(results, [1, 2]);
+});
+
 Deno.test("convertReturn leaves generic function types alone", () => {
 	// Given: <T>(...args: A) => Option<A>, whose wrapper couldn't stay generic
 	const type = fn(ref("Option", [ref("A")]), [{ name: "T" }]);

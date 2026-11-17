@@ -399,7 +399,8 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
     (`fallible` returns `(...args: A) => Result<U, E>`, and `fallibleAsync`
     `(...args: A) => Promise<Result<U, E>>`). The wrapper binds the mini
     function to a name, so the mini call still runs once, and returns a
-    function whose every call converts. It forwards arguments but not `this`.
+    function whose every call converts; a curried function is bound the same
+    way at every level. It forwards arguments but not `this`.
 
   Parameters keep their mini types (they accept main and mini values alike),
   as do positions the generator can't convert without changing behaviour:
