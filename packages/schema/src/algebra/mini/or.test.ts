@@ -7,7 +7,7 @@ import { union } from "@/src/composites/mini/union.ts";
 import { annotationKey } from "@/src/core/mini/annotation.ts";
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Issues } from "@/src/core/mini/issues.ts";
-import { nodeOf, SchemaNode } from "@/src/core/mini/node.ts";
+import { children, nodeOf, SchemaNode } from "@/src/core/mini/node.ts";
 import {
 	type ErrorOf,
 	type Input,
@@ -170,4 +170,19 @@ Deno.test("or's types: input intersects, output unions, error is Issues", () => 
 	);
 	assertType<IsExact<Output<typeof either>, string | number>>(true);
 	assertType<IsExact<ErrorOf<typeof either>, Issues<SchemaIssue>>>(true);
+});
+
+Deno.test("or has no view in its type: how many options it flattens to varies", () => {
+	// Given: a union and another schema
+	const either = union([text, count]);
+
+	// When: or-ing them
+	const any = or({ left: either, right: flag });
+
+	// Then: its type promises no options, though the union it builds has all
+	// three, as its node says
+	// @ts-expect-error or returns a plain Schema
+	const options: unknown = any.options;
+	assertEquals(options, children(nodeOf(any)));
+	assertEquals(children(nodeOf(any)), [text, count, flag]);
 });

@@ -790,8 +790,10 @@ export class SchemaWith<I, O, E> {
 	 * ```
 	 * @see {@link algebra.brand}
 	 */
-	brand<const B extends string>(name: B): Schema<I, algebra.Branded<O, B>, E> {
-		return Schema.fromMini(algebra.brand(this.#self, name));
+	brand<const B extends string>(
+		name: B,
+	): Schema<I, algebra.Branded<O, B>, E> & mini.ViewOf<mini.Schema<I, O, E>> {
+		return Schema.fromMiniView(algebra.brand(this.#self, name));
 	}
 
 	/**
@@ -812,8 +814,9 @@ export class SchemaWith<I, O, E> {
 	 * ```
 	 * @see {@link algebra.readonly}
 	 */
-	readonly(): Schema<I, algebra.ReadonlyOutput<O>, E> {
-		return Schema.fromMini(algebra.readonly(this.#self));
+	readonly(): Schema<I, algebra.ReadonlyOutput<O>, E> &
+		mini.WrapperView<mini.Schema<I, O, E>> {
+		return Schema.fromMiniView(algebra.readonly(this.#self));
 	}
 }
 

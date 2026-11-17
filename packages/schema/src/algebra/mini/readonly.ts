@@ -1,7 +1,8 @@
 import { getStructParams } from "@sekhmet/primordials/struct";
 import type { Child } from "@/src/composites/mini/collect.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";
-import { map, Schema } from "@/src/core/mini/schema.ts";
+import { map, type Schema } from "@/src/core/mini/schema.ts";
+import { viewed, type WrapperView } from "@/src/core/mini/view.ts";
 
 /**
  * The type {@linkcode readonly} gives an output: a `Map` becomes a
@@ -67,13 +68,16 @@ function frozenCopy(value: unknown): unknown {
  * class instance can't be copied without bypassing its constructor. A
  * `Map` or `Set` output is still typed as a `ReadonlyMap` or `ReadonlySet`.
  *
- * The schema records a `Readonly` node over `self`.
+ * The schema records a `Readonly` node over `self`, and its view
+ * (`.inner`) is `self`, as passed.
  *
  * @template I The input type
  * @template O The output type
  * @template E The error type
+ * @template S The schema, exactly (with its own view)
  * @param self The schema
- * @returns A schema whose array and plain object outputs are frozen copies
+ * @returns A schema whose array and plain object outputs are frozen copies,
+ *   viewing `self`
  *
  * @example
  * ```ts
@@ -91,12 +95,15 @@ function frozenCopy(value: unknown): unknown {
  * assertEquals(Object.isFrozen(parsed), true);
  * ```
  */
-export function readonly<I, O, E>(
-	self: Schema<I, O, E>,
-): Schema<I, ReadonlyOutput<O>, E>;
-export function readonly(self: Child): Child {
-	return new Schema({
-		parse: getStructParams(map(self, frozenCopy)).parse,
-		node: new SchemaNode("Readonly", { inner: self }),
+export function readonly<I, O, E, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
+): Schema<I, ReadonlyOutput<O>, E> & WrapperView<S>;
+export function readonly(self: Child): Child & WrapperView<Child> {
+	return viewed({
+		init: {
+			parse: getStructParams(map(self, frozenCopy)).parse,
+			node: new SchemaNode("Readonly", { inner: self }),
+		},
+		view: { inner: self },
 	});
 }
