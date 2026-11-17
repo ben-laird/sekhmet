@@ -18,6 +18,7 @@ import {
 	map as mapPotential,
 	type Potential,
 } from "./potential.ts";
+import { type PipeView, type TransformView, viewed } from "./view.ts";
 
 /**
  * A parser function that validates and transforms input into output.
@@ -430,9 +431,10 @@ export function parseAsync<I, O, E>(
  * @template O The original output type
  * @template E The error type
  * @template P The mapped output type
+ * @template S The schema, exactly (with its own view)
  * @param self The schema to map
  * @param mapping The transformation function
- * @returns A new schema with transformed output
+ * @returns A new schema with transformed output, viewing `self` (`.inner`)
  *
  * @example
  * ```ts
@@ -446,10 +448,10 @@ export function parseAsync<I, O, E>(
  * assertEquals(unwrap(parseSync(length, "four")), 4);
  * ```
  */
-export function map<I, O, E, P>(
-	self: Schema<I, O, E>,
+export function map<I, O, E, P, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
 	mapping: (output: O) => P,
-): Schema<I, P, E> {
+): Schema<I, P, E> & TransformView<S> {
 	return continueWith({
 		step: "map",
 		schema: self,
@@ -467,9 +469,10 @@ export function map<I, O, E, P>(
  * @template O The output type
  * @template E The original error type
  * @template F The mapped error type
+ * @template S The schema, exactly (with its own view)
  * @param self The schema to map
  * @param mapping The error transformation function
- * @returns A new schema with transformed errors
+ * @returns A new schema with transformed errors, viewing `self` (`.inner`)
  *
  * @example
  * ```ts
@@ -484,10 +487,10 @@ export function map<I, O, E, P>(
  * assertEquals(union(unwrapErr(parseSync(described, "a"))), "error 404");
  * ```
  */
-export function mapErr<I, O, E, F>(
-	self: Schema<I, O, E>,
+export function mapErr<I, O, E, F, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
 	mapping: (error: E) => F,
-): Schema<I, O, F> {
+): Schema<I, O, F> & TransformView<S> {
 	return continueWith({
 		step: "mapErr",
 		schema: self,
@@ -505,9 +508,12 @@ export function mapErr<I, O, E, F>(
  * @template O The intermediate output type
  * @template E The error type (shared between both schemas)
  * @template P The final output type
+ * @template S The first schema, exactly (with its own view)
+ * @template N The second schema, exactly (with its own view)
  * @param self The first schema
  * @param nextSchema The second schema to apply to successful results
- * @returns A new schema representing the pipeline
+ * @returns A new schema representing the pipeline, viewing both schemas
+ *   (`.inner`, `.next`)
  *
  * @example
  * ```ts
@@ -525,24 +531,34 @@ export function mapErr<I, O, E, F>(
  * assertEquals(unwrap(parseSync(pipe(digits, integer), "42")), 42);
  * ```
  */
-export function pipe<I, O, E, P>(
-	self: Schema<I, O, E>,
-	nextSchema: Schema<O, P, E>,
-): Schema<I, P, E> {
+export function pipe<
+	I,
+	O,
+	E,
+	P,
+	S extends Schema<I, O, E>,
+	N extends Schema<O, P, E>,
+>(
+	self: S & Schema<I, O, E>,
+	nextSchema: N & Schema<O, P, E>,
+): Schema<I, P, E> & PipeView<S, N> {
 	const next = getStructParams(nextSchema).parse;
 
-	return new Schema({
-		parse: (input) => {
-			return union(
-				mapPotential(parse(self, input), (result) => {
-					return match(result)<MaybePromise<Result<P, E>>>({
-						Ok: next,
-						Err: (error) => Err(error),
-					});
-				}),
-			);
+	return viewed({
+		init: {
+			parse: (input: I) => {
+				return union(
+					mapPotential(parse(self, input), (result) => {
+						return match(result)<MaybePromise<Result<P, E>>>({
+							Ok: next,
+							Err: (error) => Err(error),
+						});
+					}),
+				);
+			},
+			node: new SchemaNode("Pipe", { inner: self, next: nextSchema }),
 		},
-		node: new SchemaNode("Pipe", { inner: self, next: nextSchema }),
+		view: { inner: self, next: nextSchema },
 	});
 }
 
@@ -586,9 +602,10 @@ export interface FilterOptions<O, E, P extends O> {
  * @template O The original output type
  * @template E The error type
  * @template P The filtered output type (must be a subtype of O)
+ * @template S The schema, exactly (with its own view)
  * @param self The schema to filter
  * @param options The type guard predicate, and the error builder when it fails
- * @returns A new schema with filtered output
+ * @returns A new schema with filtered output, viewing `self` (`.inner`)
  *
  * @example
  * ```ts
@@ -606,10 +623,10 @@ export interface FilterOptions<O, E, P extends O> {
  * assertEquals(union(unwrapErr(parseSync(positive, -1))), "-1 is not positive");
  * ```
  */
-export function filter<I, O, E, P extends O>(
-	self: Schema<I, O, E>,
+export function filter<I, O, E, P extends O, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
 	options: FilterOptions<O, E, P>,
-): Schema<I, P, E> {
+): Schema<I, P, E> & TransformView<S> {
 	const { error, predicate } = options;
 
 	return continueWith({
@@ -630,25 +647,28 @@ export function filter<I, O, E, P extends O>(
  * How {@linkcode continueWith} extends a schema: which transform it is, the
  * schema to parse with, and the step each of its results goes through.
  */
-interface Continuation<I, O, E, P, F> {
+interface Continuation<I, O, E, P, F, S extends Schema<I, O, E>> {
 	readonly step: TransformStep;
-	readonly schema: Schema<I, O, E>;
+	readonly schema: S & Schema<I, O, E>;
 	readonly next: (result: Result<O, E>) => MaybePromise<Result<P, F>>;
 }
 
 /**
  * A schema that parses with `schema`, then passes the result to `next`,
- * recorded as a `Transform` node of `step`. The parse stays sync when both
- * are; a promise from either makes it async.
+ * recorded as a `Transform` node of `step` and viewing `schema` as `inner`.
+ * The parse stays sync when both are; a promise from either makes it async.
  */
-function continueWith<I, O, E, P, F>(
-	continuation: Continuation<I, O, E, P, F>,
-): Schema<I, P, F> {
+function continueWith<I, O, E, P, F, S extends Schema<I, O, E>>(
+	continuation: Continuation<I, O, E, P, F, S>,
+): Schema<I, P, F> & TransformView<S> {
 	const { step, schema, next } = continuation;
 
-	return new Schema({
-		parse: (input) => union(mapPotential(parse(schema, input), next)),
-		node: new SchemaNode("Transform", { step, inner: schema }),
+	return viewed({
+		init: {
+			parse: (input: I) => union(mapPotential(parse(schema, input), next)),
+			node: new SchemaNode("Transform", { step, inner: schema }),
+		},
+		view: { inner: schema },
 	});
 }
 
@@ -667,10 +687,12 @@ function continueWith<I, O, E, P, F>(
  * @template E The original error type
  * @template P The new output type
  * @template F The error type `next` may add
+ * @template S The schema, exactly (with its own view)
  * @param self The schema whose output to transform
  * @param next The fallible transform for each successful output: a
  * {@linkcode Parser} from the output
- * @returns A new schema whose output is `next`'s, failing with either error
+ * @returns A new schema whose output is `next`'s, failing with either error,
+ *   viewing `self` (`.inner`)
  *
  * @example
  * ```ts
@@ -689,10 +711,10 @@ function continueWith<I, O, E, P, F>(
  * assertEquals(union(unwrapErr(parseSync(integer, "x"))), "not an integer");
  * ```
  */
-export function andThen<I, O, E, P, F>(
-	self: Schema<I, O, E>,
+export function andThen<I, O, E, P, F, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
 	next: Parser<O, P, F>,
-): Schema<I, P, E | F> {
+): Schema<I, P, E | F> & TransformView<S> {
 	return continueWith({
 		step: "andThen",
 		schema: self,
@@ -719,10 +741,12 @@ export function andThen<I, O, E, P, F>(
  * @template O The output type
  * @template E The original error type
  * @template F The error type after recovery
+ * @template S The schema, exactly (with its own view)
  * @param self The schema whose failures to recover from
  * @param recover The fallback for each error: a {@linkcode Parser} from
  * the error
- * @returns A new schema that fails only with `recover`'s error
+ * @returns A new schema that fails only with `recover`'s error, viewing
+ *   `self` (`.inner`)
  *
  * @example
  * ```ts
@@ -745,10 +769,10 @@ export function andThen<I, O, E, P, F>(
  * assertEquals(unwrap(parseSync(withDefault, "")), 8080);
  * ```
  */
-export function orElse<I, O, E, F>(
-	self: Schema<I, O, E>,
+export function orElse<I, O, E, F, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
 	recover: Parser<E, O, F>,
-): Schema<I, O, F> {
+): Schema<I, O, F> & TransformView<S> {
 	return continueWith({
 		step: "orElse",
 		schema: self,
@@ -772,9 +796,11 @@ export function orElse<I, O, E, F>(
  * @template I The input type
  * @template O The output type
  * @template E The error type
+ * @template S The schema, exactly (with its own view)
  * @param self The schema whose outputs to tap
  * @param inspector The side effect for each successful output
- * @returns A new schema with the same results as `self`
+ * @returns A new schema with the same results as `self`, viewing it
+ *   (`.inner`)
  *
  * @example
  * ```ts
@@ -792,10 +818,10 @@ export function orElse<I, O, E, F>(
  * assertEquals(seen, ["a"]);
  * ```
  */
-export function inspect<I, O, E>(
-	self: Schema<I, O, E>,
+export function inspect<I, O, E, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
 	inspector: (output: O) => void,
-): Schema<I, O, E> {
+): Schema<I, O, E> & TransformView<S> {
 	return continueWith({
 		step: "inspect",
 		schema: self,
@@ -817,9 +843,11 @@ export function inspect<I, O, E>(
  * @template I The input type
  * @template O The output type
  * @template E The error type
+ * @template S The schema, exactly (with its own view)
  * @param self The schema whose errors to tap
  * @param inspector The side effect for each error
- * @returns A new schema with the same results as `self`
+ * @returns A new schema with the same results as `self`, viewing it
+ *   (`.inner`)
  *
  * @example
  * ```ts
@@ -837,10 +865,10 @@ export function inspect<I, O, E>(
  * assertEquals(seen, ["rejected"]);
  * ```
  */
-export function inspectErr<I, O, E>(
-	self: Schema<I, O, E>,
+export function inspectErr<I, O, E, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
 	inspector: (error: E) => void,
-): Schema<I, O, E> {
+): Schema<I, O, E> & TransformView<S> {
 	return continueWith({
 		step: "inspectErr",
 		schema: self,
@@ -865,9 +893,11 @@ export function inspectErr<I, O, E>(
  * @template I The input type `self` parses
  * @template O The output type
  * @template E The error type
+ * @template S The schema, exactly (with its own view)
  * @param self The schema to parse the prepared input with
  * @param prepare The transform from the new input to `self`'s input
- * @returns A new schema that accepts `prepare`'s input
+ * @returns A new schema that accepts `prepare`'s input, viewing `self`
+ *   (`.inner`)
  *
  * @example
  * ```ts
@@ -889,14 +919,17 @@ export function inspectErr<I, O, E>(
  * assertEquals(unwrap(parseSync(trimmed, " 42 ")), 42);
  * ```
  */
-export function preprocess<J, I, O, E>(
-	self: Schema<I, O, E>,
+export function preprocess<J, I, O, E, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
 	prepare: (input: J) => MaybePromise<I>,
-): Schema<J, O, E> {
+): Schema<J, O, E> & TransformView<S> {
 	const parser = getStructParams(self).parse;
 
-	return new Schema({
-		parse: (input) => union(mapPotential(from(prepare(input)), parser)),
-		node: new SchemaNode("Transform", { step: "preprocess", inner: self }),
+	return viewed({
+		init: {
+			parse: (input: J) => union(mapPotential(from(prepare(input)), parser)),
+			node: new SchemaNode("Transform", { step: "preprocess", inner: self }),
+		},
+		view: { inner: self },
 	});
 }

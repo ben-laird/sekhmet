@@ -242,7 +242,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * @template F - The error type `next` may add
 	 * @param next - The fallible transform for each successful output: a
 	 * {@linkcode Parser} from the output
-	 * @returns A new schema whose output is `next`'s, failing with either error
+	 * @returns A new schema whose output is `next`'s, failing with either error,
+	 * viewing `self` (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -261,8 +262,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.andThen}
 	 */
-	andThen<P, F>(next: mini.Parser<O, P, F>): Schema<I, P, E | F> {
-		return Schema.fromMini(mini.andThen(this, next));
+	andThen<P, F>(
+		next: mini.Parser<O, P, F>,
+	): Schema<I, P, E | F> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.andThen(this, next));
 	}
 
 	/**
@@ -274,7 +277,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 *
 	 * @template P - The filtered output type (must be a subtype of O)
 	 * @param options - The type guard predicate, and the error builder when it fails
-	 * @returns A new schema with filtered output
+	 * @returns A new schema with filtered output, viewing `self` (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -292,8 +295,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.filter}
 	 */
-	filter<P extends O>(options: mini.FilterOptions<O, E, P>): Schema<I, P, E> {
-		return Schema.fromMini(mini.filter(this, options));
+	filter<P extends O>(
+		options: mini.FilterOptions<O, E, P>,
+	): Schema<I, P, E> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.filter(this, options));
 	}
 
 	/**
@@ -305,7 +310,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * that throws panics: the throw is not caught.
 	 *
 	 * @param inspector - The side effect for each successful output
-	 * @returns A new schema with the same results as `self`
+	 * @returns A new schema with the same results as `self`, viewing it
+	 * (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -323,8 +329,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.inspect}
 	 */
-	inspect(inspector: (output: O) => void): Schema<I, O, E> {
-		return Schema.fromMini(mini.inspect(this, inspector));
+	inspect(
+		inspector: (output: O) => void,
+	): Schema<I, O, E> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.inspect(this, inspector));
 	}
 
 	/**
@@ -336,7 +344,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * panics: the throw is not caught.
 	 *
 	 * @param inspector - The side effect for each error
-	 * @returns A new schema with the same results as `self`
+	 * @returns A new schema with the same results as `self`, viewing it
+	 * (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -354,8 +363,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.inspectErr}
 	 */
-	inspectErr(inspector: (error: E) => void): Schema<I, O, E> {
-		return Schema.fromMini(mini.inspectErr(this, inspector));
+	inspectErr(
+		inspector: (error: E) => void,
+	): Schema<I, O, E> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.inspectErr(this, inspector));
 	}
 
 	/**
@@ -366,7 +377,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 *
 	 * @template P - The mapped output type
 	 * @param mapping - The transformation function
-	 * @returns A new schema with transformed output
+	 * @returns A new schema with transformed output, viewing `self` (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -380,8 +391,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.map}
 	 */
-	map<P>(mapping: (output: O) => P): Schema<I, P, E> {
-		return Schema.fromMini(mini.map(this, mapping));
+	map<P>(
+		mapping: (output: O) => P,
+	): Schema<I, P, E> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.map(this, mapping));
 	}
 
 	/**
@@ -392,7 +405,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 *
 	 * @template F - The mapped error type
 	 * @param mapping - The error transformation function
-	 * @returns A new schema with transformed errors
+	 * @returns A new schema with transformed errors, viewing `self` (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -407,8 +420,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.mapErr}
 	 */
-	mapErr<F>(mapping: (error: E) => F): Schema<I, O, F> {
-		return Schema.fromMini(mini.mapErr(this, mapping));
+	mapErr<F>(
+		mapping: (error: E) => F,
+	): Schema<I, O, F> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.mapErr(this, mapping));
 	}
 
 	/**
@@ -424,7 +439,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * @template F - The error type after recovery
 	 * @param recover - The fallback for each error: a {@linkcode Parser} from
 	 * the error
-	 * @returns A new schema that fails only with `recover`'s error
+	 * @returns A new schema that fails only with `recover`'s error, viewing
+	 * `self` (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -447,8 +463,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.orElse}
 	 */
-	orElse<F>(recover: mini.Parser<E, O, F>): Schema<I, O, F> {
-		return Schema.fromMini(mini.orElse(this, recover));
+	orElse<F>(
+		recover: mini.Parser<E, O, F>,
+	): Schema<I, O, F> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.orElse(this, recover));
 	}
 
 	/**
@@ -536,8 +554,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * If the first schema fails, the error is propagated without running the second schema.
 	 *
 	 * @template P - The final output type
+	 * @template N - The second schema, exactly (with its own view)
 	 * @param nextSchema - The second schema to apply to successful results
-	 * @returns A new schema representing the pipeline
+	 * @returns A new schema representing the pipeline, viewing both schemas
+	 * (`.inner`, `.next`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -555,8 +575,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.pipe}
 	 */
-	pipe<P>(nextSchema: mini.Schema<O, P, E>): Schema<I, P, E> {
-		return Schema.fromMini(mini.pipe(this, nextSchema));
+	pipe<P, N extends mini.Schema<O, P, E>>(
+		nextSchema: N & mini.Schema<O, P, E>,
+	): Schema<I, P, E> & mini.PipeView<this, N> {
+		return Schema.fromMiniView(mini.pipe(this, nextSchema));
 	}
 
 	/**
@@ -571,7 +593,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 *
 	 * @template J - The new input type
 	 * @param prepare - The transform from the new input to `self`'s input
-	 * @returns A new schema that accepts `prepare`'s input
+	 * @returns A new schema that accepts `prepare`'s input, viewing `self`
+	 * (`.inner`)
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -593,8 +616,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.preprocess}
 	 */
-	preprocess<J>(prepare: (input: J) => mini.MaybePromise<I>): Schema<J, O, E> {
-		return Schema.fromMini(mini.preprocess(this, prepare));
+	preprocess<J>(
+		prepare: (input: J) => mini.MaybePromise<I>,
+	): Schema<J, O, E> & mini.TransformView<this> {
+		return Schema.fromMiniView(mini.preprocess(this, prepare));
 	}
 
 	/**

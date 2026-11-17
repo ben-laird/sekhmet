@@ -109,11 +109,16 @@ export interface WrapperView<S> {
  *
  * @example
  * ```ts
- * import type { Schema } from "@sekhmet/schema/core/mini";
- * import type { TransformView } from "@sekhmet/schema/core/mini/view";
+ * import { assertStrictEquals } from "@std/assert";
+ * import { object } from "@sekhmet/schema/composites/mini";
+ * import { map } from "@sekhmet/schema/core/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
  *
- * type Text = Schema<unknown, string, never>;
- * type Length = Schema<unknown, number, never> & TransformView<Text>;
+ * const name = string();
+ * const user = object({ shape: { name } });
+ * const greeting = map(user, (value) => `Hello, ${value.name}`);
+ *
+ * assertStrictEquals(greeting.inner.shape.name, name);
  * ```
  */
 export interface TransformView<S> {
@@ -130,12 +135,16 @@ export interface TransformView<S> {
  *
  * @example
  * ```ts
- * import type { Schema } from "@sekhmet/schema/core/mini";
- * import type { PipeView } from "@sekhmet/schema/core/mini/view";
+ * import { assertStrictEquals } from "@std/assert";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import { pipe, Schema } from "@sekhmet/schema/core/mini";
  *
- * type Text = Schema<unknown, string, never>;
- * type Digits = Schema<string, number, never>;
- * type Count = Schema<unknown, number, never> & PipeView<Text, Digits>;
+ * const text = new Schema({ parse: (input: unknown) => Ok(String(input)) });
+ * const length = new Schema({ parse: (input: string) => Ok(input.length) });
+ * const counted = pipe(text, length);
+ *
+ * assertStrictEquals(counted.inner, text);
+ * assertStrictEquals(counted.next, length);
  * ```
  */
 export interface PipeView<S, N> {

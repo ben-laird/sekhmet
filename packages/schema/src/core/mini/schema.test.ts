@@ -7,7 +7,12 @@ import {
 	unwrap,
 	unwrapErr,
 } from "@sekhmet/enum/result/mini";
-import { assertEquals, assertExists, assertThrows } from "@std/assert";
+import {
+	assertEquals,
+	assertExists,
+	assertStrictEquals,
+	assertThrows,
+} from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
 	type AnySchema,
@@ -29,6 +34,7 @@ import {
 	preprocess,
 	Schema,
 } from "./schema.ts";
+import type { TransformView } from "./view.ts";
 
 Deno.test("parse handles synchronous schemas", () => {
 	// Given: a synchronous schema
@@ -686,9 +692,47 @@ Deno.test("the Result-style transforms' types", () => {
 	);
 	assertType<IsExact<Output<typeof recovered>, number>>(true);
 	assertType<IsExact<ErrorOf<typeof recovered>, "unrecoverable">>(true);
-	assertType<IsExact<typeof tapped, typeof digits>>(true);
-	assertType<IsExact<typeof tappedErr, typeof digits>>(true);
+	assertType<
+		IsExact<typeof tapped, typeof digits & TransformView<typeof digits>>
+	>(true);
+	assertType<
+		IsExact<typeof tappedErr, typeof digits & TransformView<typeof digits>>
+	>(true);
 	assertType<IsExact<Input<typeof prepared>, number>>(true);
 	assertType<IsExact<Output<typeof prepared>, number>>(true);
 	assertType<IsExact<ErrorOf<typeof prepared>, "not digits">>(true);
+});
+
+Deno.test("every transform views the schema it parses with, and pipe both", () => {
+	// Given: a schema, and one to pipe its output to
+	const text = new Schema({
+		parse: (input: string) => Ok<string, string>(input),
+	});
+	const length = new Schema({
+		parse: (input: string) => Ok<number, string>(input.length),
+	});
+
+	// When: transforming it each way
+	const transforms = [
+		map(text, (value) => value),
+		mapErr(text, (error) => error),
+		filter(text, {
+			error: (value) => value,
+			predicate: (value): value is string => value !== "",
+		}),
+		andThen(text, (value) => Ok(value)),
+		orElse(text, (error) => Err(error)),
+		inspect(text, () => {}),
+		inspectErr(text, () => {}),
+		preprocess(text, (input: string) => input),
+	];
+	const piped = pipe(text, length);
+
+	// Then: each .inner is the schema itself, and the pipe's .next is length
+	for (const transform of transforms) {
+		assertStrictEquals(transform.inner, text);
+	}
+	assertStrictEquals(piped.inner, text);
+	assertStrictEquals(piped.next, length);
+	assertType<IsExact<typeof piped.next, typeof length>>(true);
 });

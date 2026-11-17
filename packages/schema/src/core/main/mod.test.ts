@@ -319,3 +319,88 @@ Deno.test("the Result-style transforms chain as methods and take main Results", 
 	assertType<IsExact<ErrorOf<typeof halved>, string>>(true);
 	assertInstanceOf(halved, Schema);
 });
+
+Deno.test("each transform method views its receiver, exactly", () => {
+	// Given: a schema with a view of its own
+	const user = object({ shape: { name: string() } });
+
+	// When: transforming it each way, and piping it
+	const name = user.map((value) => value.name);
+	const checked = user.inspect(() => {});
+	const text = new Schema({
+		parse: (input: unknown) => Ok<string, string>(String(input)),
+	});
+	const piped = text.pipe(digits);
+
+	// Then: .inner is the receiver with its view, and .next the piped schema
+	assertEquals(name.inner, user);
+	assertEquals(piped.inner, text);
+	assertEquals(checked.inner.shape.name.parseSync("a").unwrap(), "a");
+	assertEquals(piped.next, digits);
+	assertType<IsExact<typeof name.inner, typeof user>>(true);
+	assertType<IsExact<typeof checked.inner, typeof user>>(true);
+	assertType<IsExact<typeof piped.next, typeof digits>>(true);
+	assertType<IsExact<Output<typeof piped>, number>>(true);
+});
+
+Deno.test("a transform's view holds the receiver's view, not its own", () => {
+	// Given: an object with a view
+	const user = object({ shape: { name: string() } });
+
+	// When: mapping it, then making the result optional
+	const maybeName = user.map((value) => value.name).optional();
+
+	// Then: the view reaches the object through each step, and no step
+	// claims the object's shape as its own
+	assertEquals(maybeName.inner.inner.shape.name.parseSync("a").unwrap(), "a");
+	// @ts-expect-error a mapped schema's view is .inner, not the receiver's .shape
+	assertEquals(user.map((value) => value.name).shape, undefined);
+});
+
+Deno.test("a long chain of transforms and modifiers type-checks, keeping every step", () => {
+	// Given: a long chain of .map and .optional steps
+	const chain = string()
+		.map((text) => text.length)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0)
+		.optional()
+		.map((length) => length ?? 0);
+	// {}
+
+	// When: parsing with it, and walking its view back
+	const parsed = chain.parseSync("four").unwrap();
+	const optionalStep = chain.inner.inner.inner.inner.inner;
+
+	// Then: it parses through every step, and the view reaches back
+	assertEquals(parsed, 4);
+	assertType<IsExact<Output<typeof chain>, number>>(true);
+	assertEquals(optionalStep.parseSync(undefined).unwrap(), undefined);
+});
