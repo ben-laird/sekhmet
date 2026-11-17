@@ -12,6 +12,11 @@ import { Err, Ok, type Result } from "./core.ts";
  * callback's return position, it makes a callback that returns a promise
  * (an async function) a compile error where only a plain value makes sense.
  *
+ * It can't see through a caller's own type parameter: for a generic `T`,
+ * `NotPromise<T>` stays unresolved, and a `T` isn't assignable to it, since
+ * `T` might be a promise. So `<T>(g: () => T) => fallible({ fn: g, … })`
+ * doesn't compile; constrain the caller's type, or wrap a concrete one.
+ *
  * @template T - The type to check
  */
 export type NotPromise<T> = T extends PromiseLike<unknown> ? never : T;
@@ -29,7 +34,8 @@ export type NotPromise<T> = T extends PromiseLike<unknown> ? never : T;
  * Unlike `new Promise`'s, this `resolve` doesn't adopt a thenable: it would
  * only wrap it in `Ok`, so it takes `NotPromise<T>`, and a `T` that is a
  * `PromiseLike` leaves `resolve` uncallable. Await the value first, then
- * resolve with it.
+ * resolve with it. For the same reason, a caller generic in `T` can't pass
+ * its own `T` to `resolve` (see {@linkcode NotPromise}).
  *
  * As with `new Promise`, the first call wins and later ones are ignored, and
  * the executor's return value is ignored. A synchronous throw from the

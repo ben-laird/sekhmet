@@ -474,6 +474,20 @@ Deno.test("fallible() rejects async callbacks", () => {
 	assertEquals(wrapped(1), Ok(1));
 });
 
+Deno.test("fallible() can't wrap a caller's generic return type", () => {
+	// Given: a caller generic in what its function returns
+	function wrap<T>(g: () => T): (() => Result<T, string>) | undefined {
+		// When / Then: it can't prove T isn't a promise, so this doesn't compile
+		// @ts-expect-error NotPromise<T> stays unresolved for a generic T
+		void fallible({ fn: g, parseErr: () => "e" });
+		return undefined;
+	}
+
+	// Then: a concrete return type wraps as usual
+	const concrete = fallible({ fn: () => 1, parseErr: () => "e" });
+	assertEquals([wrap(() => 1), concrete()], [undefined, Ok(1)]);
+});
+
 Deno.test("fallible() accepts a cleanup returning void or a value", () => {
 	// Given: cleanups that log, by expression body and by reference, and one
 	// that returns a value

@@ -158,6 +158,21 @@ Deno.test("promiseResult() rejects resolving with a thenable", () => {
 	});
 });
 
+Deno.test("promiseResult() can't resolve with a caller's generic T", () => {
+	// Given: a caller generic in the value it resolves with
+	function later<T>(value: T): void {
+		void promiseResult<T, string>((resolve) => {
+			// When / Then: it can't prove T isn't a promise, so this doesn't compile
+			// @ts-expect-error NotPromise<T> stays unresolved for a generic T
+			resolve(value);
+		});
+	}
+
+	// Then: a concrete T resolves as usual
+	later(1);
+	void promiseResult<number, string>((resolve) => resolve(1));
+});
+
 Deno.test("promiseResult() accepts a void-returning executor", async () => {
 	// Given: an expression-bodied executor, as new Promise accepts
 	const promise = promiseResult<number, string>((resolve) => resolve(1));

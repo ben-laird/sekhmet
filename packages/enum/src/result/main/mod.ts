@@ -792,6 +792,10 @@ export function Err<T = never, E = unknown>(err: E): Result<T, E> {
  * The callbacks must be synchronous, so an async `fn`, `parseErr` or
  * `cleanup` is a compile error rather than an `Ok(promise)`, an
  * `Err(promise)` or a cleanup nobody awaits; use {@linkcode fallibleAsync}.
+ * The check can't see through a caller's own type parameter, so a function
+ * generic in its return type, such as `<T>(g: () => T) => fallible({ fn: g,
+ * … })`, doesn't compile, since its `T` might be a promise (see
+ * {@linkcode NotPromise}).
  *
  * @template A - The wrapped function's parameter list
  * @template U - The wrapped function's return type
@@ -879,7 +883,8 @@ export function fallibleAsync<A extends unknown[], U, E>(
  * Unlike `new Promise`'s, this `resolve` doesn't adopt a thenable: it would
  * only wrap it in `Ok`, so it takes `NotPromise<T>`, and a `T` that is a
  * `PromiseLike` leaves `resolve` uncallable. Await the value first, then
- * resolve with it.
+ * resolve with it. For the same reason, a caller generic in `T` can't pass
+ * its own `T` to `resolve` (see {@linkcode NotPromise}).
  *
  * As with `new Promise`, the first call wins and later ones are ignored, and
  * the executor's return value is ignored. A synchronous throw from the

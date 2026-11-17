@@ -54,6 +54,10 @@ export type FallibleOptions<A extends unknown[], U, E, C = void> = {
  * The callbacks must be synchronous, so an async `fn`, `parseErr` or
  * `cleanup` is a compile error rather than an `Ok(promise)`, an
  * `Err(promise)` or a cleanup nobody awaits; use {@linkcode fallibleAsync}.
+ * The check can't see through a caller's own type parameter, so a function
+ * generic in its return type, such as `<T>(g: () => T) => fallible({ fn: g,
+ * … })`, doesn't compile, since its `T` might be a promise (see
+ * {@linkcode NotPromise}).
  *
  * @template A - The wrapped function's parameter list
  * @template U - The wrapped function's return type
