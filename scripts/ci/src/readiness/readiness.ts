@@ -9,6 +9,7 @@ import {
 } from "./package.ts";
 import { sourceViews } from "./source.ts";
 import { checkSpecifiers } from "./specifiers.ts";
+import { checkTodo, isTodoCheckedPath } from "./todo.ts";
 import {
 	type Manifest,
 	type Member,
@@ -40,6 +41,7 @@ export const STATIC_CHECKS: ReadonlySet<CheckId> = new Set<CheckId>([
 	"publish-exclude",
 	"given-when-then",
 	"specifiers",
+	"todo",
 ]);
 
 /**
@@ -108,6 +110,7 @@ export function docLintMembers(workspace: Workspace): Member[] {
  * - the root manifest: `publish-exclude`
  * - every `*.test.ts`: `given-when-then`
  * - every `README.md`, and JSDoc in package source: `specifiers`
+ * - non-test source under a package's `src/`: `todo`
  */
 export function staticFindings(files: WorkspaceFiles): Finding[] {
 	const workspace = readWorkspace(files);
@@ -140,9 +143,10 @@ export function staticFindings(files: WorkspaceFiles): Finding[] {
 		if (!path.endsWith(".ts")) continue;
 
 		const isTest = path.endsWith(".test.ts");
-		const inPackage = packages.some((member) =>
-			path.startsWith(`${member.dir}/`),
-		);
+		const owner = packages.find((member) => {
+			return path.startsWith(`${member.dir}/`);
+		});
+		const inPackage = owner !== undefined;
 		if (!isTest && !inPackage) continue;
 
 		const views = sourceViews(text);
@@ -153,6 +157,12 @@ export function staticFindings(files: WorkspaceFiles): Finding[] {
 			findings.push(
 				...checkSpecifiers({ path, text: views.comments, packages: byName }),
 			);
+		}
+		if (
+			owner !== undefined &&
+			isTodoCheckedPath({ path, packageDir: owner.dir })
+		) {
+			findings.push(...checkTodo({ path, text, views }));
 		}
 	}
 
