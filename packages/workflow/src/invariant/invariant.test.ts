@@ -46,7 +46,7 @@ Deno.test("invariant panics around the expected behavior", () => {
 	);
 	assert(isInvariantPanic(thrown));
 	assertEquals(thrown.cause, {
-		condition: 0,
+		check: { kind: "condition", condition: 0 },
 		expectedBehavior: EXPECTED,
 		issueUrl,
 	});
@@ -75,7 +75,11 @@ Deno.test("isInvariantPanic accepts only invariant's panic", () => {
 	const forged = new Panic<InvariantCause>({
 		name: "Invariant",
 		message: "",
-		cause: { condition: false, expectedBehavior: "", issueUrl: undefined },
+		cause: {
+			check: { kind: "condition", condition: false },
+			expectedBehavior: "",
+			issueUrl: undefined,
+		},
 	});
 
 	// When: the guard checks each
@@ -130,6 +134,22 @@ Deno.test("invariant narrows its condition", () => {
 		assertType<IsExact<typeof value, Panic<InvariantCause>>>(true);
 	}
 	assertEquals(first, "apple");
+});
+
+Deno.test("an invariant cause narrows on the check that failed", () => {
+	// Given: a panic from a broken invariant
+	const thrown = assertThrows(() => {
+		invariant("", { expectedBehavior: EXPECTED });
+	});
+	assert(isInvariantPanic(thrown));
+	const { check } = thrown.cause;
+
+	// When: narrowing on the check's kind
+	assert(check.kind === "condition");
+
+	// Then: the falsy condition is kept, typed unknown
+	assertType<IsExact<typeof check.condition, unknown>>(true);
+	assertEquals(check.condition, "");
 });
 
 Deno.test("invariant requires an expected behavior and nothing else", () => {

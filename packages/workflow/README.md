@@ -2,7 +2,8 @@
 
 Helpers that mark the state of the code itself. `@sekhmet/workflow` gives you
 `todo` and `unimplemented` for code that does not exist, `unreachable` for code
-the types rule out, and `invariant` for conditions only a bug can break.
+the types rule out, and `invariant`, `invariantEqual`, `defined` and
+`satisfies` for what only a bug can break.
 
 Each one panics through [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic), so it is a
 `Panic` with its own name, a typed cause, and a type guard that recognizes it
@@ -14,6 +15,9 @@ in a panic hook or after `catchUnwind`:
 | `unimplemented(opts?)` | `Panic (Unimplemented)` | `UnimplementedCause` | `isUnimplementedPanic` |
 | `unreachable(opts?)`   | `Panic (Unreachable)`   | `UnreachableCause`   | `isUnreachablePanic`   |
 | `invariant(cond, o)`   | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
+| `invariantEqual(o)`    | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
+| `defined(value, o)`    | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
+| `satisfies(value, o)`  | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
 
 ## Installation
 
@@ -111,6 +115,51 @@ function total(prices: ReadonlyMap<string, number>, item: string): number {
 
 assertEquals(total(new Map([["apple", 2]]), "apple"), 2);
 ```
+
+`invariantEqual` is Rust's `assert_eq!`: it panics showing both values when
+`actual` and `expected` differ by `Object.is`, or by the `equals` you pass.
+
+```ts
+import { invariantEqual } from "@sekhmet/workflow/invariant";
+
+const columns = ["name", "price"];
+const row = ["apple", "2"];
+invariantEqual({
+	actual: row.length,
+	expected: columns.length,
+	expectedBehavior: "every row should have a cell per column",
+});
+```
+
+## `defined` and `satisfies`
+
+Invariant checks that return the value, narrowed, so they fit inside an
+expression. `defined` removes what counts as absent: `null` and `undefined` by
+default, or only one of them with `absent: "undefined"` or `absent: "null"`.
+It never tests truthiness, so `0`, `""` and `false` are present. `satisfies`
+checks a predicate, and narrows when the predicate is a type guard, including
+one TypeScript infers, such as `(v) => v !== undefined`.
+
+```ts
+import { defined, satisfies } from "@sekhmet/workflow/invariant";
+import { assertEquals } from "@std/assert";
+
+const stock = new Map([["apple", 0]]);
+const count = defined(stock.get("apple"), {
+	expectedBehavior: "every listed item should have a stock count",
+});
+assertEquals(count, 0); // number, and 0 is present
+
+const isEven = (n: number): boolean => n % 2 === 0;
+const pairs = satisfies(4, {
+	predicate: isEven,
+	expectedBehavior: "socks should come in pairs",
+});
+assertEquals(pairs, 4);
+```
+
+All four panic as `Panic (Invariant)`, and the cause's `check` says which
+check failed and keeps the offending value.
 
 ## Recognizing them
 
