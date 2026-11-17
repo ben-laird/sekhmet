@@ -224,6 +224,8 @@ that is not an array cannot replace the panic with another error.
 - `satisfies` given a predicate that is not a function panics, as if the
   predicate rejected the value, and `invariantEqual` given an `equals` that
   is not a function panics, as if the values were unequal;
+- a `predicate` or `equals` that throws is not caught: it runs before any
+  panic, so its error propagates unchanged, as from `Array.prototype.filter`;
 - `invariantEqual` fails closed: missing options, or an `actual` or
   `expected` that is missing or cannot be read, panic as unequal, with the
   value left out of the cause and shown as `[unrenderable value]`;

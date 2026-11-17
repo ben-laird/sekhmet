@@ -1,5 +1,10 @@
 import { Panic } from "@sekhmet/panic/mini/core";
-import { assert, assertEquals, assertThrows } from "@std/assert";
+import {
+	assert,
+	assertEquals,
+	assertStrictEquals,
+	assertThrows,
+} from "@std/assert";
 import {
 	type InvariantCheck,
 	isInvariantPanic,
@@ -283,4 +288,26 @@ Deno.test("invariantEqual fails closed on options it cannot read", async (t) => 
 		assert(isInvariantPanic(thrown));
 		assertEquals(thrown.cause.check, { kind: "equal", actual: 1 });
 	});
+});
+
+Deno.test("invariantEqual lets a throwing equals' error propagate unchanged", () => {
+	// Given: a comparator that throws
+	const boom = new Error("equals ran");
+	const equals = (): boolean => {
+		throw boom;
+	};
+
+	// When: invariantEqual compares with it
+	const thrown = assertThrows(() => {
+		invariantEqual({
+			actual: 1,
+			expected: 1,
+			equals,
+			expectedBehavior: EXPECTED,
+		});
+	});
+
+	// Then: the comparator's own error arrives, not a panic
+	assertStrictEquals(thrown, boom);
+	assertEquals(isInvariantPanic(thrown), false);
 });

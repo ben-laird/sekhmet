@@ -1,5 +1,10 @@
 import { Panic } from "@sekhmet/panic/mini/core";
-import { assert, assertEquals, assertThrows } from "@std/assert";
+import {
+	assert,
+	assertEquals,
+	assertStrictEquals,
+	assertThrows,
+} from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { isInvariantPanic } from "@/src/invariant/invariant.ts";
 import { satisfies } from "@/src/invariant/satisfies.ts";
@@ -174,4 +179,21 @@ Deno.test("a satisfied value widens to its input, never the reverse", () => {
 
 	// Then: only widening compiles
 	assertEquals([widened, narrowed], [circle, shape]);
+});
+
+Deno.test("satisfies lets a throwing predicate's error propagate unchanged", () => {
+	// Given: a predicate that throws
+	const boom = new Error("predicate ran");
+	const predicate = (_: number): boolean => {
+		throw boom;
+	};
+
+	// When: satisfies checks a value with it
+	const thrown = assertThrows(() => {
+		satisfies(1, { predicate, expectedBehavior: EXPECTED });
+	});
+
+	// Then: the predicate's own error arrives, not a panic
+	assertStrictEquals(thrown, boom);
+	assertEquals(isInvariantPanic(thrown), false);
 });

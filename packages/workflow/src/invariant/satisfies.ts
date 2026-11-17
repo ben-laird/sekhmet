@@ -27,6 +27,8 @@ export interface SatisfiesGuardOptions<T, S extends T>
  * predicate is a type guard `(value: T) => value is S`, and otherwise panics
  * as `Panic (Invariant)`. Use it where a rejected value means the program has
  * a bug, never to check input. To reuse a check, wrap the call in a function.
+ * A predicate that throws is not caught: its error propagates unchanged, as
+ * from `Array.prototype.filter`, and only a rejection panics.
  *
  * The message shows the rejected value:
  *

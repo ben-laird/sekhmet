@@ -40,6 +40,8 @@ export interface InvariantEqualOptions<T> extends InvariantOptions {
  *
  * It fails closed: options that are missing, or whose `actual` or `expected`
  * is missing or cannot be read (a throwing getter, say), panic as unequal.
+ * An `equals` that throws is not caught: its error propagates unchanged, as
+ * from `Array.prototype.filter`, and only an unequal pair panics.
  *
  * ```txt
  * an invariant was violated
