@@ -779,6 +779,11 @@ them, typed exactly as passed, so a caller can reach a field's schema
   _Revised after review (2026-11-16):_ it first returned `S` (`this`), a copy
   with the receiver's prototype; that copy was not an `S` (a subclass lost
   its `#private` state) and copying a frozen schema threw.
+  _Owner decision (2026-11-16):_ `ViewOf<S>` would still promise a
+  subclass's prototype members (getters, methods, overrides), which the
+  copy lacks, so `annotate` panics with a `TypeError` on a receiver whose
+  prototype chain has members beyond mini's and main's `Schema.prototype`.
+  A subclass adding only own fields is annotated: its fields are its view.
 - **Algebra.** `readonly` views its `inner`. `brand` returns its schema
   itself, so it keeps the schema's view (`& ViewOf<S>`); main's `brand` and
   `.with.brand` return a receiver that is already main as is (a user

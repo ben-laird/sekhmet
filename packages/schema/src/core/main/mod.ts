@@ -212,6 +212,11 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * can't be copied, so the result is typed `Schema<I, O, E> & ViewOf<S>`,
 	 * not `S`. Main's `.annotate()` returns a main `Schema` the same way.
 	 *
+	 * A subclass that adds prototype members (getters, methods, overrides)
+	 * panics with a `TypeError`: `ViewOf<S>` would promise members the copy
+	 * doesn't have. A subclass that adds only own fields is fine, since its
+	 * fields are its view.
+	 *
 	 * @param annotations - The annotations to add, each made by calling its key
 	 * @returns A new schema with the annotations added, and `self`'s view
 	 * @example

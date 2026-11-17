@@ -11,7 +11,7 @@ import { isSome, None, type Option, Some } from "@sekhmet/enum/option/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import type { SchemaNode } from "./node.ts";
 import { type AnySchema, Schema } from "./schema.ts";
-import type { ViewOf } from "./view.ts";
+import { RESERVED_VIEW_NAMES, type ViewOf } from "./view.ts";
 
 /**
  * One annotation: a key and its value, of the key's type. Build one by
@@ -200,6 +200,11 @@ export const title: AnnotationKey<string> = annotationKey({ name: "title" });
  * can't be copied, so the result is typed `Schema<I, O, E> & ViewOf<S>`,
  * not `S`. Main's `.annotate()` returns a main `Schema` the same way.
  *
+ * A subclass that adds prototype members (getters, methods, overrides)
+ * panics with a `TypeError`: `ViewOf<S>` would promise members the copy
+ * doesn't have. A subclass that adds only own fields is fine, since its
+ * fields are its view.
+ *
  * @template I The input type
  * @template O The output type
  * @template E The error type
@@ -230,6 +235,7 @@ export function annotate(
 	self: AnySchema,
 	annotations: readonly Annotation[],
 ): AnySchema {
+	assertNoPrototypeMembers(Object.getPrototypeOf(self));
 	const params = getStructParams(self);
 	const annotated = new Schema({
 		...params,
@@ -237,6 +243,45 @@ export function annotate(
 	});
 
 	return Object.assign(annotated, Object.fromEntries(Object.entries(self)));
+}
+
+/**
+ * Whether `prototype` is main's `Schema.prototype`: it extends mini's
+ * directly and has exactly main's members (core mini can't import main).
+ */
+function isMainPrototype(prototype: object): boolean {
+	if (Object.getPrototypeOf(prototype) !== Schema.prototype) return false;
+	const members = Reflect.ownKeys(prototype).filter((key) => {
+		return key !== "constructor";
+	});
+	const mainMembers = Object.keys(RESERVED_VIEW_NAMES).filter((name) => {
+		return name !== "schema";
+	});
+
+	return (
+		members.length === mainMembers.length &&
+		members.every((key) => typeof key === "string" && mainMembers.includes(key))
+	);
+}
+
+/**
+ * Panics with a `TypeError` when `prototype`, or one it extends before mini's
+ * `Schema.prototype`, has members of its own, other than main's: a subclass
+ * adding getters or methods, which `annotate`'s copy would not have.
+ */
+function assertNoPrototypeMembers(prototype: unknown): void {
+	if (prototype === Schema.prototype) return;
+	if (typeof prototype !== "object" || prototype === null) return;
+	const own = Reflect.ownKeys(prototype).filter((key) => {
+		return key !== "constructor";
+	});
+	if (own.length > 0 && !isMainPrototype(prototype)) {
+		throw new TypeError(
+			`annotate: a subclass with prototype members (${own.map(String).join(", ")}) can't be copied; annotate a plain Schema`,
+		);
+	}
+
+	assertNoPrototypeMembers(Object.getPrototypeOf(prototype));
 }
 
 /**

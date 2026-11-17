@@ -1,7 +1,7 @@
 import { isNone, type Option, unwrap } from "@sekhmet/enum/option/mini";
 import { Ok, unwrap as unwrapResult } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
-import { assertEquals, assertStrictEquals } from "@std/assert";
+import { assertEquals, assertStrictEquals, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { readonly } from "@/src/algebra/mini/readonly.ts";
 import { nullable, optional } from "@/src/composites/mini/modifiers.ts";
@@ -142,34 +142,79 @@ Deno.test("annotate keeps the view, on a new mini or main Schema", () => {
 	assertEquals(mainLabelled.parseSync("a").unwrap(), "a");
 });
 
-Deno.test("annotate works on frozen and subclassed schemas, typed as a Schema", () => {
-	// Given: a frozen main schema, and a subclass with private state
-	class Secret extends MainSchema<string, string, never> {
+Deno.test("annotate works on frozen schemas and on subclasses adding only own fields", () => {
+	// Given: a frozen main schema, and subclasses of mini and main that add
+	// only own fields
+	class Tagged extends MainSchema<string, string, never> {
+		readonly tag: string = "t";
+	}
+	class MiniTagged extends Schema<string, string, never> {
+		readonly tag: string = "m";
+	}
+	const frozen = Object.freeze(MainSchema.fromMini(text));
+	const tagged = new Tagged({ parse: (input: string) => Ok(input) });
+	const miniTagged = new MiniTagged({ parse: (input: string) => Ok(input) });
+
+	// When: annotating each
+	const labelledFrozen = frozen.annotate([label("Frozen")]);
+	const labelledTagged = tagged.annotate([label("Tagged")]);
+	const labelledMini = annotate(miniTagged, [label("Mini")]);
+
+	// Then: each is a new, unfrozen Schema with the annotation, and an own
+	// field comes along as the view; it is a plain Schema, not the subclass
+	assertEquals(labelledFrozen.parseSync("a").unwrap(), "a");
+	assertEquals(Object.isFrozen(labelledFrozen), false);
+	assertEquals(labelledTagged.tag, "t");
+	assertEquals(labelledMini.tag, "m");
+	assertEquals(
+		unwrap(annotation({ schema: labelledMini, key: label })),
+		"Mini",
+	);
+	assertStrictEquals(
+		Object.getPrototypeOf(labelledTagged),
+		MainSchema.prototype,
+	);
+	assertEquals(labelledTagged instanceof Tagged, false);
+});
+
+Deno.test("annotate panics on a subclass that adds prototype members", async (t) => {
+	// Given: subclasses adding a getter, a method, or an override
+	class WithGetter extends MainSchema<string, string, never> {
 		#count = 1;
 		get count(): number {
 			return this.#count;
 		}
 	}
-	const frozen = Object.freeze(MainSchema.fromMini(text));
-	const secret = new Secret({ parse: (input: string) => Ok(input) });
+	class WithMethod extends Schema<string, string, never> {
+		describe(): string {
+			return "text";
+		}
+	}
+	class WithOverride extends MainSchema<string, string, never> {
+		override parseAsync(
+			input: string,
+		): ReturnType<MainSchema<string, string, never>["parseAsync"]> {
+			return super.parseAsync(input);
+		}
+	}
+	const parse = (input: string) => Ok(input);
+	const cases = [
+		{ name: "a getter", schema: new WithGetter({ parse }) },
+		{ name: "a method", schema: new WithMethod({ parse }) },
+		{ name: "an override", schema: new WithOverride({ parse }) },
+	];
 
-	// When: annotating each, with the method and the function
-	const labelledFrozen = frozen.annotate([label("Frozen")]);
-	const labelledSecret = annotate(secret, [label("Secret")]);
-
-	// Then: each is a new, unfrozen Schema that parses and has the
-	// annotation; the subclass's type is not claimed
-	assertEquals(labelledFrozen.parseSync("a").unwrap(), "a");
-	assertEquals(Object.isFrozen(labelledFrozen), false);
-	assertEquals(
-		unwrap(annotation({ schema: labelledSecret, key: label })),
-		"Secret",
-	);
-	assertEquals(unwrapResult(parseSync(labelledSecret, "b")), "b");
-	assertEquals(secret.count, 1);
-	// @ts-expect-error the copy isn't a Secret: it has none of its private state
-	const forged: Secret = labelledSecret;
-	assertEquals(forged instanceof Secret, false);
+	for (const { name, schema } of cases) {
+		await t.step(name, () => {
+			// When: annotating it
+			// Then: it panics, since the copy would lack those members
+			assertThrows(
+				() => annotate(schema, [label("x")]),
+				TypeError,
+				"prototype members",
+			);
+		});
+	}
 });
 
 Deno.test("annotation is typed by its key, and a key checks its values", () => {
