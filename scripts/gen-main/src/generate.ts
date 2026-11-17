@@ -594,6 +594,8 @@ interface Receiver {
 	readonly doc: MethodDoc | undefined;
 	/** How the method body spells the receiver (`this`, or a namespace's field). */
 	readonly self: string;
+	/** Whether the function returns its receiver itself (see `identities`). */
+	readonly identity: boolean;
 }
 
 /** How a namespace class's methods reach the primary instance it holds. */
@@ -932,10 +934,23 @@ function methodHead({
 		const { text, conversion } = converted.value;
 		const isVoid =
 			finalReturn.kind === "keyword" && finalReturn.keyword === "void";
+		const identity = checkIdentity({
+			feature,
+			name,
+			conversion,
+			identity: receiver.identity,
+		});
+		if (!identity.ok) return identity;
 
 		return ok({
 			head: `${generatorStar(conversion)}${name}${typeParams}(${paramList}): ${text}`,
-			body: convertedBody({ call, conversion, isVoid, indent: "\t\t" }),
+			body: convertedBody({
+				call,
+				conversion,
+				isVoid,
+				indent: "\t\t",
+				identity: identity.value,
+			}),
 			doc,
 			conversion,
 			isPredicate: false,
@@ -958,6 +973,34 @@ function methodHead({
 	});
 }
 
+/**
+ * Whether a function configured to return its receiver itself (`brand`)
+ * gets an identity body: only a converted plain value can be one, so any
+ * other conversion fails generation.
+ */
+function checkIdentity({
+	feature,
+	name,
+	conversion,
+	identity,
+}: {
+	feature: Feature;
+	name: string;
+	conversion: Conversion;
+	identity: boolean;
+}): Generated<boolean> {
+	if (identity && conversion.kind !== "value") {
+		return failure({
+			feature,
+			symbol: name,
+			message:
+				"a function that returns its receiver must return a converted value",
+		});
+	}
+
+	return ok(identity);
+}
+
 /** The shared implementation of an overload set, forwarding every argument. */
 function overloadImplementation({
 	feature,
@@ -965,12 +1008,14 @@ function overloadImplementation({
 	heads,
 	receiver,
 	callee = `mini.${name}`,
+	identity,
 }: {
 	feature: Feature;
 	name: string;
 	heads: readonly { conversion: Conversion; isPredicate: boolean }[];
 	receiver: string | undefined;
 	callee?: string;
+	identity: boolean;
 }): Generated<{ signature: string; body: string }> {
 	const keys = new Set(heads.map((head) => conversionKey(head.conversion)));
 	if (keys.size > 1) {
@@ -1000,14 +1045,40 @@ function overloadImplementation({
 		});
 	}
 
+	const checked = checkIdentity({ feature, name, conversion, identity });
+	if (!checked.ok) return checked;
+
 	return ok({
 		signature: `${name}(...args: unknown[]): unknown`,
-		body: convertedBody({ call, conversion, isVoid: false, indent: "" }),
+		body: convertedBody({
+			call,
+			conversion,
+			isVoid: false,
+			indent: "",
+			identity: checked.value,
+		}),
 	});
 }
 
+/** Whether a feature declares its own function `name` to return its receiver. */
+function isIdentity({
+	feature,
+	name,
+}: {
+	feature: Feature;
+	name: string;
+}): boolean {
+	return feature.identities?.includes(name) ?? false;
+}
+
 /** The receiver of a method made from the feature's own `self`-first function. */
-function ownReceiver(name: string): Receiver {
+function ownReceiver({
+	feature,
+	name,
+}: {
+	feature: Feature;
+	name: string;
+}): Receiver {
 	return {
 		callee: `mini.${name}`,
 		barrel: undefined,
@@ -1015,6 +1086,7 @@ function ownReceiver(name: string): Receiver {
 		argument: undefined,
 		doc: undefined,
 		self: "this",
+		identity: isIdentity({ feature, name }),
 	};
 }
 
@@ -1022,7 +1094,7 @@ function renderMethod({
 	module,
 	symbol,
 	classParams,
-	receiver = ownReceiver(symbol.name),
+	receiver = ownReceiver({ feature: module.feature, name: symbol.name }),
 }: {
 	module: Module;
 	symbol: DocSymbol;
@@ -1063,6 +1135,7 @@ function renderMethod({
 		heads,
 		receiver: receiver.self,
 		callee: receiver.callee,
+		identity: receiver.identity,
 	});
 	if (!impl.ok) return impl;
 
@@ -1153,11 +1226,19 @@ function renderWrapper({
 	const [onlySignature] = signatures;
 	if (heads.length === 1 && only !== undefined && onlySignature !== undefined) {
 		const args = onlySignature.params.map(forwardParam).join(", ");
+		const identity = checkIdentity({
+			feature,
+			name: symbol.name,
+			conversion: only.conversion,
+			identity: isIdentity({ feature, name: symbol.name }),
+		});
+		if (!identity.ok) return identity;
 		const body = convertedBody({
 			call: `mini.${symbol.name}(${args})`,
 			conversion: only.conversion,
 			isVoid: false,
 			indent: "\t",
+			identity: identity.value,
 		});
 
 		return ok({
@@ -1171,6 +1252,7 @@ function renderWrapper({
 		name: symbol.name,
 		heads,
 		receiver: undefined,
+		identity: isIdentity({ feature, name: symbol.name }),
 	});
 	if (!impl.ok) return impl;
 
@@ -1641,7 +1723,7 @@ function borrowedFunction({
 	method: BorrowedMethod;
 }): Generated<BorrowedFunction> {
 	const { borrow, barrel, symbols } = found;
-	const { name, field, argument, doc } = method;
+	const { name, field, argument, doc, identity = false } = method;
 	const fail = (message: string): Generated<never> => {
 		return failure({ feature, symbol: name, message });
 	};
@@ -1698,6 +1780,7 @@ function borrowedFunction({
 			argument,
 			doc,
 			self: borrow.property === undefined ? "this" : NAMESPACE_SELF,
+			identity,
 		},
 		namespace: borrow.property,
 	});
@@ -2035,7 +2118,7 @@ export function generateMain(input: GenerateInput): Generated<string> {
 	for (const { symbol, receiver, namespace } of [
 		...methodSymbols.map((symbol) => ({
 			symbol,
-			receiver: ownReceiver(symbol.name),
+			receiver: ownReceiver({ feature, name: symbol.name }),
 			namespace: undefined,
 		})),
 		...borrowed.value.methods,

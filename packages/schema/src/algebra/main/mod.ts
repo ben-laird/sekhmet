@@ -82,7 +82,10 @@ export function brand<
 	self: S & MiniSchema<I, O, E>,
 	name: B,
 ): Schema<I, mini.Branded<O, B>, E> & ViewOf<S> {
-	return Schema.fromMiniView(mini.brand(self, name));
+	const value = mini.brand(self, name);
+	if (value instanceof Schema) return value;
+
+	return Schema.fromMiniView(value);
 }
 
 /**

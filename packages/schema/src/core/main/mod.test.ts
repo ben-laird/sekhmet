@@ -2,7 +2,7 @@ import { Ok as MainOk, Result } from "@sekhmet/enum/result";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
-import type { Branded } from "@/src/algebra/main/mod.ts";
+import { type Branded, brand as brandSchema } from "@/src/algebra/main/mod.ts";
 import { object, union } from "@/src/composites/main/mod.ts";
 import * as mini from "@/src/core/mini/mod.ts";
 import { boolean, number, string } from "@/src/primitives/main/mod.ts";
@@ -488,4 +488,42 @@ Deno.test("SchemaWith's Self defaults to the mini Schema, which every receiver w
 		>
 	>(true);
 	assertEquals(frozen.inner, user);
+});
+
+Deno.test("brand returns a main subclass instance itself, keeping its members", () => {
+	// Given: a user subclass of the main Schema
+	class Tagged extends Schema<string, string, never> {
+		readonly tag: string = "t";
+	}
+	const tagged = new Tagged({ parse: (input: string) => Ok(input) });
+
+	// When: branding it through the namespace and the algebra function
+	const viaWith = tagged.with.brand("B");
+	const viaFunction = brandSchema(tagged, "B");
+
+	// Then: each is the receiver itself, so its subclass and members survive
+	assertEquals(viaWith === tagged, true);
+	assertEquals(viaFunction === tagged, true);
+	assertEquals(viaWith.tag, "t");
+	assertEquals(viaWith.parseSync("x").unwrap(), "x");
+	assertType<IsExact<Output<typeof viaWith>, Branded<string, "B">>>(true);
+	// @ts-expect-error a plain string is not the branded output
+	const plain: Schema<string, Branded<string, "B">, never> = tagged;
+	assertInstanceOf(plain, Tagged);
+});
+
+Deno.test("brand converts a mini receiver to a main Schema with its view", () => {
+	// Given: a mini schema with a view
+	const labelled = mini.viewed({
+		init: { parse: (input: string) => Ok(input) },
+		view: { label: "text" },
+	});
+
+	// When: branding it with the main algebra function
+	const branded = brandSchema(labelled, "Label");
+
+	// Then: it is a main copy over the same params, with the view
+	assertEquals(branded.label, "text");
+	assertEquals(branded.parseSync("a").unwrap(), "a");
+	assertInstanceOf(branded, Schema);
 });

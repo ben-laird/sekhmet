@@ -805,7 +805,10 @@ export class SchemaWith<
 	brand<const B extends string>(
 		name: B,
 	): Schema<I, algebra.Branded<O, B>, E> & mini.ViewOf<Self> {
-		return Schema.fromMiniView(algebra.brand(this.#self, name));
+		const value = algebra.brand(this.#self, name);
+		if (value instanceof Schema) return value;
+
+		return Schema.fromMiniView(value);
 	}
 
 	/**

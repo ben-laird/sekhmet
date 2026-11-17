@@ -1814,3 +1814,77 @@ Deno.test("generateMain rejects views on an Enum-based primary", () => {
 	assertEquals(result.error.symbol, "Box");
 	assertStringIncludes(result.error.message, '`construct: "params"`');
 });
+
+/** `retag<A>(self: Box<A>, label: string): Box<A>`, returning its receiver. */
+const RETAG = fn(
+	"retag",
+	signature({
+		typeParams: ["A"],
+		params: [selfBox("A"), param("label", keyword("string"))],
+		returnType: named("Box", [typeParam("A")]),
+	}),
+);
+
+Deno.test("generateMain returns a main receiver as is from a function that returns it", () => {
+	// Given: retag, declared to return its receiver, as a method and borrowed
+	const feature: Feature = { ...FEATURE, identities: ["retag"] };
+	const borrow: Borrow = {
+		...SHELF,
+		methods: [{ name: "wrap", identity: true }],
+	};
+
+	// When: generating each
+	const own = source([RETAG], feature);
+	const borrowed = borrowingWith({ borrow });
+
+	// Then: a value already main is returned as is; only mini is converted
+	assertStringIncludes(
+		own,
+		"const value = mini.retag(this, label);\n\t\tif (value instanceof Box) return value;\n\n\t\treturn Box.fromMini(value);",
+	);
+	assert(borrowed.ok);
+	assertStringIncludes(
+		borrowed.value,
+		"const value = shelf.wrap(this, label);\n\t\tif (value instanceof Box) return value;",
+	);
+});
+
+Deno.test("generateMain returns a main value as is from a wrapper declared to return its argument", () => {
+	// Given: a class-less feature whose retag returns its argument
+	const feature: Feature = {
+		entrypoint: "@pkg/tags",
+		mini: "pkg/src/tags/mini/mod.ts",
+		output: "pkg/src/tags/main/mod.ts",
+		wraps: [{ type: "Box", from: "../../box/main/mod.ts" }],
+		identities: ["retag"],
+	};
+
+	// When: generating
+	const output = source([RETAG], feature);
+
+	// Then: the wrapper returns a main value as is
+	assertStringIncludes(
+		output,
+		"const value = mini.retag(self, label);\n\tif (value instanceof Box) return value;\n\n\treturn Box.fromMini(value);",
+	);
+});
+
+Deno.test("generateMain rejects returning the receiver from a function it doesn't convert", () => {
+	// Given: a function returning a string, declared to return its receiver
+	const label = fn(
+		"label",
+		signature({
+			typeParams: ["A"],
+			params: [selfBox("A")],
+			returnType: keyword("string"),
+		}),
+	);
+
+	// When: generating
+	const result = generate([label], { ...FEATURE, identities: ["label"] });
+
+	// Then: it fails, naming the function
+	assert(!result.ok);
+	assertEquals(result.error.symbol, "label");
+	assertStringIncludes(result.error.message, "returns its receiver");
+});
