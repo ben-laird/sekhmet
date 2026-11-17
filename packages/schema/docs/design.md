@@ -206,6 +206,10 @@ list above, and why:
   `object({…}).strict().parseSync(x)` did not type-check. With unknown keys
   an option, `object` returns a plain `Schema` and nothing needs the shape
   at runtime.
+  _Amended by #37 (2026-11-16):_ every composite now returns its `Schema`
+  with a typed view of its children (`object(…).shape`, `array(…).item`,
+  …), still a plain `Schema` otherwise; see
+  [Typed sub-schemas](#typed-sub-schemas-37).
 
 ## Standard Schema adapter
 
@@ -311,7 +315,10 @@ gone; their logic is internal.
   issues' `"bigint"` and `"date"` origins already anticipated; neither
   coerces.
 - **`object` returns a plain `Schema`**, so `object({…}).parseSync(x)` chains
-  in main.
+  in main. _Amended by #37 (2026-11-16):_ it returns
+  `Schema<…> & ObjectView<S>`, a plain `Schema` whose `.shape` is the shape
+  passed; it still chains (see
+  [Typed sub-schemas](#typed-sub-schemas-37)).
 
 ### Methods only for modifiers, transforms and parsing
 
@@ -325,6 +332,12 @@ Since #31 it also has one getter, `.with`, whose `SchemaWith` holds the
 [algebra](#algebra-31)'s methods, and since #32 one more method,
 `.annotate([...])`, which adds typed annotations to a schema.
 
+- _Amended by #37 (2026-11-16):_ the methods are unchanged, but the
+  modifiers and transforms return their `Schema` with a view of the
+  receiver (`.optional().inner`, `.map(f).inner`), `.annotate` returns
+  `this`, `.with` returns `SchemaWith<I, O, E, this>`, and the class has a
+  second static, `fromMiniView` (see
+  [Typed sub-schemas](#typed-sub-schemas-37)).
 - _Superseded by #32 (2026-11-16):_ the list above without `.annotate`.
   Annotating is a method because it keeps the schema (its parser and node)
   and only adds metadata, as `.optional()` keeps its value.
@@ -505,6 +518,9 @@ shapes (`pick`, `omit`, `partial`, `required`).
   `ObjectSchema` subclass or a fourth type parameter, which #28 removed.
   (Since #32 an object's node holds its shape at runtime, typed as any
   `Shape`; the reshapers still take the typed shape value.)
+  _Amended by #37 (2026-11-16):_ an object now carries its typed shape as
+  its view, so `partial(user.shape)` reshapes an existing object; the
+  reshapers still take and return shapes.
   `partial` changes only key-optionality and `required` only drops it: a
   value-optional schema (`.optional()`) still accepts `undefined`, so the
   four field kinds of [Optional keys](#optional-keys-28) map onto each other
@@ -522,6 +538,9 @@ shapes (`pick`, `omit`, `partial`, `required`).
   was called on: holding the main class, whose getter returns `SchemaWith`,
   makes TypeScript's variance measurement circular and order-dependent (a
   `SchemaWith<unknown, string>` type-checked as a `SchemaWith<unknown, "a">`).
+  _Amended by #37 (2026-11-16):_ it holds `Self extends mini.Schema<I, O,
+  E>`, which the getter fills with `this`, so `.with.readonly()` and
+  `.with.brand()` keep the receiver's view; the bound stays the mini class.
 - **Dropped: `and`** (intersection) and its `InvalidIntersection` issue.
   Every use is covered unambiguously by shape spread, options, `filter` or
   `andThen`, and merging two different outputs has no good general rule.
@@ -705,3 +724,79 @@ Every new option is kept in the `Leaf` node as passed, like the rest (#32).
   - The issue stays `InvalidFormat` naming `"time"` or `"date-time"`, with
     no `pattern` (a date-time's calendar check isn't one); the options are
     in the node.
+
+## Typed sub-schemas (#37)
+
+Owner decisions (2026-11-16), in `src/core/mini/view.ts` and every
+composite, wrapper and transform. A schema built from other schemas exposes
+them, typed exactly as passed, so a caller can reach a field's schema
+(`user.shape.name`) without walking the untyped node.
+
+- **Views are own properties.** Every adapter-like constructor returns
+  `Schema<I, O, E> & XView<…>`: `viewed({ init, view })` is
+  `Object.assign(new Schema(init), view)`, so a view's properties are the
+  same child references the node holds, and add no state. Each view type
+  is exported, and names follow the node:
+
+  | Built by                                                                              | View                           | Properties                                                |
+  | ------------------------------------------------------------------------------------- | ------------------------------ | --------------------------------------------------------- |
+  | `object`                                                                              | `ObjectView<S>`                | `shape` (field entries stay entries: `.shape.age.schema`) |
+  | `array`, `.array()`                                                                   | `ArrayView<S>`                 | `item`                                                    |
+  | `tuple`                                                                               | `TupleView<T>`                 | `items`                                                   |
+  | `record`                                                                              | `RecordView<K, V>`             | `key`, `value`                                            |
+  | `union`                                                                               | `UnionView<T>`                 | `options`                                                 |
+  | `discriminatedUnion`                                                                  | `DiscriminatedUnionView<K, M>` | `key`, `options`                                          |
+  | `optional`, `nullable`, `readonly`                                                    | `WrapperView<S>`               | `inner`                                                   |
+  | `lazy`                                                                                | `LazyView<S>`                  | `getter` (returns `S`)                                    |
+  | `map`, `mapErr`, `filter`, `andThen`, `orElse`, `inspect`, `inspectErr`, `preprocess` | `TransformView<S>`             | `inner`                                                   |
+  | `pipe`                                                                                | `PipeView<S, N>`               | `inner`, `next`                                           |
+
+- **Children are captured exactly.** A child parameter is typed
+  `S & Schema<I, O, E>` with `S extends Schema<I, O, E>`: TypeScript infers
+  `I`, `O`, `E` as before and `S` as the child's whole type, view included.
+  So views nest (`user.optional().inner.shape.name`), and a child stays
+  main or mini as it was built. `record` takes its key and value schemas
+  as two more type parameters (seven in all); every output type is
+  unchanged. (A generic `S extends AnySchema` with `Input<S>` in the return
+  fails in main's methods, where `S` is `this`: the conditional defers.)
+- **Transforms are precise.** `string().map(f).inner` is the receiver, with
+  its own view (`TransformView<this>` in main), so hovers grow with a
+  chain's length; a 33-step `.map().optional()` chain is type-tested to stay
+  fast and within depth limits. A transform's own view is `inner`, so the
+  receiver's view (`.shape`) is not on the result's type, correctly.
+- **`annotate` keeps the exact type.** `annotate<S extends AnySchema>(self:
+  S, …): S` copies the schema with the same prototype and own properties,
+  under new params; main's `.annotate()` returns `this`.
+- **Algebra.** `readonly` views its `inner`. `brand` returns its schema
+  itself, so it keeps the schema's view (`& ViewOf<S>`). `or` gets no view:
+  flattening makes its option count unknown from its type (its runtime
+  union still has its options).
+- **`.with` keeps views.** `SchemaWith<I, O, E, Self>` holds the receiver
+  as a type parameter bounded by the _mini_ `Schema` (`Self extends
+  mini.Schema<I, O, E> = mini.Schema<I, O, E>`), and the getter returns
+  `SchemaWith<I, O, E, this>`: `.with.readonly().inner` is the receiver and
+  `.with.brand(…)` keeps its view. Bounding by the mini class keeps #31's
+  fix: the #31 covariance tests stay green, as do new ones checking
+  narrowing first (the #31 bug was order-dependent) for outputs, views and
+  `Self`.
+- **Reserved keys.** `viewed` rejects, at the type level, a view key that
+  would collide: `schema` (it marks an object's field entry), every symbol
+  (a schema keeps its params under `struct`), and the main `Schema`'s
+  members (`MainSchemaMember`, type-tested to match main exactly).
+  `ViewOf<S>` reads the view off a schema by omitting them. Two hazards
+  were fixed with it: `WithOptionalKeys` now requires `schema` in the
+  optional-field pattern (a `discriminatedUnion({ key: "optional", … })`
+  was read as an optional field), and the node's `fieldSchema` checks
+  `instanceof Schema` first, as `object` does.
+- **Power users.** `viewed({ init, view })` with a `custom()` node gives a
+  composite of your own typed children.
+- **gen-main.** A class feature can carry views (`views: { any:
+  "AnySchema" }`): its main class gets `fromMiniView`, which builds a main
+  instance over the same params and copies the value's own properties,
+  always (a main receiver's view comes along), and panics with a
+  `TypeError` on any other prototype than mini's or main's `Schema` (a
+  subclass would lose its behaviour in the copy). A returned intersection
+  naming one wrap target converts through it; `self: S & Schema<A, B, C>`
+  and `self: S extends AnySchema` render `S` as `this` (as `Self` on a
+  namespace class), and so does a field method's options type parameter
+  constrained to `Schema<A, B, C>` (`array`'s `item`).
