@@ -100,7 +100,7 @@ Rejected value: -1
 ## Equality in `invariantEqual`
 
 `invariantEqual({ actual, expected, expectedBehavior, issueUrl?, equals? })`
-compares with `Object.is` unless you pass `equals(actual, expected)`. So
+compares with `Object.is` unless you pass `equals({ actual, expected })`. So
 `NaN` equals `NaN`, `0` does not equal `-0`, and objects and arrays are equal
 only to themselves; pass `equals` to compare them by content or by a key.
 `actual` and `expected` share one type, so comparing a number with a string is

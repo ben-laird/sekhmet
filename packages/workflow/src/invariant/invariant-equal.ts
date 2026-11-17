@@ -9,6 +9,14 @@ import { readField } from "../workflow-panic/read.ts";
 import type { InvariantOptions } from "./invariant.ts";
 import { violated } from "./violation.ts";
 
+/** The two values {@linkcode InvariantEqualOptions.equals} compares. */
+export interface InvariantEqualValues<T> {
+	/** The value the program computed */
+	readonly actual: T;
+	/** The value the program should have computed */
+	readonly expected: T;
+}
+
 /** What {@linkcode invariantEqual} is given. */
 export interface InvariantEqualOptions<T> extends InvariantOptions {
 	/** The value the program computed */
@@ -19,13 +27,13 @@ export interface InvariantEqualOptions<T> extends InvariantOptions {
 	 * Whether `actual` equals `expected`; `Object.is` when left out. It takes
 	 * no part in inferring `T`, which comes from the values alone.
 	 */
-	readonly equals?: (actual: NoInfer<T>, expected: NoInfer<T>) => boolean;
+	readonly equals?: (values: InvariantEqualValues<NoInfer<T>>) => boolean;
 }
 
 /**
  * Asserts that `actual` equals `expected`, and otherwise panics as
  * `Panic (Invariant)`, showing both. Values are equal by `Object.is` unless
- * `equals` says otherwise, so `NaN` equals `NaN`, `0` does not equal `-0`,
+ * `equals({ actual, expected })` says otherwise, so `NaN` equals `NaN`, `0` does not equal `-0`,
  * and objects are equal only to themselves; pass `equals` to compare them by
  * content. Both values share one type, so comparing a number with a string
  * is a type error.
@@ -114,5 +122,5 @@ function equal({
 	if (read.kind !== "present" || typeof read.value !== "function") {
 		return false;
 	}
-	return Boolean(Reflect.apply(read.value, options, [actual, expected]));
+	return Boolean(Reflect.apply(read.value, options, [{ actual, expected }]));
 }

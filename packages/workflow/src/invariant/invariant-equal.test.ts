@@ -125,7 +125,7 @@ Deno.test("invariantEqual compares with a custom equals", () => {
 		return {
 			actual,
 			expected,
-			equals: (a, b) => a.id === b.id,
+			equals: ({ actual, expected }) => actual.id === expected.id,
 			expectedBehavior: "a renamed user should keep their ID",
 		};
 	};
@@ -183,7 +183,9 @@ Deno.test("invariantEqual with an explicitly undefined equals uses Object.is", (
 Deno.test("invariantEqual requires values of one type", () => {
 	// Given: calls that must not compile, never run, and a comparator of strings
 	const ones = { actual: 1, expected: 1, expectedBehavior: EXPECTED };
-	const onStrings = (a: string, b: string): boolean => a === b;
+	const onStrings = (values: { actual: string; expected: string }): boolean => {
+		return values.actual === values.expected;
+	};
 	const neverRun = (): void => {
 		// When: comparing different types, or leaving out what is required
 		// Then: each is a type error
