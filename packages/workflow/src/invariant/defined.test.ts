@@ -220,3 +220,17 @@ Deno.test("a defined value widens to its input, never the reverse", () => {
 	// Then: only widening compiles
 	assertEquals([widened, narrowed], ["a", "a"]);
 });
+
+Deno.test("a defined value rejects its input, then widens to it", () => {
+	// Given: a value narrowed by defined, and one that may be absent
+	const maybe: string | undefined = ["a", undefined][0];
+	const narrow = defined(maybe, { expectedBehavior: EXPECTED });
+
+	// When: assigning between them, rejection first
+	// @ts-expect-error a value that may be undefined is not narrowed
+	const narrowed: typeof narrow = maybe;
+	const widened: typeof maybe = narrow;
+
+	// Then: the order changes nothing: only widening compiles
+	assertEquals([narrowed, widened], ["a", "a"]);
+});

@@ -103,8 +103,10 @@ Rejected value: -1
 compares with `Object.is` unless you pass `equals({ actual, expected })`. So
 `NaN` equals `NaN`, `0` does not equal `-0`, and objects and arrays are equal
 only to themselves; pass `equals` to compare them by content or by a key.
-`actual` and `expected` share one type, so comparing a number with a string is
-a type error.
+TypeScript infers one type `T` from `actual` and `expected` together. Unrelated
+types, such as a number and a string, are a type error. A type and `null` or
+`undefined` are not: `actual: 1, expected: null` infers `T` as
+`number | null` and compiles.
 
 ## Narrowing with `defined` and `satisfies`
 

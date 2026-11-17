@@ -172,10 +172,10 @@ Deno.test("a satisfied value widens to its input, never the reverse", () => {
 		expectedBehavior: "a wheel should be a circle",
 	});
 
-	// When: assigning between them both ways
-	const widened: Shape = circle;
-	// @ts-expect-error a shape is not known to be a circle
-	const narrowed: Circle = shape;
+	// When: assigning between what satisfies produced and its input both ways
+	const widened: typeof shape = circle;
+	// @ts-expect-error a shape is not known to be what satisfies produced
+	const narrowed: typeof circle = shape;
 
 	// Then: only widening compiles
 	assertEquals([widened, narrowed], [circle, shape]);
@@ -196,4 +196,21 @@ Deno.test("satisfies lets a throwing predicate's error propagate unchanged", () 
 	// Then: the predicate's own error arrives, not a panic
 	assertStrictEquals(thrown, boom);
 	assertEquals(isInvariantPanic(thrown), false);
+});
+
+Deno.test("a satisfied value rejects its input, then widens to it", () => {
+	// Given: a circle narrowed by satisfies, and a shape
+	const shape = widen<Shape>({ kind: "circle", r: 1 });
+	const circle = satisfies(shape, {
+		predicate: isCircle,
+		expectedBehavior: "a wheel should be a circle",
+	});
+
+	// When: assigning between them, rejection first
+	// @ts-expect-error a shape is not known to be what satisfies produced
+	const narrowed: typeof circle = shape;
+	const widened: typeof shape = circle;
+
+	// Then: the order changes nothing: only widening compiles
+	assertEquals([narrowed, widened], [shape, circle]);
 });

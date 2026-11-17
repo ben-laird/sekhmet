@@ -35,8 +35,9 @@ export interface InvariantEqualOptions<T> extends InvariantOptions {
  * `Panic (Invariant)`, showing both. Values are equal by `Object.is` unless
  * `equals({ actual, expected })` says otherwise, so `NaN` equals `NaN`, `0` does not equal `-0`,
  * and objects are equal only to themselves; pass `equals` to compare them by
- * content. Both values share one type, so comparing a number with a string
- * is a type error.
+ * content. TypeScript infers one type `T` from both values: unrelated types,
+ * such as a number and a string, are a type error, while a number and `null`
+ * infer `T` as `number | null` and compile.
  *
  * It fails closed: options that are missing, or whose `actual` or `expected`
  * is missing or cannot be read (a throwing getter, say), panic as unequal.

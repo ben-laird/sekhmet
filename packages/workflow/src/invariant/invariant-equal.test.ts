@@ -5,6 +5,7 @@ import {
 	assertStrictEquals,
 	assertThrows,
 } from "@std/assert";
+import { assertType, type IsExact } from "@std/testing/types";
 import {
 	type InvariantCheck,
 	isInvariantPanic,
@@ -310,4 +311,76 @@ Deno.test("invariantEqual lets a throwing equals' error propagate unchanged", ()
 	// Then: the comparator's own error arrives, not a panic
 	assertStrictEquals(thrown, boom);
 	assertEquals(isInvariantPanic(thrown), false);
+});
+
+Deno.test("invariantEqual infers one type from both values", () => {
+	// Given: pairs of literals, of a union and a literal, and of a number and null
+	const statuses: ("open" | "closed")[] = ["open"];
+	const status = statuses[0] ?? "closed";
+
+	// When: invariantEqual checks each, observing T through equals
+	invariantEqual({
+		actual: 1,
+		expected: 1,
+		equals: (values) => {
+			assertType<IsExact<typeof values.actual, number>>(true);
+			return Object.is(values.actual, values.expected);
+		},
+		expectedBehavior: EXPECTED,
+	});
+	invariantEqual({
+		actual: status,
+		expected: "open",
+		equals: (values) => {
+			assertType<IsExact<typeof values.expected, string>>(true);
+			return values.actual === values.expected;
+		},
+		expectedBehavior: EXPECTED,
+	});
+	const nullable = assertThrows(() => {
+		invariantEqual({
+			actual: 1,
+			expected: null,
+			equals: (values) => {
+				assertType<IsExact<typeof values.actual, number | null>>(true);
+				return values.actual === values.expected;
+			},
+			expectedBehavior: EXPECTED,
+		});
+	});
+
+	// Then: T is the values' common type with literals widened (string, not
+	// "open" | "closed"), and a type and null widen to a union
+	assert(isInvariantPanic(nullable));
+});
+
+Deno.test("invariantEqual's options are invariant in their type", () => {
+	// Given: options over a literal type and over string
+	const narrow: InvariantEqualOptions<"a"> = {
+		actual: "a",
+		expected: "a",
+		expectedBehavior: EXPECTED,
+	};
+	const wide: InvariantEqualOptions<string> = {
+		actual: "b",
+		expected: "b",
+		equals: ({ actual, expected }) => actual.length === expected.length,
+		expectedBehavior: EXPECTED,
+	};
+
+	// When: assigning between them both ways, in both orders
+	// @ts-expect-error a string comparator does not take "a" values' place
+	const narrowed: InvariantEqualOptions<"a"> = wide;
+	// @ts-expect-error equals of "a" values cannot compare any string
+	const widened: InvariantEqualOptions<string> = narrow;
+	// @ts-expect-error equals of "a" values cannot compare any string
+	const widenedAgain: InvariantEqualOptions<string> = narrow;
+	// @ts-expect-error a string comparator does not take "a" values' place
+	const narrowedAgain: InvariantEqualOptions<"a"> = wide;
+
+	// Then: neither direction compiles, since equals reads T and actual holds it
+	assertEquals(
+		[narrowed, widened, widenedAgain, narrowedAgain],
+		[wide, narrow, narrow, wide],
+	);
 });
