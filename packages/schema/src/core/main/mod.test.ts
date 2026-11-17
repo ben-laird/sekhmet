@@ -47,8 +47,9 @@ Deno.test("variance holds with views, checked narrowing-first (#31 was order-dep
 		typeof narrowUser
 	> = wideUser.with;
 
-	// Then: only widening type-checks, for outputs, views and Self alike (a
-	// main Schema's error stays exact: filter's error builder returns it)
+	// Then: only widening type-checks, for outputs, views and Self alike.
+	// (Widening one type parameter at a time: filter takes both O and E, so
+	// widening both at once is rejected; see the E variance test.)
 	const narrowText = new Schema({ parse: (_: unknown) => Ok<"a", never>("a") });
 	const wideSchema: Schema<unknown, string, never> = narrowText;
 	const wideView: Schema<unknown, { name: string }, Issues<SchemaIssue>> & {
@@ -63,6 +64,27 @@ Deno.test("variance holds with views, checked narrowing-first (#31 was order-dep
 	assertInstanceOf(wideSchema, Schema);
 	assertInstanceOf(wideView, Schema);
 	assertInstanceOf(wideSelf, SchemaWith);
+});
+
+Deno.test("a main Schema is covariant in its error, checked in both orders", () => {
+	// Given: schemas failing with a narrow and a wide error
+	const narrow = new Schema({ parse: (_: unknown) => Err<never, "x">("x") });
+	const wide = new Schema({ parse: (_: unknown) => Err<never, string>("x") });
+
+	// When: narrowing first, then widening, then narrowing again
+	// @ts-expect-error a string error is not an "x" error
+	const narrowedFirst: Schema<unknown, never, "x"> = wide;
+	const widened: Schema<unknown, never, string> = narrow;
+	const widenedWith: SchemaWith<unknown, never, string> = narrow.with;
+	// @ts-expect-error a string error is not an "x" error
+	const narrowedAfter: Schema<unknown, never, "x"> = wide;
+
+	// Then: widening is accepted (orElse and mapErr only ever receive a
+	// narrower error), and narrowing is rejected either way round
+	assertInstanceOf(narrowedFirst, Schema);
+	assertInstanceOf(widened, Schema);
+	assertInstanceOf(widenedWith, SchemaWith);
+	assertInstanceOf(narrowedAfter, Schema);
 });
 
 Deno.test("MainSchemaMember names exactly the members main adds to mini", () => {
