@@ -18,6 +18,14 @@ Deno.test("stringbool's default words are the design's lists", () => {
 	assertEquals(STRINGBOOL_FALSY, ["false", "0", "no", "off", "n", "disabled"]);
 });
 
+Deno.test("stringbool's default words are frozen", () => {
+	// Given: the default word lists, shared by every stringbool and boolean
+	// When: checking whether they can change
+	// Then: both are frozen, so no caller can alter another's defaults
+	assertEquals(Object.isFrozen(STRINGBOOL_TRUTHY), true);
+	assertEquals(Object.isFrozen(STRINGBOOL_FALSY), true);
+});
+
 Deno.test("stringbool reads every default word, trimmed and ignoring case", () => {
 	const cases: [words: readonly string[], value: boolean][] = [
 		[STRINGBOOL_TRUTHY, true],

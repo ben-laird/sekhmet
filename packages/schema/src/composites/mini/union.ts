@@ -81,27 +81,34 @@ export function union(
 ): Schema<unknown, unknown, Issues<unknown>> {
 	return new Schema({
 		parse: (input: unknown): Parsed => {
-			const attempt = (
-				index: number,
-				failures: readonly Issues<unknown>[],
-			): Parsed => {
+			const attempt = ({
+				index,
+				failures,
+			}: {
+				index: number;
+				failures: readonly Issues<unknown>[];
+			}): Parsed => {
 				const option = options[index];
 				if (option === undefined) {
 					return Err(fromError(InvalidUnion({ input, branches: failures })));
 				}
 
 				return unionValue(
-					mapPotential(parse(option, input), (result) =>
-						match(result)({
+					mapPotential(parse(option, input), (result) => {
+						return match(result)({
 							Ok: (output): Parsed => Ok(output),
-							Err: (error) =>
-								attempt(index + 1, [...failures, toIssues(error)]),
-						}),
-					),
+							Err: (error) => {
+								return attempt({
+									index: index + 1,
+									failures: [...failures, toIssues(error)],
+								});
+							},
+						});
+					}),
 				);
 			};
 
-			return attempt(0, []);
+			return attempt({ index: 0, failures: [] });
 		},
 		node: new SchemaNode("Union", { options }),
 	});

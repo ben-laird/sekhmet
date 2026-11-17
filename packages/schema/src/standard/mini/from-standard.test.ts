@@ -157,8 +157,8 @@ Deno.test("fromStandard makes each Standard issue an Issues entry", async (t) =>
 
 /** A sekhmet schema failing with `Issues<SchemaIssue>` at nested paths. */
 const tagged = new Schema({
-	parse: (input: unknown) =>
-		Array.isArray(input) && input.length > 0
+	parse: (input: unknown) => {
+		return Array.isArray(input) && input.length > 0
 			? Ok(input.length)
 			: Err(
 					issues([
@@ -176,7 +176,8 @@ const tagged = new Schema({
 							}),
 						},
 					]),
-				),
+				);
+	},
 });
 
 Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
@@ -244,12 +245,13 @@ Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
 	await t.step("async stays async", async () => {
 		// Given: an asynchronous schema, round-tripped
 		const delayed = new Schema({
-			parse: (input: unknown) =>
-				Promise.resolve(
+			parse: (input: unknown) => {
+				return Promise.resolve(
 					typeof input === "number"
 						? Ok(input)
 						: Err(InvalidType({ input, expected: "number" })),
-				),
+				);
+			},
 		});
 		const schema = fromStandard(toStandard({ schema: delayed }));
 

@@ -189,12 +189,12 @@ export function compose({
 	build: (outputs: [PropertyKey, unknown][]) => unknown;
 }): Parsed {
 	return union(
-		mapPotential(settle(pending), (settled) =>
-			match(gather({ settled, extra }))({
+		mapPotential(settle(pending), (settled) => {
+			return match(gather({ settled, extra }))({
 				Ok: (outputs): Result<unknown, Issues<unknown>> => Ok(build(outputs)),
 				Err: (issues) => Err(issues),
-			}),
-		),
+			});
+		}),
 	);
 }
 

@@ -34,14 +34,12 @@ import * as composites from "../../composites/mini/mod.ts";
 import * as mini from "../mini/mod.ts";
 
 export type {
-	Annotation,
 	AnnotationKey,
 	AnnotationOptions,
 	AnySchema,
 	ArrayDetails,
 	CustomDataOptions,
 	CustomDetails,
-	CustomNodeDetails,
 	CustomOptions,
 	DiscriminatedUnionDetails,
 	ErrorOf,
@@ -84,10 +82,12 @@ export type {
 	WrapperDetails,
 } from "../mini/mod.ts";
 export {
+	Annotation,
 	Async,
 	annotation,
 	annotationKey,
 	Custom,
+	CustomNodeDetails,
 	children,
 	concat,
 	custom,
@@ -171,7 +171,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * `annotations` added after its own. A later annotation for a key wins over
 	 * an earlier one. Annotations describe the schema they are on: every other
 	 * operation builds a schema with none, so `map(annotate(s, …), f)` has no
-	 * annotations of its own.
+	 * annotations of its own. The exception is `brand`, which returns its
+	 * schema as is, so the annotations survive; a main view
+	 * (`Schema.fromMini`) is the same schema, not an operation, and keeps them.
 	 *
 	 * @param annotations - The annotations to add, each made by calling its key
 	 * @returns The schema with the annotations added

@@ -7,38 +7,94 @@
 
 import { union as variant } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
-import { None, type Option, Some } from "@sekhmet/enum/option/mini";
+import { isSome, None, type Option, Some } from "@sekhmet/enum/option/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import type { SchemaNode } from "./node.ts";
 import { type AnySchema, Schema } from "./schema.ts";
 
 /**
- * One annotation: a key and its value. Make one by calling the key with the
- * value (`label("Name")`), which checks the value's type.
+ * One annotation: a key and its value, of the key's type. Build one by
+ * calling the key (`label("Name")`), which is `Annotation.of({ key, value })`.
+ * The constructor is private and the fields are `#private`, so an object
+ * literal or another class can't pass for one, and every annotation's
+ * value has its key's type.
  *
  * @example
  * ```ts
- * import { assertEquals } from "@std/assert";
- * import { annotationKey } from "@sekhmet/schema/core/mini/annotation";
+ * import { Annotation, annotationKey } from "@sekhmet/schema/core/mini/annotation";
  *
  * const label = annotationKey<string>({ name: "label" });
- * const { key, value } = label("Name");
+ * const entry: Annotation = label("Name");
+ * const same: Annotation = Annotation.of({ key: label, value: "Name" });
  *
- * assertEquals(key, label);
- * assertEquals(value, "Name");
+ * const fields = { key: label, value: 42 };
+ * // @ts-expect-error only a key (or Annotation.of) builds an annotation
+ * const forged: Annotation = fields;
  * ```
  */
-export interface Annotation {
-	/** The annotation's key. */
-	readonly key: AnnotationKey<never>;
-	/** Its value, of the key's type. */
-	readonly value: unknown;
+export class Annotation {
+	readonly #key: object;
+	readonly #value: unknown;
+
+	private constructor(entry: {
+		readonly key: object;
+		readonly value: unknown;
+	}) {
+		this.#key = entry.key;
+		this.#value = entry.value;
+	}
+
+	/**
+	 * An annotation of `key`, holding `value` of its type: what calling the
+	 * key builds.
+	 *
+	 * @template T The type of the key's values
+	 * @param entry The key, and its value
+	 * @returns The annotation
+	 */
+	static of<T>(entry: {
+		readonly key: AnnotationKey<T>;
+		readonly value: T;
+	}): Annotation {
+		return new Annotation(entry);
+	}
+
+	/**
+	 * The value of the last of `annotations` whose key is `key`, typed by
+	 * the key; `None` when none is.
+	 *
+	 * @template T The type of the key's values
+	 * @param options The annotations, and the key to find
+	 * @returns The last value for `key`
+	 */
+	static find<T>(options: {
+		readonly annotations: readonly Annotation[];
+		readonly key: AnnotationKey<T>;
+	}): Option<T> {
+		const { annotations, key } = options;
+		const found = annotations.findLast((entry) => entry.#key === key);
+		if (found === undefined) return None();
+
+		return Some(valueOfKey<T>(found.#value));
+	}
+}
+
+/**
+ * The value of an annotation whose key is an `AnnotationKey<T>`. Only
+ * `Annotation.of`, typed by the (invariant) key, builds an annotation, so
+ * identity, which `Annotation.find` checked, proves the value is a `T`; the type system
+ * can't carry that through the erased list, so this one cast restores it.
+ */
+function valueOfKey<T>(value: unknown): T {
+	return value as T;
 }
 
 /**
  * A typed annotation key, defined with {@linkcode annotationKey}: call it
  * with a value of type `T` to make an {@linkcode Annotation}. Keys are told
- * apart by identity, not by name, so hold each in a constant.
+ * apart by identity, not by name, so hold each in a constant. `T` is
+ * invariant: an `AnnotationKey<string>` is not an `AnnotationKey<"a">`, so a
+ * key can't be read back at a narrower or wider type than it was written.
  *
  * @template T The type of the key's values
  *
@@ -52,9 +108,11 @@ export interface Annotation {
  * assertEquals(label.name, "label");
  * // @ts-expect-error a label is a string
  * label(1);
+ * // @ts-expect-error keys are invariant in their type
+ * const narrow: AnnotationKey<"a"> = label;
  * ```
  */
-export interface AnnotationKey<T> {
+export interface AnnotationKey<in out T> {
 	/** An annotation of this key, with `value`. */
 	(value: T): Annotation;
 	/** The key's name, for display. */
@@ -82,7 +140,7 @@ export interface AnnotationKey<T> {
 export function annotationKey<T>(options: {
 	readonly name: string;
 }): AnnotationKey<T> {
-	const key = (value: T): Annotation => ({ key, value });
+	const key = (value: T): Annotation => Annotation.of({ key, value });
 
 	return Object.defineProperty(key, "name", { value: options.name });
 }
@@ -130,7 +188,9 @@ export const title: AnnotationKey<string> = annotationKey({ name: "title" });
  * `annotations` added after its own. A later annotation for a key wins over
  * an earlier one. Annotations describe the schema they are on: every other
  * operation builds a schema with none, so `map(annotate(s, …), f)` has no
- * annotations of its own.
+ * annotations of its own. The exception is `brand`, which returns its
+ * schema as is, so the annotations survive; a main view
+ * (`Schema.fromMini`) is the same schema, not an operation, and keeps them.
  *
  * @template I The input type
  * @template O The output type
@@ -253,21 +313,11 @@ function wrapped(node: SchemaNode): AnySchema | undefined {
 export function annotation<T>(options: AnnotationOptions<T>): Option<T> {
 	const { schema, key } = options;
 	const { node, annotations } = getStructParams(schema);
-	const found = annotations.findLast((entry) => entry.key === key);
-	if (found !== undefined) return Some(valueOfKey<T>(found));
+	const found = Annotation.find({ annotations, key });
+	if (isSome(found)) return found;
 
 	const inner = wrapped(node);
 	if (inner === undefined) return None();
 
 	return annotation({ schema: inner, key });
-}
-
-/**
- * The value of an annotation whose key is an `AnnotationKey<T>`. An
- * annotation's key is erased to `AnnotationKey<never>` when it is stored,
- * and identity, which `annotation` checked, is the only proof of `T` there
- * is: the type system can't carry it, so this one cast restores it.
- */
-function valueOfKey<T>(entry: Annotation): T {
-	return entry.value as T;
 }

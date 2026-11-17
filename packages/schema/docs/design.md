@@ -578,7 +578,10 @@ module-level state.
   `annotate(self, annotations)` (main `.annotate([...])`) returns the same
   parser and node with the annotations appended; a later entry for a key
   wins. Every other operation starts with none: annotations describe the
-  schema they are on, and a `map`'s output is another value.
+  schema they are on, and a `map`'s output is another value. The exception
+  is `brand`, which is type-only and returns its schema as is, so the
+  annotations survive. `Schema.fromMini` is not an operation but a view of
+  the same schema, built from its params, so it keeps them too.
   `annotation({ schema, key })` reads `Option<T>`, falling back through
   `Optional`, `Nullable` and `Readonly` only, so a field's `.optional()`
   keeps its label. `description` and `title` are the well-known keys, as
@@ -598,6 +601,16 @@ module-level state.
   and `annotation` return are cross-package types the package doesn't
   re-export; they are allowlisted under #11 with the existing ones. The
   avoidable refs were designed away: `SchemaNodeVariants` is written out
-  rather than `Split`, and `NodeKind` and `Annotation` are plain objects.
+  rather than `Split`, `NodeKind` is a plain object, and `Annotation` and
+  `CustomNodeDetails` are classes of their own, not `Struct`s.
+- **Typed keys can't be forged (fixed after review, 2026-11-16).**
+  `AnnotationKey<in out T>` and `NodeKind<in out D>` are invariant, so a key
+  or kind can't be read back at a narrower or wider type than it was
+  written. `Annotation` and a `Custom` node's `CustomNodeDetails` have
+  private constructors and `#private` fields, so no object literal passes
+  for one (the `SchemaNode` constructor can't be handed a forged `Custom`);
+  each is built only by a static `of` typed by its key or kind, which
+  calling a key and `custom()` use. The two casts, one per lookup, stay the
+  only ones.
 - **Later (not in this change):** `toJsonSchema` and Standard JSON Schema,
   reading nodes and annotations.

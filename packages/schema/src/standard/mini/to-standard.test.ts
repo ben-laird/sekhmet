@@ -12,10 +12,11 @@ import type { InferStandardInput, InferStandardOutput } from "./spec.ts";
 import { toStandard } from "./to-standard.ts";
 
 const text = new Schema({
-	parse: (input: unknown) =>
-		typeof input === "string"
+	parse: (input: unknown) => {
+		return typeof input === "string"
 			? Ok(input)
-			: Err(InvalidType({ input, expected: "string" })),
+			: Err(InvalidType({ input, expected: "string" }));
+	},
 });
 
 Deno.test("toStandard declares Standard Schema v1 from the sekhmet vendor", () => {
@@ -57,12 +58,13 @@ Deno.test("toStandard returns a Promise when the parse is Async", async () => {
 	// Given: an asynchronous schema exposed as a Standard Schema
 	const standard = toStandard({
 		schema: new Schema({
-			parse: (input: unknown) =>
-				Promise.resolve(
+			parse: (input: unknown) => {
+				return Promise.resolve(
 					typeof input === "string"
 						? Ok(input)
 						: Err(InvalidType({ input, expected: "string" })),
-				),
+				);
+			},
 		}),
 	});
 
@@ -117,12 +119,13 @@ Deno.test("toStandard keeps symbol path segments", () => {
 	const key = Symbol("key");
 	const standard = toStandard({
 		schema: new Schema({
-			parse: (input: unknown) =>
-				Err(
+			parse: (input: unknown) => {
+				return Err(
 					issues([
 						{ path: [key], error: InvalidType({ input, expected: "string" }) },
 					]),
-				),
+				);
+			},
 		}),
 	});
 
@@ -139,10 +142,11 @@ Deno.test("toStandard converts other errors with toIssue", async (t) => {
 	await t.step("a message becomes an issue at the root", () => {
 		// Given: a schema failing with a custom error, and a toIssue giving a message
 		const even = new Schema({
-			parse: (input: unknown) =>
-				typeof input === "number" && input % 2 === 0
+			parse: (input: unknown) => {
+				return typeof input === "number" && input % 2 === 0
 					? Ok(input)
-					: Err({ code: "odd" }),
+					: Err({ code: "odd" });
+			},
 		});
 		const standard = toStandard({
 			schema: even,
@@ -160,13 +164,14 @@ Deno.test("toStandard converts other errors with toIssue", async (t) => {
 		// Given: Issues of custom errors, and a toIssue that adds a path
 		const standard = toStandard({
 			schema: new Schema({
-				parse: (_: unknown) =>
-					Err(
+				parse: (_: unknown) => {
+					return Err(
 						issues([
 							{ path: ["outer"], error: "a" },
 							{ path: [], error: "b" },
 						]),
-					),
+					);
+				},
 			}),
 			toIssue: (error) => ({
 				message: `bad ${error}`,

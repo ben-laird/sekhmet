@@ -9,6 +9,7 @@ import {
 	children,
 	custom,
 	customData,
+	type NodeKind,
 	nodeKind,
 	nodeOf,
 	Opaque,
@@ -149,6 +150,32 @@ Deno.test("a custom node round-trips its data through its own kind only", () => 
 	assertEquals(isNone(foreign), true);
 	assertEquals(children(nodeOf(euros)), [text]);
 	assertType<IsExact<typeof own, typeof foreign>>(true);
+});
+
+Deno.test("a custom node can't be forged, nor its kind widened", () => {
+	// Given: a kind
+	const money = nodeKind<{ currency: string }>({ name: "money" });
+
+	// When: widening the kind, and building Custom details by hand
+	// Then: each is a type error, and custom() still reads back as built
+	// @ts-expect-error kinds are invariant in their data type
+	const loose: NodeKind<unknown> = money;
+	new SchemaNode("Custom", {
+		// @ts-expect-error only custom() builds a Custom node's details
+		kind: money,
+		data: 42,
+		children: [],
+	});
+	assertStrictEquals(loose, money);
+	assertEquals(
+		unwrap(
+			customData({
+				node: custom({ kind: money, data: { currency: "EUR" } }),
+				kind: money,
+			}),
+		),
+		{ currency: "EUR" },
+	);
 });
 
 Deno.test("customData of a node of another variant is None", () => {

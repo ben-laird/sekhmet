@@ -139,12 +139,15 @@ export function record(options: {
 			return compose({
 				pending,
 				extra: undefined,
-				build: (outputs) =>
-					Object.fromEntries(
-						outputs.flatMap(([, outputKey], index) =>
-							index % 2 === 0 ? [[outputKey, outputs[index + 1]?.[1]]] : [],
-						),
-					),
+				build: (outputs) => {
+					return Object.fromEntries(
+						outputs.flatMap(([, outputKey], index) => {
+							if (index % 2 !== 0) return [];
+
+							return [[outputKey, outputs[index + 1]?.[1]]];
+						}),
+					);
+				},
 			});
 		},
 		node: new SchemaNode("Record", { key, value }),

@@ -210,13 +210,16 @@ export function discriminatedUnion(declaration: {
 			}
 
 			return union(
-				mapPotential(parse(option, input), (result) =>
-					match(result)({
-						Ok: (output): Parsed =>
-							Ok(isRecord(output) ? { ...output, [key]: value } : output),
+				mapPotential(parse(option, input), (result) => {
+					return match(result)({
+						Ok: (output): Parsed => {
+							if (!isRecord(output)) return Ok(output);
+
+							return Ok({ ...output, [key]: value });
+						},
 						Err: (error) => Err(toIssues(error)),
-					}),
-				),
+					});
+				}),
 			);
 		},
 		node: new SchemaNode("DiscriminatedUnion", { key, options }),

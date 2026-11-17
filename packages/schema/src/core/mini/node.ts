@@ -303,7 +303,9 @@ export interface PipeDetails {
  * A kind of `Custom` node, defined with {@linkcode nodeKind}: a value you
  * hold, which tags the nodes you build with {@linkcode custom} and reads
  * their data back with {@linkcode customData}. Kinds are told apart by
- * identity, not by name: two kinds with one name are different kinds.
+ * identity, not by name: two kinds with one name are different kinds. `D`
+ * is invariant, so a kind can't be widened (to `NodeKind<unknown>`) to
+ * build a node with data of another type.
  *
  * @template D The data each node of this kind carries
  *
@@ -315,9 +317,11 @@ export interface PipeDetails {
  * const money: NodeKind<{ currency: string }> = nodeKind({ name: "money" });
  *
  * assertEquals(money.name, "money");
+ * // @ts-expect-error kinds are invariant in their data type
+ * const loose: NodeKind<unknown> = money;
  * ```
  */
-export interface NodeKind<D> {
+export interface NodeKind<in out D> {
 	/** The kind's name, for display. */
 	readonly name: string;
 	/**
@@ -328,26 +332,94 @@ export interface NodeKind<D> {
 }
 
 /**
- * The details of a `Custom` node: its kind, the data it carries, and the
- * schemas it is built from. Build one with {@linkcode custom}, and read its
- * data with {@linkcode customData}.
+ * The details of a `Custom` node: the schemas it is built from (`children`)
+ * and its kind's `name`, with its kind and data held privately. Build them
+ * with {@linkcode custom} (which is `CustomNodeDetails.of`), typed by the
+ * kind, and read the data with {@linkcode customData}. The constructor is
+ * private and the fields `#private`, so the `SchemaNode` constructor can't
+ * be handed forged details.
  *
  * @example
  * ```ts
- * import type { CustomNodeDetails } from "@sekhmet/schema/core/mini/node";
- * import { nodeKind } from "@sekhmet/schema/core/mini/node";
+ * import { assertEquals } from "@std/assert";
+ * import {
+ * 	children,
+ * 	custom,
+ * 	type CustomNodeDetails,
+ * 	nodeKind,
+ * } from "@sekhmet/schema/core/mini/node";
  *
  * const money = nodeKind<string>({ name: "money" });
- * const details: CustomNodeDetails = { kind: money, data: "EUR", children: [] };
+ *
+ * assertEquals(children(custom({ kind: money, data: "EUR" })), []);
+ * const fields = { kind: money, data: 42, children: [] };
+ * // @ts-expect-error only custom() builds a Custom node's details
+ * const forged: CustomNodeDetails = fields;
  * ```
  */
-export interface CustomNodeDetails {
-	/** The node's kind. */
-	readonly kind: NodeKind<unknown>;
-	/** The data it carries, of its kind's data type. */
-	readonly data: unknown;
-	/** The schemas it is built from. */
+export class CustomNodeDetails {
+	readonly #kind: object;
+	readonly #data: unknown;
+	/** The name of the node's kind. */
+	readonly name: string;
+	/** The schemas the node is built from. */
 	readonly children: readonly AnySchema[];
+
+	private constructor(entry: {
+		readonly kind: { readonly name: string };
+		readonly data: unknown;
+		readonly children: readonly AnySchema[];
+	}) {
+		this.#kind = entry.kind;
+		this.#data = entry.data;
+		this.name = entry.kind.name;
+		this.children = entry.children;
+	}
+
+	/**
+	 * A `Custom` node's details: its kind, data of the kind's type, and the
+	 * schemas it is built from.
+	 *
+	 * @template D The kind's data type
+	 * @param entry The kind, its data, and the node's children
+	 * @returns The details
+	 */
+	static of<D>(entry: {
+		readonly kind: NodeKind<D>;
+		readonly data: D;
+		readonly children: readonly AnySchema[];
+	}): CustomNodeDetails {
+		return new CustomNodeDetails(entry);
+	}
+
+	/**
+	 * The data of `details` when its kind is `kind`, typed by the kind;
+	 * `None` for another kind.
+	 *
+	 * @template D The kind's data type
+	 * @param options The details, and the kind to read them as
+	 * @returns The node's data, when it is of `kind`
+	 */
+	static dataOf<D>(options: {
+		readonly details: CustomNodeDetails;
+		readonly kind: NodeKind<D>;
+	}): Option<D> {
+		const { details, kind } = options;
+		if (details.#kind !== kind) return None();
+
+		return Some(dataOfKind<D>(details.#data));
+	}
+}
+
+/**
+ * The data of a `Custom` node whose kind is a `NodeKind<D>`. Only
+ * `CustomNodeDetails.of`, typed by the (invariant) kind, builds a node's
+ * details, so identity, which `CustomNodeDetails.dataOf` checked, proves
+ * the data is a `D`; the type system can't carry that through the erased
+ * node, so this one cast restores it.
+ */
+function dataOfKind<D>(data: unknown): D {
+	return data as D;
 }
 
 /**
@@ -585,11 +657,14 @@ export interface CustomOptions<D> {
  * ```
  */
 export function custom<D>(options: CustomOptions<D>): SchemaNode {
-	return new SchemaNode("Custom", {
-		kind: options.kind,
-		data: options.data,
-		children: options.children ?? [],
-	});
+	return new SchemaNode(
+		"Custom",
+		CustomNodeDetails.of({
+			kind: options.kind,
+			data: options.data,
+			children: options.children ?? [],
+		}),
+	);
 }
 
 /**
@@ -650,20 +725,6 @@ export function customData<D>(options: CustomDataOptions<D>): Option<D> {
 		Transform: () => None(),
 		Pipe: () => None(),
 		Readonly: () => None(),
-		Custom: (details) => {
-			if (details.kind !== kind) return None();
-
-			return Some(dataOfKind<D>(details));
-		},
+		Custom: (details) => CustomNodeDetails.dataOf({ details, kind }),
 	});
-}
-
-/**
- * The data of a `Custom` node whose kind is a `NodeKind<D>`. A node's kind
- * is erased to `NodeKind<unknown>` when it is built, and identity, which
- * `customData` checked, is the only proof of `D` there is: the type system
- * can't carry it, so this one cast restores it.
- */
-function dataOfKind<D>(details: CustomNodeDetails): D {
-	return details.data as D;
 }

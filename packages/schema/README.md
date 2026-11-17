@@ -254,8 +254,10 @@ schema from outside the package can describe itself with a kind of its own
 Schemas also carry typed annotations. Define a key with `annotationKey<T>`,
 call it to annotate (`.annotate([label("Name")])`), and read it back with
 `annotation({ schema, key })`, an `Option<T>`. A later annotation for a key
-wins; every other operation starts with none, and lookup falls back through
-`.optional()`, `.nullable()` and `.with.readonly()` only. `description` and
+wins. Every other operation starts with none, except `.with.brand`, which
+returns its schema as is, so its annotations survive; `Schema.fromMini` is a
+view of the same schema, not an operation, so it keeps them too. Lookup falls
+back through `.optional()`, `.nullable()` and `.with.readonly()` only. `description` and
 `title` are the well-known keys. A form generator reads its labels from an
 object's shape:
 
@@ -284,6 +286,7 @@ const signUp = object({
 		referrer: string()
 			.annotate([label("Who sent you?")])
 			.optional(),
+		// {}
 	},
 });
 
