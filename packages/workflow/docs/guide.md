@@ -77,8 +77,10 @@ Each cause is a plain object, typed and exported:
   caller's array afterwards does not change the cause.
 - `UnreachableCause`: `{ value?, issueUrl }`; `value` is present exactly when
   one was passed.
-- `InvariantCause`: `{ condition, expectedBehavior, issueUrl }`, where
-  `condition` is the falsy value that broke the invariant.
+- `InvariantCause`: `{ check, expectedBehavior, issueUrl }`, where `check`
+  says which check failed and keeps the value(s) that failed it, discriminated
+  by `check.kind`: `{ kind: "condition", condition }` holds the falsy
+  condition `invariant` was given.
 
 Options never reach the panic's name: it is always the helper's own, even when
 the options object carries extra fields at runtime.
