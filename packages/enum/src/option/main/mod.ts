@@ -933,9 +933,9 @@ export function None<T = never>(): Option<T> {
  * two count, and the `Some` type narrows to match.
  *
  * @template T - The possibly absent type
- * @template A - Which values count as absent
+ * @template A - Which values count as absent, or `undefined` for the default
  * @param value - The value to wrap
- * @param options - Which values count as absent (`"nullish"` by default)
+ * @param options - Which values count as absent (`"nullish"` when missing or `undefined`)
  * @returns `None` if `value` is absent, otherwise `Some(value)`
  * @example
  * ```ts
@@ -948,7 +948,7 @@ export function None<T = never>(): Option<T> {
  * assertEquals(maybe(undefined, { absent: "null" }), Some(undefined));
  * ```
  */
-export function maybe<T, A extends mini.Absent = "nullish">(
+export function maybe<T, A extends mini.Absent | undefined = undefined>(
 	value: T,
 	options?: mini.MaybeOptions<A>,
 ): Option<mini.Present<T, A>> {

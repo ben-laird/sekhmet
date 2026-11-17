@@ -136,6 +136,23 @@ Deno.test("maybe() with a widened mode keeps both possibilities", () => {
 	assertType<IsExact<typeof option, Option<string | null | undefined>>>(true);
 });
 
+Deno.test("maybe() treats an undefined mode as the nullish default", () => {
+	// Given: options whose mode is undefined, as consumers' default
+	// (non-exact) optional properties allow
+	const value = typed<string | null | undefined>(null);
+	const options = typed<{ absent?: "null" | undefined }>({ absent: undefined });
+
+	// When: the value is wrapped with an explicit undefined and with them
+	const explicit = maybe(value, { absent: undefined });
+	const loose = maybe(value, options);
+
+	// Then: explicit undefined narrows like the default, and a possibly
+	// undefined mode narrows to what its mode removes
+	assertType<IsExact<typeof explicit, Option<string>>>(true);
+	assertType<IsExact<typeof loose, Option<string | undefined>>>(true);
+	assertEquals([explicit, loose], [None(), None()]);
+});
+
 Deno.test("Present of a never mode is the nullish default's narrowing", () => {
 	// Given: a possibly absent type
 	type Value = string | null | undefined;
