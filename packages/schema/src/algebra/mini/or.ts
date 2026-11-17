@@ -4,7 +4,7 @@ import { getStructParams } from "@sekhmet/primordials/struct";
 import { union } from "@/src/composites/mini/union.ts";
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Issues } from "@/src/core/mini/issues.ts";
-import type { AnySchema, Schema } from "@/src/core/mini/schema.ts";
+import { type AnySchema, Schema } from "@/src/core/mini/schema.ts";
 
 /**
  * What {@linkcode or} builds a schema from: the schema to try first, and the
@@ -101,5 +101,11 @@ export function or(options: {
 	readonly left: AnySchema;
 	readonly right: AnySchema;
 }): AnySchema {
-	return union([...branches(options.left), ...branches(options.right)]);
+	const combined = union([
+		...branches(options.left),
+		...branches(options.right),
+	]);
+
+	// The union's params alone: `or`'s type has no view, so it carries none.
+	return new Schema(getStructParams(combined));
 }

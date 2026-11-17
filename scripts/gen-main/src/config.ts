@@ -56,6 +56,13 @@ export interface FeatureBase {
 	readonly omit?: readonly string[];
 	/** A runnable example for the module doc (doc-tested). */
 	readonly example?: string;
+	/**
+	 * Mini functions of this feature that return their receiver (first
+	 * argument) itself, retyped (`brand`). Main returns a value that is
+	 * already main as is, so a subclass instance keeps its identity and
+	 * members, and converts only a mini value.
+	 */
+	readonly identities?: readonly string[];
 }
 
 /**
@@ -88,6 +95,12 @@ export interface BorrowedMethod {
 	 * examples can't be rewritten to.
 	 */
 	readonly doc?: MethodDoc;
+	/**
+	 * Whether the function returns its receiver itself, retyped (`brand`):
+	 * the method then returns a receiver that is already main as is (see
+	 * {@linkcode FeatureBase.identities}).
+	 */
+	readonly identity?: boolean;
 }
 
 /** A borrowed method's own docs, written for the method form. */
@@ -311,10 +324,12 @@ const BRAND_METHOD_DOC: MethodDoc = {
 	description: [
 		"This schema with its output branded `name`, a type-only brand: parsing",
 		"is the branded type's smart constructor. The output passes through",
-		"unchanged at runtime.",
+		"unchanged at runtime, and the schema is returned itself, so its view",
+		"(`.shape`, `.inner`, …) stays on the result.",
 	].join("\n"),
 	params: { name: "The brand's name" },
-	returns: "A schema whose output is branded `name`",
+	returns:
+		"A schema whose output is branded `name`, keeping this schema's view: this schema itself when it is already main",
 	example: [
 		'import { assertEquals } from "@std/assert";',
 		'import { unwrap } from "@sekhmet/enum/result/mini";',
@@ -556,7 +571,7 @@ export const FEATURES: readonly Feature[] = [
 						argument: "right",
 						doc: OR_METHOD_DOC,
 					},
-					{ name: "brand", doc: BRAND_METHOD_DOC },
+					{ name: "brand", doc: BRAND_METHOD_DOC, identity: true },
 					{ name: "readonly", doc: READONLY_METHOD_DOC },
 				],
 			},
@@ -664,6 +679,7 @@ export const FEATURES: readonly Feature[] = [
 		entrypoint: "@sekhmet/schema/algebra",
 		mini: "packages/schema/src/algebra/mini/mod.ts",
 		output: "packages/schema/src/algebra/main/mod.ts",
+		identities: ["brand"],
 		wraps: [
 			{
 				type: "Schema",

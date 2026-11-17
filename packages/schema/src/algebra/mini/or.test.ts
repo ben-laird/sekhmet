@@ -4,6 +4,7 @@ import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { union } from "@/src/composites/mini/union.ts";
+import { Schema as MainSchema } from "@/src/core/main/mod.ts";
 import { annotationKey } from "@/src/core/mini/annotation.ts";
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Issues } from "@/src/core/mini/issues.ts";
@@ -172,17 +173,20 @@ Deno.test("or's types: input intersects, output unions, error is Issues", () => 
 	assertType<IsExact<ErrorOf<typeof either>, Issues<SchemaIssue>>>(true);
 });
 
-Deno.test("or has no view in its type: how many options it flattens to varies", () => {
+Deno.test("or has no view, in its type or at runtime: how many options it flattens to varies", () => {
 	// Given: a union and another schema
 	const either = union([text, count]);
 
-	// When: or-ing them
+	// When: or-ing them with the function and with main's .with.or
 	const any = or({ left: either, right: flag });
+	const anyMain = MainSchema.fromMini(either).with.or(flag);
 
-	// Then: its type promises no options, though the union it builds has all
-	// three, as its node says
-	// @ts-expect-error or returns a plain Schema
-	const options: unknown = any.options;
-	assertEquals(options, children(nodeOf(any)));
+	// Then: neither has an own property, though each node has all three
+	// options
+	// @ts-expect-error or returns a plain Schema, with no options
+	assertEquals(any.options, undefined);
+	assertEquals(Object.keys(any), []);
+	assertEquals(Object.keys(anyMain), []);
 	assertEquals(children(nodeOf(any)), [text, count, flag]);
+	assertEquals(children(nodeOf(anyMain)), [text, count, flag]);
 });

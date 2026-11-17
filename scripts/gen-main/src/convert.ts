@@ -29,7 +29,12 @@ export type Apply = (expression: string) => string;
 /** The runtime conversion a return type needs. */
 export type Conversion =
 	| { readonly kind: "none" }
-	| { readonly kind: "value"; readonly apply: Apply }
+	| {
+			readonly kind: "value";
+			readonly apply: Apply;
+			/** The main class the value converts to. */
+			readonly target: string;
+	  }
 	| {
 			readonly kind: "tuple";
 			readonly elements: readonly {
@@ -67,6 +72,8 @@ const ITERABLES: ReadonlySet<string> = new Set([
 interface Value {
 	readonly text: string;
 	readonly apply: Apply | undefined;
+	/** The wrap target `apply` converts to, when there is one. */
+	readonly target?: string;
 }
 
 function planValue({
@@ -113,6 +120,7 @@ function planValue({
 	return ok({
 		text,
 		apply: (expression) => `${target}.fromMini(${expression})${maps.join("")}`,
+		target,
 	});
 }
 
@@ -164,15 +172,32 @@ function planIntersection({
 		);
 	}
 	const text = type.types
-		.map((part) =>
-			part === member ? planned.value.text : context.render(part),
-		)
+		.map((part) => {
+			if (part === member) return planned.value.text;
+
+			return context.render(part);
+		})
 		.join(" & ");
+	// {}
 
 	return ok({
 		text,
 		apply: (expression) => `${target}.fromMiniView(${expression})`,
+		target,
 	});
+}
+
+/** Plans a top-level return type: an intersection with a view, or a value. */
+function planTopLevel({
+	type,
+	context,
+}: {
+	type: TypeNode;
+	context: ConvertContext;
+}): Result<Value, string> {
+	if (type.kind === "intersection") return planIntersection({ type, context });
+
+	return planValue({ type, context, depth: 0 });
 }
 
 function isVoidLike(type: TypeNode | undefined): boolean {
@@ -246,19 +271,15 @@ export function convertReturn({
 		}
 	}
 
-	const planned =
-		type.kind === "intersection"
-			? planIntersection({ type, context })
-			: planValue({ type, context, depth: 0 });
+	const planned = planTopLevel({ type, context });
 	if (!planned.ok) return planned;
 
-	const { text, apply } = planned.value;
+	const { text, apply, target } = planned.value;
+	if (apply === undefined || target === undefined) {
+		return ok({ text, conversion: { kind: "none" } });
+	}
 
-	return ok({
-		text,
-		conversion:
-			apply === undefined ? { kind: "none" } : { kind: "value", apply },
-	});
+	return ok({ text, conversion: { kind: "value", apply, target } });
 }
 
 /**
@@ -275,16 +296,20 @@ export function convertedBody({
 	conversion,
 	isVoid,
 	indent,
+	identity = false,
 }: {
 	call: string;
 	conversion: Conversion;
 	isVoid: boolean;
 	indent: string;
+	identity?: boolean;
 }): string {
 	switch (conversion.kind) {
 		case "none":
 			return isVoid ? `${call};` : `return ${call};`;
 		case "value":
+			if (identity) return identityBody({ call, conversion, indent });
+
 			return `return ${conversion.apply(call)};`;
 		case "iterable":
 			return `for (const item of ${call}) {\n${indent}\tyield ${conversion.apply("item")};\n${indent}}`;
@@ -301,6 +326,28 @@ export function convertedBody({
 			return `const [${names.join(", ")}] = ${call};\n${indent}return [${values.join(", ")}];`;
 		}
 	}
+}
+
+/**
+ * The body of a function that returns its receiver itself (`brand`): a
+ * value that is already the main class (a subclass included) is returned
+ * as is, so its identity and members survive; only a mini value is
+ * converted.
+ */
+function identityBody({
+	call,
+	conversion,
+	indent,
+}: {
+	call: string;
+	conversion: Extract<Conversion, { kind: "value" }>;
+	indent: string;
+}): string {
+	const { target, apply } = conversion;
+
+	const check = `const value = ${call};\n${indent}if (value instanceof ${target}) return value;`;
+
+	return `${check}\n\n${indent}return ${apply("value")};`;
 }
 
 /**

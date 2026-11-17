@@ -70,6 +70,7 @@ export type {
 	PotentialVariants,
 	RecordDetails,
 	ReservedViewKey,
+	ReservedViewNames,
 	SchemaInit,
 	SchemaIssueVariants,
 	SchemaNodeVariants,
@@ -123,6 +124,7 @@ export {
 	ParseSyncError,
 	Potential,
 	prefix,
+	RESERVED_VIEW_NAMES,
 	SchemaIssue,
 	SchemaNode,
 	Sync,
@@ -203,12 +205,15 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * schema as is, so the annotations survive; a main view
 	 * (`Schema.fromMini`) is the same schema, not an operation, and keeps them.
 	 *
-	 * The result has `self`'s exact type: a copy with the same prototype (a
-	 * main `Schema` stays main) and the same own properties, so a composite's
-	 * view (`.shape`, `.inner`, …) survives annotating.
+	 * The result is a new `Schema` over the same parser and node, with
+	 * `self`'s view (its own enumerable string-keyed properties: `.shape`,
+	 * `.inner`, …) copied on, so a composite's view survives annotating. It is
+	 * not a copy of `self`'s class: a subclass's private state and prototype
+	 * can't be copied, so the result is typed `Schema<I, O, E> & ViewOf<S>`,
+	 * not `S`. Main's `.annotate()` returns a main `Schema` the same way.
 	 *
 	 * @param annotations - The annotations to add, each made by calling its key
-	 * @returns The schema with the annotations added
+	 * @returns A new schema with the annotations added, and `self`'s view
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -224,8 +229,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.annotate}
 	 */
-	annotate(annotations: readonly mini.Annotation[]): this {
-		return mini.annotate(this, annotations);
+	annotate(
+		annotations: readonly mini.Annotation[],
+	): Schema<I, O, E> & mini.ViewOf<this> {
+		return Schema.fromMiniView(mini.annotate(this, annotations));
 	}
 
 	/**
@@ -777,10 +784,11 @@ export class SchemaWith<
 	/**
 	 * This schema with its output branded `name`, a type-only brand: parsing
 	 * is the branded type's smart constructor. The output passes through
-	 * unchanged at runtime.
+	 * unchanged at runtime, and the schema is returned itself, so its view
+	 * (`.shape`, `.inner`, …) stays on the result.
 	 *
 	 * @param name - The brand's name
-	 * @returns A schema whose output is branded `name`
+	 * @returns A schema whose output is branded `name`, keeping this schema's view: this schema itself when it is already main
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -798,7 +806,10 @@ export class SchemaWith<
 	brand<const B extends string>(
 		name: B,
 	): Schema<I, algebra.Branded<O, B>, E> & mini.ViewOf<Self> {
-		return Schema.fromMiniView(algebra.brand(this.#self, name));
+		const value = algebra.brand(this.#self, name);
+		if (value instanceof Schema) return value;
+
+		return Schema.fromMiniView(value);
 	}
 
 	/**
@@ -829,7 +840,11 @@ export class SchemaWith<
  * copied onto it, so the schema exposes its children typed as passed. A
  * view holds no state of its own; pass the same children the schema's node
  * holds. Use it with `custom()` nodes to give a composite of your own typed
- * children. A reserved key ({@linkcode ReservedViewKey}) is a type error.
+ * children. A reserved key ({@linkcode ReservedViewKey}) is a type error;
+ * since a view widened by assignment can still carry one, `viewed` also
+ * panics with a `TypeError` on a symbol key, a reserved name or
+ * `__proto__`, rather than let it replace the schema's params or shadow a
+ * method.
  *
  * @template I - The input type
  * @template O - The output type

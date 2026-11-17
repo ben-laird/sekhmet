@@ -8,9 +8,10 @@
 import { union as variant } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { isSome, None, type Option, Some } from "@sekhmet/enum/option/mini";
-import { getStructParams, struct } from "@sekhmet/primordials/struct";
+import { getStructParams } from "@sekhmet/primordials/struct";
 import type { SchemaNode } from "./node.ts";
-import type { AnySchema } from "./schema.ts";
+import { type AnySchema, Schema } from "./schema.ts";
+import type { ViewOf } from "./view.ts";
 
 /**
  * One annotation: a key and its value, of the key's type. Build one by
@@ -192,14 +193,20 @@ export const title: AnnotationKey<string> = annotationKey({ name: "title" });
  * schema as is, so the annotations survive; a main view
  * (`Schema.fromMini`) is the same schema, not an operation, and keeps them.
  *
- * The result has `self`'s exact type: a copy with the same prototype (a
- * main `Schema` stays main) and the same own properties, so a composite's
- * view (`.shape`, `.inner`, …) survives annotating.
+ * The result is a new `Schema` over the same parser and node, with
+ * `self`'s view (its own enumerable string-keyed properties: `.shape`,
+ * `.inner`, …) copied on, so a composite's view survives annotating. It is
+ * not a copy of `self`'s class: a subclass's private state and prototype
+ * can't be copied, so the result is typed `Schema<I, O, E> & ViewOf<S>`,
+ * not `S`. Main's `.annotate()` returns a main `Schema` the same way.
  *
- * @template S The schema's type, kept exactly
+ * @template I The input type
+ * @template O The output type
+ * @template E The error type
+ * @template S The schema, exactly (with its own view)
  * @param self The schema to annotate
  * @param annotations The annotations to add, each made by calling its key
- * @returns The schema with the annotations added
+ * @returns A new schema with the annotations added, and `self`'s view
  *
  * @example
  * ```ts
@@ -215,25 +222,21 @@ export const title: AnnotationKey<string> = annotationKey({ name: "title" });
  * assertEquals(unwrap(annotation({ schema: name, key: title })), "Full name");
  * ```
  */
-export function annotate<S extends AnySchema>(
-	self: S,
+export function annotate<I, O, E, S extends Schema<I, O, E>>(
+	self: S & Schema<I, O, E>,
 	annotations: readonly Annotation[],
-): S;
+): Schema<I, O, E> & ViewOf<S>;
 export function annotate(
 	self: AnySchema,
 	annotations: readonly Annotation[],
 ): AnySchema {
 	const params = getStructParams(self);
-	const copy: AnySchema = Object.create(
-		Object.getPrototypeOf(self),
-		Object.getOwnPropertyDescriptors(self),
-	);
-	copy[struct] = {
+	const annotated = new Schema({
 		...params,
 		annotations: [...params.annotations, ...annotations],
-	};
+	});
 
-	return copy;
+	return Object.assign(annotated, Object.fromEntries(Object.entries(self)));
 }
 
 /**

@@ -2,7 +2,7 @@ import { Ok as MainOk, Result } from "@sekhmet/enum/result";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
-import type { Branded } from "@/src/algebra/main/mod.ts";
+import { type Branded, brand as brandSchema } from "@/src/algebra/main/mod.ts";
 import { object, union } from "@/src/composites/main/mod.ts";
 import * as mini from "@/src/core/mini/mod.ts";
 import { boolean, number, string } from "@/src/primitives/main/mod.ts";
@@ -47,8 +47,9 @@ Deno.test("variance holds with views, checked narrowing-first (#31 was order-dep
 		typeof narrowUser
 	> = wideUser.with;
 
-	// Then: only widening type-checks, for outputs, views and Self alike (a
-	// main Schema's error stays exact: filter's error builder returns it)
+	// Then: only widening type-checks, for outputs, views and Self alike.
+	// (Widening one type parameter at a time: filter takes both O and E, so
+	// widening both at once is rejected; see the E variance test.)
 	const narrowText = new Schema({ parse: (_: unknown) => Ok<"a", never>("a") });
 	const wideSchema: Schema<unknown, string, never> = narrowText;
 	const wideView: Schema<unknown, { name: string }, Issues<SchemaIssue>> & {
@@ -63,6 +64,27 @@ Deno.test("variance holds with views, checked narrowing-first (#31 was order-dep
 	assertInstanceOf(wideSchema, Schema);
 	assertInstanceOf(wideView, Schema);
 	assertInstanceOf(wideSelf, SchemaWith);
+});
+
+Deno.test("a main Schema is covariant in its error, checked in both orders", () => {
+	// Given: schemas failing with a narrow and a wide error
+	const narrow = new Schema({ parse: (_: unknown) => Err<never, "x">("x") });
+	const wide = new Schema({ parse: (_: unknown) => Err<never, string>("x") });
+
+	// When: narrowing first, then widening, then narrowing again
+	// @ts-expect-error a string error is not an "x" error
+	const narrowedFirst: Schema<unknown, never, "x"> = wide;
+	const widened: Schema<unknown, never, string> = narrow;
+	const widenedWith: SchemaWith<unknown, never, string> = narrow.with;
+	// @ts-expect-error a string error is not an "x" error
+	const narrowedAfter: Schema<unknown, never, "x"> = wide;
+
+	// Then: widening is accepted (orElse and mapErr only ever receive a
+	// narrower error), and narrowing is rejected either way round
+	assertInstanceOf(narrowedFirst, Schema);
+	assertInstanceOf(widened, Schema);
+	assertInstanceOf(widenedWith, SchemaWith);
+	assertInstanceOf(narrowedAfter, Schema);
 });
 
 Deno.test("MainSchemaMember names exactly the members main adds to mini", () => {
@@ -488,4 +510,42 @@ Deno.test("SchemaWith's Self defaults to the mini Schema, which every receiver w
 		>
 	>(true);
 	assertEquals(frozen.inner, user);
+});
+
+Deno.test("brand returns a main subclass instance itself, keeping its members", () => {
+	// Given: a user subclass of the main Schema
+	class Tagged extends Schema<string, string, never> {
+		readonly tag: string = "t";
+	}
+	const tagged = new Tagged({ parse: (input: string) => Ok(input) });
+
+	// When: branding it through the namespace and the algebra function
+	const viaWith = tagged.with.brand("B");
+	const viaFunction = brandSchema(tagged, "B");
+
+	// Then: each is the receiver itself, so its subclass and members survive
+	assertEquals(viaWith === tagged, true);
+	assertEquals(viaFunction === tagged, true);
+	assertEquals(viaWith.tag, "t");
+	assertEquals(viaWith.parseSync("x").unwrap(), "x");
+	assertType<IsExact<Output<typeof viaWith>, Branded<string, "B">>>(true);
+	// @ts-expect-error a plain string is not the branded output
+	const plain: Schema<string, Branded<string, "B">, never> = tagged;
+	assertInstanceOf(plain, Tagged);
+});
+
+Deno.test("brand converts a mini receiver to a main Schema with its view", () => {
+	// Given: a mini schema with a view
+	const labelled = mini.viewed({
+		init: { parse: (input: string) => Ok(input) },
+		view: { label: "text" },
+	});
+
+	// When: branding it with the main algebra function
+	const branded = brandSchema(labelled, "Label");
+
+	// Then: it is a main copy over the same params, with the view
+	assertEquals(branded.label, "text");
+	assertEquals(branded.parseSync("a").unwrap(), "a");
+	assertInstanceOf(branded, Schema);
 });

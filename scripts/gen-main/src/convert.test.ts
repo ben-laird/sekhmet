@@ -82,10 +82,12 @@ Deno.test("conversionKey tells conversions apart", () => {
 	const a = {
 		kind: "value",
 		apply: (e: string) => `A.fromMini(${e})`,
+		target: "A",
 	} as const;
 	const b = {
 		kind: "value",
 		apply: (e: string) => `B.fromMini(${e})`,
+		target: "B",
 	} as const;
 
 	// When: keying them

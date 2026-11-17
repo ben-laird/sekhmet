@@ -764,13 +764,24 @@ them, typed exactly as passed, so a caller can reach a field's schema
   chain's length; a 33-step `.map().optional()` chain is type-tested to stay
   fast and within depth limits. A transform's own view is `inner`, so the
   receiver's view (`.shape`) is not on the result's type, correctly.
-- **`annotate` keeps the exact type.** `annotate<S extends AnySchema>(self:
-  S, …): S` copies the schema with the same prototype and own properties,
-  under new params; main's `.annotate()` returns `this`.
+- **`annotate` keeps the view.** It builds a new `Schema` over the same
+  parser and node with the annotations added, and copies the receiver's
+  view (its own enumerable string-keyed properties) onto it: `annotate(self,
+  …)` is `Schema<I, O, E> & ViewOf<S>`, and main's `.annotate()` is
+  `Schema<I, O, E> & ViewOf<this>`.
+  _Revised after review (2026-11-16):_ it first returned `S` (`this`), a copy
+  with the receiver's prototype; that copy was not an `S` (a subclass lost
+  its `#private` state) and copying a frozen schema threw.
 - **Algebra.** `readonly` views its `inner`. `brand` returns its schema
-  itself, so it keeps the schema's view (`& ViewOf<S>`). `or` gets no view:
-  flattening makes its option count unknown from its type (its runtime
-  union still has its options).
+  itself, so it keeps the schema's view (`& ViewOf<S>`); main's `brand` and
+  `.with.brand` return a receiver that is already main as is (a user
+  subclass included) and convert only a mini one (gen-main's `identities`
+  and `identity`). `or` gets no view: flattening makes its option count
+  unknown from its type, so it returns a schema over the union's params
+  with no own properties, in mini as in main.
+  _Revised after review (2026-11-16):_ main's `brand` went through
+  `fromMiniView`, which panics on a subclass; and mini `or` returned the
+  union itself, whose own `options` its type didn't promise.
 - **`.with` keeps views.** `SchemaWith<I, O, E, Self>` holds the receiver
   as a type parameter bounded by the _mini_ `Schema` (`Self extends
   mini.Schema<I, O, E> = mini.Schema<I, O, E>`), and the getter returns
@@ -783,6 +794,11 @@ them, typed exactly as passed, so a caller can reach a field's schema
   would collide: `schema` (it marks an object's field entry), every symbol
   (a schema keeps its params under `struct`), and the main `Schema`'s
   members (`MainSchemaMember`, type-tested to match main exactly).
+  _Revised after review (2026-11-16):_ a view widened by assignment slips
+  past the types, and `Object.assign` copied a smuggled `struct` (replacing
+  the parser) or `map`. `viewed` now also panics with a `TypeError` on a
+  symbol key, a reserved name (`RESERVED_VIEW_NAMES`, a frozen record whose
+  type names each one) or `__proto__`.
   `ViewOf<S>` reads the view off a schema by omitting them. Two hazards
   were fixed with it: `WithOptionalKeys` now requires `schema` in the
   optional-field pattern (a `discriminatedUnion({ key: "optional", … })`

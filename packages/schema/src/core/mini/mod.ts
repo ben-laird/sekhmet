@@ -129,7 +129,9 @@ export {
 export {
 	type MainSchemaMember,
 	type PipeView,
+	RESERVED_VIEW_NAMES,
 	type ReservedViewKey,
+	type ReservedViewNames,
 	type TransformView,
 	type ViewedOptions,
 	type ViewOf,
