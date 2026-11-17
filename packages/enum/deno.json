@@ -25,6 +25,7 @@
 		"./option/mini/combinators": "./src/option/mini/combinators.ts",
 		"./option/mini/core": "./src/option/mini/core.ts",
 		"./option/mini/mutation": "./src/option/mini/mutation.ts",
+		"./option/mini/nullable": "./src/option/mini/nullable.ts",
 		"./option/mini/predicates": "./src/option/mini/predicates.ts",
 		"./option/mini/result": "./src/option/mini/result.ts",
 		"./option/mini/transform": "./src/option/mini/transform.ts",

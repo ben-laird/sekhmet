@@ -1,0 +1,87 @@
+/**
+ * Converting a nullable value to an `Option`: `maybe`.
+ *
+ * @module
+ */
+
+import { None, type Option, Some } from "./core.ts";
+
+/**
+ * Which values {@linkcode maybe} treats as absent:
+ * - `"nullish"`: `null` and `undefined`
+ * - `"undefined"`: `undefined` only (`null` is a present value)
+ * - `"null"`: `null` only (`undefined` is a present value)
+ */
+export type Absent = "nullish" | "undefined" | "null";
+
+/**
+ * Options for {@linkcode maybe}.
+ *
+ * @template A - Which values count as absent
+ */
+export type MaybeOptions<A extends Absent> = {
+	/** Which values count as absent; defaults to `"nullish"`. */
+	absent?: A;
+};
+
+/**
+ * The type of `T` once the values that `A` counts as absent are removed.
+ *
+ * @template T - The possibly absent type
+ * @template A - Which values count as absent
+ */
+export type Present<T, A extends Absent> = A extends "undefined"
+	? Exclude<T, undefined>
+	: A extends "null"
+		? Exclude<T, null>
+		: NonNullable<T>;
+
+/**
+ * Wraps a value in an `Option`: `None` when it is absent, `Some` otherwise.
+ *
+ * Only `null` and `undefined` can be absent, never a falsy value: `0`, `""`,
+ * `false` and `NaN` are all `Some`. The `absent` option picks which of the
+ * two count, and the `Some` type narrows to match.
+ *
+ * @template T - The possibly absent type
+ * @template A - Which values count as absent
+ * @param value - The value to wrap
+ * @param options - Which values count as absent (`"nullish"` by default)
+ * @returns `None` if `value` is absent, otherwise `Some(value)`
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { maybe, None, Some } from "@sekhmet/enum/option/mini";
+ *
+ * assertEquals(maybe(0), Some(0));
+ * assertEquals(maybe(null), None());
+ * assertEquals(maybe(null, { absent: "undefined" }), Some(null));
+ * assertEquals(maybe(undefined, { absent: "null" }), Some(undefined));
+ * ```
+ */
+export function maybe<T, A extends Absent = "nullish">(
+	value: T,
+	options?: MaybeOptions<A>,
+): Option<Present<T, A>> {
+	const isPresent = presenceIn<T, A>(options?.absent ?? "nullish");
+	if (isPresent(value)) return Some(value);
+
+	return None();
+}
+
+/** The guard for the values that `absent` doesn't count as absent. */
+function presenceIn<T, A extends Absent>(
+	absent: Absent,
+): (value: T) => value is Present<T, A> {
+	return (value): value is Present<T, A> => {
+		switch (absent) {
+			case "nullish":
+				return value !== null && value !== undefined;
+			case "undefined":
+				return value !== undefined;
+			case "null":
+				return value !== null;
+		}
+	};
+}

@@ -19,6 +19,7 @@
 export * from "./combinators.ts";
 export * from "./core.ts";
 export * from "./mutation.ts";
+export * from "./nullable.ts";
 export * from "./predicates.ts";
 export * from "./result.ts";
 export * from "./transform.ts";

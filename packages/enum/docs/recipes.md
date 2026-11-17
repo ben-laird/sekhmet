@@ -5,18 +5,24 @@ function of the same name in the feature's `/mini` entrypoint.
 
 ## Wrap a nullable value
 
+`maybe` turns `null` and `undefined` into `None` and anything else, falsy
+values included, into `Some`. Its `absent` option narrows that to just
+`"undefined"` or just `"null"` when the other is a real value.
+
 ```ts
 import { assertEquals } from "@std/assert";
-import { None, type Option, Some } from "@sekhmet/enum/option";
-
-function fromNullable<T>(value: T | null | undefined): Option<T> {
-	return value === null || value === undefined ? None() : Some(value);
-}
+import { maybe, None, Some } from "@sekhmet/enum/option";
 
 const env: Record<string, string | undefined> = { PORT: "8080" };
 
-assertEquals(fromNullable(env.PORT).map(Number).unwrapOr(80), 8080);
-assertEquals(fromNullable(env.HOST).unwrapOr("localhost"), "localhost");
+assertEquals(maybe(env.PORT).map(Number).unwrapOr(80), 8080);
+assertEquals(maybe(env.HOST).unwrapOr("localhost"), "localhost");
+assertEquals(maybe(0), Some(0));
+
+// A JSON `null` is a value; only a missing key is absent
+const body: Record<string, unknown> = { note: null };
+assertEquals(maybe(body.note, { absent: "undefined" }), Some(null));
+assertEquals(maybe(body.title, { absent: "undefined" }), None());
 ```
 
 ## Wrap a function that throws

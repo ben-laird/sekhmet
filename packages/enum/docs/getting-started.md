@@ -21,13 +21,13 @@ otherwise return `T | undefined`.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { None, type Option, Some } from "@sekhmet/enum/option";
+import { maybe, type Option } from "@sekhmet/enum/option";
 
 const users = new Map([[1, "Ada"]]);
 
+// maybe() is None for null or undefined, and Some for anything else
 function findName(id: number): Option<string> {
-	const name = users.get(id);
-	return name === undefined ? None() : Some(name);
+	return maybe(users.get(id));
 }
 
 // Transform the value if there is one, then fall back to a default
