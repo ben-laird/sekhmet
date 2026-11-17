@@ -30,21 +30,28 @@ assertEquals(maybe(body.title, { absent: "undefined" }), None());
 Turn a throwing call into a `Result` once, at the edge, so the rest of the code
 handles failure as a value.
 
+`fallible` wraps the function: a return becomes `Ok`, and a throw becomes `Err`
+of what `parseErr` makes of it. `fallibleAsync` does the same for a function
+that returns a promise.
+
 ```ts
 import { assertEquals } from "@std/assert";
-import { Err, Ok, type Result } from "@sekhmet/enum/result";
+import { fallible, Result } from "@sekhmet/enum/result";
 
-function parseJson(text: string): Result<unknown, string> {
-	try {
-		return Ok(JSON.parse(text));
-	} catch (error: unknown) {
-		return Err(error instanceof Error ? error.message : String(error));
-	}
-}
+const parseJson = fallible({
+	fn: (text: string): unknown => JSON.parse(text),
+	parseErr: ({ error }) => {
+		return error instanceof Error ? error.message : String(error);
+	},
+});
 
-assertEquals(parseJson('{"a":1}').isOk(), true);
-assertEquals(parseJson("{").isErr(), true);
+// fallible's Result is a mini one; fromMini views it as a main Result
+assertEquals(Result.fromMini(parseJson('{"a":1}')).isOk(), true);
+assertEquals(Result.fromMini(parseJson("{")).isErr(), true);
 ```
+
+A throw from `parseErr` or from the optional `cleanup` is not captured: it
+propagates as in a plain `try`/`catch`/`finally`, so keep both from throwing.
 
 ## Validate in steps
 

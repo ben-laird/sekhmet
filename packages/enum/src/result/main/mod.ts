@@ -31,7 +31,12 @@ import type { Enum, Isolate } from "@/src/core/mini/core.ts";
 import { Option } from "../../option/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
-export type { ResultVariants } from "../mini/mod.ts";
+export type {
+	FallibleAsyncOptions,
+	FallibleOptions,
+	ResultVariants,
+} from "../mini/mod.ts";
+export { fallible, fallibleAsync } from "../mini/mod.ts";
 
 /**
  * A type representing either a success value or an error.
