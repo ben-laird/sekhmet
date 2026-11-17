@@ -499,3 +499,93 @@ Deno.test("fallible()'s wrapper is covariant in its Result", () => {
 		[Ok(1), Ok(1), Ok(1)],
 	);
 });
+
+/** A thenable that is not a `Promise`, settling as `settled` does. */
+function thenable<T>(settled: Promise<T>): PromiseLike<T> {
+	return {
+		// biome-ignore lint/suspicious/noThenProperty: a thenable is the subject under test
+		then: (onFulfilled, onRejected) => settled.then(onFulfilled, onRejected),
+	};
+}
+
+Deno.test("fallibleAsync() adopts a thenable that is not a Promise", async (t) => {
+	await t.step("a thenable that fulfills is Ok", async () => {
+		// Given: fn returning a bare thenable rather than a Promise
+		const wrapped = fallibleAsync({
+			fn: (n: number) => thenable(Promise.resolve(n * 2)),
+			parseErr: () => "e",
+		});
+
+		// When: it is called
+		const result = await wrapped(21);
+
+		// Then: the thenable was adopted and its value is Ok
+		assertEquals(result, Ok(42));
+	});
+
+	await t.step("a thenable that rejects is Err", async () => {
+		// Given: fn returning a bare thenable that rejects
+		const wrapped = fallibleAsync({
+			fn: () => thenable<number>(Promise.reject("bad")),
+			parseErr: ({ error }) => ({ error }),
+		});
+
+		// When: it is called
+		const result = await wrapped();
+
+		// Then: the rejection reached parseErr
+		assertEquals(result, Err({ error: "bad" }));
+	});
+});
+
+Deno.test("fallibleAsync() rejects mismatched arguments", () => {
+	// Given: a wrapped async function of one number
+	const wrapped = fallibleAsync({
+		fn: (n: number) => Promise.resolve(n),
+		parseErr: ({ args }) => {
+			// @ts-expect-error args is [n: number], so it has no second element
+			const second: number = args[1];
+			return second;
+		},
+	});
+
+	// When / Then: calling it with a string does not compile
+	// @ts-expect-error the wrapper takes fn's parameters
+	void wrapped("1");
+
+	// Then: a parseErr expecting other arguments does not compile
+	fallibleAsync({
+		fn: (n: number) => Promise.resolve(n),
+		// @ts-expect-error parseErr's args are fn's, not [string]
+		parseErr: ({ args }: { error: unknown; args: [string] }) => args[0],
+	});
+});
+
+Deno.test("fallibleAsync()'s wrapper is covariant in its Result", async () => {
+	// Given: a wrapper with a narrow value and error, and a wide one
+	const narrow = fallibleAsync({
+		fn: (n: number) => Promise.resolve(n),
+		parseErr: () => "e" as const,
+	});
+	const wide = fallibleAsync({
+		fn: (n: number): Promise<number | string> => Promise.resolve(n),
+		parseErr: (): string => "e",
+	});
+
+	// When / Then: widening its value and error is accepted
+	const widened: (n: number) => Promise<Result<number | string, string>> =
+		narrow;
+
+	// Then: narrowing a wide wrapper is rejected
+	// @ts-expect-error a number | string value is not a number
+	const narrowed: (n: number) => Promise<Result<number, "e">> = wide;
+
+	// Then: widening still holds when checked after a rejection
+	const widenedAgain: (n: number) => Promise<Result<unknown, unknown>> = narrow;
+	const settled: unknown[] = await Promise.all([
+		widened(1),
+		narrowed(1),
+		widenedAgain(1),
+	]);
+	assertEquals(settled, [Ok(1), Ok(1), Ok(1)]);
+});
