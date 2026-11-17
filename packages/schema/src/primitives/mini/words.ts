@@ -7,24 +7,24 @@
  */
 
 /** The words `stringbool` reads as `true` by default. */
-export const STRINGBOOL_TRUTHY: readonly string[] = [
+export const STRINGBOOL_TRUTHY: readonly string[] = Object.freeze([
 	"true",
 	"1",
 	"yes",
 	"on",
 	"y",
 	"enabled",
-];
+]);
 
 /** The words `stringbool` reads as `false` by default. */
-export const STRINGBOOL_FALSY: readonly string[] = [
+export const STRINGBOOL_FALSY: readonly string[] = Object.freeze([
 	"false",
 	"0",
 	"no",
 	"off",
 	"n",
 	"disabled",
-];
+]);
 
 /** The word lists read as each boolean. */
 export interface Words {
