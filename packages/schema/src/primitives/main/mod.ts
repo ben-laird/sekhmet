@@ -31,13 +31,16 @@ export type {
 	Bound,
 	CoerceMode,
 	DateSchemaOptions,
+	FractionalDigits,
 	LetterCase,
 	Literal,
 	NormalizationForm,
 	NumberSchemaOptions,
+	OffsetRule,
 	StringboolOptions,
 	StringFormat,
 	StringSchemaOptions,
+	TimeFormat,
 } from "../mini/mod.ts";
 export {
 	EMAIL_PATTERN,

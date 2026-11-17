@@ -35,10 +35,15 @@ export const UUID_PATTERN: RegExp =
  * - `"uuid"`: matches {@linkcode UUID_PATTERN}.
  * - `"date"`: an ISO 8601 calendar date, `YYYY-MM-DD`, that exists (so
  *   `2023-02-29` fails but `2024-02-29` passes).
- * - `"time"`: an ISO 8601 time of day without an offset, `HH:MM`,
- *   `HH:MM:SS` or `HH:MM:SS.fraction` (24-hour, no leap second).
- * - `"date-time"`: a `"date"`, `T`, a `"time"`, then `Z` or `±HH:MM` (as RFC
- *   3339 requires, since a date-time without an offset is ambiguous).
+ * - `"time"`: an ISO 8601 time of day, `HH:MM`, `HH:MM:SS` or
+ *   `HH:MM:SS.fraction` (24-hour, no leap second), without an offset.
+ * - `"date-time"`: a `"date"`, `T`, a `"time"`, then a UTC offset, `Z` or
+ *   `±HH:MM` (as RFC 3339 requires, since a date-time without an offset is
+ *   ambiguous).
+ *
+ * The two time formats take options, given as a {@linkcode TimeFormat}
+ * (`format: { name: "date-time", precision: 3 }`); the bare name is the
+ * same format with every option at its default.
  *
  * @example
  * ```ts
@@ -62,9 +67,79 @@ export type StringFormat =
 	| "time"
 	| "date-time";
 
-const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-const TIME = /^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?$/;
-const OFFSET = /^(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+/**
+ * How many digits a time's fractional seconds have, from `0` (whole
+ * seconds, no fraction) to `9` (nanoseconds, as `Temporal` keeps them).
+ */
+export type FractionalDigits = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+/**
+ * Whether a time carries a UTC offset, `Z` or `±HH:MM`: it must
+ * (`"required"`), it may (`"allowed"`), or it must not (`"forbidden"`, a
+ * local time).
+ */
+export type OffsetRule = "required" | "allowed" | "forbidden";
+
+/**
+ * A time format, `"time"` or `"date-time"`, with its options. Each option
+ * left out keeps the bare name's behavior, so `{ name: "time" }` is
+ * `"time"`.
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, isOk } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { type TimeFormat, string } from "@sekhmet/schema/primitives/mini";
+ *
+ * const millis: TimeFormat = { name: "date-time", precision: 3 };
+ * const local: TimeFormat = { name: "date-time", offset: "forbidden" };
+ *
+ * assertEquals(isOk(parseSync(string({ format: millis }), "2026-11-16T09:30:00.250Z")), true);
+ * assertEquals(isErr(parseSync(string({ format: millis }), "2026-11-16T09:30:00Z")), true);
+ * assertEquals(isOk(parseSync(string({ format: local }), "2026-11-16T09:30")), true);
+ * assertEquals(isErr(parseSync(string({ format: local }), "2026-11-16T09:30Z")), true);
+ * ```
+ */
+export interface TimeFormat {
+	/** Which time format: a time of day, or a date and a time. */
+	readonly name: "time" | "date-time";
+
+	/**
+	 * Exactly how many fractional-second digits the time has. Setting it
+	 * makes the seconds required: `0` allows `HH:MM:SS` only, `3` allows
+	 * `HH:MM:SS.sss` only. Left out, the seconds and any number of fraction
+	 * digits are optional.
+	 */
+	readonly precision?: FractionalDigits;
+
+	/**
+	 * Whether the time carries a UTC offset (see {@linkcode OffsetRule}).
+	 *
+	 * @default "forbidden" for `"time"`, `"required"` for `"date-time"`
+	 */
+	readonly offset?: OffsetRule;
+}
+
+/** The time format names, which take a {@linkcode TimeFormat}'s options. */
+type TimeFormatName = TimeFormat["name"];
+
+/** The offset each time format has when its options leave it out. */
+const DEFAULT_OFFSET: Readonly<Record<TimeFormatName, OffsetRule>> = {
+	time: "forbidden",
+	"date-time": "required",
+};
+
+// Fragments composed into the time patterns, written as literals so no
+// escape is doubled (the archived prototype's `"\\d"` bug).
+const DATE_SHAPE = /(\d{4})-(\d{2})-(\d{2})/;
+const HOUR = /(?:[01]\d|2[0-3])/;
+const SEXAGESIMAL = /[0-5]\d/;
+const FRACTION_MARK = /\./;
+const DIGIT = /\d/;
+const UTC_OFFSET = /(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)/;
+
+const DATE = new RegExp(`^${DATE_SHAPE.source}$`);
 
 function isLeapYear(year: number): boolean {
 	return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
@@ -76,9 +151,12 @@ function daysInMonth({ year, month }: { year: number; month: number }): number {
 	return [4, 6, 9, 11].includes(month) ? 30 : 31;
 }
 
-/** Whether a string is a `YYYY-MM-DD` date that exists in the calendar. */
-function isIsoDate(value: string): boolean {
-	const [, year, month, day] = DATE.exec(value) ?? [];
+/**
+ * Whether `DATE_SHAPE`'s captures, as `exec` returns them, name a day that
+ * exists in the calendar. A failed match has none.
+ */
+function isCalendarDate(match: RegExpExecArray | null): boolean {
+	const [, year, month, day] = match ?? [];
 	if (year === undefined || month === undefined || day === undefined) {
 		return false;
 	}
@@ -88,47 +166,100 @@ function isIsoDate(value: string): boolean {
 	return m >= 1 && m <= 12 && d >= 1 && d <= daysInMonth({ year: y, month: m });
 }
 
-function isIsoTime(value: string): boolean {
-	return TIME.test(value);
+/** The fractional seconds `precision` allows, as a pattern source. */
+function fractionSource(precision: FractionalDigits | undefined): string {
+	if (precision === undefined) {
+		return `(?:${FRACTION_MARK.source}${DIGIT.source}+)?`;
+	}
+	if (precision === 0) return "";
+
+	return `${FRACTION_MARK.source}${DIGIT.source}{${precision}}`;
 }
 
-/** Whether a string is an ISO date, `T`, an ISO time and a UTC offset. */
-function isIsoDateTime(value: string): boolean {
-	const [datePart = "", rest = ""] = value.split("T");
-	const offsetAt = rest.search(/[Z+-]/);
-	if (offsetAt < 0) return false;
+/** The time of day `precision` and `offset` allow, as a pattern source. */
+function timeSource({
+	precision,
+	offset,
+}: {
+	precision: FractionalDigits | undefined;
+	offset: OffsetRule;
+}): string {
+	const seconds = `:${SEXAGESIMAL.source}${fractionSource(precision)}`;
+	const zone = {
+		required: UTC_OFFSET.source,
+		allowed: `${UTC_OFFSET.source}?`,
+		forbidden: "",
+	}[offset];
+	const optionalSeconds = precision === undefined ? `(?:${seconds})?` : seconds;
 
-	return (
-		value.split("T").length === 2 &&
-		isIsoDate(datePart) &&
-		isIsoTime(rest.slice(0, offsetAt)) &&
-		OFFSET.test(rest.slice(offsetAt))
-	);
+	return `${HOUR.source}:${SEXAGESIMAL.source}${optionalSeconds}${zone}`;
 }
 
-/** How each format is tested, and the pattern its issue carries, if any. */
+/** How a time format is tested, given its options. */
+function timeTest({
+	name,
+	precision,
+	offset,
+}: TimeFormat): (value: string) => boolean {
+	const time = timeSource({
+		precision,
+		offset: offset ?? DEFAULT_OFFSET[name],
+	});
+	if (name === "time") {
+		const pattern = new RegExp(`^${time}$`);
+
+		return (value) => pattern.test(value);
+	}
+
+	const pattern = new RegExp(`^${DATE_SHAPE.source}T${time}$`);
+
+	return (value) => isCalendarDate(pattern.exec(value));
+}
+
+/** How each non-time format is tested, and the pattern its issue carries. */
 const FORMATS: Readonly<
 	Record<
-		StringFormat,
+		Exclude<StringFormat, TimeFormatName>,
 		{ readonly test: (value: string) => boolean; readonly pattern?: RegExp }
 	>
 > = {
 	email: { test: (value) => EMAIL_PATTERN.test(value), pattern: EMAIL_PATTERN },
 	url: { test: (value) => URL.canParse(value) },
 	uuid: { test: (value) => UUID_PATTERN.test(value), pattern: UUID_PATTERN },
-	date: { test: isIsoDate },
-	time: { test: isIsoTime },
-	"date-time": { test: isIsoDateTime },
+	date: { test: (value) => isCalendarDate(DATE.exec(value)) },
 };
 
-/** Fails a string that isn't in `name`'s format with `InvalidFormat`. */
-export function format(name: StringFormat): Inspect<string> {
-	const { test, pattern } = FORMATS[name];
+/** A format option spelled out: its name, its test and its issue's pattern. */
+interface FormatCheck {
+	readonly name: StringFormat;
+	readonly test: (value: string) => boolean;
+	readonly pattern?: RegExp;
+}
+
+/** Spells out a format option: a bare time name is its default options. */
+function formatCheck(option: StringFormat | TimeFormat): FormatCheck {
+	if (typeof option === "object") {
+		return { name: option.name, test: timeTest(option) };
+	}
+	if (option === "time" || option === "date-time") {
+		return { name: option, test: timeTest({ name: option }) };
+	}
+
+	return { name: option, ...FORMATS[option] };
+}
+
+/**
+ * Fails a string that isn't in `option`'s format with `InvalidFormat`,
+ * naming the format.
+ */
+export function format(option: StringFormat | TimeFormat): Inspect<string> {
+	const { name, test, pattern } = formatCheck(option);
 
 	return (value) => {
 		if (test(value)) return undefined;
-		if (pattern === undefined)
+		if (pattern === undefined) {
 			return InvalidFormat({ input: value, format: name });
+		}
 
 		return InvalidFormat({ input: value, format: name, pattern });
 	};

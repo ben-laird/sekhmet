@@ -14,7 +14,11 @@ import {
 	startsWith,
 	toCase,
 } from "./string-checks.ts";
-import { format, type StringFormat } from "./string-formats.ts";
+import {
+	format,
+	type StringFormat,
+	type TimeFormat,
+} from "./string-formats.ts";
 
 /**
  * Options for configuring the string schema: coercion, the transforms
@@ -79,8 +83,13 @@ export interface StringSchemaOptions {
 	 */
 	readonly endsWith?: string;
 
-	/** A named format the string must be in (see {@linkcode StringFormat}). */
-	readonly format?: StringFormat;
+	/**
+	 * A named format the string must be in (see {@linkcode StringFormat}),
+	 * failing with an `InvalidFormat` issue naming it. A time format takes
+	 * its options as a {@linkcode TimeFormat}:
+	 * `format: { name: "date-time", precision: 3, offset: "allowed" }`.
+	 */
+	readonly format?: StringFormat | TimeFormat;
 
 	/**
 	 * A pattern the string must match, failing with an `InvalidFormat` issue

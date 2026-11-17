@@ -22,7 +22,10 @@ export { type StringSchemaOptions, string } from "./string.ts";
 export type { LetterCase, NormalizationForm } from "./string-checks.ts";
 export {
 	EMAIL_PATTERN,
+	type FractionalDigits,
+	type OffsetRule,
 	type StringFormat,
+	type TimeFormat,
 	UUID_PATTERN,
 } from "./string-formats.ts";
 export {

@@ -100,7 +100,11 @@ inclusive; `{ value, inclusive: false }` excludes the bound itself. Coercion
 and the transforms (`trim`, `normalize`, then `case: "lower" | "upper"`) apply
 before the checks, and a primitive reports the first check that fails. A
 string can also require a prefix or suffix:
-`string({ case: "lower", startsWith: "v", endsWith: ".json" })`.
+`string({ case: "lower", startsWith: "v", endsWith: ".json" })`. The time
+formats take their options in place of the name:
+`string({ format: { name: "date-time", precision: 3, offset: "allowed" } })`
+wants exactly milliseconds, with or without a UTC offset, and
+`offset: "forbidden"` wants a local time.
 
 ```ts
 import { assertEquals } from "@std/assert";
