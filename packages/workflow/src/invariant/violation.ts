@@ -5,7 +5,7 @@
  * @module
  */
 
-import { describeValue } from "../workflow-panic/describe.ts";
+import { describeValue, UNRENDERABLE } from "../workflow-panic/describe.ts";
 import { guardedMessage, textField, urlField } from "../workflow-panic/read.ts";
 import {
 	issueLine,
@@ -63,11 +63,19 @@ function checkLines(check: InvariantCheck): readonly string[] {
 		}
 		case "equal": {
 			return [
-				`Actual value: ${describeValue(check.actual)}`,
-				`Expected value: ${describeValue(check.expected)}`,
+				`Actual value: ${shownField({ from: check, key: "actual" })}`,
+				`Expected value: ${shownField({ from: check, key: "expected" })}`,
 			];
 		}
 	}
+}
+
+/** A field of a check, rendered; the unrenderable marker when it is left out. */
+function shownField({ from, key }: { from: object; key: string }): string {
+	if (!(key in from)) {
+		return UNRENDERABLE;
+	}
+	return describeValue(Reflect.get(from, key));
 }
 
 const HEADER = "an invariant was violated";

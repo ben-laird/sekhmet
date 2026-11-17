@@ -30,6 +30,9 @@ export interface InvariantEqualOptions<T> extends InvariantOptions {
  * content. Both values share one type, so comparing a number with a string
  * is a type error.
  *
+ * It fails closed: options that are missing, or whose `actual` or `expected`
+ * is missing or cannot be read (a throwing getter, say), panic as unequal.
+ *
  * ```txt
  * an invariant was violated
  * Expected behavior: every key should have a value
@@ -66,24 +69,25 @@ export interface InvariantEqualOptions<T> extends InvariantOptions {
  * ```
  */
 export function invariantEqual<T>(options: InvariantEqualOptions<T>): void {
-	const actual = optionField({ options, key: "actual" });
-	const expected = optionField({ options, key: "expected" });
-	if (equal({ actual, expected, options })) {
+	const actual = readField({ from: options, key: "actual" });
+	const expected = readField({ from: options, key: "expected" });
+	if (
+		actual.kind === "present" &&
+		expected.kind === "present" &&
+		equal({ actual: actual.value, expected: expected.value, options })
+	) {
 		return;
 	}
-	violated({ check: { kind: "equal", actual, expected }, options });
-}
-
-/** A field of the caller's options, read without throwing. */
-function optionField({
-	options,
-	key,
-}: {
-	options: unknown;
-	key: string;
-}): unknown {
-	const read = readField({ from: options, key });
-	return read.kind === "present" ? read.value : undefined;
+	const check: { kind: "equal"; actual?: unknown; expected?: unknown } = {
+		kind: "equal",
+	};
+	if (actual.kind === "present") {
+		check.actual = actual.value;
+	}
+	if (expected.kind === "present") {
+		check.expected = expected.value;
+	}
+	violated({ check, options });
 }
 
 /**

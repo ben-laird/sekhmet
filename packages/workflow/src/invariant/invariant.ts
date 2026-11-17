@@ -29,7 +29,8 @@ export interface InvariantOptions {
  * - `"condition"`: {@linkcode invariant} was given a falsy `condition`.
  * - `"defined"`: `defined` was given an absent `value`, by its `absent`.
  * - `"satisfies"`: `satisfies`'s predicate rejected `value`.
- * - `"equal"`: `invariantEqual` found `actual` unequal to `expected`.
+ * - `"equal"`: `invariantEqual` found `actual` unequal to `expected`; each
+ *   is present exactly when it could be read off the options.
  */
 export type InvariantCheck =
 	| {
@@ -51,10 +52,10 @@ export type InvariantCheck =
 	  }
 	| {
 			readonly kind: "equal";
-			/** The value the program computed */
-			readonly actual: unknown;
-			/** The value it should have computed */
-			readonly expected: unknown;
+			/** The value the program computed, present when it could be read */
+			readonly actual?: unknown;
+			/** The value it should have computed, present when it could be read */
+			readonly expected?: unknown;
 	  };
 
 /**

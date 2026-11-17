@@ -146,8 +146,8 @@ Each cause is a plain object, typed and exported:
     `defined` was given, and what counted as absent;
   - `{ kind: "satisfies", value }`: the value `satisfies`'s predicate
     rejected;
-  - `{ kind: "equal", actual, expected }`: the two values `invariantEqual`
-    found unequal.
+  - `{ kind: "equal", actual?, expected? }`: the two values `invariantEqual`
+    found unequal, each present exactly when it could be read.
 
 Options never reach the panic's name: it is always the helper's own, even when
 the options object carries extra fields at runtime.
@@ -224,6 +224,9 @@ that is not an array cannot replace the panic with another error.
 - `satisfies` given a predicate that is not a function panics, as if the
   predicate rejected the value, and `invariantEqual` given an `equals` that
   is not a function panics, as if the values were unequal;
+- `invariantEqual` fails closed: missing options, or an `actual` or
+  `expected` that is missing or cannot be read, panic as unequal, with the
+  value left out of the cause and shown as `[unrenderable value]`;
 - if building the message still throws, the message is the header alone.
 
 ## Recognizing the panics

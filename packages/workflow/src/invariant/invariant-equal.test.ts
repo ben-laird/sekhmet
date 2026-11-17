@@ -199,3 +199,86 @@ Deno.test("invariantEqual requires values of one type", () => {
 
 	assertEquals(typeof neverRun, "function");
 });
+
+Deno.test("invariantEqual fails closed on options it cannot read", async (t) => {
+	await t.step("missing or non-object options panic", () => {
+		// Given: options that are absent, null, or lack both values
+		const untyped: unknown[][] = [[], [null], [{ expectedBehavior: EXPECTED }]];
+
+		// When: invariantEqual is called with each
+		const checks = untyped.map((args) => {
+			const thrown = assertThrows(() => {
+				Reflect.apply(invariantEqual, undefined, args);
+			}, Panic);
+			return isInvariantPanic(thrown) ? thrown.cause.check : undefined;
+		});
+
+		// Then: each panics as unequal, claiming no value it was not given
+		const missing: InvariantCheck = { kind: "equal" };
+		assertEquals(checks, [missing, missing, missing]);
+	});
+
+	await t.step(
+		"a value whose getter throws panics, marked unrenderable",
+		() => {
+			// Given: options whose actual and expected getters throw
+			const options = {
+				get actual(): never {
+					throw new Error("getter ran");
+				},
+				get expected(): never {
+					throw new Error("getter ran");
+				},
+				expectedBehavior: EXPECTED,
+			};
+
+			// When: invariantEqual checks them
+			const thrown = assertThrows(() => invariantEqual(options), Panic);
+
+			// Then: it panics; the message marks both values, the cause omits them
+			assertEquals(thrown.message.split("\n").slice(2), [
+				"Actual value: [unrenderable value]",
+				"Expected value: [unrenderable value]",
+			]);
+			assert(isInvariantPanic(thrown));
+			assertEquals(thrown.cause.check, { kind: "equal" });
+			assertEquals("actual" in thrown.cause.check, false);
+		},
+	);
+
+	await t.step("a Proxy whose every trap throws panics", () => {
+		// Given: options that throw on any inspection
+		const trap = (): never => {
+			throw new Error("trap ran");
+		};
+		const hostile = new Proxy({}, { has: trap, get: trap });
+
+		// When: invariantEqual checks them
+		const thrown = assertThrows(() => {
+			Reflect.apply(invariantEqual, undefined, [hostile]);
+		}, Panic);
+
+		// Then: it panics as an invariant with nothing claimed
+		assert(isInvariantPanic(thrown));
+		assertEquals(thrown.cause.check, { kind: "equal" });
+		assertEquals(thrown.cause.expectedBehavior, "[unrenderable value]");
+	});
+
+	await t.step("one readable value is kept, the other is not", () => {
+		// Given: options with a readable actual and a throwing expected
+		const options = {
+			actual: 1,
+			get expected(): number {
+				throw new Error("getter ran");
+			},
+			expectedBehavior: EXPECTED,
+		};
+
+		// When: invariantEqual checks them
+		const thrown = assertThrows(() => invariantEqual(options), Panic);
+
+		// Then: only the readable value is in the cause
+		assert(isInvariantPanic(thrown));
+		assertEquals(thrown.cause.check, { kind: "equal", actual: 1 });
+	});
+});
