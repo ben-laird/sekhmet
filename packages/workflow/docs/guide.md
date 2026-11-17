@@ -72,7 +72,8 @@ Each cause is a plain object, typed and exported:
 
 - `TodoCause` and `UnimplementedCause`: `{ description, subtasks,
   trackingUrl }`, with `undefined` for an absent description or URL and `[]`
-  for an absent checklist.
+  for an absent checklist. The checklist is a copy, with each subtask's
+  `complete` spelled out as `true` or `false`.
 - `UnreachableCause`: `{ value?, issueUrl }`; `value` is present exactly when
   one was passed.
 - `InvariantCause`: `{ condition, expectedBehavior, issueUrl }`, where
@@ -123,9 +124,21 @@ never throws:
 - anything that still throws, such as a revoked Proxy, renders as
   `[unrenderable value]`.
 
-Text you pass (descriptions, URLs, the expected behavior) goes through
-`String`, falling back to the same formatter if that throws. Building a
-message never throws while panicking.
+Text you pass (descriptions, subtasks, the expected behavior) goes through
+`String`, falling back to the same formatter if that throws.
+
+## Never throwing while panicking
+
+A helper runs when the program is already wrong, so it must throw its own
+panic and nothing else. Every option is read through a guard: an untyped
+caller's `null` options, a throwing getter, a hostile Proxy or a checklist
+that is not an array cannot replace the panic with another error.
+
+- a field that cannot be read renders as `[unrenderable value]`;
+- a checklist that is not an array counts as empty;
+- a URL that is not a `URL` is left out;
+- `invariant` given no expected behavior says `(not given)`;
+- if building the message still throws, the message is the header alone.
 
 ## Recognizing the panics
 

@@ -15,7 +15,7 @@ const MAX_DEPTH = 2;
 const MAX_ENTRIES = 10;
 
 /** The text shown for a value that cannot be rendered at all. */
-const UNRENDERABLE = "[unrenderable value]";
+export const UNRENDERABLE = "[unrenderable value]";
 
 /** The name shown for a function without one. */
 const ANONYMOUS = "(anonymous)";

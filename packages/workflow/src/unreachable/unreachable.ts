@@ -7,7 +7,8 @@
  */
 
 import type { Panic } from "@sekhmet/panic/mini/core";
-import { describeValue } from "../workflow-panic/describe.ts";
+import { describeValue, UNRENDERABLE } from "../workflow-panic/describe.ts";
+import { guardedMessage, readField, urlField } from "../workflow-panic/read.ts";
 import {
 	issueLine,
 	messageLines,
@@ -101,22 +102,33 @@ export function unreachable(options: UnreachableValueOptions): never;
 export function unreachable(
 	options: UnreachableOptions | UnreachableValueOptions = {},
 ): never {
-	const { issueUrl } = options;
-	if (!("value" in options)) {
+	const issueUrl = urlField({ from: options, key: "issueUrl" });
+	const read = readField({ from: options, key: "value" });
+	if (read.kind === "absent") {
 		throw new WorkflowPanic<UnreachableCause>({
 			kind: "Unreachable",
-			message: messageLines([HEADER, issueLine(issueUrl)]),
+			message: guardedMessage({
+				header: HEADER,
+				build: () => messageLines([HEADER, issueLine(issueUrl)]),
+			}),
 			cause: { issueUrl },
 		});
 	}
-	const { value } = options;
+	const value = read.kind === "present" ? read.value : undefined;
 	throw new WorkflowPanic<UnreachableCause>({
 		kind: "Unreachable",
-		message: messageLines([
-			HEADER,
-			`Impossible value: ${describeValue(value)}`,
-			issueLine(issueUrl),
-		]),
+		message: guardedMessage({
+			header: HEADER,
+			build: () => {
+				const shown =
+					read.kind === "present" ? describeValue(read.value) : UNRENDERABLE;
+				return messageLines([
+					HEADER,
+					`Impossible value: ${shown}`,
+					issueLine(issueUrl),
+				]);
+			},
+		}),
 		cause: { value, issueUrl },
 	});
 }

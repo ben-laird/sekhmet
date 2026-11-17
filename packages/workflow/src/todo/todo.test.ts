@@ -110,11 +110,12 @@ Deno.test("todo's cause holds its options, with absent parts filled in", () => {
 	const full = assertThrows(() => todo({ description: "d", subtasks }));
 	const empty = assertThrows(() => todo());
 
-	// Then: the causes are plain objects, undefined and [] where absent
+	// Then: the causes are plain objects, undefined and [] where absent, and
+	// each subtask is copied with `complete` spelled out
 	assert(isTodoPanic(full) && isTodoPanic(empty));
 	assertEquals(full.cause, {
 		description: "d",
-		subtasks,
+		subtasks: [{ description: "a", complete: false }],
 		trackingUrl: undefined,
 	});
 	assertEquals(empty.cause, {

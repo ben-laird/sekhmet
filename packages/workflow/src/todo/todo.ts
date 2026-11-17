@@ -8,7 +8,13 @@
  */
 
 import type { Panic } from "@sekhmet/panic/mini/core";
-import { displayText } from "../workflow-panic/describe.ts";
+import {
+	flagField,
+	guardedMessage,
+	listField,
+	textField,
+	urlField,
+} from "../workflow-panic/read.ts";
 import {
 	messageLines,
 	WorkflowPanic,
@@ -208,15 +214,26 @@ function workPanic({
 	options: TodoOptions;
 }): WorkflowPanic<TodoCause> {
 	const cause: TodoCause = {
-		description: options.description,
-		subtasks: options.subtasks ?? [],
-		trackingUrl: options.trackingUrl,
+		description: textField({ from: options, key: "description" }),
+		subtasks: listField({ from: options, key: "subtasks" }).map(subtaskOf),
+		trackingUrl: urlField({ from: options, key: "trackingUrl" }),
 	};
 	return new WorkflowPanic({
 		kind,
-		message: workMessage({ kind, cause }),
+		message: guardedMessage({
+			header: HEADERS[kind],
+			build: () => workMessage({ kind, cause }),
+		}),
 		cause,
 	});
+}
+
+/** A subtask copied out of the caller's checklist, read without throwing. */
+function subtaskOf(item: unknown): Subtask {
+	return {
+		description: textField({ from: item, key: "description" }) ?? "",
+		complete: flagField({ from: item, key: "complete" }),
+	};
 }
 
 function workMessage({
@@ -230,7 +247,7 @@ function workMessage({
 		HEADERS[kind],
 		workLine({ kind, description, trackingUrl }),
 		...subtasks.map((subtask) => {
-			return `  - [${subtask.complete ? "x" : " "}] ${displayText(subtask.description)}`;
+			return `  - [${subtask.complete ? "x" : " "}] ${subtask.description}`;
 		}),
 	]);
 }
@@ -245,10 +262,10 @@ function workLine({
 	description: string | undefined;
 	trackingUrl: URL | undefined;
 }): string | undefined {
-	const url = trackingUrl === undefined ? undefined : displayText(trackingUrl);
+	const url = trackingUrl?.href;
 	if (description === undefined) {
 		return url === undefined ? undefined : `Tracked at ${url}`;
 	}
 	const suffix = url === undefined ? "" : ` (tracked at ${url})`;
-	return `${kind}: ${displayText(description)}${suffix}`;
+	return `${kind}: ${description}${suffix}`;
 }
