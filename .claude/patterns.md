@@ -419,9 +419,10 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   size matters.
 - **Constructors and other free functions.** A function without `self` whose
   return needs converting (`Some`, `None`, `flatten`, `unzip`, `transpose`,
-  `compareNumbers`, `fork`, `fallible`, `promiseResult`) is re-declared in main as a wrapper that returns
-  main classes, so `Some(1).map(…)` chains. Everything else mini exports is
-  re-exported unchanged.
+  `compareNumbers`, `fork`, `fallible`, `fallibleAsync`, `promiseResult`) is
+  re-declared in main as a wrapper that returns main classes, so
+  `Some(1).map(…)` chains. Everything else mini exports is re-exported
+  unchanged.
 
 ```ts ignore
 // mini/transform.ts
