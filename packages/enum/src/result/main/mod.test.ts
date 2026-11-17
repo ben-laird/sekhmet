@@ -3,7 +3,14 @@ import { assertType, type IsExact } from "@std/testing/types";
 import * as coreMini from "@/src/core/mini/mod.ts";
 import { Option } from "@/src/option/main/mod.ts";
 import * as mini from "../mini/mod.ts";
-import { Err, Ok, Result } from "./mod.ts";
+import {
+	Err,
+	fallible,
+	fallibleAsync,
+	Ok,
+	promiseResult,
+	Result,
+} from "./mod.ts";
 
 Deno.test("Result methods chain on main constructors", () => {
 	// Given: a main Ok and a main Err
@@ -213,4 +220,74 @@ Deno.test("main isErrAnd() narrows to Err and a main Result<never, F>", async (t
 			);
 		}
 	});
+});
+
+Deno.test("fallible's wrapper returns main Results that chain", () => {
+	// Given: a main fallible wrapper
+	const parse = fallible({
+		fn: (text: string) => {
+			const parsed = Number(text);
+			if (Number.isNaN(parsed)) throw new Error(`not a number: ${text}`);
+			return parsed;
+		},
+		parseErr: ({ args: [text] }) => `bad: ${text}`,
+	});
+
+	// When: calling it and chaining on each outcome
+	const ok = parse("21");
+	const err = parse("x");
+
+	// Then: both are main Results whose methods chain
+	assertInstanceOf(ok, Result);
+	assertInstanceOf(err, Result);
+	assertEquals(ok.map((n) => n * 2).unwrapOr(0), 42);
+	assertEquals(err.mapErr((e) => e.toUpperCase()).unwrapErr(), "BAD: X");
+	assertType<IsExact<typeof parse, (text: string) => Result<number, string>>>(
+		true,
+	);
+});
+
+Deno.test("fallibleAsync's wrapper resolves to main Results that chain", async () => {
+	// Given: a main fallibleAsync wrapper
+	const load = fallibleAsync({
+		fn: (id: number): Promise<string> => {
+			if (id !== 1) return Promise.reject(new Error(`no user ${id}`));
+			return Promise.resolve("Ada");
+		},
+		parseErr: ({ args: [id] }) => id,
+	});
+
+	// When: awaiting each outcome
+	const found = await load(1);
+	const missing = await load(2);
+
+	// Then: both are main Results whose methods chain
+	assertInstanceOf(found, Result);
+	assertInstanceOf(missing, Result);
+	assertEquals(found.map((name) => name.length).unwrapOr(0), 3);
+	assertEquals(missing.mapErr((id) => id * 10).unwrapErr(), 20);
+	assertType<
+		IsExact<typeof load, (id: number) => Promise<Result<string, number>>>
+	>(true);
+});
+
+Deno.test("promiseResult resolves to a main Result that chains", async () => {
+	// Given: an executor that resolves and one that rejects
+	const resolved = promiseResult<number, string>((resolve) => {
+		resolve(21);
+	});
+	const rejected = promiseResult<number, string>((_resolve, reject) => {
+		reject("bad");
+	});
+
+	// When: awaiting each
+	const ok = await resolved;
+	const err = await rejected;
+
+	// Then: both are main Results whose methods chain
+	assertInstanceOf(ok, Result);
+	assertInstanceOf(err, Result);
+	assertEquals(ok.map((n) => n * 2).unwrapOr(0), 42);
+	assertEquals(err.mapErr((e) => e.toUpperCase()).unwrapErr(), "BAD");
+	assertType<IsExact<typeof resolved, Promise<Result<number, string>>>>(true);
 });

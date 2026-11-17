@@ -36,7 +36,7 @@ that returns a promise.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { fallible, Result } from "@sekhmet/enum/result";
+import { fallible } from "@sekhmet/enum/result";
 
 const parseJson = fallible({
 	fn: (text: string): unknown => JSON.parse(text),
@@ -45,9 +45,8 @@ const parseJson = fallible({
 	},
 });
 
-// fallible's Result is a mini one; fromMini views it as a main Result
-assertEquals(Result.fromMini(parseJson('{"a":1}')).isOk(), true);
-assertEquals(Result.fromMini(parseJson("{")).isErr(), true);
+assertEquals(parseJson('{"a":1}').isOk(), true);
+assertEquals(parseJson("{").isErr(), true);
 ```
 
 A throw from `parseErr` or from the optional `cleanup` is not captured: it
