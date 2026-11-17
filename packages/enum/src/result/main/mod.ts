@@ -815,9 +815,9 @@ export function Err<T = never, E = unknown>(err: E): Result<T, E> {
 export function fallible<A extends unknown[], U, E>(
 	options: mini.FallibleOptions<A, U, E>,
 ): (...args: A) => Result<U, E> {
-	const converted = mini.fallible(options);
-	return (...args0) => {
-		return Result.fromMini(converted(...args0));
+	const $converted = mini.fallible(options);
+	return (...$args0) => {
+		return Result.fromMini($converted(...$args0));
 	};
 }
 
@@ -857,9 +857,9 @@ export function fallible<A extends unknown[], U, E>(
 export function fallibleAsync<A extends unknown[], U, E>(
 	options: mini.FallibleAsyncOptions<A, U, E>,
 ): (...args: A) => Promise<Result<U, E>> {
-	const converted = mini.fallibleAsync(options);
-	return (...args0) => {
-		return converted(...args0).then((value1) => Result.fromMini(value1));
+	const $converted = mini.fallibleAsync(options);
+	return (...$args0) => {
+		return $converted(...$args0).then(($value1) => Result.fromMini($value1));
 	};
 }
 
@@ -914,5 +914,7 @@ export function promiseResult<T, E>(
 		reject: (error: E) => void,
 	) => undefined,
 ): Promise<Result<T, E>> {
-	return mini.promiseResult(executor).then((value0) => Result.fromMini(value0));
+	return mini
+		.promiseResult(executor)
+		.then(($value0) => Result.fromMini($value0));
 }

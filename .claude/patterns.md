@@ -462,6 +462,10 @@ methods.
 - Annotate every return type (`isolatedDeclarations` already requires it).
 - Use plain or rest parameters; destructured or defaulted parameters are
   rejected.
+- Don't start a parameter name with `$`: generated code reserves that prefix
+  for its own locals (`$converted`, `$item`, `$element0`, `$value0`,
+  `$args0`), so they never collide with a parameter, and generation rejects a
+  parameter that uses it.
 - If generation fails, `deno task gen:main` names the feature, the symbol and
   the reason.
 

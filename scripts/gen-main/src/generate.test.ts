@@ -296,7 +296,7 @@ Deno.test("generateMain re-yields generators of the primary lazily as main", () 
 	assertStringIncludes(output, "*iter(): Generator<Box<T>, void> {");
 	assertStringIncludes(
 		output,
-		"for (const item of mini.iter(this)) {\n\t\t\tyield Box.fromMini(item);\n\t\t}",
+		"for (const $item of mini.iter(this)) {\n\t\t\tyield Box.fromMini($item);\n\t\t}",
 	);
 });
 
@@ -324,9 +324,9 @@ Deno.test("generateMain converts primary types in returned tuples", () => {
 	);
 	assertStringIncludes(
 		output,
-		"const [element0, element1] = mini.split(pair);",
+		"const [$element0, $element1] = mini.split(pair);",
 	);
-	assertStringIncludes(output, "return [Box.fromMini(element0), element1];");
+	assertStringIncludes(output, "return [Box.fromMini($element0), $element1];");
 });
 
 Deno.test("generateMain converts wrap targets nested in type arguments through mappers", () => {
@@ -348,7 +348,7 @@ Deno.test("generateMain converts wrap targets nested in type arguments through m
 	assertStringIncludes(output, "nest(): Box<Box<T>> {");
 	assertStringIncludes(
 		output,
-		"return Box.fromMini(mini.nest(this)).map((value0) => Box.fromMini(value0));",
+		"return Box.fromMini(mini.nest(this)).map(($value0) => Box.fromMini($value0));",
 	);
 	assert(!missing.ok);
 	assertStringIncludes(missing.error.message, "no mapper");
@@ -605,6 +605,55 @@ Deno.test("generateMain points example imports at the main entrypoint", () => {
 		' * import { Full } from "@pkg/box";\n *\n * Full(1).get();\n',
 	);
 	assertEquals(output.includes('from "@pkg/box/mini'), false);
+});
+
+Deno.test("generateMain's locals don't collide with mini's parameter names", () => {
+	// Given: a function whose parameters take the names generated code once
+	// used for its locals, returning a tuple that needs converting
+	const split = fn(
+		"split",
+		signature({
+			typeParams: ["T"],
+			params: [
+				param("converted", named("Box", [typeParam("T")])),
+				param("element0", keyword("number")),
+			],
+			returnType: {
+				kind: "tuple",
+				elements: [named("Box", [typeParam("T")]), keyword("number")],
+			},
+		}),
+	);
+
+	// When: generating
+	const output = source([split]);
+
+	// Then: the destructured locals are prefixed, so neither parameter is
+	// redeclared
+	assertStringIncludes(
+		output,
+		"const [$element0, $element1] = mini.split(converted, element0);",
+	);
+});
+
+Deno.test("generateMain rejects a parameter taking the generated-locals prefix", () => {
+	// Given: a function with a parameter starting with "$"
+	const bad = fn(
+		"bad",
+		signature({
+			typeParams: ["T"],
+			params: [param("$item", named("Box", [typeParam("T")]))],
+			returnType: named("Box", [typeParam("T")]),
+		}),
+	);
+
+	// When: generating
+	const result = generate([bad]);
+
+	// Then: generation fails, naming the symbol and the parameter
+	assert(!result.ok);
+	assertEquals(result.error.symbol, "bad");
+	assertStringIncludes(result.error.message, "$item");
 });
 
 Deno.test("generateMain rejects a method type parameter that shadows the class's", () => {

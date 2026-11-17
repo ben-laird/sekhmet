@@ -841,8 +841,8 @@ export class Option<out T> extends mini.Option<T> {
 export function unzip<T, U>(
 	opt: mini.Option<[first: T, second: U]>,
 ): [first: Option<T>, second: Option<U>] {
-	const [element0, element1] = mini.unzip(opt);
-	return [Option.fromMini(element0), Option.fromMini(element1)];
+	const [$element0, $element1] = mini.unzip(opt);
+	return [Option.fromMini($element0), Option.fromMini($element1)];
 }
 
 /**
@@ -867,8 +867,8 @@ export function unzip<T, U>(
 export function transpose<T, E>(
 	opt: mini.Option<MiniResult<T, E>>,
 ): Result<Option<T>, E> {
-	return Result.fromMini(mini.transpose(opt)).map((value0) =>
-		Option.fromMini(value0),
+	return Result.fromMini(mini.transpose(opt)).map(($value0) =>
+		Option.fromMini($value0),
 	);
 }
 

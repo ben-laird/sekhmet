@@ -26,6 +26,18 @@ import type { TypeNode } from "./doc.ts";
 import { renderTuple } from "./render.ts";
 import { err, ok, type Result } from "./result.ts";
 
+/**
+ * The prefix of every local name generated code declares (`$converted`,
+ * `$item`, `$element0`, `$value0`, `$args0`). Mini parameters can't use it,
+ * so a generated name never collides with one.
+ */
+export const GENERATED_PREFIX = "$";
+
+/** A local name for generated code, out of reach of mini's parameters. */
+function local(name: string): string {
+	return `${GENERATED_PREFIX}${name}`;
+}
+
 /** Turns the source of a mini value into the source of its main value. */
 export type Apply = (expression: string) => string;
 
@@ -110,7 +122,7 @@ function planPromise({
 	const { text, apply } = planned.value;
 	if (apply === undefined) return ok(unconverted({ type, context }));
 
-	const item = `value${depth}`;
+	const item = local(`value${depth}`);
 
 	return ok({
 		text: `Promise<${text}>`,
@@ -139,25 +151,46 @@ function planFunction({
 	const { text, apply, named } = planned.value;
 	if (apply === undefined) return ok(unconverted({ type, context }));
 
-	const args = `args${depth}`;
-	const bound = `converted${depth}`;
+	const args = local(`args${depth}`);
+	const bound = local(`converted${depth}`);
 
-	// A braced body, so the wrapper stays bracketed however Biome wraps it. A
-	// returned value that is itself `named` (a curried function) is bound once
-	// per call, so the outer call isn't deferred into, and repeated by, each
-	// inner call.
+	// A returned value that is itself `named` (a curried function) is bound
+	// once per call, so the outer call isn't deferred into, and repeated by,
+	// each inner call.
 	return ok({
 		text: context.render({ ...type, returnType: verbatim(text) }),
 		apply: (expression) => {
 			const call = `${expression}(...${args})`;
 			if (named) {
-				return `(...${args}) => { const ${bound} = ${call}; return ${apply(bound)}; }`;
+				return arrow({
+					params: `...${args}`,
+					body: apply(bound),
+					before: `const ${bound} = ${call};`,
+				});
 			}
 
-			return `(...${args}) => { return ${apply(call)}; }`;
+			return arrow({ params: `...${args}`, body: apply(call) });
 		},
 		named: true,
 	});
+}
+
+/**
+ * Renders an arrow function with a braced body, so generated code stays
+ * bracketed however Biome wraps it.
+ */
+function arrow({
+	params,
+	body,
+	before,
+}: {
+	params: string;
+	body: string;
+	before?: string;
+}): string {
+	const statements = before === undefined ? "" : `${before} `;
+
+	return `(${params}) => { ${statements}return ${body}; }`;
 }
 
 /** A type node that renders as `text` unchanged. */
@@ -213,7 +246,7 @@ function planValue({
 				`${target}'s type argument ${i} names a main class but ${target} has no mapper for it; add one to its \`mappers\``,
 			);
 		}
-		const item = `value${depth}`;
+		const item = local(`value${depth}`);
 		maps.push(`.${mapper}((${item}) => ${arg.apply(item)})`);
 	}
 
@@ -332,23 +365,31 @@ export function convertedBody({
 	switch (conversion.kind) {
 		case "none":
 			return isVoid ? `${call};` : `return ${call};`;
-		case "value":
+		case "value": {
 			if (conversion.named) {
-				return `const converted = ${call};\n${indent}return ${conversion.apply("converted")};`;
+				const converted = local("converted");
+
+				return `const ${converted} = ${call};\n${indent}return ${conversion.apply(converted)};`;
 			}
 
 			return `return ${conversion.apply(call)};`;
-		case "iterable":
-			return `for (const item of ${call}) {\n${indent}\tyield ${conversion.apply("item")};\n${indent}}`;
+		}
+		case "iterable": {
+			const item = local("item");
+
+			return `for (const ${item} of ${call}) {\n${indent}\tyield ${conversion.apply(item)};\n${indent}}`;
+		}
 		case "tuple": {
-			const names = conversion.elements.map(
-				({ rest }, i) => `${rest ? "..." : ""}element${i}`,
-			);
-			const values = conversion.elements.map(({ rest, apply }, i) =>
-				rest || apply === undefined
-					? `${rest ? "..." : ""}element${i}`
-					: apply(`element${i}`),
-			);
+			const names = conversion.elements.map(({ rest }, i) => {
+				return `${rest ? "..." : ""}${local(`element${i}`)}`;
+			});
+			const values = conversion.elements.map(({ rest, apply }, i) => {
+				const name = local(`element${i}`);
+				if (rest) return `...${name}`;
+				if (apply === undefined) return name;
+
+				return apply(name);
+			});
 
 			return `const [${names.join(", ")}] = ${call};\n${indent}return [${values.join(", ")}];`;
 		}
