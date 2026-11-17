@@ -102,7 +102,10 @@ export type FieldSchema<V> = V extends {
 /**
  * `T`, one property per key of the shape `S`, with the keys `S` declares
  * `key: "optional"` made optional. Under `exactOptionalPropertyTypes` an
- * optional key's type gains no `undefined`: a present key must parse.
+ * optional key's type gains no `undefined`: a present key must parse. Only
+ * a field entry (`{ schema, key: "optional" }`) counts: a schema whose view
+ * has a `key` of its own (`discriminatedUnion({ key: "optional", … })`)
+ * is a required key, since a view can't have a `schema` key.
  *
  * @template S The object's shape
  * @template T Each key's type
@@ -125,9 +128,9 @@ export type WithOptionalKeys<
 	S extends Shape,
 	T extends { readonly [K in keyof S]: unknown },
 > = {
-	[K in keyof S as S[K] extends { readonly key: "optional" } ? never : K]: T[K];
+	[K in keyof S as S[K] extends Field<AnySchema, "optional"> ? never : K]: T[K];
 } & {
-	[K in keyof S as S[K] extends { readonly key: "optional" }
+	[K in keyof S as S[K] extends Field<AnySchema, "optional">
 		? K
 		: never]?: T[K];
 } extends infer Flat

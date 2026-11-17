@@ -4,6 +4,7 @@ import { assertEquals, assertInstanceOf } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import type { Branded } from "@/src/algebra/main/mod.ts";
 import { object, union } from "@/src/composites/main/mod.ts";
+import type * as mini from "@/src/core/mini/mod.ts";
 import { boolean, number, string } from "@/src/primitives/main/mod.ts";
 import {
 	type ErrorOf,
@@ -12,6 +13,7 @@ import {
 	type Input,
 	type Issues,
 	isSchemaIssue,
+	type MainSchemaMember,
 	nodeOf,
 	type Output,
 	ParseError,
@@ -20,6 +22,18 @@ import {
 	SchemaWith,
 	TooSmall,
 } from "./mod.ts";
+
+Deno.test("MainSchemaMember names exactly the members main adds to mini", () => {
+	// Given: the main and mini Schema types
+	type Added = Exclude<
+		keyof Schema<unknown, unknown, unknown>,
+		keyof mini.Schema<unknown, unknown, unknown>
+	>;
+
+	// When: comparing what main adds with the names a view reserves
+	// Then: they are the same, so a view can shadow no main member
+	assertType<IsExact<Added, MainSchemaMember>>(true);
+});
 
 const digits = new Schema({
 	parse: (input: string) => {

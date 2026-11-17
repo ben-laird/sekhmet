@@ -55,6 +55,7 @@ export type {
 	LeafDetails,
 	LimitOf,
 	Located,
+	MainSchemaMember,
 	MaybePromise,
 	NodeKind,
 	NonEmpty,
@@ -65,8 +66,10 @@ export type {
 	Parser,
 	ParseSyncErrorVariants,
 	PipeDetails,
+	PipeView,
 	PotentialVariants,
 	RecordDetails,
+	ReservedViewKey,
 	SchemaInit,
 	SchemaIssueVariants,
 	SchemaNodeVariants,
@@ -75,11 +78,15 @@ export type {
 	TooSmallDetails,
 	TransformDetails,
 	TransformStep,
+	TransformView,
 	TupleDetails,
 	TypeName,
 	UnionDetails,
 	UnknownKeyDetails,
+	ViewedOptions,
+	ViewOf,
 	WrapperDetails,
+	WrapperView,
 } from "../mini/mod.ts";
 export {
 	Annotation,
@@ -126,6 +133,7 @@ export {
 	typeName,
 	UnexpectedAsyncParse,
 	UnknownKey,
+	viewed,
 } from "../mini/mod.ts";
 
 /**

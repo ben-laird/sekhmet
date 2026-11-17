@@ -1,5 +1,6 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
-import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { Err, isOk, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { getStructParams } from "@sekhmet/primordials/struct";
 import { assert, assertEquals, assertFalse } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
@@ -17,6 +18,7 @@ import {
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
+import { viewed } from "@/src/core/mini/view.ts";
 import { nullable, optional } from "./modifiers.ts";
 import { object, type UnknownKeys } from "./object.ts";
 
@@ -387,4 +389,21 @@ Deno.test("each field kind has exact input and output types", () => {
 	assertType<IsExact<Output<typeof loose>, Exact & { [key: string]: unknown }>>(
 		true,
 	);
+});
+
+Deno.test("a viewed schema with a `key` of its own is a required key, not a field entry", () => {
+	// Given: a schema whose view has `key: "optional"`, as a
+	// discriminatedUnion keyed "optional" has
+	const keyed = viewed({
+		init: { parse: getStructParams(text).parse },
+		view: { key: "optional" },
+	});
+
+	// When: using it as a shape's value
+	const holder = object({ shape: { value: keyed } });
+
+	// Then: the key is required, in the type and at parse time
+	assertType<IsExact<Output<typeof holder>, { value: string }>>(true);
+	assertFalse(isOk(parseSync(holder, {})));
+	assertEquals(unwrap(parseSync(holder, { value: "a" })), { value: "a" });
 });
