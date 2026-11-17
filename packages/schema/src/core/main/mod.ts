@@ -784,10 +784,11 @@ export class SchemaWith<
 	/**
 	 * This schema with its output branded `name`, a type-only brand: parsing
 	 * is the branded type's smart constructor. The output passes through
-	 * unchanged at runtime.
+	 * unchanged at runtime, and the schema is returned itself, so its view
+	 * (`.shape`, `.inner`, …) stays on the result.
 	 *
 	 * @param name - The brand's name
-	 * @returns A schema whose output is branded `name`
+	 * @returns A schema whose output is branded `name`, keeping this schema's view: this schema itself when it is already main
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";

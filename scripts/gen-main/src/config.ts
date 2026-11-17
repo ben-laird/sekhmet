@@ -324,10 +324,12 @@ const BRAND_METHOD_DOC: MethodDoc = {
 	description: [
 		"This schema with its output branded `name`, a type-only brand: parsing",
 		"is the branded type's smart constructor. The output passes through",
-		"unchanged at runtime.",
+		"unchanged at runtime, and the schema is returned itself, so its view",
+		"(`.shape`, `.inner`, …) stays on the result.",
 	].join("\n"),
 	params: { name: "The brand's name" },
-	returns: "A schema whose output is branded `name`",
+	returns:
+		"A schema whose output is branded `name`, keeping this schema's view: this schema itself when it is already main",
 	example: [
 		'import { assertEquals } from "@std/assert";',
 		'import { unwrap } from "@sekhmet/enum/result/mini";',
