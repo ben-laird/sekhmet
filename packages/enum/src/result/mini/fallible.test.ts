@@ -408,6 +408,28 @@ Deno.test("fallible() rejects mismatched arguments", () => {
 	});
 });
 
+Deno.test("fallible() rejects async callbacks", () => {
+	// Given: synchronous callbacks for the parts not under test
+	const fn = (n: number) => n;
+	const parseErr = () => "e";
+
+	// When / Then: an async fn does not compile, rather than giving Ok(promise)
+	// @ts-expect-error fn must not return a promise
+	fallible({ fn: (n: number) => Promise.resolve(n), parseErr });
+
+	// When / Then: an async parseErr does not compile, rather than Err(promise)
+	// @ts-expect-error parseErr must not return a promise
+	fallible({ fn, parseErr: () => Promise.resolve("e") });
+
+	// When / Then: an async cleanup does not compile, since nothing awaits it
+	// @ts-expect-error cleanup must return undefined
+	fallible({ fn, parseErr, cleanup: () => Promise.resolve() });
+
+	// Then: the synchronous forms compile
+	const wrapped = fallible({ fn, parseErr, cleanup: () => {} });
+	assertEquals(wrapped(1), Ok(1));
+});
+
 Deno.test("fallible()'s wrapper is covariant in its Result", () => {
 	// Given: a wrapper with a narrow value and error
 	const narrow = fallible({

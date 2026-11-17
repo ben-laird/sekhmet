@@ -34,6 +34,7 @@ import * as mini from "../mini/mod.ts";
 export type {
 	FallibleAsyncOptions,
 	FallibleOptions,
+	NotPromise,
 	ResultVariants,
 } from "../mini/mod.ts";
 export { fallible, fallibleAsync, promiseResult } from "../mini/mod.ts";

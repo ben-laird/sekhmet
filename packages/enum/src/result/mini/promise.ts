@@ -8,6 +8,15 @@
 import { Err, Ok, type Result } from "./core.ts";
 
 /**
+ * `T`, unless it is a `PromiseLike`, in which case `never`. Used in a
+ * callback's return position, it makes a callback that returns a promise
+ * (an async function) a compile error where only a plain value makes sense.
+ *
+ * @template T - The type to check
+ */
+export type NotPromise<T> = T extends PromiseLike<unknown> ? never : T;
+
+/**
  * Builds a `Promise<Result>` from an executor shaped like the `Promise`
  * constructor's: calling `resolve(value)` settles it with `Ok(value)`, and
  * `reject(error)` with `Err(error)`. The promise itself never rejects for

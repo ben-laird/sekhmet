@@ -11,9 +11,11 @@
  */
 
 import { Err, Ok, type Result } from "./core.ts";
+import type { NotPromise } from "./promise.ts";
 
 /**
- * Options for {@linkcode fallible}.
+ * Options for {@linkcode fallible}. Every callback is synchronous: an async
+ * one does not compile (use {@linkcode fallibleAsync}).
  *
  * @template A - The wrapped function's parameter list
  * @template U - The wrapped function's return type
@@ -21,11 +23,11 @@ import { Err, Ok, type Result } from "./core.ts";
  */
 export type FallibleOptions<A extends unknown[], U, E> = {
 	/** The function that may throw. */
-	fn: (...args: A) => U;
+	fn: (...args: A) => NotPromise<U>;
 	/** Turns what `fn` threw, and the arguments it got, into the error. */
-	parseErr: (caught: { error: unknown; args: NoInfer<A> }) => E;
+	parseErr: (caught: { error: unknown; args: NoInfer<A> }) => NotPromise<E>;
 	/** Runs after every call, whether `fn` returned or threw. */
-	cleanup?: (call: { args: NoInfer<A> }) => void;
+	cleanup?: (call: { args: NoInfer<A> }) => undefined;
 };
 
 /**
@@ -35,6 +37,10 @@ export type FallibleOptions<A extends unknown[], U, E> = {
  * `parseErr` makes of it. `cleanup`, when given, runs in a `finally` block
  * after either. A throw from `parseErr` or `cleanup` propagates (a throw
  * from `cleanup` replaces the outcome), as in a plain `try`/`catch`/`finally`.
+ *
+ * The callbacks must be synchronous, so an async `fn`, `parseErr` or
+ * `cleanup` is a compile error rather than an `Ok(promise)`, an
+ * `Err(promise)` or a cleanup nobody awaits; use {@linkcode fallibleAsync}.
  *
  * @template A - The wrapped function's parameter list
  * @template U - The wrapped function's return type
