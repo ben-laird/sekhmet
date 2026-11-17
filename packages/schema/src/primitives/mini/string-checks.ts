@@ -1,6 +1,7 @@
 /**
- * The length and pattern checks behind `string`'s options. Internal: the
- * barrel re-exports only {@linkcode NormalizationForm}.
+ * The length, affix and pattern checks and the case transform behind
+ * `string`'s options. Internal: the barrel re-exports only
+ * {@linkcode NormalizationForm} and {@linkcode LetterCase}.
  *
  * @module
  */
@@ -10,6 +11,28 @@ import type { Inspect } from "./check.ts";
 
 /** A Unicode normalization form, as `String.prototype.normalize` takes. */
 export type NormalizationForm = "NFC" | "NFD" | "NFKC" | "NFKD";
+
+/**
+ * A letter case to convert a string to: `"lower"` as
+ * `String.prototype.toLowerCase` does, `"upper"` as `toUpperCase` does. The
+ * conversion is Unicode's default, not the runtime locale's, so it is the
+ * same everywhere (Turkish `"I"` lowers to `"i"`), and it can change the
+ * length (`"ß"` uppers to `"SS"`).
+ */
+export type LetterCase = "lower" | "upper";
+
+/** Converts `value` to `letterCase`. */
+export function toCase({
+	value,
+	letterCase,
+}: {
+	value: string;
+	letterCase: LetterCase;
+}): string {
+	if (letterCase === "lower") return value.toLowerCase();
+
+	return value.toUpperCase();
+}
 
 /**
  * Fails a string shorter than `minimum` with `TooSmall`. Length is

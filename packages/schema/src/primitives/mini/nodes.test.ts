@@ -79,3 +79,14 @@ Deno.test("string keeps its affix options in its Leaf as passed", () => {
 	// Then: the Leaf holds the options as passed
 	assertEquals(node, leafOf({ type: "string", options }));
 });
+
+Deno.test("string keeps its case option in its Leaf as passed", () => {
+	// Given: a string converted to upper case
+	const options = { case: "upper" } as const;
+
+	// When: reading its node
+	const node = nodeOf(string(options));
+
+	// Then: the Leaf holds the options as passed
+	assertEquals(node, leafOf({ type: "string", options }));
+});

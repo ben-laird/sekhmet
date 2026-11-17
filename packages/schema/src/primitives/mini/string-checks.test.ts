@@ -15,7 +15,8 @@ import {
 	ParseError,
 	parseSync,
 } from "@/src/core/mini/schema.ts";
-import { string } from "./string.ts";
+import { type StringSchemaOptions, string } from "./string.ts";
+import type { LetterCase } from "./string-checks.ts";
 import { EMAIL_PATTERN } from "./string-formats.ts";
 
 Deno.test("minLength and maxLength bound a string's length inclusively", () => {
@@ -198,6 +199,68 @@ Deno.test("trim runs before normalize, and both before the checks", () => {
 	assertEquals(result, Ok("fi"));
 });
 
+for (const { letterCase, input, expected } of [
+	{ letterCase: "lower", input: "Ada LOVELACE", expected: "ada lovelace" },
+	{ letterCase: "upper", input: "Ada lovelace", expected: "ADA LOVELACE" },
+	{ letterCase: "lower", input: "ÉCOLE", expected: "école" },
+	{ letterCase: "upper", input: "straße", expected: "STRASSE" },
+	{ letterCase: "lower", input: "I", expected: "i" },
+	{ letterCase: "upper", input: "123 -_", expected: "123 -_" },
+] as const) {
+	Deno.test(`case "${letterCase}" converts "${input}" to "${expected}"`, () => {
+		// Given: a string converted to a letter case
+		const schema = string({ case: letterCase });
+
+		// When: parsing a string in mixed case
+		const result = parseSync(schema, input);
+
+		// Then: it is converted by Unicode's default (not the locale's) mapping
+		assertEquals(result, Ok(expected));
+	});
+}
+
+Deno.test("case runs after trim and normalize, and before the checks", () => {
+	// Given: a trimmed, NFKC-normalized, upper-cased string with a prefix
+	const schema = string({
+		trim: true,
+		normalize: "NFKC",
+		case: "upper",
+		startsWith: "FI",
+		maxLength: 4,
+	});
+
+	// When: parsing a padded ligature word, and one without the prefix
+	// Then: the ligature expands, then uppers, and the checks see the result
+	assertEquals(parseSync(schema, "  ﬁne "), Ok("FINE"));
+	assertEquals(
+		parseSync(schema, "fun"),
+		Err(ParseError(InvalidFormat({ input: "FUN", format: "starts-with" }))),
+	);
+});
+
+Deno.test("case can change a string's length before the length checks", () => {
+	// Given: an upper-cased string of at most 5 code units
+	const schema = string({ case: "upper", maxLength: 5 });
+
+	// When: parsing a 5-letter word whose "ß" uppers to "SS"
+	const result = parseSync(schema, "straß");
+
+	// Then: the converted string is too long
+	assertEquals(
+		result,
+		Err(
+			ParseError(
+				TooBig({
+					input: "STRASS",
+					origin: "string",
+					maximum: 5,
+					inclusive: true,
+				}),
+			),
+		),
+	);
+});
+
 Deno.test("coercion runs before the transforms and checks", () => {
 	// Given: a coercing string of at least 3 characters
 	const schema = string({ coerce: true, minLength: 3 });
@@ -286,6 +349,20 @@ Deno.test("string's options don't change its types", () => {
 	assertType<IsExact<Input<typeof schema>, unknown>>(true);
 	assertType<IsExact<Output<typeof schema>, string>>(true);
 	assertType<IsExact<ErrorOf<typeof schema>, SchemaIssue>>(true);
+});
+
+Deno.test("case takes one of two letter cases", () => {
+	// Given: the case option's type
+	// When: reading it
+	// Then: it is "lower" or "upper", and nothing else
+	assertType<IsExact<LetterCase, "lower" | "upper">>(true);
+	assertType<IsExact<StringSchemaOptions["case"], LetterCase | undefined>>(
+		true,
+	);
+
+	// @ts-expect-error: title case is not a letter case
+	const title: StringSchemaOptions = { case: "title" };
+	assertEquals(title.case, "title");
 });
 
 Deno.test("checks report the first failure: lengths, then affixes, then format", () => {

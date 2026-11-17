@@ -117,6 +117,8 @@ A primitive accepts only its own type unless asked to coerce.
   `url`, `uuid`, `date`, `time`, `date-time`. `email` uses a pragmatic
   pattern (`EMAIL_PATTERN`), not RFC 5322; `url` is what `URL.canParse`
   accepts. They are options since #28: `string({ trim: true, format: "email" })`.
+  #35 added `case`, `startsWith` and `endsWith`
+  (see [String options](#string-options-35)).
 - _Superseded by #28 (2026-11-16):_ checks were first built as `self`-first
   mini functions typed on the output they refine (`int(number())`,
   `min(number(), 0, { inclusive: false })`), and `number` had a `range`
@@ -262,17 +264,17 @@ example this document first gave.
 Every check and transform is an option of the schema it refines, the same in
 mini and main:
 
-| Schema                   | Options                                                                                                                  |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `number`                 | `coerce`, `nan`, `infinite`, `int`, `safe`, `min`, `max`, `multipleOf`                                                   |
-| `string`                 | `coerce`, `trim`, `normalize`, `minLength`, `maxLength`, `startsWith`, `endsWith`, `format`, `regex` (affixes since #35) |
-| `bigint`                 | `min`, `max`, `multipleOf`                                                                                               |
-| `date`                   | `min`, `max`                                                                                                             |
-| `boolean` / `stringbool` | `coerce` / `truthy`, `falsy`                                                                                             |
-| `object`                 | `shape`, `unknownKeys` (`"strip"` by default, `"strict"`, `"passthrough"`)                                               |
-| `array`                  | `item`, `minItems`, `maxItems`                                                                                           |
-| `record`                 | `key`, `value`                                                                                                           |
-| `discriminatedUnion`     | `key`, `options`                                                                                                         |
+| Schema                   | Options                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `number`                 | `coerce`, `nan`, `infinite`, `int`, `safe`, `min`, `max`, `multipleOf`                                       |
+| `string`                 | `coerce`, `trim`, `normalize`, `case`, `minLength`, `maxLength`, `startsWith`, `endsWith`, `format`, `regex` |
+| `bigint`                 | `min`, `max`, `multipleOf`                                                                                   |
+| `date`                   | `min`, `max`                                                                                                 |
+| `boolean` / `stringbool` | `coerce` / `truthy`, `falsy`                                                                                 |
+| `object`                 | `shape`, `unknownKeys` (`"strip"` by default, `"strict"`, `"passthrough"`)                                   |
+| `array`                  | `item`, `minItems`, `maxItems`                                                                               |
+| `record`                 | `key`, `value`                                                                                               |
+| `discriminatedUnion`     | `key`, `options`                                                                                             |
 
 `tuple`, `union`, `enumOf`, `literal` and `lazy` keep their single
 positional parameter. The standalone `int`, `safe`, `multipleOf`, `min`,
@@ -292,12 +294,13 @@ gone; their logic is internal.
   `"date"`, `"time"`, `"date-time"`.
 - **`normalize` names its form** (`normalize: "NFC"`), rather than taking
   `true` for NFC as well: one spelling per form.
-- **Order:** coercion first, then the transforms (`trim`, then `normalize`),
-  then the checks on the transformed value. A primitive reports the first
-  failing check, in a documented order: for `number`, `NaN`/`±Infinity`,
-  `int`, `safe`, `min`, `max`, `multipleOf`; for `string`, `minLength`,
-  `maxLength`, `startsWith`, `endsWith` (since #35), `format`, `regex`. A check of a value after a `map` is a
-  `filter` (checks were once `self`-first and applied after a `map` too).
+- **Order:** coercion first, then the transforms (`trim`, then `normalize`,
+  then `case`), then the checks on the transformed value. A primitive reports
+  the first failing check, in a documented order: for `number`,
+  `NaN`/`±Infinity`, `int`, `safe`, `min`, `max`, `multipleOf`; for `string`,
+  `minLength`, `maxLength`, `startsWith`, `endsWith`, `format`, `regex`
+  (`case`, `startsWith` and `endsWith` since #35). A check of a value after a
+  `map` is a `filter` (checks were once `self`-first and applied after a `map` too).
 - **Allowed means accepted** (owner decision, 2026-11-16): with `nan: true`,
   `NaN` passes without any other check, since none means anything for it.
   With `infinite: true`, `±Infinity` still meets `min` and `max`, which
@@ -628,3 +631,12 @@ Every new option is kept in the `Leaf` node as passed, like the rest (#32).
   lengths and before `format` and `regex`, the cheap literal checks first.
   The issue carries no `pattern`, since an affix is not a pattern; the
   expected affix is in the schema's node.
+- **`case: "lower" | "upper"`** is a transform, like `trim` and `normalize`:
+  it never fails, and runs after them, so the order is coerce → trim →
+  normalize → case → checks. Normalizing first means a compatibility form
+  (`NFKC` turns `"ﬁ"` into `"fi"`) is cased too. The conversion is
+  `toLowerCase`/`toUpperCase`, Unicode's default mapping rather than the
+  runtime locale's, so a schema parses the same everywhere. It can change the
+  length (`"ß"` uppers to `"SS"`), which is why the length checks come after
+  it. A string literal union (`LetterCase`) rather than two booleans, so
+  `lower` and `upper` can't both be set.

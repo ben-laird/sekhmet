@@ -6,17 +6,19 @@ import type { CoerceMode } from "./coerce.ts";
 import { coerceString } from "./convert.ts";
 import {
 	endsWith,
+	type LetterCase,
 	maxLength,
 	minLength,
 	type NormalizationForm,
 	regex,
 	startsWith,
+	toCase,
 } from "./string-checks.ts";
 import { format, type StringFormat } from "./string-formats.ts";
 
 /**
  * Options for configuring the string schema: coercion, the transforms
- * (`trim`, `normalize`) and the checks. Every option is off unless set.
+ * (`trim`, `normalize`, `case`) and the checks. Every option is off unless set.
  */
 export interface StringSchemaOptions {
 	/**
@@ -43,6 +45,13 @@ export interface StringSchemaOptions {
 	 * string. It never fails.
 	 */
 	readonly normalize?: NormalizationForm;
+
+	/**
+	 * The letter case to convert the string to, after `normalize` and before
+	 * the checks (see {@linkcode LetterCase}). It never fails, and the checks
+	 * see the converted string, so write a `startsWith` in that case.
+	 */
+	readonly case?: LetterCase;
 
 	/**
 	 * The fewest characters allowed, failing with `TooSmall`. Length is
@@ -91,10 +100,10 @@ export interface StringSchemaOptions {
  * and symbols still fail. `coerce: "native"` converts anything `String()`
  * can.
  *
- * The options apply in this order: `coerce`, then the transforms `trim` and
- * `normalize`, then the checks `minLength`, `maxLength`, `startsWith`,
- * `endsWith`, `format` and `regex`, on the transformed string. The first check that fails is
- * reported.
+ * The options apply in this order: `coerce`, then the transforms `trim`,
+ * `normalize` and `case`, then the checks `minLength`, `maxLength`,
+ * `startsWith`, `endsWith`, `format` and `regex`, on the transformed string.
+ * The first check that fails is reported.
  *
  * @param options Coercion, transforms and checks
  * @returns A schema that validates string inputs
@@ -134,6 +143,19 @@ export interface StringSchemaOptions {
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
  *
+ * const handle = string({ trim: true, case: "lower", startsWith: "@" });
+ *
+ * assertEquals(unwrap(parseSync(handle, " @Ada ")), "@ada");
+ * assertEquals(isErr(parseSync(handle, "Ada")), true);
+ * ```
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parseSync } from "@sekhmet/schema/core/mini";
+ * import { string } from "@sekhmet/schema/primitives/mini";
+ *
  * const strict = string({ coerce: true });
  * assertEquals(unwrap(parseSync(strict, 123)), "123");
  * assertEquals(isErr(parseSync(strict, null)), true);
@@ -147,10 +169,13 @@ export function string(
 ): Schema<unknown, string, SchemaIssue> {
 	const mode = options?.coerce ?? false;
 	const form = options?.normalize;
+	const letterCase = options?.case;
 	const transform = (value: string): string => {
 		const trimmed = options?.trim === true ? value.trim() : value;
+		const normalized = form === undefined ? trimmed : trimmed.normalize(form);
+		if (letterCase === undefined) return normalized;
 
-		return form === undefined ? trimmed : trimmed.normalize(form);
+		return toCase({ value: normalized, letterCase });
 	};
 
 	return leaf({
