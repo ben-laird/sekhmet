@@ -188,7 +188,9 @@ export const title: AnnotationKey<string> = annotationKey({ name: "title" });
  * `annotations` added after its own. A later annotation for a key wins over
  * an earlier one. Annotations describe the schema they are on: every other
  * operation builds a schema with none, so `map(annotate(s, …), f)` has no
- * annotations of its own.
+ * annotations of its own. The exception is `brand`, which returns its
+ * schema as is, so the annotations survive; a main view
+ * (`Schema.fromMini`) is the same schema, not an operation, and keeps them.
  *
  * @template I The input type
  * @template O The output type
