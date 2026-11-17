@@ -81,19 +81,162 @@ Deno.test("conversionKey tells conversions apart", () => {
 	const a = {
 		kind: "value",
 		apply: (e: string) => `A.fromMini(${e})`,
+		named: false,
 	} as const;
 	const b = {
 		kind: "value",
 		apply: (e: string) => `B.fromMini(${e})`,
+		named: false,
 	} as const;
 
-	// When: keying them
+	// When: keying them, and a conversion like a that binds its value first
 	const keys = [
 		conversionKey(a),
 		conversionKey(b),
 		conversionKey({ kind: "none" }),
+		conversionKey({ ...a, named: true }),
 	];
 
 	// Then: every key differs
-	assertEquals(new Set(keys).size, 3);
+	assertEquals(new Set(keys).size, 4);
+});
+
+const promise = (inner: TypeNode): TypeNode => ({
+	kind: "ref",
+	name: "Promise",
+	args: [inner],
+	resolution: { kind: "global" },
+});
+
+const fn = (
+	returnType: TypeNode,
+	typeParams: { name: string }[] = [],
+): TypeNode => ({
+	kind: "function",
+	constructor: false,
+	typeParams: typeParams.map(({ name }) => ({
+		name,
+		constraint: undefined,
+		default: undefined,
+	})),
+	params: [{ kind: "rest", name: "args", type: ref("A") }],
+	returnType,
+});
+
+/** CONTEXT, also rendering function and global types. */
+const FUNCTION_CONTEXT: ConvertContext = {
+	...CONTEXT,
+	render: (type) => {
+		if (type.kind === "function") {
+			return `(...args: mini.A) => ${FUNCTION_CONTEXT.render(type.returnType)}`;
+		}
+		if (type.kind === "ref" && type.resolution.kind === "global") {
+			const args = type.args.map(FUNCTION_CONTEXT.render);
+
+			return args.length === 0 ? type.name : `${type.name}<${args.join(", ")}>`;
+		}
+
+		return CONTEXT.render(type);
+	},
+};
+
+const bodyOf = (type: TypeNode): { text: string; body: string } => {
+	const planned = convertReturn({ type, context: FUNCTION_CONTEXT });
+	assert(planned.ok);
+
+	return {
+		text: planned.value.text,
+		body: convertedBody({
+			call: "f()",
+			conversion: planned.value.conversion,
+			isVoid: false,
+			indent: "",
+		}),
+	};
+};
+
+Deno.test("convertReturn converts a promise's fulfilled value", () => {
+	// Given: Promise<Result<A, E>>
+	const type = promise(ref("Result", [ref("A"), ref("E")]));
+
+	// When: planning it and rendering its body
+	const { text, body } = bodyOf(type);
+
+	// Then: the result converts once the promise fulfills
+	assertEquals(text, "Promise<Result<mini.A, mini.E>>");
+	assertEquals(body, "return f().then((value0) => Result.fromMini(value0));");
+});
+
+Deno.test("convertReturn converts what a returned function returns", () => {
+	// Given: (...args: A) => Result<A, E>
+	const type = fn(ref("Result", [ref("A"), ref("E")]));
+
+	// When: planning it and rendering its body
+	const { text, body } = bodyOf(type);
+
+	// Then: the mini call runs once, and each call of its function converts
+	assertEquals(text, "(...args: mini.A) => Result<mini.A, mini.E>");
+	assertEquals(
+		body,
+		"const converted = f();\nreturn (...args0) => { return Result.fromMini(converted(...args0)); };",
+	);
+});
+
+Deno.test("convertReturn converts a returned function's promise", () => {
+	// Given: (...args: A) => Promise<Option<A>>
+	const type = fn(promise(ref("Option", [ref("A")])));
+
+	// When: planning it and rendering its body
+	const { text, body } = bodyOf(type);
+
+	// Then: each call's promise converts its value when it fulfills
+	assertEquals(text, "(...args: mini.A) => Promise<Option<mini.A>>");
+	assertEquals(
+		body,
+		"const converted = f();\nreturn (...args0) => { return converted(...args0).then((value1) => Option.fromMini(value1)); };",
+	);
+});
+
+Deno.test("convertReturn converts functions and promises nested in a wrap target", () => {
+	// Given: Result<() => Option<A>, Promise<Option<E>>>
+	const type = ref("Result", [
+		fn(ref("Option", [ref("A")])),
+		promise(ref("Option", [ref("E")])),
+	]);
+
+	// When: planning it and rendering its body
+	const { body } = bodyOf(type);
+
+	// Then: each mapper converts its argument, reading the mapped value by name
+	assertEquals(
+		body,
+		"return Result.fromMini(f()).map((value0) => (...args1) => { return Option.fromMini(value0(...args1)); }).mapErr((value0) => value0.then((value1) => Option.fromMini(value1)));",
+	);
+});
+
+Deno.test("convertReturn leaves promises and functions of other types alone", () => {
+	// Given: a promise and a function naming no wrap target
+	const types = [promise(ref("Other")), fn(ref("Other"))];
+
+	// When: planning each
+	const kinds = types.map((type) => {
+		const planned = convertReturn({ type, context: FUNCTION_CONTEXT });
+		assert(planned.ok);
+		return planned.value.conversion.kind;
+	});
+
+	// Then: neither needs a conversion
+	assertEquals(kinds, ["none", "none"]);
+});
+
+Deno.test("convertReturn leaves generic function types alone", () => {
+	// Given: <T>(...args: A) => Option<A>, whose wrapper couldn't stay generic
+	const type = fn(ref("Option", [ref("A")]), [{ name: "T" }]);
+
+	// When: planning it
+	const planned = convertReturn({ type, context: FUNCTION_CONTEXT });
+
+	// Then: it keeps its mini type
+	assert(planned.ok);
+	assertEquals(planned.value.conversion.kind, "none");
 });
