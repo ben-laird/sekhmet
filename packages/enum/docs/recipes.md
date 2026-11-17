@@ -5,18 +5,24 @@ function of the same name in the feature's `/mini` entrypoint.
 
 ## Wrap a nullable value
 
+`maybe` turns `null` and `undefined` into `None` and anything else, falsy
+values included, into `Some`. Its `absent` option narrows that to just
+`"undefined"` or just `"null"` when the other is a real value.
+
 ```ts
 import { assertEquals } from "@std/assert";
-import { None, type Option, Some } from "@sekhmet/enum/option";
-
-function fromNullable<T>(value: T | null | undefined): Option<T> {
-	return value === null || value === undefined ? None() : Some(value);
-}
+import { maybe, None, Some } from "@sekhmet/enum/option";
 
 const env: Record<string, string | undefined> = { PORT: "8080" };
 
-assertEquals(fromNullable(env.PORT).map(Number).unwrapOr(80), 8080);
-assertEquals(fromNullable(env.HOST).unwrapOr("localhost"), "localhost");
+assertEquals(maybe(env.PORT).map(Number).unwrapOr(80), 8080);
+assertEquals(maybe(env.HOST).unwrapOr("localhost"), "localhost");
+assertEquals(maybe(0), Some(0));
+
+// A JSON `null` is a value; only a missing key is absent
+const body: Record<string, unknown> = { note: null };
+assertEquals(maybe(body.note, { absent: "undefined" }), Some(null));
+assertEquals(maybe(body.title, { absent: "undefined" }), None());
 ```
 
 ## Wrap a function that throws
@@ -24,21 +30,27 @@ assertEquals(fromNullable(env.HOST).unwrapOr("localhost"), "localhost");
 Turn a throwing call into a `Result` once, at the edge, so the rest of the code
 handles failure as a value.
 
+`fallible` wraps the function: a return becomes `Ok`, and a throw becomes `Err`
+of what `parseErr` makes of it. `fallibleAsync` does the same for a function
+that returns a promise.
+
 ```ts
 import { assertEquals } from "@std/assert";
-import { Err, Ok, type Result } from "@sekhmet/enum/result";
+import { fallible } from "@sekhmet/enum/result";
 
-function parseJson(text: string): Result<unknown, string> {
-	try {
-		return Ok(JSON.parse(text));
-	} catch (error: unknown) {
-		return Err(error instanceof Error ? error.message : String(error));
-	}
-}
+const parseJson = fallible({
+	fn: (text: string): unknown => JSON.parse(text),
+	parseErr: ({ error }) => {
+		return error instanceof Error ? error.message : String(error);
+	},
+});
 
 assertEquals(parseJson('{"a":1}').isOk(), true);
 assertEquals(parseJson("{").isErr(), true);
 ```
+
+A throw from `parseErr` or from the optional `cleanup` is not captured: it
+propagates as in a plain `try`/`catch`/`finally`, so keep both from throwing.
 
 ## Validate in steps
 

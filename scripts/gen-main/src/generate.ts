@@ -23,6 +23,7 @@ import {
 	conversionKey,
 	convertedBody,
 	convertReturn,
+	GENERATED_PREFIX,
 } from "./convert.ts";
 import { moduleScopeValueUses } from "./cycle.ts";
 import type {
@@ -276,6 +277,19 @@ function signaturesOf(symbol: DocSymbol): FunctionDeclaration[] {
 		: functions;
 }
 
+/**
+ * Why `params` can't be generated, if one takes the prefix reserved for
+ * generated locals and so could collide with one.
+ */
+function reservedParamError(params: readonly Param[]): string | undefined {
+	const reserved = params.find((param) => {
+		return param.name.startsWith(GENERATED_PREFIX);
+	});
+	if (reserved === undefined) return undefined;
+
+	return `parameter ${reserved.name} starts with "${GENERATED_PREFIX}", which generated code reserves; rename it in mini`;
+}
+
 function isSelfOfPrimary(primary: string, param: Param | undefined): boolean {
 	if (param?.kind !== "identifier" || param.name !== "self") return false;
 	const type = param.type;
@@ -480,6 +494,10 @@ function methodHead({
 			: returnType;
 	const methodParams =
 		returnType.kind === "function" && curried ? returnType.params : params;
+	const reserved = reservedParamError([...params, ...methodParams]);
+	if (reserved !== undefined) {
+		return failure({ feature, symbol: name, message: reserved });
+	}
 	const methodTypeParams =
 		returnType.kind === "function" && curried
 			? [...ownParams, ...returnType.typeParams]
@@ -687,6 +705,10 @@ function renderWrapper({
 
 	for (const declared of signatures) {
 		const signature = labelled(module, declared);
+		const reserved = reservedParamError(signature.params);
+		if (reserved !== undefined) {
+			return failure({ feature, symbol: symbol.name, message: reserved });
+		}
 		const context = contextFor({
 			module,
 			fileUrl: signature.location.filename,

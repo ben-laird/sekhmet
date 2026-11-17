@@ -31,7 +31,12 @@ import type { Enum, Isolate } from "@/src/core/mini/core.ts";
 import { Option } from "../../option/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
-export type { ResultVariants } from "../mini/mod.ts";
+export type {
+	FallibleAsyncOptions,
+	FallibleOptions,
+	NotPromise,
+	ResultVariants,
+} from "../mini/mod.ts";
 
 /**
  * A type representing either a success value or an error.
@@ -774,4 +779,152 @@ export function Ok<T = unknown, E = never>(value: T): Result<T, E> {
  */
 export function Err<T = never, E = unknown>(err: E): Result<T, E> {
 	return Result.fromMini(mini.Err(err));
+}
+
+/**
+ * Wraps a function that may throw so that it returns a `Result` instead.
+ *
+ * A return from `fn` becomes `Ok`, and a throw becomes `Err` of what
+ * `parseErr` makes of it. `cleanup`, when given, runs in a `finally` block
+ * after either. A throw from `parseErr` or `cleanup` propagates (a throw
+ * from `cleanup` replaces the outcome), as in a plain `try`/`catch`/`finally`.
+ *
+ * The callbacks must be synchronous, so an async `fn`, `parseErr` or
+ * `cleanup` is a compile error rather than an `Ok(promise)`, an
+ * `Err(promise)` or a cleanup nobody awaits; use {@linkcode fallibleAsync}.
+ * The check can't see through a caller's own type parameter, so a function
+ * generic in its return type, such as `<T>(g: () => T) => fallible({ fn: g,
+ * … })`, doesn't compile, since its `T` might be a promise (see
+ * {@linkcode NotPromise}).
+ *
+ * @template A - The wrapped function's parameter list
+ * @template U - The wrapped function's return type
+ * @template E - The error type `parseErr` produces
+ * @template C - What `cleanup` returns, which is ignored unless it's a promise
+ * @param options - The function, its error parser and an optional cleanup
+ * @returns A function taking `fn`'s arguments and returning its outcome as a `Result`
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, fallible, Ok } from "@sekhmet/enum/result";
+ *
+ * const parseJson = fallible({
+ * 	fn: (text: string): unknown => JSON.parse(text),
+ * 	parseErr: ({ args: [text] }) => `not JSON: ${text}`,
+ * });
+ *
+ * assertEquals(parseJson('{"a":1}'), Ok({ a: 1 }));
+ * assertEquals(parseJson("{"), Err("not JSON: {"));
+ * ```
+ */
+export function fallible<A extends unknown[], U, E, C = void>(
+	options: mini.FallibleOptions<A, U, E, C>,
+): (...args: A) => Result<U, E> {
+	const $converted = mini.fallible(options);
+	return (...$args0) => {
+		return Result.fromMini($converted(...$args0));
+	};
+}
+
+/**
+ * Wraps a function that may throw or reject so that it resolves to a
+ * `Result` instead.
+ *
+ * `fn`, `parseErr` and `cleanup` may each be sync or async. A value from
+ * `fn` (returned or resolved) becomes `Ok`, and a throw or rejection becomes
+ * `Err` of what `parseErr` makes of it. `cleanup`, when given, is awaited in
+ * a `finally` block before the promise settles. A throw or rejection from
+ * `parseErr` or `cleanup` rejects the returned promise (one from `cleanup`
+ * replaces the outcome), as in an `async` `try`/`catch`/`finally`.
+ *
+ * @template A - The wrapped function's parameter list
+ * @template U - The value the wrapped function returns or resolves to
+ * @template E - The error type `parseErr` produces or resolves to
+ * @param options - The function, its error parser and an optional cleanup
+ * @returns A function taking `fn`'s arguments and resolving to its outcome as a `Result`
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, fallibleAsync, Ok } from "@sekhmet/enum/result";
+ *
+ * const load = fallibleAsync({
+ * 	fn: async (id: number): Promise<string> => {
+ * 		if (id !== 1) throw new Error(`no user ${id}`);
+ * 		return "Ada";
+ * 	},
+ * 	parseErr: ({ error }) => String(error),
+ * });
+ *
+ * assertEquals(await load(1), Ok("Ada"));
+ * assertEquals(await load(2), Err("Error: no user 2"));
+ * ```
+ */
+export function fallibleAsync<A extends unknown[], U, E>(
+	options: mini.FallibleAsyncOptions<A, U, E>,
+): (...args: A) => Promise<Result<U, E>> {
+	const $converted = mini.fallibleAsync(options);
+	return (...$args0) => {
+		return $converted(...$args0).then(($value1) => {
+			return Result.fromMini($value1);
+		});
+	};
+}
+
+/**
+ * Builds a `Promise<Result>` from an executor shaped like the `Promise`
+ * constructor's: calling `resolve(value)` settles it with `Ok(value)`, and
+ * `reject(error)` with `Err(error)`. The promise itself never rejects for
+ * either.
+ *
+ * The executor takes `resolve` and `reject` positionally, not as one object:
+ * a deliberate exception to the named-arguments rule, so that it reads
+ * exactly like `new Promise((resolve, reject) => …)`.
+ *
+ * Unlike `new Promise`'s, this `resolve` doesn't adopt a thenable: it would
+ * only wrap it in `Ok`, so it takes `NotPromise<T>`, and a `T` that is a
+ * `PromiseLike` leaves `resolve` uncallable. Await the value first, then
+ * resolve with it. For the same reason, a caller generic in `T` can't pass
+ * its own `T` to `resolve` (see {@linkcode NotPromise}).
+ *
+ * As with `new Promise`, the first call wins and later ones are ignored, and
+ * the executor's return value is ignored. A synchronous throw from the
+ * executor is not captured: the returned promise rejects with the thrown
+ * value, uncaught (it is a bug, not an `E`), unless the executor already
+ * settled it.
+ *
+ * An async executor also behaves as it does with `new Promise`: what it
+ * returns is ignored, so a throw after its first `await` rejects a promise
+ * nobody handles, and unless it called `resolve` or `reject` first, the
+ * returned promise never settles. Keep the executor synchronous, and settle
+ * from the callbacks of whatever it starts.
+ *
+ * @template T - The success value type
+ * @template E - The error type
+ * @param executor - Runs at once with `resolve` and `reject`
+ * @returns A promise of `Ok` for a resolve or `Err` for a reject
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, promiseResult } from "@sekhmet/enum/result";
+ *
+ * const later = (ms: number) => {
+ * 	return promiseResult<number, string>((resolve, reject) => {
+ * 		if (ms < 0) return reject(`negative delay: ${ms}`);
+ * 		setTimeout(() => resolve(ms), ms);
+ * 	});
+ * };
+ *
+ * assertEquals(await later(1), Ok(1));
+ * assertEquals(await later(-1), Err("negative delay: -1"));
+ * ```
+ */
+export function promiseResult<T, E>(
+	executor: (
+		resolve: (value: mini.NotPromise<T>) => void,
+		reject: (error: E) => void,
+	) => void,
+): Promise<Result<T, E>> {
+	return mini.promiseResult(executor).then(($value0) => {
+		return Result.fromMini($value0);
+	});
 }

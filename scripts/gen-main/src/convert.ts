@@ -10,6 +10,12 @@
  * - the plain elements of a returned tuple (`[Option<T>, Option<U>]`)
  * - the yielded type of a returned `Generator`/`IterableIterator` whose return
  *   type is `void`, by re-yielding lazily
+ * - the fulfilled value of a `Promise<X>` in any converted position, through
+ *   `.then` (`Promise<Result<T, E>>`)
+ * - the return value of a non-generic function type in any converted position
+ *   (`(...args: A) => Result<U, E>`), by wrapping the function so that each
+ *   call converts; a returned function is bound to a name first, at every
+ *   level of a curried function, so each mini call still runs once
  *
  * Everything else (parameters, unions, other generics) keeps its mini type.
  *
@@ -20,13 +26,30 @@ import type { TypeNode } from "./doc.ts";
 import { renderTuple } from "./render.ts";
 import { err, ok, type Result } from "./result.ts";
 
+/**
+ * The prefix of every local name generated code declares (`$converted`,
+ * `$item`, `$element0`, `$value0`, `$args0`). Mini parameters can't use it,
+ * so a generated name never collides with one.
+ */
+export const GENERATED_PREFIX = "$";
+
+/** A local name for generated code, out of reach of mini's parameters. */
+function local(name: string): string {
+	return `${GENERATED_PREFIX}${name}`;
+}
+
 /** Turns the source of a mini value into the source of its main value. */
 export type Apply = (expression: string) => string;
 
 /** The runtime conversion a return type needs. */
 export type Conversion =
 	| { readonly kind: "none" }
-	| { readonly kind: "value"; readonly apply: Apply }
+	| {
+			readonly kind: "value";
+			readonly apply: Apply;
+			/** Whether the value must be bound to a name before `apply` reads it. */
+			readonly named: boolean;
+	  }
 	| {
 			readonly kind: "tuple";
 			readonly elements: readonly {
@@ -62,6 +85,119 @@ const ITERABLES: ReadonlySet<string> = new Set([
 interface Value {
 	readonly text: string;
 	readonly apply: Apply | undefined;
+	/**
+	 * Whether `apply` evaluates its expression on every call of the function
+	 * it builds, so the expression must be a name rather than a call.
+	 */
+	readonly named: boolean;
+}
+
+/** A value of `type` that keeps its mini spelling and needs no conversion. */
+function unconverted({
+	type,
+	context,
+}: {
+	type: TypeNode;
+	context: ConvertContext;
+}): Value {
+	return { text: context.render(type), apply: undefined, named: false };
+}
+
+/** Plans `Promise<X>`: its fulfilled value converts through `.then`. */
+function planPromise({
+	type,
+	context,
+	depth,
+}: {
+	type: Extract<TypeNode, { kind: "ref" }>;
+	context: ConvertContext;
+	depth: number;
+}): Result<Value, string> {
+	const [fulfilled] = type.args;
+	if (fulfilled === undefined) return ok(unconverted({ type, context }));
+
+	const planned = planValue({ type: fulfilled, context, depth: depth + 1 });
+	if (!planned.ok) return planned;
+
+	const { text, apply } = planned.value;
+	if (apply === undefined) return ok(unconverted({ type, context }));
+
+	const item = local(`value${depth}`);
+
+	return ok({
+		text: `Promise<${text}>`,
+		apply: (expression) => {
+			return `${expression}.then(${arrow({ params: item, body: apply(item) })})`;
+		},
+		named: false,
+	});
+}
+
+/** Plans a non-generic function type: each call's return value converts. */
+function planFunction({
+	type,
+	context,
+	depth,
+}: {
+	type: Extract<TypeNode, { kind: "function" }>;
+	context: ConvertContext;
+	depth: number;
+}): Result<Value, string> {
+	const planned = planValue({
+		type: type.returnType,
+		context,
+		depth: depth + 1,
+	});
+	if (!planned.ok) return planned;
+
+	const { text, apply, named } = planned.value;
+	if (apply === undefined) return ok(unconverted({ type, context }));
+
+	const args = local(`args${depth}`);
+	const bound = local(`converted${depth}`);
+
+	// A returned value that is itself `named` (a curried function) is bound
+	// once per call, so the outer call isn't deferred into, and repeated by,
+	// each inner call.
+	return ok({
+		text: context.render({ ...type, returnType: verbatim(text) }),
+		apply: (expression) => {
+			const call = `${expression}(...${args})`;
+			if (named) {
+				return arrow({
+					params: `...${args}`,
+					body: apply(bound),
+					before: `const ${bound} = ${call};`,
+				});
+			}
+
+			return arrow({ params: `...${args}`, body: apply(call) });
+		},
+		named: true,
+	});
+}
+
+/**
+ * Renders an arrow function with a braced body, so generated code stays
+ * bracketed however Biome wraps it.
+ */
+function arrow({
+	params,
+	body,
+	before,
+}: {
+	params: string;
+	body: string;
+	before?: string;
+}): string {
+	const statements = before === undefined ? "" : `${before} `;
+
+	return `(${params}) => { ${statements}return ${body}; }`;
+}
+
+/** A type node that renders as `text` unchanged. */
+function verbatim(text: string): TypeNode {
+	return { kind: "ref", name: text, args: [], resolution: { kind: "global" } };
 }
 
 function planValue({
@@ -73,9 +209,25 @@ function planValue({
 	context: ConvertContext;
 	depth: number;
 }): Result<Value, string> {
+	if (
+		type.kind === "ref" &&
+		type.resolution.kind === "global" &&
+		type.name === "Promise" &&
+		type.args.length === 1
+	) {
+		return planPromise({ type, context, depth });
+	}
+	if (
+		type.kind === "function" &&
+		!type.constructor &&
+		type.typeParams.length === 0
+	) {
+		return planFunction({ type, context, depth });
+	}
+
 	const target = context.wrapTarget(type);
 	if (target === undefined || type.kind !== "ref") {
-		return ok({ text: context.render(type), apply: undefined });
+		return ok(unconverted({ type, context }));
 	}
 
 	const args: Value[] = [];
@@ -96,8 +248,8 @@ function planValue({
 				`${target}'s type argument ${i} names a main class but ${target} has no mapper for it; add one to its \`mappers\``,
 			);
 		}
-		const item = `value${depth}`;
-		maps.push(`.${mapper}((${item}) => ${arg.apply(item)})`);
+		const item = local(`value${depth}`);
+		maps.push(`.${mapper}(${arrow({ params: item, body: arg.apply(item) })})`);
 	}
 
 	const text =
@@ -108,6 +260,7 @@ function planValue({
 	return ok({
 		text,
 		apply: (expression) => `${target}.fromMini(${expression})${maps.join("")}`,
+		named: false,
 	});
 }
 
@@ -185,13 +338,10 @@ export function convertReturn({
 	const planned = planValue({ type, context, depth: 0 });
 	if (!planned.ok) return planned;
 
-	const { text, apply } = planned.value;
+	const { text, apply, named } = planned.value;
+	if (apply === undefined) return ok({ text, conversion: { kind: "none" } });
 
-	return ok({
-		text,
-		conversion:
-			apply === undefined ? { kind: "none" } : { kind: "value", apply },
-	});
+	return ok({ text, conversion: { kind: "value", apply, named } });
 }
 
 /**
@@ -217,19 +367,31 @@ export function convertedBody({
 	switch (conversion.kind) {
 		case "none":
 			return isVoid ? `${call};` : `return ${call};`;
-		case "value":
+		case "value": {
+			if (conversion.named) {
+				const converted = local("converted");
+
+				return `const ${converted} = ${call};\n${indent}return ${conversion.apply(converted)};`;
+			}
+
 			return `return ${conversion.apply(call)};`;
-		case "iterable":
-			return `for (const item of ${call}) {\n${indent}\tyield ${conversion.apply("item")};\n${indent}}`;
+		}
+		case "iterable": {
+			const item = local("item");
+
+			return `for (const ${item} of ${call}) {\n${indent}\tyield ${conversion.apply(item)};\n${indent}}`;
+		}
 		case "tuple": {
-			const names = conversion.elements.map(
-				({ rest }, i) => `${rest ? "..." : ""}element${i}`,
-			);
-			const values = conversion.elements.map(({ rest, apply }, i) =>
-				rest || apply === undefined
-					? `${rest ? "..." : ""}element${i}`
-					: apply(`element${i}`),
-			);
+			const names = conversion.elements.map(({ rest }, i) => {
+				return `${rest ? "..." : ""}${local(`element${i}`)}`;
+			});
+			const values = conversion.elements.map(({ rest, apply }, i) => {
+				const name = local(`element${i}`);
+				if (rest) return `...${name}`;
+				if (apply === undefined) return name;
+
+				return apply(name);
+			});
 
 			return `const [${names.join(", ")}] = ${call};\n${indent}return [${values.join(", ")}];`;
 		}
@@ -248,8 +410,9 @@ export function conversionKey(conversion: Conversion): string {
 		case "none":
 			return "none";
 		case "value":
+			return `value:${conversion.named}:${conversion.apply("x")}`;
 		case "iterable":
-			return `${conversion.kind}:${conversion.apply("x")}`;
+			return `iterable:${conversion.apply("x")}`;
 		case "tuple":
 			return `tuple:${conversion.elements.map((e) => `${e.rest}:${e.apply?.("x") ?? ""}`).join(",")}`;
 	}

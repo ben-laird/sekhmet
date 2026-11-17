@@ -23,6 +23,8 @@
 
 export * from "./combinators.ts";
 export * from "./core.ts";
+export * from "./fallible.ts";
 export * from "./predicates.ts";
+export * from "./promise.ts";
 export * from "./transform.ts";
 export * from "./unwrap.ts";
