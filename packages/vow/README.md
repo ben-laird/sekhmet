@@ -65,12 +65,13 @@ assertEquals(await wait(total), 15);
 - **Tutorial:** [Getting started](./docs/getting-started.md) builds an order
   total from values that arrive separately, step by step.
 - **How-to guides:** [Recipes](./docs/recipes.md) for resolving a vow from a
-  callback or an executor, combining vows, awaiting a vow, turning a promise
-  into a vow and handling its failure, and catching errors thrown by
-  dependents.
+  callback or an executor, starting a chain from a value you already have,
+  combining vows, awaiting a vow, turning a promise into a vow and handling
+  its failure, and catching errors thrown by dependents.
 - **Explanation:** [Concepts](./docs/concepts.md) covers when to use a vow
-  rather than a promise, why resolution is synchronous, resolve-once
-  semantics, why a vow cannot fail, and errors in dependents.
+  rather than a promise, why resolution is synchronous, how a vow is built as
+  an enum, resolve-once semantics, why a vow cannot fail, and errors in
+  dependents.
 - **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/vow/doc)
   documents every export.
 
