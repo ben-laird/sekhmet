@@ -127,7 +127,10 @@ assertEquals(isErr(await read("q=tea&archived=maybe")), true);
 ```
 
 If a form uses other words for a checkbox, pass them:
-`stringbool({ truthy: ["checked"], falsy: ["unchecked"] })`. If you need
+`stringbool({ truthy: ["checked"], falsy: ["unchecked"] })`. A list you pass
+replaces that default list rather than adding to it, so if `yes` and `no`
+must still work, list them too, or spread the defaults that
+`@sekhmet/schema/primitives` exports: `truthy: [...STRINGBOOL_TRUTHY, "checked"]`. If you need
 JavaScript's own conversions, traps included, use `coerce: "native"`; the
 coercion modes are listed on
 [`CoerceMode`](https://jsr.io/@sekhmet/schema/doc/primitives/~/CoerceMode).
