@@ -195,13 +195,25 @@ export const REPOSITORY_BLOB =
  * Rewrites the root README's links for the site: links into
  * `packages/<dir>/README.md` or `packages/<dir>/docs/<page>.md` become that
  * package's site pages, and other relative links (such as `LICENSE.md`)
- * point at the file in the repository.
+ * point at the file in the repository. So do links into an unpublished
+ * package, which has no pages on the site.
  *
- * @param text - The root README markdown
+ * @param options.text - The root README markdown
+ * @param options.unpublished - The directory names of unpublished packages
  * @returns The home page markdown
  */
-export function rootLinks(text: string): string {
+export function rootLinks({
+	text,
+	unpublished,
+}: {
+	text: string;
+	unpublished: ReadonlySet<string>;
+}): string {
 	return rewriteLinks(text, (target) => {
+		const dir = /^(?:\.\/)?packages\/([\w-]+)(?:\/|$)/.exec(target)?.[1];
+		if (dir !== undefined && unpublished.has(dir)) {
+			return `${REPOSITORY_BLOB}${target.replace(/^\.\//, "")}`;
+		}
 		const packagePage = target
 			.replace(/^(?:\.\/)?packages\/([\w-]+)\/README\.md/, "/$1/")
 			.replace(/^(?:\.\/)?packages\/([\w-]+)\/docs\/([\w-]+)\.md/, "/$1/$2")
@@ -318,7 +330,12 @@ export function planSite({
 	rootReadme: string;
 	packages: readonly PackageSource[];
 }): Result<Site, readonly PageError[]> {
-	const pages: Page[] = [{ path: "index.md", text: rootLinks(rootReadme) }];
+	const unpublished = new Set(
+		packages.filter((pkg) => !pkg.published).map((pkg) => pkg.dir),
+	);
+	const pages: Page[] = [
+		{ path: "index.md", text: rootLinks({ text: rootReadme, unpublished }) },
+	];
 	const sidebar: Record<string, readonly SidebarGroup[]> = {};
 	const nav: SidebarLink[] = [];
 	const errors: PageError[] = [];

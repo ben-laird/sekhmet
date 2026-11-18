@@ -63,7 +63,7 @@ Deno.test("rootLinks points package links at package sections", () => {
 		"[a](packages/enum) [b](./packages/effect/README.md) [c](packages/enum/docs/concepts.md)";
 
 	// When: rewriting it for the site
-	const rewritten = rootLinks(text);
+	const rewritten = rootLinks({ text, unpublished: new Set() });
 
 	// Then: each link points into the package's section
 	assertEquals(rewritten, "[a](/enum/) [b](/effect/) [c](/enum/concepts)");
@@ -75,7 +75,7 @@ Deno.test("rootLinks points other relative links at the repository", () => {
 		"[l](LICENSE.md) [c](./CONTRIBUTING.md) [j](https://jsr.io/@sekhmet) [a](#packages)";
 
 	// When: rewriting it for the site
-	const rewritten = rootLinks(text);
+	const rewritten = rootLinks({ text, unpublished: new Set() });
 
 	// Then: only the relative file links change, to the repository's files
 	assertEquals(
@@ -321,4 +321,40 @@ Deno.test("planSite leaves out unpublished packages", () => {
 		["enum"],
 	);
 	assertEquals(Object.keys(planned.value.sidebar), ["/enum/"]);
+});
+
+Deno.test("rootLinks points links into unpublished packages at the repository", () => {
+	// Given: the root README linking a published package and an unpublished one
+	const text =
+		"[e](packages/enum/README.md) [j](packages/job/README.md) [g](./packages/job/docs/guide.md)";
+
+	// When: rewriting it with job unpublished
+	const rewritten = rootLinks({ text, unpublished: new Set(["job"]) });
+
+	// Then: the published package gets its section; job's links go to GitHub
+	assertEquals(
+		rewritten,
+		"[e](/enum/) [j](https://github.com/ben-laird/sekhmet/blob/main/packages/job/README.md) [g](https://github.com/ben-laird/sekhmet/blob/main/packages/job/docs/guide.md)",
+	);
+});
+
+Deno.test("planSite's home page links an unpublished package to the repository", () => {
+	// Given: a root README that links the unpublished job package
+	const packages = [
+		{ dir: "enum", readme: "# Enum", docs: [], published: true },
+		{ dir: "job", readme: "# Job", docs: [], published: false },
+	];
+	const rootReadme =
+		"See [job](packages/job/README.md) and [enum](packages/enum/README.md).";
+
+	// When: planning the site
+	const planned = planSite({ rootReadme, packages });
+	assert(planned.ok);
+
+	// Then: the home page has no route to the missing /job/ section
+	const home = planned.value.pages.find((page) => page.path === "index.md");
+	assertEquals(
+		home?.text,
+		"See [job](https://github.com/ben-laird/sekhmet/blob/main/packages/job/README.md) and [enum](/enum/).",
+	);
 });
