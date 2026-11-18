@@ -28,10 +28,12 @@ The helpers do not report or recover from anything themselves. Each throws a
 `Panic` from [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic), with its own
 name (`Panic (Todo)`, `Panic (Invariant)` and so on) and a typed cause, and
 leaves the rest to a panic runtime: a program runs inside
-`definePanicRuntime()`, whose hook reports every panic and whose
-`catchUnwind` boundaries stop them. So these panics are reported the same way
-as any other, by one hook the program chooses, and the package adds no global
-state of its own.
+`definePanicRuntime()`, whose `catchUnwind` boundaries stop the panics that
+reach them and report each one to the runtime's hook. The hook runs at the
+boundary, not at the throw, so a panic caught by a plain `try`/`catch` before
+it reaches a boundary is never reported. These panics are reported the same
+way as any other, by one hook the program chooses, and the package adds no
+global state of its own.
 
 What the package adds is the cause and the guard. The cause keeps what the
 call was given, as data, so a hook can file the tracking URL, count the
@@ -58,71 +60,50 @@ handle it, deduplicate the package, or fall back to its `name`.
 
 ## Equality in `invariantEqual`
 
-`invariantEqual` compares with `Object.is` unless you pass `equals`. That is
-JavaScript's own notion of "the same value". Unlike `===`, it treats `NaN` as
-equal to itself, so asserting that a computation gave `NaN` can pass, and it
-keeps `0` and `-0` apart, which matters when the sign carries meaning.
+`invariantEqual` compares with `Object.is` by default: `NaN` equals `NaN`,
+and `-0` differs from `+0`. Objects compare by identity, so for structural or
+domain equality the call passes an `equals` comparator.
 
-Objects compare by identity. There is no single right notion of content
-equality (deep or shallow, ordered or not, by every field or by a key), so
-the package does not pick one: `equals` lets the call say what equal means
-there. Both values share one inferred type, so comparing a number to a string
-is a type error rather than a guaranteed panic, while a nullable value still
-compiles against `null`.
+Both values share one inferred type `T`, as in `@std/assert`'s
+`assertEquals`. So comparing a number to a string is a type error, while
+`actual: 1, expected: null` compiles, with `T` inferred as `number | null`.
+The alternative, `assertStrictEquals`'s `actual: unknown`, buys nothing here:
+an `asserts` signature cannot narrow a property of an options object, so an
+`unknown` `actual` would only loosen the type check.
 
 ## Rendering the impossible value
 
 `unreachable` shows the value that should have been impossible, and the
 invariant checks show the values that failed them. That value arrived from
-somewhere the types did not cover, so it can be anything. It is rendered with
-a small, runtime-agnostic formatter that never throws:
+somewhere the types did not cover, so it can be anything: a cycle, a BigInt,
+a throwing getter, a hostile Proxy. Rendering it must not throw, must not run
+the value's own code, and must not turn a bug report into a huge message, so
+the helpers use their own small, runtime-agnostic formatter. It reads properties through their
+descriptors instead of running getters, `toJSON` or `toString`, and cuts
+strings, depth and width short. The module docs in the
+[API reference](https://jsr.io/@sekhmet/workflow/doc) list the exact formats
+and limits.
 
-- strings are quoted, `-0` and BigInts (`10n`) are kept apart, symbols read as
-  `Symbol(tag)`, functions as `[Function: name]`, errors as
-  `[TypeError: message]`;
-- objects, arrays, typed arrays, maps and sets are shown two levels deep and
-  ten entries wide, as `{ a: 1 }`, `[1, <empty>, 3]`,
-  `Uint8Array(3) [0, 0, 0]`, `Map(1) { "a" => 1 }` and `Set(1) { 1 }`, with a
-  class instance prefixed by its class name and cycles shown as `[Circular]`;
-- properties are read through their descriptors, so no getter runs (shown as
-  `[Getter]`) and no `toJSON` or `toString` is called;
-- anything that still throws, such as a revoked Proxy, renders as
-  `[unrenderable value]`.
-
-Rendering is bounded, so a huge value cannot make a huge message or a slow
-panic: strings and keys are cut at 200 characters (`"aaa…"… 4999800 more
-chars`), lists are read by index and their hidden entries counted from their
-length, and at most a hundred keys of an object are examined. A Proxy's own
-`ownKeys` trap still runs once, at whatever cost it has.
-
-Text you pass (descriptions, subtasks, the expected behavior) goes through
-`String`, falling back to the same formatter if that throws, and is cut at a
-thousand characters.
+The bounds keep the message small, and most of the work with it, but not all
+of it. An object's own key names are listed in full before the formatter
+picks the few it shows, so rendering a very large object still takes time
+linear in its key count, and a Proxy's `ownKeys` trap runs once, at whatever
+cost it has.
 
 ## Never throwing while panicking
 
 A helper runs when the program is already wrong, so it must throw its own
 panic and nothing else; an unrelated error would hide the bug it reports.
-Every option is read through a guard: an untyped caller's `null` options, a
-throwing getter, a hostile Proxy or a checklist that is not an array cannot
-replace the panic with another error.
+Every option is read through a guard, so an untyped caller's `null` options,
+a throwing getter, a hostile Proxy or a checklist that is not an array
+cannot replace the panic with another error. Each bad option has a fixed
+fallback, listed in the module docs in the
+[API reference](https://jsr.io/@sekhmet/workflow/doc).
 
-- a field that cannot be read renders as `[unrenderable value]`;
-- a checklist that is not an array counts as empty;
-- a URL that is not a `URL` is left out;
-- an invariant check given no expected behavior says `(not given)`;
-- `defined` given an `absent` it does not know counts `null` and `undefined`
-  as absent;
-- `satisfies` given a predicate that is not a function panics, as if the
-  predicate rejected the value, and `invariantEqual` given an `equals` that
-  is not a function panics, as if the values were unequal;
-- a `predicate` or `equals` that throws is not caught: it runs before any
-  panic, so its error propagates unchanged, as from `Array.prototype.filter`;
-- `invariantEqual` fails closed: missing options, or an `actual` or
-  `expected` that is missing or cannot be read, panic as unequal, with the
-  value left out of the cause and shown as `[unrenderable value]`;
-- if building the message still throws, the message is the header alone.
+The one thing a helper does not guard is the caller's own code. A
+`predicate` or `equals` that throws runs before any panic, so its error
+propagates unchanged, as from `Array.prototype.filter`.
 
-Failing closed is the safe direction for an invariant: a check that cannot
-tell whether the program is right reports it as wrong, rather than letting a
-possible bug through.
+`invariantEqual` fails closed: when it cannot tell whether the values are
+equal, it panics. A check that cannot tell whether the program is right
+reports it as wrong, rather than letting a possible bug through.

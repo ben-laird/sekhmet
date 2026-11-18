@@ -178,25 +178,40 @@ with `defined` and `satisfies`. Both return the value, narrowed.
    TypeScript infers, such as `(v) => v !== undefined`.
 
 ```ts
-import { defined, satisfies } from "@sekhmet/workflow/invariant";
-import { assertEquals } from "@std/assert";
+import {
+	defined,
+	isInvariantPanic,
+	satisfies,
+} from "@sekhmet/workflow/invariant";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 
 const stock = new Map([["apple", 0]]);
-const count = defined(stock.get("apple"), {
+const count: number = defined(stock.get("apple"), {
 	expectedBehavior: "every listed item should have a stock count",
 });
-assertEquals(count, 0); // number, and 0 is present
+assertEquals(count, 0); // 0 is present
 
-const isEven = (n: number): boolean => n % 2 === 0;
-const pairs = satisfies(4, {
-	predicate: isEven,
-	expectedBehavior: "socks should come in pairs",
-});
-assertEquals(pairs, 4);
+const settings: Record<string, unknown> = JSON.parse(
+	'{ "theme": "dark", "fontSize": 14 }',
+);
+const textSetting = (key: string): string => {
+	return satisfies(settings[key], {
+		predicate: (value) => typeof value === "string",
+		expectedBehavior: "a text setting should hold a string",
+	}); // narrowed from unknown to string
+};
+
+assertEquals(textSetting("theme").toUpperCase(), "DARK");
+
+const thrown = assertThrows(() => textSetting("fontSize"));
+assert(isInvariantPanic(thrown));
+assertEquals(thrown.cause.check, { kind: "satisfies", value: 14 });
 ```
 
 A discriminant check such as `(s) => s.kind === "circle"` is not inferred as
-a guard; annotate its return type (`s is Circle`) to narrow.
+a guard when written inline in the options. Declare it on its own
+(`const isCircle = (s: Shape) => s.kind === "circle"`), where TypeScript
+infers the guard, or annotate its return type (`s is Circle`).
 
 ## How to attach a tracking or issue URL
 
@@ -299,23 +314,13 @@ for what to do about a second copy.
 
 ## How to keep `todo` out of releases
 
-In the Sekhmet repository, `deno task ci` keeps `todo` out of published
-packages. Its publish-readiness step fails when a package's non-test source
-(its `src/` and its top-level modules alike) reaches `todo` from
-`@sekhmet/workflow`. It flags the import itself, not call sites, so every
-call shape is caught:
+This guide shows you how to check that no `todo` placeholder is left before
+you publish. `unimplemented`, `unreachable` and the invariant checks are
+meant to ship; only `todo` marks work that is not done.
 
-- a value import binding `todo`, under any alias or quoted name;
-- a re-export of `todo`, or an `export *` of a module holding it;
-- `ns.todo`, `ns?.todo` or `ns["todo"]` through a namespace import;
-- a dynamic `import()` of a module holding `todo`.
-
-It recognizes the package by every specifier form: bare, `jsr:` (with a
-version), `npm:@jsr/sekhmet__workflow`, `https://jsr.io/@sekhmet/workflow/…`
-URLs, and relative or `@/` paths into `packages/workflow`. Tests, the
-playground and `scripts/` may use `todo` freely. `unimplemented`,
-`unreachable` and the invariant checks are meant to ship and are never
-flagged.
-
-To fix a finding, finish the work, or replace the `todo` with
-`unimplemented` if the path will stay unsupported.
+1. Search your non-test source for `todo` imported from `@sekhmet/workflow`,
+   for example with
+   `grep -rn --include="*.ts" --exclude="*.test.ts" "todo" src`, and check
+   each hit.
+2. For each placeholder, finish the work, or replace `todo` with
+   `unimplemented` if the path will stay unsupported.
