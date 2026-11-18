@@ -1,3 +1,7 @@
+---
+kind: how-to
+---
+
 # Recipes
 
 Runnable patterns built from the public API. They share a small `run` helper

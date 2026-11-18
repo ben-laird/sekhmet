@@ -1,3 +1,7 @@
+---
+kind: tutorial
+---
+
 # Getting started
 
 This guide builds an effect, runs it, reads its result, and then makes it
