@@ -226,8 +226,9 @@ export type SchemaIssueVariants = Split<{
  *
  * `received` is the input's {@linkcode TypeName}. `origin` says what was
  * measured (see {@linkcode Origin}) and fixes the bound's type (see
- * {@linkcode LimitOf}). Each variant has a constructor of the same name,
- * taking its details: `InvalidType({ input, expected })`.
+ * {@linkcode LimitOf}). Each variant has a constructor of the same name that
+ * takes its details, except that {@linkcode InvalidType} derives `received`
+ * from the input itself: `InvalidType({ input, expected })`.
  *
  * @example
  * ```ts
