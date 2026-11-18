@@ -40,30 +40,27 @@ first call counts.
 
 ## How to resolve a vow from an executor
 
-This guide shows you how to create a vow whose resolution is set up in one
-place, as with `new Promise`.
+This guide shows you how to create a vow whose value is computed where the
+vow is made, as with `new Promise`.
 
 1. Construct a `Vow` with an executor; it receives `resolve`.
-2. Call `resolve` inside the executor to resolve the vow as soon as it is
-   constructed, or keep it to call later.
+2. Compute the value and call `resolve` inside the executor. The vow is
+   resolved by the time the constructor returns.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { Vow, wait } from "@sekhmet/vow";
+import { map, Vow } from "@sekhmet/vow";
 
-const now = new Vow<number>((resolve) => resolve(1));
-
-let resolveLater = (_value: number): void => {};
-const later = new Vow<number>((resolve) => {
-	resolveLater = resolve;
+const config = new Vow<{ retries: number }>((resolve) => {
+	const retries = Number("3");
+	resolve({ retries });
 });
-resolveLater(2);
 
-assertEquals(await Promise.all([wait(now), wait(later)]), [1, 2]);
+const seen: number[] = [];
+map(config, ({ retries }) => seen.push(retries));
+
+assertEquals(seen, [3]);
 ```
-
-If you already have the value, `resolved(value)` is shorter than an executor
-that resolves at once.
 
 ## How to start a chain from a value you already have
 
