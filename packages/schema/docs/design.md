@@ -116,7 +116,8 @@ A primitive accepts only its own type unless asked to coerce.
   bounds), `trim`, `normalize` (Unicode), `regex`, and formats `email`,
   `url`, `uuid`, `date`, `time`, `date-time`. `email` uses a pragmatic
   pattern (`EMAIL_PATTERN`), not RFC 5322; `url` is what `URL.canParse`
-  accepts. They are options since #28: `string({ trim: true, format: "email" })`.
+  accepts, plus a check that keeps it to the URL Standard on Chromium (no `%`
+  left in a special scheme's host; 2026-11-18). They are options since #28: `string({ trim: true, format: "email" })`.
   #35 added `case`, `startsWith`, `endsWith` and the time formats' options
   (see [String options](#string-options-35)).
 - _Superseded by #28 (2026-11-16):_ checks were first built as `self`-first
