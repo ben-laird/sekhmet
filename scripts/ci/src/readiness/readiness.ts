@@ -2,6 +2,7 @@ import { dirname } from "@std/path/posix";
 import type { CheckId, Finding } from "./finding.ts";
 import { checkGivenWhenThen } from "./given-when-then.ts";
 import { checkImports } from "./imports.ts";
+import { checkModuleState, isStatelessSource } from "./module-state.ts";
 import {
 	checkExports,
 	checkPackageFiles,
@@ -41,6 +42,7 @@ export const STATIC_CHECKS: ReadonlySet<CheckId> = new Set<CheckId>([
 	"publish-exclude",
 	"given-when-then",
 	"specifiers",
+	"module-state",
 	"todo",
 ]);
 
@@ -110,6 +112,7 @@ export function docLintMembers(workspace: Workspace): Member[] {
  * - the root manifest: `publish-exclude`
  * - every `*.test.ts`: `given-when-then`
  * - every `README.md`, and JSDoc in package source: `specifiers`
+ * - non-test source under a stateless root: `module-state`
  * - non-test source of every package but `@sekhmet/workflow`: `todo`
  */
 export function staticFindings(files: WorkspaceFiles): Finding[] {
@@ -157,6 +160,9 @@ export function staticFindings(files: WorkspaceFiles): Finding[] {
 			findings.push(
 				...checkSpecifiers({ path, text: views.comments, packages: byName }),
 			);
+			if (isStatelessSource(path)) {
+				findings.push(...checkModuleState({ path, text, views }));
+			}
 		}
 		if (
 			owner !== undefined &&

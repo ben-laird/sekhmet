@@ -76,10 +76,10 @@ export type {
  */
 export class Result<out T, out E> extends mini.Result<T, E> {
 	/**
-	 * Views a mini {@linkcode mini.Result} as a main `Result`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
+	 * Views a mini {@linkcode mini.Result} as a main `Result`, returning it unchanged when it already is one. The view is built from the mini instance's struct params, so it sees the same state.
 	 *
 	 * @param self - The Result to convert
-	 * @returns A main `Result` sharing `self`'s state
+	 * @returns A main `Result` built from `self`'s params
 	 */
 	static fromMini<T, E>(self: mini.Result<T, E>): Result<T, E> {
 		if (self instanceof Result) return self;

@@ -9,6 +9,8 @@
  * - `publish-exclude`: the root `publish.exclude` keeps tests out of packages
  * - `given-when-then`: every test and step has Given/When/Then comments
  * - `specifiers`: `@sekhmet/*` imports in READMEs and JSDoc name real exports
+ * - `module-state`: stateless package source declares no top-level mutable
+ *   state (a `let`/`var`, or a `Map`/`Set` registry)
  * - `todo`: package source does not import, re-export or reach `todo`
  *   from `@sekhmet/workflow`
  * - `doc-lint`: `deno doc --lint` over each package's export set
@@ -22,6 +24,7 @@ export type CheckId =
 	| "publish-exclude"
 	| "given-when-then"
 	| "specifiers"
+	| "module-state"
 	| "todo"
 	| "doc-lint"
 	| "allowlist";

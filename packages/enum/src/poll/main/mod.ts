@@ -45,10 +45,10 @@ export type { PollVariants } from "../mini/mod.ts";
  */
 export class Poll<out T> extends mini.Poll<T> {
 	/**
-	 * Views a mini {@linkcode mini.Poll} as a main `Poll`, returning it unchanged when it already is one. The view shares the mini instance's state, so a change through either is visible through both.
+	 * Views a mini {@linkcode mini.Poll} as a main `Poll`, returning it unchanged when it already is one. The view is built from the mini instance's struct params, so it sees the same state.
 	 *
 	 * @param self - The Poll to convert
-	 * @returns A main `Poll` sharing `self`'s state
+	 * @returns A main `Poll` built from `self`'s params
 	 */
 	static fromMini<T>(self: mini.Poll<T>): Poll<T> {
 		if (self instanceof Poll) return self;

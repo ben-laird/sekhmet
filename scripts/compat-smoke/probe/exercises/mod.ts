@@ -15,6 +15,7 @@ export const EXERCISES: Exercises = {
 	"@sekhmet/matrix": () => import("./matrix.ts"),
 	"@sekhmet/panic": () => import("./panic.ts"),
 	"@sekhmet/primordials": () => import("./primordials.ts"),
+	"@sekhmet/schema": () => import("./schema.ts"),
 	"@sekhmet/vow": () => import("./vow.ts"),
 	"@sekhmet/workflow": () => import("./workflow.ts"),
 };

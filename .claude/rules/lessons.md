@@ -20,3 +20,9 @@ Rules learned from corrections in this repo. Each carries a one-line _why_.
   `deno task compat:test <runtime>` for any test that touches async error
   paths. _Why: such a test passed the gate but failed five compat suites on
   #45 (2026-11-17)._
+- **Package tests never call Deno-only APIs** (`Deno.inspect`,
+  `Deno.Command`, …) without a runtime guard such as
+  `ignore: typeof Deno.Command !== "function"`. The compat suite runs every
+  package test on seven runtimes, and a green `deno task ci` doesn't prove
+  it's portable. _Why: nine schema test files used `Deno.inspect` and failed
+  compat on Node and Bun while preparing the 0.1.0 release (2026-11-18)._

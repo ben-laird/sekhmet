@@ -112,6 +112,25 @@ Deno.test("decodeDocJson records type aliases as type-only", () => {
 	]);
 });
 
+Deno.test("decodeDocJson records an interface's own property names", () => {
+	// Given: an interface declaring two properties
+	const json = docJson([
+		{
+			kind: "interface",
+			def: { properties: [{ name: "item" }, { name: "minItems" }] },
+		},
+	]);
+
+	// When: decoding it
+	const decoded = decodeDocJson(json);
+
+	// Then: it is type-only, with its property names
+	assert(decoded.ok);
+	assertEquals(decoded.value.get(FILE)?.[0]?.declarations, [
+		{ kind: "other", typeOnly: true, properties: ["item", "minItems"] },
+	]);
+});
+
 Deno.test("decodeDocJson rejects an unknown format version", () => {
 	// Given: output in a format this decoder doesn't know
 	const json = { version: 1, nodes: {} };

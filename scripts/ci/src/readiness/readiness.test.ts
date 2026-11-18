@@ -54,6 +54,35 @@ Deno.test("staticFindings passes a ready repo, where tests may import anything",
 	assertEquals(findings, []);
 });
 
+Deno.test("staticFindings checks schema source, not its tests, for module state", () => {
+	// Given: the ready repo with a schema package whose source and test both
+	// declare a top-level let
+	const files = cleanRepo();
+	files.set(
+		"packages/schema/deno.json",
+		JSON.stringify({
+			name: "@sekhmet/schema",
+			publish: false,
+			exports: { ".": "./mod.ts" },
+		}),
+	);
+	files.set("packages/schema/mod.ts", 'export * from "./src/a.ts";');
+	files.set("packages/schema/src/a.ts", "let count = 0;\nexport const a = 1;");
+	files.set(
+		"packages/schema/src/a.test.ts",
+		'let seen = 0;\nDeno.test("a", () => {\n\t// Given: a\n\t// When: b\n\t// Then: c\n});',
+	);
+
+	// When: running the static checks
+	const findings = staticFindings(files);
+
+	// Then: only the source's let is reported
+	assertEquals(
+		findings.map(({ check, file, line }) => `${check} ${file}:${line}`),
+		["module-state packages/schema/src/a.ts:1"],
+	);
+});
+
 Deno.test("staticFindings reports each kind of failure with its check", () => {
 	// Given: the ready repo broken in one way per check
 	const files = cleanRepo();

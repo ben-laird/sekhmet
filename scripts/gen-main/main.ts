@@ -16,6 +16,7 @@ import {
 	FEATURES,
 	type Feature,
 	generateMain,
+	isClassFeature,
 	isStale,
 } from "@/mod.ts";
 
@@ -76,9 +77,17 @@ async function run({
 async function documentMinis(
 	features: readonly Feature[],
 ): Promise<Outcome<DocModules>> {
+	const minis = new Set(
+		features.flatMap((feature) => [
+			feature.mini,
+			...(isClassFeature(feature) ? (feature.borrows ?? []) : []).map(
+				(borrow) => borrow.mini,
+			),
+		]),
+	);
 	const output = await run({
 		command: "deno",
-		args: ["doc", "--json", ...features.map((feature) => feature.mini)],
+		args: ["doc", "--json", ...minis],
 	});
 	if (!output.ok) return output;
 
@@ -132,12 +141,20 @@ async function generateFeature({
 	const miniUrl = new URL(feature.mini, ROOT).href;
 	const outputUrl = new URL(feature.output, ROOT).href;
 
+	const borrowed = (isClassFeature(feature) ? (feature.borrows ?? []) : []).map(
+		(borrow) => {
+			const url = new URL(borrow.mini, ROOT).href;
+			return { borrow, url, symbols: modules.get(url) ?? [] };
+		},
+	);
+
 	const generated = generateMain({
 		feature,
 		symbols: modules.get(miniUrl) ?? [],
 		sources,
 		miniUrl,
 		outputUrl,
+		borrowed,
 	});
 	if (!generated.ok) return generated;
 
@@ -205,6 +222,7 @@ export async function main(args: string[]): Promise<number> {
 		if (check) {
 			stale.push(feature.output);
 		} else {
+			await Deno.mkdir(new URL(".", url), { recursive: true });
 			await Deno.writeTextFile(url, generated.value);
 			console.log(`wrote ${feature.output}`);
 		}

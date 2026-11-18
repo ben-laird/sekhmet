@@ -10,6 +10,9 @@
  * - the plain elements of a returned tuple (`[Option<T>, Option<U>]`)
  * - the yielded type of a returned `Generator`/`IterableIterator` whose return
  *   type is `void`, by re-yielding lazily
+ * - the one wrap target of a returned intersection with a view
+ *   (`Schema<I, O, E> & ObjectView<S>`), through the target's `fromMiniView`,
+ *   which keeps the view's own properties
  * - the fulfilled value of a `Promise<X>` in any converted position, through
  *   `.then` (`Promise<Result<T, E>>`)
  * - the return value of a non-generic function type in any converted position
@@ -49,6 +52,8 @@ export type Conversion =
 			readonly apply: Apply;
 			/** Whether the value must be bound to a name before `apply` reads it. */
 			readonly named: boolean;
+			/** The main class the value converts to, when it is a wrap target. */
+			readonly target: string | undefined;
 	  }
 	| {
 			readonly kind: "tuple";
@@ -75,6 +80,8 @@ export interface ConvertContext {
 	readonly wrapTarget: (type: TypeNode) => string | undefined;
 	/** The main method mapping each type argument of a wrap target, if any. */
 	readonly mappers: (target: string) => readonly (string | undefined)[];
+	/** Whether a wrap target's main class has a `fromMiniView` static. */
+	readonly views: (target: string) => boolean;
 }
 
 const ITERABLES: ReadonlySet<string> = new Set([
@@ -85,6 +92,8 @@ const ITERABLES: ReadonlySet<string> = new Set([
 interface Value {
 	readonly text: string;
 	readonly apply: Apply | undefined;
+	/** The wrap target `apply` converts to, when there is one. */
+	readonly target?: string;
 	/**
 	 * Whether `apply` evaluates its expression on every call of the function
 	 * it builds, so the expression must be a name rather than a call.
@@ -261,7 +270,85 @@ function planValue({
 		text,
 		apply: (expression) => `${target}.fromMini(${expression})${maps.join("")}`,
 		named: false,
+		target,
 	});
+}
+
+/**
+ * Plans a top-level intersection naming one wrap target, a mini class with a
+ * view (`Schema<I, O, E> & ObjectView<S>`): the target is spelled as its main
+ * class, the other members as they are, and the value is converted with the
+ * target's `fromMiniView`, which copies the view's own properties. An
+ * intersection naming no wrap target needs no conversion.
+ */
+function planIntersection({
+	type,
+	context,
+}: {
+	type: Extract<TypeNode, { kind: "intersection" }>;
+	context: ConvertContext;
+}): Result<Value, string> {
+	const targets = type.types.filter((member) => {
+		return context.wrapTarget(member) !== undefined;
+	});
+	const [member, ...others] = targets;
+	if (member === undefined) {
+		const text = type.types.map(context.render).join(" & ");
+
+		return ok({ text, apply: undefined, named: false });
+	}
+	const target = context.wrapTarget(member);
+	if (others.length > 0 || target === undefined) {
+		return err(
+			"an intersection may name one wrap target, the class its view is on",
+		);
+	}
+	if (!context.views(target)) {
+		return err(
+			`${target} & … needs ${target}.fromMiniView; set \`views\` on ${target}'s feature or wrap target`,
+		);
+	}
+
+	const nested = member.kind === "ref" ? member.args : [];
+	const converts = nested.some((arg) => {
+		const plannedArg = planValue({ type: arg, context, depth: 1 });
+		return !plannedArg.ok || plannedArg.value.apply !== undefined;
+	});
+	const planned = planValue({ type: member, context, depth: 0 });
+	if (!planned.ok) return planned;
+	if (converts) {
+		return err(
+			`${target}'s type arguments name a main class, which an intersection with its view can't convert`,
+		);
+	}
+	const text = type.types
+		.map((part) => {
+			if (part === member) return planned.value.text;
+
+			return context.render(part);
+		})
+		.join(" & ");
+	// {}
+
+	return ok({
+		text,
+		apply: (expression) => `${target}.fromMiniView(${expression})`,
+		named: false,
+		target,
+	});
+}
+
+/** Plans a top-level return type: an intersection with a view, or a value. */
+function planTopLevel({
+	type,
+	context,
+}: {
+	type: TypeNode;
+	context: ConvertContext;
+}): Result<Value, string> {
+	if (type.kind === "intersection") return planIntersection({ type, context });
+
+	return planValue({ type, context, depth: 0 });
 }
 
 function isVoidLike(type: TypeNode | undefined): boolean {
@@ -335,13 +422,13 @@ export function convertReturn({
 		}
 	}
 
-	const planned = planValue({ type, context, depth: 0 });
+	const planned = planTopLevel({ type, context });
 	if (!planned.ok) return planned;
 
-	const { text, apply, named } = planned.value;
+	const { text, apply, named, target } = planned.value;
 	if (apply === undefined) return ok({ text, conversion: { kind: "none" } });
 
-	return ok({ text, conversion: { kind: "value", apply, named } });
+	return ok({ text, conversion: { kind: "value", apply, named, target } });
 }
 
 /**
@@ -358,16 +445,22 @@ export function convertedBody({
 	conversion,
 	isVoid,
 	indent,
+	identity = false,
 }: {
 	call: string;
 	conversion: Conversion;
 	isVoid: boolean;
 	indent: string;
+	identity?: boolean;
 }): string {
 	switch (conversion.kind) {
 		case "none":
 			return isVoid ? `${call};` : `return ${call};`;
 		case "value": {
+			const { target } = conversion;
+			if (identity && target !== undefined) {
+				return identityBody({ call, target, apply: conversion.apply, indent });
+			}
 			if (conversion.named) {
 				const converted = local("converted");
 
@@ -396,6 +489,29 @@ export function convertedBody({
 			return `const [${names.join(", ")}] = ${call};\n${indent}return [${values.join(", ")}];`;
 		}
 	}
+}
+
+/**
+ * The body of a function that returns its receiver itself (`brand`): a
+ * value that is already the main class (a subclass included) is returned
+ * as is, so its identity and members survive; only a mini value is
+ * converted.
+ */
+function identityBody({
+	call,
+	target,
+	apply,
+	indent,
+}: {
+	call: string;
+	target: string;
+	apply: Apply;
+	indent: string;
+}): string {
+	const value = local("value");
+	const check = `const ${value} = ${call};\n${indent}if (${value} instanceof ${target}) return ${value};`;
+
+	return `${check}\n\n${indent}return ${apply(value)};`;
 }
 
 /**
