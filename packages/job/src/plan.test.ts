@@ -162,3 +162,29 @@ Deno.test("a dry run finds duplicate names and cycles", async (t) => {
 		assertEquals(unwrapErr(result), Cycle(["b", "a", "b"]));
 	});
 });
+
+Deno.test("a dry run parks a plan at p.result, so its finally doesn't run", async () => {
+	// Given: a staged plan with a finally after its p.result
+	let finished = false;
+	const version = job({ name: "version", run: () => "1.0.0" });
+	const publish = job({
+		name: "publish",
+		plan: async (p) => {
+			try {
+				return { version: await p.result(version) };
+			} finally {
+				finished = true;
+			}
+		},
+		run: () => {},
+	});
+
+	// When: dry-running it
+	const graph = unwrap(
+		await planJobs({ jobs: [publish], context: { release: true } }),
+	);
+
+	// Then: it is Pending on version, and its finally never ran
+	assert(isolate(planOf({ graph, name: "publish" }), "Pending"));
+	assertEquals(finished, false);
+});

@@ -45,7 +45,9 @@ export interface RunOptions<C> {
 	readonly signal?: AbortSignal | undefined;
 	/**
 	 * When a job fails (without `continueOnError`), abort the rest through
-	 * their signals; jobs not yet started end `Cancelled` (default `false`)
+	 * their signals (default `false`). Ordinary jobs not yet started end
+	 * `Cancelled`; observer jobs (plans that only await `p.outcome`) still
+	 * run, with `t.signal` already aborted
 	 */
 	readonly failFast?: boolean | undefined;
 	/**
@@ -85,6 +87,14 @@ export interface JobMisuseCause {
  * a failed or blocked need makes the job `Blocked` without starting it. A
  * throw or rejection in a plan or body becomes `Failed` and is never
  * rethrown. Unrelated jobs keep running after a failure, unless `failFast`.
+ *
+ * Cancellation (the run's `signal`, `failFast`, or a graph error) aborts
+ * every body's `t.signal`, and ordinary jobs that haven't started end
+ * `Cancelled`. A job whose plan only observes others through `p.outcome`
+ * (an `always()` or `failure()` job) is not cancelled: it runs with
+ * `t.signal` already aborted, so it can tell. A body that throws after the
+ * abort ends `Cancelled` only if what it threw is the abort itself (the
+ * signal's `reason`, or an `AbortError`); any other error is `Failed`.
  *
  * A duplicate name or a cycle (across `needs` and plan awaits) cancels the
  * run, and the result is that `Err`.

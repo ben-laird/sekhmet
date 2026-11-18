@@ -117,6 +117,14 @@ assertEquals(report.passed, true);
   `Result<RunReport, GraphError>`. A failed or blocked need makes a job
   `Blocked` without starting it; a throw becomes `Failed`; a duplicate name or
   a cycle is an `Err`, never a throw or a hang.
+- **Cancellation** (the run's `signal`, `failFast`, or a graph error) aborts
+  every body's `t.signal`, and ordinary jobs that haven't started end
+  `Cancelled`. An observer job, whose plan only awaits `p.outcome` (an
+  `always()` or `failure()` job), is not cancelled: it runs with `t.signal`
+  already aborted, as GitHub Actions runs `always()` jobs. A body that throws
+  after the abort ends `Cancelled` only if it threw the abort itself (the
+  signal's `reason`, or an `AbortError`); any other error is `Failed`.
 - **`planJobs({ jobs, context })`** is the dry run: it calls every plan and
   returns the graph, with a plan that awaits a result reported `Pending` on
-  that job.
+  that job. There `p.result` never settles, so code after it (`finally`
+  included) doesn't run in a dry run.

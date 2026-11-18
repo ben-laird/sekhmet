@@ -125,7 +125,9 @@ export interface Planner<C> {
 	result<T>(job: Job<T, C>): Promise<NeedResult<T>>;
 	/**
 	 * Waits for `job`'s outcome, whatever it is. It never blocks, so a plan
-	 * can run after a failure (`always`) or only after one (`failure`).
+	 * can run after a failure (`always`) or only after one (`failure`). A
+	 * job whose plan only observes through `p.outcome` survives the run's
+	 * cancellation: its body runs with `t.signal` already aborted.
 	 */
 	outcome<T>(job: Job<T, C>): Promise<JobOutcome<Readonly<T>>>;
 }
@@ -162,7 +164,13 @@ export type PlanExit = Skip | NeedResult<never>;
 export interface JobRun<C> {
 	/** The run's read-only context, such as a logger and config */
 	readonly context: C;
-	/** Aborted when the run is cancelled; pass it to `fetch` and friends */
+	/**
+	 * Aborted when the run is cancelled; pass it to `fetch` and friends. An
+	 * observer job (one whose plan only awaited `p.outcome`) can start with
+	 * it already aborted. If the body then throws, the job ends `Cancelled`
+	 * only when the throw is the abort itself (this signal's `reason`, or an
+	 * `AbortError`); any other error is `Failed`.
+	 */
 	readonly signal: AbortSignal;
 	/**
 	 * Runs a named sub-step, reported through `StepStarted`, then

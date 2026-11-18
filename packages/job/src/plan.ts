@@ -75,6 +75,10 @@ export interface PlanOptions<C> {
  * plan's later needs depend on a result only a real run produces, so a
  * cycle closed after a staged await shows up only there.
  *
+ * In a dry run `p.result` and `p.outcome` never settle: the plan stays
+ * parked at that await, so the code after it, `finally` blocks included,
+ * doesn't run there (it does in a real run).
+ *
  * @param options The roots and the context
  * @returns Each job's plan, or why the jobs don't form a graph
  *
