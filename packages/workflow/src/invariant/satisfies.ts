@@ -26,13 +26,17 @@ export interface SatisfiesGuardOptions<T, S extends T>
  * Returns `value` when `predicate` accepts it, narrowed to `S` when the
  * predicate is a type guard `(value: T) => value is S`, and otherwise panics
  * as `Panic (Invariant)`. Use it where a rejected value means the program has
- * a bug, never to check input. To reuse a check, wrap the call in a function.
+ * a bug, never to check input. `T` is inferred from the value, so a guard
+ * over a wider type (say, `unknown`) still narrows. The predicate is called
+ * as a method of the options; to reuse a check, wrap the call in a function.
  *
  * A predicate need not be written as a guard to narrow: TypeScript 5.5 and
  * later infer a function like `(v) => typeof v === "string"` or
  * `(v) => v !== undefined` as one. A discriminant check such as
- * `(s) => s.kind === "circle"` is not inferred, so it leaves `T` as it is;
- * annotate its return type (`s is Circle`) to narrow.
+ * `(s) => s.kind === "circle"` written inline in the options is not
+ * inferred, so it leaves `T` as it is; declare it on its own
+ * (`const isCircle = (s: Shape) => s.kind === "circle"`), where TypeScript
+ * infers the guard, or annotate its return type (`s is Circle`).
  *
  * A predicate that throws is not caught: its error propagates unchanged, as
  * from `Array.prototype.filter`, and only a rejection panics.

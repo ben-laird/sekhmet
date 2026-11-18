@@ -673,6 +673,32 @@ deno task hooks
 - **Escape hatch:** `git commit --no-verify` skips the hook. It is for human
   emergencies only; agents must never use it.
 
+### `todo` stays out of published packages
+
+`@sekhmet/workflow`'s `todo` is a placeholder, so it must not ship. The
+publish-readiness step of `deno task ci` fails when a package's non-test
+source (its `src/` and its top-level modules alike) reaches `todo` through:
+
+- a value import binding `todo`, under any alias or quoted name;
+- a re-export of `todo`, or an `export *` of a module holding it;
+- `ns.todo`, `ns?.todo` or `ns["todo"]` through a namespace import of a
+  module holding it;
+- a dynamic `import()` of a module holding `todo`, with a literal specifier.
+
+A named import is flagged whatever is done with the binding afterwards
+(`f = todo; f()`, `todo.call`). A namespace import is flagged only by those
+three member forms, so destructuring it (`const { todo } = wf`), a computed
+key (`wf[key]`) or passing the namespace to a function goes unflagged.
+
+The package is recognized by every specifier form: bare, `jsr:` (with a
+version), `@jsr/sekhmet__workflow` with or without `npm:`,
+`https://jsr.io/@sekhmet/workflow/…` URLs, and relative or `@/` paths into
+`packages/workflow`. Tests, the playground, `scripts/` and
+`@sekhmet/workflow` itself may use `todo` freely. `unimplemented`,
+`unreachable` and the invariant checks are meant to ship and are never
+flagged. To fix a finding, finish the work, or replace the `todo` with
+`unimplemented` if the path will stay unsupported.
+
 ## Pull Request Process
 
 Sekhmet follows GitHub Flow. `main` is protected by a ruleset: it cannot be
