@@ -82,6 +82,7 @@ export {
 	Blocked,
 	Cancelled,
 	Failed,
+	isUnhealthy,
 	JobOutcome,
 	type JobOutcomeVariants,
 	Skipped,

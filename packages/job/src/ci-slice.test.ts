@@ -11,6 +11,7 @@ import { unwrap } from "@sekhmet/enum/result/mini";
 import {
 	Blocked,
 	defineJobs,
+	isUnhealthy,
 	type JobOutcome,
 	type RunReport,
 	runJobs,
@@ -39,11 +40,6 @@ const stub = (name: string) => {
 	};
 };
 
-/** `scripts/ci`'s unhealthy: failed or blocked. */
-const unhealthy = (outcome: JobOutcome<unknown>): boolean => {
-	return isolate(outcome, "Failed") || isolate(outcome, "Blocked");
-};
-
 // "Deno Lint": no dependencies.
 const lint = job({ name: "Deno Lint", run: stub("Deno Lint") });
 
@@ -70,7 +66,7 @@ const coverage = job({
 // unhealthy, else skipped.
 const explainFailure = job({
 	name: "Explain failure",
-	plan: async (p) => (unhealthy(await p.outcome(test)) ? {} : skip()),
+	plan: async (p) => (isUnhealthy(await p.outcome(test)) ? {} : skip()),
 	run: stub("Explain failure"),
 });
 

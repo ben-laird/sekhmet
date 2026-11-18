@@ -333,14 +333,22 @@ Deno.test("a staged plan decides its needs from a result", async (t) => {
 
 	await t.step("a 1.x version needs one", async () => {
 		// When: publishing 1.0.0
-		const report = unwrap(await run({ jobs: [publishFor("1.0.0")] }));
+		const events: string[] = [];
+		const report = unwrap(await run({ jobs: [publishFor("1.0.0")], events }));
 
-		// Then: sign ran first and its result arrived
+		// Then: version, then sign, ran before publish started, and sign's result arrived
 		assertEquals(
 			outcomeOf({ report, name: "publish" }),
 			Succeeded("1.0.0 sig"),
 		);
 		assertEquals(signed, true);
+		const started = indexOf({ events, event: "Started publish" });
+		assert(indexOf({ events, event: "Finished version Succeeded" }) < started);
+		assert(indexOf({ events, event: "Finished sign Succeeded" }) < started);
+		assert(
+			indexOf({ events, event: "Finished version Succeeded" }) <
+				indexOf({ events, event: "Started sign" }),
+		);
 	});
 });
 
@@ -923,4 +931,58 @@ Deno.test("a throwing onEvent still leaves the caller's signal clean", async () 
 	// Then: the throw escaped (it's a bug in the hook), and no listener leaked
 	assertInstanceOf(thrown, Error);
 	assertEquals(listeners, 0);
+});
+
+Deno.test("a body cancelled mid-step reports the step, then Cancelled", async () => {
+	// Given: a body whose step waits on the signal, and a run signal to abort
+	const events: string[] = [];
+	const controller = new AbortController();
+	const deploy = job({
+		name: "deploy",
+		run: async (t) => {
+			await t.step("upload", () => {
+				controller.abort("stop");
+				return untilAborted(t.signal);
+			});
+		},
+	});
+
+	// When: the run is cancelled during the step
+	const report = unwrap(
+		await run({ jobs: [deploy], events, signal: controller.signal }),
+	);
+
+	// Then: the step ends Err, and the job Cancelled, not Failed
+	assertEquals(events, [
+		"Started deploy",
+		"StepStarted deploy/upload",
+		"StepFinished deploy/upload Err",
+		"Cancelled deploy",
+	]);
+	assertEquals(outcomeOf({ report, name: "deploy" }), Cancelled());
+});
+
+Deno.test("a cycle closed after a staged await is an Err", async () => {
+	// Given: a's plan awaits x's result, then needs b; b needs a
+	const ref: { a?: Job<void, null> } = {};
+	const x = job({ name: "x", run: () => 1 });
+	const b = job({
+		name: "b",
+		plan: (p) => ({ a: ref.a === undefined ? undefined : p.needs(ref.a) }),
+		run: () => {},
+	});
+	ref.a = job({
+		name: "a",
+		plan: async (p) => {
+			const n = await p.result(x);
+			return { n, b: p.needs(b) };
+		},
+		run: () => {},
+	});
+
+	// When: running (the cycle exists only once x has a result)
+	const result = await run({ jobs: [ref.a] });
+
+	// Then: it is found, and the run settles
+	assertEquals(unwrapErr(result), Cycle(["b", "a", "b"]));
 });
