@@ -1,3 +1,12 @@
+/**
+ * The tuple composite: {@linkcode tuple} builds a schema for fixed-length
+ * arrays whose element `i` the `i`th schema parses, with its
+ * {@linkcode TupleInput}, {@linkcode TupleOutput} and {@linkcode TupleError}
+ * types and {@linkcode TupleView}.
+ *
+ * @module
+ */
+
 import { type SchemaIssue, TooBig } from "@/src/core/mini/issue.ts";
 import {
 	type Flatten,

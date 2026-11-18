@@ -1,3 +1,12 @@
+/**
+ * The record composite: {@linkcode record} builds a schema for objects used as
+ * dictionaries, parsing every key with one schema and every value with
+ * another, with its {@linkcode RecordOptions}, {@linkcode RecordInput} and
+ * {@linkcode RecordOutput} types and {@linkcode RecordView}.
+ *
+ * @module
+ */
+
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Flatten, Issues } from "@/src/core/mini/issues.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";

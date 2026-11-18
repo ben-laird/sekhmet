@@ -1,3 +1,11 @@
+/**
+ * Type-only brands for a schema's output: {@linkcode brand} brands what a
+ * schema parses, {@linkcode Branded} is the branded type, and
+ * {@linkcode BRAND} is the key the brand lives under.
+ *
+ * @module
+ */
+
 import type { Child } from "@/src/composites/mini/collect.ts";
 import type { Schema } from "@/src/core/mini/schema.ts";
 import type { ViewOf } from "@/src/core/mini/view.ts";

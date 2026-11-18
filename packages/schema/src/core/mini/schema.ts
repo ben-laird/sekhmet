@@ -1,3 +1,15 @@
+/**
+ * The {@linkcode Schema} type and its core API: running a schema
+ * ({@linkcode parse}, {@linkcode parseSync}, {@linkcode parseAsync}),
+ * transforming one ({@linkcode map}, {@linkcode mapErr}, {@linkcode pipe},
+ * {@linkcode filter}, {@linkcode andThen}, {@linkcode orElse},
+ * {@linkcode inspect}, {@linkcode inspectErr}, {@linkcode preprocess}), and its
+ * type helpers ({@linkcode Input}, {@linkcode Output}, {@linkcode Infer},
+ * {@linkcode ErrorOf}, {@linkcode ParseSyncError}).
+ *
+ * @module
+ */
+
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { match, union } from "@sekhmet/enum/core/mini/exit";
 import {

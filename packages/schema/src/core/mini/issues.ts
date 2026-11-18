@@ -1,3 +1,13 @@
+/**
+ * Located errors: {@linkcode Issues}, the non-empty collection of
+ * {@linkcode Located} errors a composite schema fails with, and the functions
+ * that build and combine it ({@linkcode issues}, {@linkcode fromError},
+ * {@linkcode prefix}, {@linkcode concat}, {@linkcode toIssues},
+ * {@linkcode locate}) and read it ({@linkcode entries}, {@linkcode isIssues}).
+ *
+ * @module
+ */
+
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 
 /**

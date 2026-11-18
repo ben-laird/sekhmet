@@ -1,3 +1,12 @@
+/**
+ * The discriminated union composite: {@linkcode discriminatedUnion} builds a
+ * schema for objects told apart by the string under one key, with its
+ * {@linkcode DiscriminatedUnionOptions}, {@linkcode DiscriminatedInput} and
+ * {@linkcode DiscriminatedOutput} types and {@linkcode DiscriminatedUnionView}.
+ *
+ * @module
+ */
+
 import { match, union } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { InvalidValue, type SchemaIssue } from "@/src/core/mini/issue.ts";

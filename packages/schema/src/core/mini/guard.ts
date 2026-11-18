@@ -1,3 +1,10 @@
+/**
+ * Type guards from schemas: {@linkcode is} turns a schema into a curried
+ * predicate that narrows its input when the schema parses it.
+ *
+ * @module
+ */
+
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { parseSync, type Schema } from "./schema.ts";
 

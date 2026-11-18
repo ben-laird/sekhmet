@@ -1,3 +1,10 @@
+/**
+ * The never primitive: {@linkcode never} builds a schema that rejects every
+ * value.
+ *
+ * @module
+ */
+
 import { Err } from "@sekhmet/enum/result/mini";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";

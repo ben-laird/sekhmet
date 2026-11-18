@@ -1,3 +1,10 @@
+/**
+ * Literal schemas: {@linkcode literal} builds a schema that accepts exactly
+ * one primitive value, of type {@linkcode Literal}.
+ *
+ * @module
+ */
+
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { InvalidValue, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";

@@ -1,3 +1,11 @@
+/**
+ * Standard Schema out: {@linkcode toStandard} exposes a schema as a Standard
+ * Schema v1, for tools that accept one, with its {@linkcode ToStandardSchema}
+ * and {@linkcode ToStandardOptions}.
+ *
+ * @module
+ */
+
 import { match } from "@sekhmet/enum/core/mini/exit";
 import type { Result } from "@sekhmet/enum/result/mini";
 import {

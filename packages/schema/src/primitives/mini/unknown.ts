@@ -1,3 +1,10 @@
+/**
+ * The unknown primitive: {@linkcode unknown} builds a schema that accepts
+ * every value unchanged and never fails.
+ *
+ * @module
+ */
+
 import { Ok } from "@sekhmet/enum/result/mini";
 import { SchemaNode } from "@/src/core/mini/node.ts";
 import { Schema } from "@/src/core/mini/schema.ts";

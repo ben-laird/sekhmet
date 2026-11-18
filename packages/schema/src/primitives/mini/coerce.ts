@@ -1,4 +1,11 @@
 /**
+ * How primitive schemas coerce a value of another type:
+ * {@linkcode CoerceMode}, the type of their `coerce` option.
+ *
+ * @module
+ */
+
+/**
  * How a primitive schema treats a value of another type:
  *
  * - `false` (the default): reject it.

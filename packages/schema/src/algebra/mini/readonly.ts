@@ -1,3 +1,10 @@
+/**
+ * Read-only outputs: {@linkcode readonly} makes a schema's output a frozen
+ * shallow copy, typed by {@linkcode ReadonlyOutput}.
+ *
+ * @module
+ */
+
 import { getStructParams } from "@sekhmet/primordials/struct";
 import type { Child } from "@/src/composites/mini/collect.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";
