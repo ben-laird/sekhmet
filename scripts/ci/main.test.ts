@@ -496,7 +496,12 @@ async function fixtureRepo({ broken }: { broken: boolean }): Promise<string> {
 		"/**\n * A.\n *\n * @module\n */\n\n/** A. */\nexport const a = 1;\n",
 	);
 	await write("packages/a/LICENSE.md", "MIT License\n");
-	if (!broken) await write("packages/a/README.md", "# a\n");
+	if (!broken) {
+		await write(
+			"packages/a/README.md",
+			'# a\n\n```ts\nimport {} from "@sekhmet/a";\n```\n',
+		);
+	}
 	return root;
 }
 

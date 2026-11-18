@@ -9,6 +9,7 @@ import {
 	checkPackageFiles,
 	checkPublishExclude,
 } from "./package.ts";
+import { checkReadmeExamples } from "./readme-examples.ts";
 import { sourceViews } from "./source.ts";
 import { checkSpecifiers } from "./specifiers.ts";
 import { checkTodo, isTodoCheckedPath } from "./todo.ts";
@@ -46,6 +47,7 @@ export const STATIC_CHECKS: ReadonlySet<CheckId> = new Set<CheckId>([
 	"module-state",
 	"todo",
 	"module-doc",
+	"readme-examples",
 ]);
 
 /**
@@ -109,7 +111,8 @@ export function docLintMembers(workspace: Workspace): Member[] {
 /**
  * Runs every check that reads files only (all but `doc-lint`):
  *
- * - published packages: `package-files`, `license`, `module-doc`
+ * - published packages: `package-files`, `license`, `module-doc`,
+ *   `readme-examples`
  * - every package: `exports`, and `imports` over its non-test source
  * - the root manifest: `publish-exclude`
  * - every `*.test.ts`: `given-when-then`
@@ -138,6 +141,7 @@ export function staticFindings(files: WorkspaceFiles): Finding[] {
 		if (member.manifest.publish) {
 			findings.push(...checkPackageFiles({ member, files }));
 			findings.push(...checkModuleDocs({ member, files }));
+			findings.push(...checkReadmeExamples({ member, files }));
 		}
 		findings.push(...checkExports({ member, files }));
 	}
