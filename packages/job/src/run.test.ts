@@ -1200,3 +1200,106 @@ Deno.test("an Err no unmet p.result produced fails the plan's job", async () => 
 	assertInstanceOf(panic, Panic);
 	assertEquals(panic.name, "Panic (UnexplainedErr)");
 });
+
+Deno.test("a need's outcome propagates: Blocked > Cancelled > Skipped", async (t) => {
+	await t.step("a skipped need skips its dependent", async () => {
+		// Given: a job its plan skips, and a dependent
+		const deploy = job({ name: "deploy", plan: () => skip(), run: () => 1 });
+		const announce = job({
+			name: "announce",
+			plan: (p) => ({ deploy: p.needs(deploy) }),
+			run: () => {},
+		});
+
+		// When: they run
+		const report = unwrap(await run({ jobs: [announce] }));
+
+		// Then: the dependent is Skipped too (it has no value to receive)
+		assertEquals(outcomeOf({ report, name: "announce" }), Skipped());
+	});
+
+	await t.step("a cancelled need cancels its dependent", async () => {
+		// Given: a long job cancelled by the run's signal, and a dependent
+		const controller = new AbortController();
+		const long = job({
+			name: "long",
+			run: (t) => {
+				controller.abort("stop");
+				return untilAborted(t.signal);
+			},
+		});
+		const after = job({
+			name: "after",
+			plan: (p) => ({ long: p.needs(long) }),
+			run: () => {},
+		});
+
+		// When: the run is cancelled
+		const report = unwrap(
+			await run({ jobs: [after], signal: controller.signal }),
+		);
+
+		// Then: the dependent is Cancelled, like its need
+		assertEquals(outcomeOf({ report, name: "long" }), Cancelled());
+		assertEquals(outcomeOf({ report, name: "after" }), Cancelled());
+	});
+
+	await t.step("with mixed needs, the strongest wins", async () => {
+		// Given: under failFast, a failing job, a long job it cancels, a skip
+		const failing = job({
+			name: "failing",
+			run: () => Promise.reject(new Error("x")),
+		});
+		const long = job({ name: "long", run: (t) => untilAborted(t.signal) });
+		const skipped = job({ name: "skipped", plan: () => skip(), run: () => 1 });
+		const all = job({
+			name: "all",
+			plan: (p) => {
+				return {
+					s: p.needs(skipped),
+					l: p.needs(long),
+					f: p.needs(failing),
+				};
+			},
+			run: () => {},
+		});
+		const noFailure = job({
+			name: "noFailure",
+			plan: (p) => ({ s: p.needs(skipped), l: p.needs(long) }),
+			run: () => {},
+		});
+
+		// When: they run
+		const report = unwrap(
+			await run({ jobs: [all, noFailure], failFast: true }),
+		);
+
+		// Then: Blocked outranks Cancelled and Skipped; Cancelled outranks Skipped
+		assertEquals(outcomeOf({ report, name: "all" }), Blocked(["failing"]));
+		assertEquals(outcomeOf({ report, name: "noFailure" }), Cancelled());
+	});
+});
+
+Deno.test("continueOnError exempts a failure from failFast", async () => {
+	// Given: under failFast, an optional job that fails and a slow sibling
+	const optional = job({
+		name: "optional",
+		continueOnError: true,
+		run: () => Promise.reject(new Error("flaky")),
+	});
+	const slow = job({
+		name: "slow",
+		run: async (t) => {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			return t.signal.aborted;
+		},
+	});
+
+	// When: they run
+	const report = unwrap(await run({ jobs: [optional, slow], failFast: true }));
+
+	// Then: the tolerated failure aborted nothing, and the run passes
+	assert(isolate(outcomeOf({ report, name: "optional" }), "Failed"));
+	assertEquals(outcomeOf({ report, name: "slow" }), Succeeded(false));
+	assert(report.passed);
+});
