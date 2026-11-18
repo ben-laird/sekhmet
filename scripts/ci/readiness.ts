@@ -28,7 +28,8 @@ import { readWorkspaceFiles } from "@/src/workspace-files.ts";
  * Usage: `readiness.ts <static|doc-lint> [--root <dir>] [--no-allowlist]`
  *
  * - `static`: every check that reads files (README, LICENSE, exports,
- *   imports, publish.exclude, Given/When/Then, README/JSDoc specifiers)
+ *   entrypoint module docs, README examples, imports, publish.exclude,
+ *   Given/When/Then, README/JSDoc specifiers, module state, `todo`)
  * - `doc-lint`: `deno doc --lint` per workspace member over its export set
  *
  * `--no-allowlist` triages without this repo's allowlist, for a `--root`
