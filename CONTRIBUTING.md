@@ -751,8 +751,31 @@ No approval is required. Repository admins can bypass the ruleset.
 - **Mini examples feed main.** `deno task gen:main` copies mini examples into
   the generated main modules, rewriting calls to method form and imports to
   the main entrypoint, so both forms are checked.
-- **Guides** live in each package's `docs/` folder (`getting-started.md`,
-  `concepts.md`, `recipes.md` lead the sidebar, in that order).
+- **Guides** live flat in each package's `docs/` folder, and each serves one
+  [Diátaxis](https://diataxis.fr) need, declared in frontmatter at the top of
+  the page (#54):
+
+  ```md
+  ---
+  kind: tutorial
+  ---
+
+  # Getting started
+  ```
+
+  `kind` is one of `tutorial`, `how-to`, `explanation` or `reference`; the
+  frontmatter is flat `key: value` lines, and an unknown kind fails
+  `deno task docs:build`, naming the file. The site gives each package's
+  sidebar the Overview (its README), then any untagged pages, then a group
+  per kind that has pages: Tutorials, How-to guides, Explanation and
+  Reference. Reference always links the package's API docs on JSR, which are
+  generated from its JSDoc. Within a group, `getting-started` leads and the
+  rest sort by their `#` title, which is also the sidebar label. Untagged
+  pages stay listed until they are converted; `kind` is not yet required.
+  Biome keeps the frontmatter intact only because `biome.json` sets
+  `markdown.parser.frontmatter`; without it, `deno task fmt` rewrites the
+  block into a rule and a `## kind: …` heading. GitHub shows the frontmatter
+  as a table above the page.
   `deno task docs:dev` serves the site that assembles them with every README;
   `deno task docs:build` builds it.
 

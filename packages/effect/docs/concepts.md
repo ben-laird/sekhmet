@@ -1,3 +1,7 @@
+---
+kind: explanation
+---
+
 # Concepts
 
 How `@sekhmet/effect` runs work: effects and their continuations, the error

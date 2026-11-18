@@ -4,14 +4,20 @@
  * every package's `README.md` and `docs/*.md`, and writes the pages and the
  * navigation (`site.json`) into `scripts/docs-site/content/`, which
  * VitePress then builds. The content directory is generated and ignored by
- * git.
+ * git. A docs page with unreadable frontmatter or an unknown `kind` fails
+ * the run, naming the file.
  *
  * @module
  */
 
 import { emptyDir } from "@std/fs";
 import { dirname, fromFileUrl, join } from "@std/path";
-import { type DocFile, type PackageSource, planSite } from "@/mod.ts";
+import {
+	type DocFile,
+	describePageError,
+	type PackageSource,
+	planSite,
+} from "@/mod.ts";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const PACKAGES = join(ROOT, "packages");
@@ -67,10 +73,17 @@ async function readPackages(): Promise<PackageSource[]> {
  * @returns The process exit code
  */
 export async function main(): Promise<number> {
-	const site = planSite({
+	const planned = planSite({
 		rootReadme: await Deno.readTextFile(join(ROOT, "README.md")),
 		packages: await readPackages(),
 	});
+	if (!planned.ok) {
+		for (const error of planned.error) {
+			console.error(`docs:assemble: ${describePageError(error)}`);
+		}
+		return 1;
+	}
+	const site = planned.value;
 
 	await emptyDir(CONTENT_DIR);
 	for (const page of site.pages) {

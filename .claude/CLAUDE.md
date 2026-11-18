@@ -126,8 +126,9 @@ Scripts (`scripts/`, unpublished):
   export path (`deno task compat:smoke <runtime>`; run by
   `.github/workflows/compat-smoke.yml`, never by `deno task ci`)
 - `@sekhmet/docs-site`: the VitePress docs site; assembles the root README and
-  every package's `README.md` and `docs/*.md` into a sidebar per package
-  (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
+  every package's `README.md` and `docs/*.md` into a sidebar per package,
+  grouped by each page's Diátaxis `kind` frontmatter (see CONTRIBUTING.md,
+  "Documenting your change") (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
   `.github/workflows/docs.yml`)
 - `@sekhmet/dv`: the pinned dv release CLI, run frozen (`deno task dv <args>`,
   e.g. `deno task dv add`, `deno task dv status`)

@@ -1,3 +1,7 @@
+---
+kind: how-to
+---
+
 # Recipes
 
 Short, runnable patterns. Each one uses the main API; every method has a mini
