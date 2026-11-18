@@ -19,9 +19,6 @@ output:
 deno add jsr:@sekhmet/schema jsr:@sekhmet/enum jsr:@std/assert
 ```
 
-On Node.js, Bun or another npm-compatible runtime, use
-`npx jsr add @sekhmet/schema @sekhmet/enum @std/assert` instead.
-
 ## Parse a string
 
 First, we build a schema that accepts a string, and parse a good value with
