@@ -40,6 +40,11 @@ export interface PackageSource {
 	readonly readme: string | undefined;
 	/** The package's `docs/*.md` files. */
 	readonly docs: readonly DocFile[];
+	/**
+	 * Whether the package is released to JSR: `false` when its `deno.json`
+	 * sets `"publish": false` (a prototype), as dv and compat-smoke read it.
+	 */
+	readonly published: boolean;
 }
 
 /** A page of the site, by its path under the content directory. */
@@ -298,7 +303,8 @@ function overviewOf(pkg: PackageSource): string {
 
 /**
  * Plans the site from the root README and every package's markdown.
- * Packages with neither a README nor docs are left out.
+ * Unpublished packages, which have no JSR page to link, and packages with
+ * neither a README nor docs are left out.
  *
  * @param options.rootReadme - The repository README, the home page
  * @param options.packages - Every package's markdown sources
@@ -318,7 +324,9 @@ export function planSite({
 	const errors: PageError[] = [];
 
 	const present = packages
-		.filter((pkg) => pkg.readme !== undefined || pkg.docs.length > 0)
+		.filter((pkg) => {
+			return pkg.published && (pkg.readme !== undefined || pkg.docs.length > 0);
+		})
 		.toSorted((a, b) => a.dir.localeCompare(b.dir));
 	// {}
 

@@ -53,6 +53,12 @@ async function readDocs(dir: string): Promise<DocFile[]> {
 	return docs;
 }
 
+/** A manifest publishes unless it sets `"publish": false`. */
+function isPublished(manifest: unknown): boolean {
+	if (typeof manifest !== "object" || manifest === null) return true;
+	return !("publish" in manifest && manifest.publish === false);
+}
+
 async function readPackages(): Promise<PackageSource[]> {
 	const packages: PackageSource[] = [];
 	for await (const entry of Deno.readDir(PACKAGES)) {
@@ -62,6 +68,9 @@ async function readPackages(): Promise<PackageSource[]> {
 			dir: entry.name,
 			readme: await readIfExists(join(dir, "README.md")),
 			docs: await readDocs(join(dir, "docs")),
+			published: isPublished(
+				JSON.parse(await Deno.readTextFile(join(dir, "deno.json"))),
+			),
 		});
 	}
 	return packages;

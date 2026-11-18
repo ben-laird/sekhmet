@@ -116,8 +116,9 @@ Deno.test("planSite groups a package's pages by Diátaxis kind", () => {
 					text: "---\nkind: tutorial\n---\n# Getting started",
 				},
 			],
+			published: true,
 		},
-		{ dir: "empty", readme: undefined, docs: [] },
+		{ dir: "empty", readme: undefined, docs: [], published: true },
 	];
 
 	// When: planning the site
@@ -184,6 +185,7 @@ Deno.test("planSite leads each group with getting-started, then sorts by title",
 				},
 				{ name: "a.md", text: "---\nkind: how-to\n---\n# Beta" },
 			],
+			published: true,
 		},
 	];
 
@@ -217,6 +219,7 @@ Deno.test("planSite lists untagged pages after the overview, before the kind gro
 					text: "---\nkind: tutorial\n---\n# Getting started",
 				},
 			],
+			published: true,
 		},
 	];
 
@@ -253,6 +256,7 @@ Deno.test("planSite rejects every page with an invalid kind, naming its file", (
 				{ name: "recipes.md", text: "---\nkind: recipe\n---\n# Recipes" },
 				{ name: "concepts.md", text: "---\nkind: explanation\n# Concepts" },
 			],
+			published: true,
 		},
 	];
 
@@ -275,6 +279,7 @@ Deno.test("planSite gives a docs-only package a placeholder overview", () => {
 			dir: "panic",
 			readme: undefined,
 			docs: [{ name: "concepts.md", text: "# Concepts" }],
+			published: true,
 		},
 	];
 
@@ -288,4 +293,32 @@ Deno.test("planSite gives a docs-only package a placeholder overview", () => {
 		site.pages.find((page) => page.path === "panic/index.md")?.text,
 		"# @sekhmet/panic\n\nThis package has no README yet.\n",
 	);
+});
+
+Deno.test("planSite leaves out unpublished packages", () => {
+	// Given: a published package and a prototype marked "publish": false
+	const packages = [
+		{ dir: "enum", readme: "# Enum", docs: [], published: true },
+		{
+			dir: "job",
+			readme: "# Job",
+			docs: [{ name: "guide.md", text: "---\nkind: how-to\n---\n# Guide" }],
+			published: false,
+		},
+	];
+
+	// When: planning the site
+	const planned = planSite({ rootReadme: "# Sekhmet", packages });
+	assert(planned.ok);
+
+	// Then: the prototype has no pages, no nav entry and no dead JSR link
+	assertEquals(
+		planned.value.pages.map((page) => page.path),
+		["index.md", "enum/index.md"],
+	);
+	assertEquals(
+		planned.value.nav.map((link) => link.text),
+		["enum"],
+	);
+	assertEquals(Object.keys(planned.value.sidebar), ["/enum/"]);
 });
