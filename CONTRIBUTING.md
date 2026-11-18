@@ -823,6 +823,10 @@ rerun the `release` workflow on `main` from the Actions tab with **force**
 checked. Versions already on JSR are skipped, and the recovered packages get
 their GitHub Releases.
 
+A package's first release needs the package to exist on JSR already: JSR
+never creates one on upload, and `deno publish` fails with "Following
+packages don't exist". See "First release on JSR" under Adding New Packages.
+
 Only packages under `packages/` are released. Members marked
 `"publish": false` (everything in `scripts/`) never are.
 
@@ -853,6 +857,22 @@ New packages should:
 - Include test coverage
 - Export type utilities where appropriate
 - Maintain composability with other Sekhmet packages
+
+### First release on JSR
+
+Before the PR that publishes a new package merges, a maintainer of the
+`@sekhmet` scope does two things on JSR:
+
+1. Creates the package at
+   `https://jsr.io/new?scope=sekhmet&package=<name>`.
+2. In the package's **Settings**, links the GitHub repository
+   `ben-laird/sekhmet`, so the release workflow can publish over GitHub
+   OIDC.
+
+If the PR merged first, the release job fails on that package after tagging
+it. Do both steps, then rerun the `release` workflow on `main` with
+**force** checked (see What happens on merge). `@sekhmet/schema` 0.1.0 was
+published this way (2026-11-18).
 
 ## Questions?
 
