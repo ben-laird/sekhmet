@@ -30,8 +30,10 @@ export const UUID_PATTERN: RegExp =
  * - `"email"`: matches {@linkcode EMAIL_PATTERN}, a pragmatic pattern, not
  *   RFC 5322.
  * - `"url"`: an absolute URL by the WHATWG URL Standard (what `new URL(value)`
- *   accepts, tested with `URL.canParse`). Any scheme is accepted, so
- *   `mailto:` and `data:` URLs pass; add a `regex` to restrict it.
+ *   accepts, tested with `URL.canParse`), with the same answer on every
+ *   runtime: a space in an `http(s)`, `ws(s)`, `ftp` or `file` host fails
+ *   even where the runtime's parser accepts it (Chromium does). Any scheme is
+ *   accepted, so `mailto:` and `data:` URLs pass; add a `regex` to restrict it.
  * - `"uuid"`: matches {@linkcode UUID_PATTERN}.
  * - `"date"`: an ISO 8601 calendar date, `YYYY-MM-DD`, that exists (so
  *   `2023-02-29` fails but `2024-02-29` passes).
@@ -216,6 +218,23 @@ function timeTest({
 	return (value) => isCalendarDate(pattern.exec(value));
 }
 
+/** The URL Standard's special schemes, whose hosts are domains. */
+const SPECIAL_SCHEME = /^(?:https?|wss?|ftp|file):$/;
+
+/**
+ * Whether `value` is an absolute URL by the URL Standard on every runtime.
+ * Chromium also accepts a space in a host (as `%20`), but a standard domain
+ * never keeps a `%` once parsed.
+ */
+function isStandardUrl(value: string): boolean {
+	if (!URL.canParse(value)) {
+		return false;
+	}
+	const { protocol, hostname } = new URL(value);
+
+	return !(SPECIAL_SCHEME.test(protocol) && hostname.includes("%"));
+}
+
 /** How each non-time format is tested, and the pattern its issue carries. */
 const FORMATS: Readonly<
 	Record<
@@ -224,7 +243,7 @@ const FORMATS: Readonly<
 	>
 > = {
 	email: { test: (value) => EMAIL_PATTERN.test(value), pattern: EMAIL_PATTERN },
-	url: { test: (value) => URL.canParse(value) },
+	url: { test: isStandardUrl },
 	uuid: { test: (value) => UUID_PATTERN.test(value), pattern: UUID_PATTERN },
 	date: { test: (value) => isCalendarDate(DATE.exec(value)) },
 };

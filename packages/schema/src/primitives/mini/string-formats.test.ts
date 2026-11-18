@@ -104,6 +104,8 @@ runTable({
 		"mailto:ada@example.com",
 		"data:text/plain,hi",
 		"file:///tmp/x",
+		"https://ex%41mple.com",
+		"foo://exa%20mple/x",
 	],
 	invalid: [
 		"",
@@ -111,6 +113,9 @@ runTable({
 		"/relative/path",
 		"http://",
 		"https://exa mple.com",
+		"https://exa%20mple.com",
+		"http://a b/",
+		"wss://exa%20mple.com",
 		"://x",
 	],
 });
