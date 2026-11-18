@@ -289,23 +289,21 @@ assertEquals(
 );
 ```
 
-## How to run a fallible step after parsing
+## How to convert a parsed value with a step that can fail
 
-When a value is valid only once another check passes, or you want a
-fallback, chain the `Result`-style transforms:
+When a parsed value still has to be converted, and the conversion can fail,
+chain the `Result`-style transforms:
 
 - `andThen` runs a step that returns a `Result`; its error adds to the
   schema's.
 - `orElse` replaces a failure, for a default.
-- `preprocess` changes the input before it is parsed.
 
 ```ts
 import { assertEquals } from "@std/assert";
 import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
 import { string } from "@sekhmet/schema/primitives";
 
-const port = string()
-	.preprocess((input: string) => input.trim())
+const port = string({ trim: true })
 	.andThen((text) => {
 		const parsed = Number(text);
 		if (Number.isInteger(parsed) && parsed > 0) {
@@ -324,6 +322,31 @@ assertEquals(unwrap(await port.parseAsync("http")), 8080);
 A callback may return a promise, which makes the parse asynchronous. For a
 check that only keeps or rejects the value, `.filter({ predicate, error })`
 is shorter than `andThen`.
+
+## How to adjust the input before parsing
+
+When the input arrives in a different form from the one a schema parses,
+such as a comma-separated list where the schema expects an array, convert it
+first with `preprocess`. Its callback receives the raw input, so its
+parameter type becomes the new schema's input type.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import { string } from "@sekhmet/schema/primitives";
+
+const tags = string({ trim: true, minLength: 1 })
+	.array()
+	.preprocess((input: string) => input.split(","));
+// {}
+
+assertEquals(unwrap(await tags.parseAsync("tea, cake")), ["tea", "cake"]);
+assertEquals(isErr(await tags.parseAsync("tea,,cake")), true);
+```
+
+The callback can't fail; a callback that throws panics. If the conversion
+can fail, write it as a schema of its own and `pipe` it into the next, as in
+[How to validate a JSON request body](#how-to-validate-a-json-request-body).
 
 ## How to use a schema as a type guard
 
