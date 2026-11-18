@@ -727,6 +727,22 @@ No approval is required. Repository admins can bypass the ruleset.
 
 - **JSDoc** on every export, with an `@example` that runs. Every entrypoint
   module starts with a `@module` doc. JSR renders these as the API reference.
+- **JSR score.** `deno task ci` enforces every part of the
+  [JSR score](https://jsr.io/docs/scoring) the repo controls, so a package
+  scores fully from its first release:
+
+  | JSR criterion                        | Enforced by                                       |
+  | ------------------------------------ | ------------------------------------------------- |
+  | Has a README or module doc           | readiness `package-files` (README.md)             |
+  | Has examples in README or module doc | readiness `readme-examples` (a fenced code block) |
+  | All entrypoints have module docs     | readiness `module-doc` (a leading `@module` doc)  |
+  | Has docs for most symbols            | `deno doc --lint` over each export set            |
+  | No slow types                        | the JSR publish dry run                           |
+
+  The rest live outside the repo: provenance comes from publishing in the
+  `release` workflow over GitHub OIDC, and the description and runtime
+  compatibility are package settings on jsr.io (JSR does not read them from
+  `deno.json`), so set them in each package's settings page.
 - **Examples are tests.** `deno test --doc` (part of `deno task ci`)
   type-checks and runs every `ts` code block in JSDoc and in markdown files,
   so write examples with explicit imports from the public entrypoint (e.g.
@@ -735,8 +751,31 @@ No approval is required. Repository admins can bypass the ruleset.
 - **Mini examples feed main.** `deno task gen:main` copies mini examples into
   the generated main modules, rewriting calls to method form and imports to
   the main entrypoint, so both forms are checked.
-- **Guides** live in each package's `docs/` folder (`getting-started.md`,
-  `concepts.md`, `recipes.md` lead the sidebar, in that order).
+- **Guides** live flat in each package's `docs/` folder, and each serves one
+  [Diátaxis](https://diataxis.fr) need, declared in frontmatter at the top of
+  the page (#54):
+
+  ```md
+  ---
+  kind: tutorial
+  ---
+
+  # Getting started
+  ```
+
+  `kind` is one of `tutorial`, `how-to`, `explanation` or `reference`; the
+  frontmatter is flat `key: value` lines, and an unknown kind fails
+  `deno task docs:build`, naming the file. The site gives each package's
+  sidebar the Overview (its README), then any untagged pages, then a group
+  per kind that has pages: Tutorials, How-to guides, Explanation and
+  Reference. Reference always links the package's API docs on JSR, which are
+  generated from its JSDoc. Within a group, `getting-started` leads and the
+  rest sort by their `#` title, which is also the sidebar label. Untagged
+  pages stay listed until they are converted; `kind` is not yet required.
+  Biome keeps the frontmatter intact only because `biome.json` sets
+  `markdown.parser.frontmatter`; without it, `deno task fmt` rewrites the
+  block into a rule and a `## kind: …` heading. GitHub shows the frontmatter
+  as a table above the page.
   `deno task docs:dev` serves the site that assembles them with every README;
   `deno task docs:build` builds it.
 

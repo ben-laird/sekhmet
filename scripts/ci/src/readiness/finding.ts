@@ -13,6 +13,10 @@
  *   state (a `let`/`var`, or a `Map`/`Set` registry)
  * - `todo`: package source does not import, re-export or reach `todo`
  *   from `@sekhmet/workflow`
+ * - `module-doc`: every `exports` target of a published package opens with a
+ *   `@module` doc, as JSR's score asks of every entrypoint
+ * - `readme-examples`: a published package's README (or its `"."` module
+ *   doc) has a code example, as JSR's score asks
  * - `doc-lint`: `deno doc --lint` over each package's export set
  * - `allowlist`: an allowlist entry that no longer matches a finding
  */
@@ -26,6 +30,8 @@ export type CheckId =
 	| "specifiers"
 	| "module-state"
 	| "todo"
+	| "module-doc"
+	| "readme-examples"
 	| "doc-lint"
 	| "allowlist";
 

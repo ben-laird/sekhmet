@@ -31,12 +31,13 @@ CI_AI=true deno task ci
 # - Format and lint with Biome, and deno lint
 # - Type checking
 # - Documentation lint per package, over its export set
-# - Publish readiness: README/LICENSE, exports, no external imports,
-#   tests excluded from publish, Given/When/Then comments, README/JSDoc
-#   import specifiers, no module-level mutable state in schema source, no
-#   todo from @sekhmet/workflow in package source (known failures:
-#   scripts/ci/src/readiness/allowlisted.ts)
-# - JSR publish dry run
+# - Publish readiness: README/LICENSE, exports, a @module doc on every
+#   published entrypoint, a code example in every published README, no
+#   external imports, tests excluded from publish, Given/When/Then
+#   comments, README/JSDoc import specifiers, no module-level mutable
+#   state in schema source, no todo from @sekhmet/workflow in package
+#   source (known failures: scripts/ci/src/readiness/allowlisted.ts)
+# - JSR publish dry run (fails on slow types)
 # - All tests, with coverage (CI: a per-package table on the GitHub job
 #   summary; AI mode: totals in the "Coverage Summary" step outputs)
 
@@ -125,8 +126,9 @@ Scripts (`scripts/`, unpublished):
   export path (`deno task compat:smoke <runtime>`; run by
   `.github/workflows/compat-smoke.yml`, never by `deno task ci`)
 - `@sekhmet/docs-site`: the VitePress docs site; assembles the root README and
-  every package's `README.md` and `docs/*.md` into a sidebar per package
-  (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
+  every package's `README.md` and `docs/*.md` into a sidebar per package,
+  grouped by each page's Diátaxis `kind` frontmatter (see CONTRIBUTING.md,
+  "Documenting your change") (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
   `.github/workflows/docs.yml`)
 - `@sekhmet/dv`: the pinned dv release CLI, run frozen (`deno task dv <args>`,
   e.g. `deno task dv add`, `deno task dv status`)
