@@ -3,9 +3,32 @@
  * graph, in the style of GitHub Actions and other CI runners, on the
  * language's own promises and `AbortSignal`.
  *
- * - {@linkcode JobOutcome}: how a job ended in one run.
- * - {@linkcode JobEvent}: what a run reports as it goes.
- * - {@linkcode GraphError}: why a set of jobs is not a graph that can run.
+ * - {@linkcode defineJobs} fixes the run's context type and returns `job`.
+ *   A job pairs a `plan`, which declares what it needs as data, with a
+ *   `run`, which receives that data with its handles resolved.
+ * - {@linkcode runJobs} runs every job reachable from the roots once, and
+ *   reports a {@linkcode JobOutcome} for each.
+ *
+ * @example
+ * ```ts
+ * import { defineJobs, runJobs } from "@sekhmet/job";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { assert } from "@std/assert";
+ *
+ * const { job } = defineJobs<{ readonly release: boolean }>();
+ *
+ * const version = job({ name: "version", run: () => "1.2.0" });
+ * const publish = job({
+ * 	name: "publish",
+ * 	plan: (p) => ({ version: p.needs(version), dryRun: !p.context.release }),
+ * 	run: (_t, { version, dryRun }) => `${dryRun ? "would publish" : "published"} ${version}`,
+ * });
+ *
+ * const report = unwrap(
+ * 	await runJobs({ jobs: [publish], context: { release: false } }),
+ * );
+ * assert(report.passed);
+ * ```
  *
  * @module
  */
@@ -32,6 +55,25 @@ export {
 	type GraphErrorVariants,
 } from "./src/graph-error.ts";
 export {
+	type AnyJob,
+	defineJobs,
+	Handle,
+	type HandleParams,
+	type HandleReader,
+	Job,
+	type JobKit,
+	type JobParams,
+	type JobRun,
+	type LeafJobDefinition,
+	type PlannedJobDefinition,
+	type Planner,
+	type Resolved,
+	type ResolvedField,
+	Skip,
+	type Stage,
+	skip,
+} from "./src/job.ts";
+export {
 	Blocked,
 	Cancelled,
 	Failed,
@@ -40,3 +82,10 @@ export {
 	Skipped,
 	Succeeded,
 } from "./src/outcome.ts";
+export type { ClosedPlannerCause } from "./src/planner.ts";
+export {
+	type JobMisuseCause,
+	type RunOptions,
+	type RunReport,
+	runJobs,
+} from "./src/run.ts";
