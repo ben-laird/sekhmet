@@ -15,7 +15,6 @@ import { trackGraph } from "@/src/graph.ts";
 import type { GraphError } from "@/src/graph-error.ts";
 import {
 	type AnyJob,
-	type Handle,
 	type HandleReader,
 	handleOn,
 	type Job,
@@ -193,33 +192,45 @@ export async function runJobs<C>({
 		return schedule(to);
 	}
 
+	/**
+	 * One job's way through a run: plan, wait for every job the plan touched,
+	 * decide, then run the body if nothing forced an outcome. Waiting for all
+	 * of them first is what puts each job's terminal event after theirs.
+	 */
 	async function lifecycle<T>(job: Job<T, C>): Promise<JobOutcome<T>> {
 		const { name, plan } = getStructParams(job);
-		const stopped = Promise.withResolvers<JobOutcome<never>>();
-		const declared: Handle<unknown>[] = [];
-		const awaited: AnyJob[] = [];
+		const stopped = Promise.withResolvers<void>();
+		const dependencies = new Map<AnyJob, Dependency>();
+
+		const touch = <U>({
+			need,
+			blocks,
+		}: {
+			need: Job<U, C>;
+			blocks: boolean;
+		}): Promise<JobOutcome<U>> => {
+			const outcome = depend({ from: job, to: need });
+			const known = dependencies.get(need)?.blocks ?? false;
+			dependencies.set(need, { outcome, blocks: blocks || known });
+			return outcome;
+		};
 
 		const { planner, close } = openPlanner<C>({
 			job: name,
 			context,
 			needs: (need) => {
-				const handle = handleOn({
+				return handleOn({
 					job: need,
-					outcome: depend({ from: job, to: need }),
+					outcome: touch({ need, blocks: true }),
 				});
-				declared.push(handle);
-				return handle;
 			},
 			result: async (need) => {
-				awaited.push(need);
-				const outcome = await depend({ from: job, to: need });
+				const outcome = await touch({ need, blocks: true });
 				if (isolate(outcome, "Succeeded")) return union(outcome);
-				stopped.resolve(
-					decideFromNeeds([{ name: nameOf(need), outcome }]) ?? Cancelled(),
-				);
+				stopped.resolve();
 				return new Promise<never>(() => {});
 			},
-			outcome: (need) => depend({ from: job, to: need }),
+			outcome: (need) => touch({ need, blocks: false }),
 		});
 
 		type Planned =
@@ -227,49 +238,40 @@ export async function runJobs<C>({
 					readonly kind: "stage";
 					readonly stage: Awaited<ReturnType<typeof plan>>;
 			  }
-			| { readonly kind: "end"; readonly outcome: JobOutcome<never> };
+			| { readonly kind: "failed"; readonly error: unknown }
+			| { readonly kind: "stopped" };
 		const planned = await Promise.race<Planned>([
 			plan(planner).then(
 				(stage) => ({ kind: "stage", stage }),
-				(error: unknown) => ({ kind: "end", outcome: Failed(error) }),
+				(error: unknown) => ({ kind: "failed", error }),
 			),
-			stopped.promise.then((outcome) => ({ kind: "end", outcome })),
-			cancelled.then(() => ({ kind: "end", outcome: cancelledPlan(awaited) })),
+			stopped.promise.then(() => ({ kind: "stopped" })),
+			cancelled.then(() => ({ kind: "stopped" })),
 		]);
 		close();
 
-		if (planned.kind === "end")
-			return finish({ job, outcome: planned.outcome });
+		const settledNeeds = await Promise.all(
+			[...dependencies].map(async ([need, { outcome, blocks }]) => {
+				return { name: nameOf(need), outcome: await outcome, blocks };
+			}),
+		);
+		const forced = decideFromNeeds(settledNeeds.filter(({ blocks }) => blocks));
+
+		if (planned.kind === "failed") {
+			return finish({ job, outcome: Failed(planned.error) });
+		}
+		if (planned.kind === "stopped") {
+			return finish({ job, outcome: forced ?? Cancelled() });
+		}
 		if (planned.stage.kind === "skip") {
 			return finish({ job, outcome: Skipped() });
 		}
-
-		const needs = await Promise.all(
-			declared.map(async (handle) => {
-				const { job: need, outcome } = getStructParams(handle);
-				return { name: nameOf(need), outcome: await outcome };
-			}),
-		);
-		const forced = decideFromNeeds(needs);
 		if (forced !== undefined) return finish({ job, outcome: forced });
 		if (cancel.signal.aborted) return finish({ job, outcome: Cancelled() });
 
 		onEvent(new JobEvent("Started", { job: name }));
 		const outcome = await body({ name, run: planned.stage.run });
 		return finish({ job, outcome });
-	}
-
-	/**
-	 * The outcome of a plan the run cancelled while it waited: if a job it
-	 * awaited with `p.result` already ended unhealthy, the plan was stopped by
-	 * that (so `failFast` still reports `Blocked`), else `Cancelled`.
-	 */
-	function cancelledPlan(awaited: readonly AnyJob[]): JobOutcome<never> {
-		const needs = awaited.flatMap((need) => {
-			const outcome = settled.get(need);
-			return outcome === undefined ? [] : [{ name: nameOf(need), outcome }];
-		});
-		return decideFromNeeds(needs) ?? Cancelled();
 	}
 
 	async function body<T>({
@@ -350,6 +352,14 @@ export async function runJobs<C>({
 		}
 		return outcome;
 	}
+}
+
+/** A job a plan touched, and whether its failure blocks the plan's job. */
+interface Dependency {
+	/** The touched job's outcome in this run */
+	readonly outcome: Promise<JobOutcome<unknown>>;
+	/** `true` for `p.needs` and `p.result`, `false` for `p.outcome` alone */
+	readonly blocks: boolean;
 }
 
 function terminalEvent({

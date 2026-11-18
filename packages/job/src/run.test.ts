@@ -53,6 +53,19 @@ async function run({
 	}
 }
 
+/** The position of `event` in `events`, failing if it's missing. */
+function indexOf({
+	events,
+	event,
+}: {
+	events: string[];
+	event: string;
+}): number {
+	const index = events.indexOf(event);
+	assert(index >= 0, `missing event: ${event}`);
+	return index;
+}
+
 /** One line per event, so a test can compare the whole sequence. */
 function describe(event: JobEvent): string {
 	return match(event)({
@@ -93,6 +106,7 @@ function outcomeOf({
 /** Resolves when `signal` aborts; a body that honours cancellation. */
 function untilAborted(signal: AbortSignal): Promise<never> {
 	return new Promise((_, reject) => {
+		if (signal.aborted) reject(signal.reason);
 		signal.addEventListener("abort", () => reject(signal.reason), {
 			once: true,
 		});
@@ -641,18 +655,24 @@ Deno.test("events arrive in order: needs end before dependents start", async () 
 	// When: they run
 	unwrap(await run({ jobs: [test, deploy], events }));
 
-	// Then: the whole sequence, with no Started for the skipped job
-	assertEquals(events, [
-		"Skipped deploy",
-		"Started build",
-		"StepStarted build/compile",
-		"StepFinished build/compile Ok",
-		"StepStarted build/bundle",
-		"StepFinished build/bundle Ok",
-		"Finished build Succeeded",
-		"Started test",
-		"Finished test Succeeded",
-	]);
+	// Then: each job's own sequence, needs first, and no Started for a skip
+	assertEquals(
+		events.filter((event) => event.includes("deploy")),
+		["Skipped deploy"],
+	);
+	assertEquals(
+		events.filter((event) => !event.includes("deploy")),
+		[
+			"Started build",
+			"StepStarted build/compile",
+			"StepFinished build/compile Ok",
+			"StepStarted build/bundle",
+			"StepFinished build/bundle Ok",
+			"Finished build Succeeded",
+			"Started test",
+			"Finished test Succeeded",
+		],
+	);
 });
 
 Deno.test("a failing step is reported, then fails its job", async () => {
@@ -718,4 +738,120 @@ Deno.test("an untyped caller's non-plain plan panics, failing its job", async ()
 		assertInstanceOf(panic, Panic);
 		assertEquals(panic.name, "Panic (NonPlainPlan)");
 	}
+});
+
+Deno.test("a stopped plan's job ends after every job it declared", async (t) => {
+	await t.step("stopped by a failed result", async () => {
+		// Given: a plan that declares a slow need, then awaits a failing result
+		const events: string[] = [];
+		const slow = job({
+			name: "slow",
+			run: async () => {
+				await new Promise((resolve) => setTimeout(resolve, 10));
+				return 1;
+			},
+		});
+		const bad = job({ name: "bad", run: () => Promise.reject(new Error("x")) });
+		const a = job({
+			name: "a",
+			plan: async (p) => {
+				const s = p.needs(slow);
+				return { s, bad: await p.result(bad) };
+			},
+			run: () => {},
+		});
+
+		// When: it runs
+		const report = unwrap(await run({ jobs: [a], events }));
+
+		// Then: a is Blocked by bad, and only after slow finished
+		assertEquals(outcomeOf({ report, name: "a" }), Blocked(["bad"]));
+		assert(
+			indexOf({ events, event: "Finished slow Succeeded" }) <
+				indexOf({ events, event: "Blocked a by bad" }),
+		);
+	});
+
+	await t.step("blockedBy names every unhealthy declared need", async () => {
+		// Given: a plan that declares one failing need, then awaits another
+		const first = job({
+			name: "first",
+			run: () => Promise.reject(new Error("1")),
+		});
+		const second = job({
+			name: "second",
+			run: () => Promise.reject(new Error("2")),
+		});
+		const a = job({
+			name: "a",
+			plan: async (p) => {
+				const f = p.needs(first);
+				return { f, s: await p.result(second) };
+			},
+			run: () => {},
+		});
+
+		// When: it runs
+		const report = unwrap(await run({ jobs: [a] }));
+
+		// Then: both are named, in the order the plan reached them
+		assertEquals(
+			outcomeOf({ report, name: "a" }),
+			Blocked(["first", "second"]),
+		);
+	});
+
+	await t.step("cancelled by the run's signal", async () => {
+		// Given: a plan that declares a long need and awaits another's result
+		const events: string[] = [];
+		const controller = new AbortController();
+		const long = job({ name: "long", run: (t) => untilAborted(t.signal) });
+		const slowResult = job({
+			name: "slowResult",
+			run: async (t) => {
+				controller.abort("stop");
+				return await untilAborted(t.signal);
+			},
+		});
+		const a = job({
+			name: "a",
+			plan: async (p) => {
+				const l = p.needs(long);
+				return { l, r: await p.result(slowResult) };
+			},
+			run: () => {},
+		});
+
+		// When: the run is cancelled while a's plan waits
+		unwrap(await run({ jobs: [a], events, signal: controller.signal }));
+
+		// Then: a's Cancelled comes after both of its jobs' terminal events
+		const end = indexOf({ events, event: "Cancelled a" });
+		assert(indexOf({ events, event: "Cancelled long" }) < end);
+		assert(indexOf({ events, event: "Cancelled slowResult" }) < end);
+	});
+});
+
+Deno.test("failFast still blocks a staged plan whose declared need failed", async () => {
+	// Given: a plan that declares a failing need, then awaits a slow result
+	const failing = job({
+		name: "failing",
+		run: () => Promise.reject(new Error("x")),
+	});
+	const slow = job({ name: "slow", run: (t) => untilAborted(t.signal) });
+	const staged = job({
+		name: "staged",
+		plan: async (p) => {
+			const f = p.needs(failing);
+			return { f, s: await p.result(slow) };
+		},
+		run: () => {},
+	});
+
+	// When: running with failFast, which cancels slow while staged waits
+	const report = unwrap(await run({ jobs: [staged], failFast: true }));
+
+	// Then: staged is Blocked by the failure, not Cancelled
+	assertEquals(outcomeOf({ report, name: "slow" }), Cancelled());
+	assertEquals(outcomeOf({ report, name: "staged" }), Blocked(["failing"]));
 });
