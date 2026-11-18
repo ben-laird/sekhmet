@@ -86,6 +86,9 @@ export interface InvariantCause {
  * Please file an issue at https://example.com/issues
  * ```
  *
+ * The issue line appears only with an `issueUrl`. The other invariant checks
+ * use the same layout, adding a line per offending value.
+ *
  * @param condition The condition that must hold
  * @param options The expected behavior, and an optional issue URL
  * @returns Nothing; it panics when `condition` is falsy
@@ -126,8 +129,10 @@ export function invariant(
 
 /**
  * Whether `value` is the panic {@linkcode invariant} (or another invariant
- * check) throws. It runs no Proxy trap, and a `Panic` built by hand with the
- * same name is not one.
+ * check) throws. It accepts the panic of every invariant check
+ * (`invariant`, `invariantEqual`, `defined` and `satisfies`); narrow further
+ * on `cause.check.kind`. It runs no Proxy trap, and a `Panic` built by hand
+ * with the same name is not one.
  *
  * @param value Any caught value
  * @returns True if an invariant check threw `value`, narrowing it to
