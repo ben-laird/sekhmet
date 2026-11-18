@@ -1,3 +1,7 @@
+---
+kind: explanation
+---
+
 # Concepts
 
 ## Why `Struct`
