@@ -1,3 +1,10 @@
+/**
+ * Enums of literals: {@linkcode enumOf} builds a schema that accepts exactly
+ * the given literal values, typed as their union.
+ *
+ * @module
+ */
+
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { InvalidValue, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";

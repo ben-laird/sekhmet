@@ -1,3 +1,10 @@
+/**
+ * The date primitive: {@linkcode date} builds a schema that accepts only valid
+ * `Date` objects, with the range checks of its {@linkcode DateSchemaOptions}.
+ *
+ * @module
+ */
+
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import {
 	InvalidType,

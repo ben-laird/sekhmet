@@ -1,3 +1,12 @@
+/**
+ * Booleans read from strings: {@linkcode stringbool} builds a schema that
+ * reads words such as `"yes"` and `"off"` as booleans, for env vars, query
+ * params and form fields, with its {@linkcode StringboolOptions} and the
+ * default word lists `STRINGBOOL_TRUTHY` and `STRINGBOOL_FALSY`.
+ *
+ * @module
+ */
+
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import {
 	InvalidType,

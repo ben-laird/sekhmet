@@ -1,3 +1,11 @@
+/**
+ * The number primitive: {@linkcode number} builds a schema that accepts
+ * numbers, finite only by default, with the coercion and checks of its
+ * {@linkcode NumberSchemaOptions}.
+ *
+ * @module
+ */
+
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Schema } from "@/src/core/mini/schema.ts";

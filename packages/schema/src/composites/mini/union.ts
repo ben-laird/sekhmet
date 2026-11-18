@@ -1,3 +1,11 @@
+/**
+ * The union composite: {@linkcode union} builds a schema that accepts what any
+ * of its options accepts, trying them in order, with its
+ * {@linkcode UnionInput} type and {@linkcode UnionView}.
+ *
+ * @module
+ */
+
 import { match, union as unionValue } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { InvalidUnion, type SchemaIssue } from "@/src/core/mini/issue.ts";

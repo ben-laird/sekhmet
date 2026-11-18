@@ -1,3 +1,12 @@
+/**
+ * Values that may be synchronous or asynchronous: {@linkcode Potential}, an
+ * enum built with {@linkcode Sync}, {@linkcode Async} or {@linkcode from} (from
+ * a {@linkcode MaybePromise}), and mapped with {@linkcode map} without going
+ * async unless it must.
+ *
+ * @module
+ */
+
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { match } from "@sekhmet/enum/core/mini/exit";
 

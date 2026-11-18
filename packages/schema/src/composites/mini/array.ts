@@ -1,3 +1,12 @@
+/**
+ * The array composite: {@linkcode array} builds a schema for arrays whose
+ * every element one schema accepts, reporting each failing element at its
+ * index, with its {@linkcode ArrayOptions}, {@linkcode ArrayInput} type and
+ * {@linkcode ArrayView}.
+ *
+ * @module
+ */
+
 import { type SchemaIssue, TooBig, TooSmall } from "@/src/core/mini/issue.ts";
 import {
 	type Flatten,

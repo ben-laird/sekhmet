@@ -1,3 +1,12 @@
+/**
+ * Standard Schema in: {@linkcode fromStandard} wraps any Standard Schema v1
+ * (Zod, Valibot, ArkType…) as a `Schema`, and
+ * {@linkcode EMPTY_FAILURE_MESSAGE} is the message it reports when one fails
+ * without issues.
+ *
+ * @module
+ */
+
 import { union } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { Issues, type Located } from "@/src/core/mini/issues.ts";

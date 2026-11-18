@@ -1,3 +1,11 @@
+/**
+ * Two-way alternation: {@linkcode or} builds a schema that accepts what
+ * either of two schemas accepts, trying the left one first, and
+ * {@linkcode OrOptions} is what it takes.
+ *
+ * @module
+ */
+
 import { union as variant } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { getStructParams } from "@sekhmet/primordials/struct";

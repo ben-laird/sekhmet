@@ -1,3 +1,11 @@
+/**
+ * The boolean primitive: {@linkcode boolean} builds a schema that accepts
+ * booleans, optionally coercing other values as its
+ * {@linkcode BooleanSchemaOptions} say.
+ *
+ * @module
+ */
+
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";

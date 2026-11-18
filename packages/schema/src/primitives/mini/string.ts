@@ -1,3 +1,11 @@
+/**
+ * The string primitive: {@linkcode string} builds a schema that accepts
+ * strings, with the coercion, transforms and checks of its
+ * {@linkcode StringSchemaOptions}.
+ *
+ * @module
+ */
+
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Schema } from "@/src/core/mini/schema.ts";

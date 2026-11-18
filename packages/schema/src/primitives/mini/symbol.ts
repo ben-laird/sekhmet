@@ -1,3 +1,10 @@
+/**
+ * The symbol primitive: {@linkcode symbol} builds a schema that accepts only
+ * symbols.
+ *
+ * @module
+ */
+
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";

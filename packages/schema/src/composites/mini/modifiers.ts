@@ -1,3 +1,11 @@
+/**
+ * Schema modifiers: {@linkcode optional} also accepts `undefined`,
+ * {@linkcode nullable} also accepts `null`, and {@linkcode lazy} defers
+ * building a schema so it can refer to itself, with its {@linkcode LazyView}.
+ *
+ * @module
+ */
+
 import { Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { SchemaNode } from "@/src/core/mini/node.ts";

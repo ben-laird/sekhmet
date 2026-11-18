@@ -1,3 +1,14 @@
+/**
+ * The object composite: {@linkcode object} builds a schema for objects from a
+ * {@linkcode Shape} of fields, reporting each failing field at its path, with
+ * its {@linkcode ObjectOptions}, unknown-key policy ({@linkcode UnknownKeys}),
+ * field types ({@linkcode Field}, {@linkcode KeyPresence},
+ * {@linkcode FieldSchema}), input, output and error types, and
+ * {@linkcode ObjectView}.
+ *
+ * @module
+ */
+
 import { type SchemaIssue, UnknownKey } from "@/src/core/mini/issue.ts";
 import { type Flatten, type Issues, issues } from "@/src/core/mini/issues.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";

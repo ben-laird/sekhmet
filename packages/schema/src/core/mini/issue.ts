@@ -1,3 +1,15 @@
+/**
+ * The built-in schemas' error: {@linkcode SchemaIssue}, an enum of why a value
+ * was rejected, with a constructor per variant ({@linkcode InvalidType},
+ * {@linkcode InvalidValue}, {@linkcode InvalidFormat}, {@linkcode TooSmall},
+ * {@linkcode TooBig}, {@linkcode NotMultipleOf}, {@linkcode UnknownKey},
+ * {@linkcode InvalidUnion}, {@linkcode Custom}) and its details types,
+ * {@linkcode isSchemaIssue}, {@linkcode formatIssue} for a default message, and
+ * {@linkcode typeName} for naming a value's runtime type.
+ *
+ * @module
+ */
+
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import type { Issues } from "./issues.ts";

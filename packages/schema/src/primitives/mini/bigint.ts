@@ -1,3 +1,11 @@
+/**
+ * The bigint primitive: {@linkcode bigint} builds a schema that accepts only
+ * bigints, with the range and divisibility checks of its
+ * {@linkcode BigintSchemaOptions}.
+ *
+ * @module
+ */
+
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import {
 	InvalidType,
