@@ -21,6 +21,10 @@ with TypeScript's strictest settings, including `isolatedDeclarations`.
 | [`@sekhmet/primordials`](packages/primordials/README.md) | `Struct`, `Subtle`, `block` and `define`: the building blocks of the other packages                       |
 | [`@sekhmet/workflow`](packages/workflow/README.md)       | `todo`/`unimplemented`, `unreachable` and invariant checks: panics that mark the state of the code        |
 
+[`@sekhmet/job`](packages/job/README.md), a CI-runner-style job graph, is an
+unpublished prototype while its design is settled in
+[#57](https://github.com/ben-laird/sekhmet/issues/57).
+
 Guides for each package are on the
 [docs site](https://ben-laird.github.io/sekhmet/), and the API reference is on
 [JSR](https://jsr.io/@sekhmet).

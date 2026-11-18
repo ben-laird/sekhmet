@@ -95,6 +95,9 @@ Packages (`packages/`):
   scheduler)
 - `@sekhmet/enum`: enum framework plus `option`, `result`, `latch`, `poll` and
   `ordering` built on it
+- `@sekhmet/job` (prototype, `"publish": false`; #57): named jobs run as a
+  dependency graph on promises and `AbortSignal`: `defineJobs`/`job` (a
+  plan as data, a typed run), `runJobs` and the dry run `planJobs`
 - `@sekhmet/matrix`: `matrix()` builds the Cartesian product of value arrays for
   parameterized tests
 - `@sekhmet/panic`: `Panic` error, `panic()`/`panicWithoutCause()`, a Rust-style
@@ -282,7 +285,7 @@ fix(@sekhmet/primordials): correct Struct type inference
 **Types**: `feat`, `fix`, `test`, `refactor`, `docs`, `chore`, `perf`
 
 **Scopes**: Use package names: `@sekhmet/effect`, `@sekhmet/enum`,
-`@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/schema`,
+`@sekhmet/job` (prototype), `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/schema`,
 `@sekhmet/vow`, `@sekhmet/workflow`, and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`,
 `@sekhmet/dv`, `@sekhmet/dv-plugin`, `@sekhmet/gen-main`, `@sekhmet/playground`,
 `@sekhmet/release` for scripts
