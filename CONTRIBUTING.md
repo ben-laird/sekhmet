@@ -727,6 +727,22 @@ No approval is required. Repository admins can bypass the ruleset.
 
 - **JSDoc** on every export, with an `@example` that runs. Every entrypoint
   module starts with a `@module` doc. JSR renders these as the API reference.
+- **JSR score.** `deno task ci` enforces every part of the
+  [JSR score](https://jsr.io/docs/scoring) the repo controls, so a package
+  scores fully from its first release:
+
+  | JSR criterion                        | Enforced by                                       |
+  | ------------------------------------ | ------------------------------------------------- |
+  | Has a README or module doc           | readiness `package-files` (README.md)             |
+  | Has examples in README or module doc | readiness `readme-examples` (a fenced code block) |
+  | All entrypoints have module docs     | readiness `module-doc` (a leading `@module` doc)  |
+  | Has docs for most symbols            | `deno doc --lint` over each export set            |
+  | No slow types                        | the JSR publish dry run                           |
+
+  The rest live outside the repo: provenance comes from publishing in the
+  `release` workflow over GitHub OIDC, and the description and runtime
+  compatibility are package settings on jsr.io (JSR does not read them from
+  `deno.json`), so set them in each package's settings page.
 - **Examples are tests.** `deno test --doc` (part of `deno task ci`)
   type-checks and runs every `ts` code block in JSDoc and in markdown files,
   so write examples with explicit imports from the public entrypoint (e.g.
