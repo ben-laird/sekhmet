@@ -197,3 +197,8 @@ assertEquals(reported.length, 1);
 The vow is resolved and every other dependent has run by the time the error
 reaches you. See [errors in dependents](./concepts.md#errors-in-dependents)
 for why.
+
+This does not apply to a vow from `fromPromise`. You never call its resolver:
+the promise's `then` callback does, so a dependent that throws becomes an
+unhandled promise rejection, out of reach of any `try`. Keep the dependents
+of such a vow from throwing.
