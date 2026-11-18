@@ -85,6 +85,9 @@ assertEquals(
 - **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/schema/doc)
   documents every schema, option and issue.
 
+The guides are also on the
+[docs site](https://ben-laird.github.io/sekhmet/schema/).
+
 ## Design record
 
 The
