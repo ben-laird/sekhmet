@@ -6,6 +6,8 @@
  * @module
  */
 
+import { Result } from "@sekhmet/enum/result/mini";
+import { isErr } from "@sekhmet/enum/result/mini/predicates";
 import { panic } from "@sekhmet/panic/mini/core";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import type { JobOutcome } from "@/src/outcome.ts";
@@ -50,6 +52,7 @@ export interface JobParams<T, C> {
  */
 export type Stage<T, C> =
 	| { readonly kind: "skip" }
+	| { readonly kind: "unmet" }
 	| {
 			readonly kind: "planned";
 			/** The plan's value as returned, handles unresolved (for a dry run) */
@@ -113,16 +116,42 @@ export interface Planner<C> {
 	needs<T>(job: Job<T, C>): Handle<T>;
 	/**
 	 * Waits for `job`'s result, for a plan whose needs depend on it (a staged
-	 * plan). If `job` doesn't succeed, the plan never resumes: the job ends as
-	 * a `needs` on it would.
+	 * plan): `Ok` with its value, or `Err` with its outcome if it didn't
+	 * succeed. Either way the plan resumes. `job` then counts as a need: if it
+	 * didn't succeed, the job ends as a `needs` on it would (`Blocked`,
+	 * `Skipped` or `Cancelled`) before its run. To give up early, return the
+	 * `Err` from the plan.
 	 */
-	result<T>(job: Job<T, C>): Promise<Readonly<T>>;
+	result<T>(job: Job<T, C>): Promise<NeedResult<T>>;
 	/**
 	 * Waits for `job`'s outcome, whatever it is. It never blocks, so a plan
 	 * can run after a failure (`always`) or only after one (`failure`).
 	 */
 	outcome<T>(job: Job<T, C>): Promise<JobOutcome<Readonly<T>>>;
 }
+
+/**
+ * Why `p.result(job)` has no value: `job` ended without succeeding.
+ */
+export interface UnmetNeed {
+	/** The job awaited */
+	readonly job: string;
+	/** How it ended: anything but `Succeeded` */
+	readonly outcome: JobOutcome<unknown>;
+}
+
+/**
+ * What `p.result(job)` resolves to: the job's value, or why there is none.
+ *
+ * @template T What the awaited job returns
+ */
+export type NeedResult<T> = Result<Readonly<T>, UnmetNeed>;
+
+/**
+ * What a plan may return instead of a plan record: `skip()`, or the `Err` of
+ * a `p.result` it gives up on.
+ */
+export type PlanExit = Skip | NeedResult<unknown>;
 
 /**
  * What a run receives as `t`.
@@ -169,11 +198,11 @@ export type PlanRecord = { readonly [key: string]: unknown };
  * signature lets through: `unknown` when every key is a string, else a type
  * that makes the definition's `plan` fail to type-check.
  *
- * @template P The plan's value, or `Skip`
+ * @template P The plan's value, or a `PlanExit`
  */
-export type StringKeysOnly<P> = [Exclude<P, Skip>] extends [never]
+export type StringKeysOnly<P> = [Exclude<P, PlanExit>] extends [never]
 	? unknown
-	: [Extract<keyof Exclude<P, Skip>, symbol>] extends [never]
+	: [Extract<keyof Exclude<P, PlanExit>, symbol>] extends [never]
 		? unknown
 		: { readonly plan: "a plan's keys must be strings" };
 
@@ -181,18 +210,21 @@ export type StringKeysOnly<P> = [Exclude<P, Skip>] extends [never]
  * A job with a plan.
  *
  * @template C The run's context type
- * @template P The plan's value, or `Skip`
+ * @template P The plan's value, or a `PlanExit`
  * @template T What the run returns
  */
-export interface PlannedJobDefinition<C, P extends PlanRecord | Skip, T> {
+export interface PlannedJobDefinition<C, P extends PlanRecord | PlanExit, T> {
 	/** The job's display name, unique within a run */
 	readonly name: string;
-	/** Declares what the job needs, as data; may be async, may `skip()` */
+	/**
+	 * Declares what the job needs, as data; may be async, may `skip()`, may
+	 * return the `Err` of a `p.result` to give up
+	 */
 	readonly plan: (p: Planner<C>) => P | Promise<P>;
 	/** Does the work, given the plan with its handles resolved */
 	readonly run: (
 		t: JobRun<C>,
-		plan: Resolved<Exclude<P, Skip>>,
+		plan: Resolved<Exclude<P, PlanExit>>,
 	) => T | Promise<T>;
 	/** A failure leaves the run's verdict passing (default `false`) */
 	readonly continueOnError?: boolean | undefined;
@@ -224,7 +256,7 @@ export interface JobKit<C> {
 	 * returns; a job that needs nothing omits `plan`.
 	 */
 	readonly job: {
-		<P extends PlanRecord | Skip, T = void>(
+		<P extends PlanRecord | PlanExit, T = void>(
 			definition: PlannedJobDefinition<C, P, T> & StringKeysOnly<P>,
 		): Job<T, C>;
 		<T = void>(definition: LeafJobDefinition<C, T>): Job<T, C>;
@@ -261,7 +293,7 @@ export interface JobKit<C> {
 export function defineJobs<C>(): JobKit<C> {
 	return { job: defineJob };
 
-	function defineJob<P extends PlanRecord | Skip, T>(
+	function defineJob<P extends PlanRecord | PlanExit, T>(
 		definition: PlannedJobDefinition<C, P, T> | LeafJobDefinition<C, T>,
 	): Job<T, C> {
 		if ("plan" in definition) return plannedJob(definition);
@@ -274,7 +306,7 @@ export function defineJobs<C>(): JobKit<C> {
 	}
 }
 
-function plannedJob<C, P extends PlanRecord | Skip, T>({
+function plannedJob<C, P extends PlanRecord | PlanExit, T>({
 	name,
 	plan,
 	run,
@@ -286,6 +318,7 @@ function plannedJob<C, P extends PlanRecord | Skip, T>({
 		plan: async (p) => {
 			const value = await plan(p);
 			if (value instanceof Skip) return { kind: "skip" };
+			if (value instanceof Result && isErr(value)) return { kind: "unmet" };
 			assertPlainPlan({ job: name, plan: value });
 			return {
 				kind: "planned",
@@ -329,23 +362,23 @@ function assertPlainPlan({ job, plan }: { job: string; plan: object }): void {
  * Replaces each top-level handle in `plan` with its resolved value.
  *
  * A cast (one of two in the package): an object built key by key can't be
- * typed as a mapped type over a generic `P`. The caller has ruled out `Skip`
- * and checked that `plan` is a plain object with only string keys, so
+ * typed as a mapped type over a generic `P`. The caller has ruled out a
+ * `PlanExit` and checked that `plan` is a plain object with only string keys, so
  * `Object.entries` visits exactly the keys `Resolved<P>` maps.
  */
-function resolvePlanUnsafely<P extends PlanRecord | Skip>({
+function resolvePlanUnsafely<P extends PlanRecord | PlanExit>({
 	plan,
 	read,
 }: {
 	plan: P;
 	read: HandleReader;
-}): Resolved<Exclude<P, Skip>> {
+}): Resolved<Exclude<P, PlanExit>> {
 	const resolved = Object.fromEntries(
 		Object.entries(plan).map(([key, field]) => {
 			return [key, field instanceof Handle ? read(field) : field];
 		}),
 	);
-	return resolved as Resolved<Exclude<P, Skip>>;
+	return resolved as Resolved<Exclude<P, PlanExit>>;
 }
 
 /**

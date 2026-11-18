@@ -1,5 +1,11 @@
 import { isolate, match, union } from "@sekhmet/enum/core/mini";
-import { type Result, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import {
+	Err,
+	isErr,
+	type Result,
+	unwrap,
+	unwrapErr,
+} from "@sekhmet/enum/result/mini";
 import {
 	Blocked,
 	Cancelled,
@@ -303,10 +309,12 @@ Deno.test("a staged plan decides its needs from a result", async (t) => {
 		return job({
 			name: "publish",
 			plan: async (p) => {
-				const version_ = await p.result(version);
+				const versioned = await p.result(version);
+				if (isErr(versioned)) return versioned;
+				const v = unwrap(versioned);
 				return {
-					version: version_,
-					sign: version_.startsWith("0.") ? undefined : p.needs(sign),
+					version: v,
+					sign: v.startsWith("0.") ? undefined : p.needs(sign),
 				};
 			},
 			run: (_t, { version, sign }) => `${version} ${sign ?? "unsigned"}`,
@@ -347,31 +355,85 @@ Deno.test("a staged plan decides its needs from a result", async (t) => {
 	});
 });
 
-Deno.test("awaiting a result that fails blocks the plan's job", async () => {
-	// Given: a plan that awaits a failing job's result
-	let resumed = false;
+Deno.test("p.result of a job that fails is an Err, and blocks", async (t) => {
+	// Given: a version job that fails
 	const version = job({
 		name: "version",
 		run: () => {
 			throw new Error("no tags");
 		},
 	});
-	const publish = job({
-		name: "publish",
-		plan: async (p) => {
-			await p.result(version);
-			resumed = true;
-			return {};
-		},
-		run: () => {},
+
+	await t.step("a plan that returns the Err gives up as Blocked", async () => {
+		// Given: a plan that gives up on the Err, with a finally
+		const seen: string[] = [];
+		const publish = job({
+			name: "publish",
+			plan: async (p) => {
+				try {
+					const versioned = await p.result(version);
+					if (isErr(versioned)) {
+						seen.push(unwrapErr(versioned).job);
+						return versioned;
+					}
+					return { version: unwrap(versioned) };
+				} finally {
+					seen.push("finally");
+				}
+			},
+			run: () => {},
+		});
+
+		// When: it runs
+		const report = unwrap(await run({ jobs: [publish] }));
+
+		// Then: the plan resumed (finally ran), and the job is Blocked by version
+		assertEquals(seen, ["version", "finally"]);
+		assertEquals(outcomeOf({ report, name: "publish" }), Blocked(["version"]));
 	});
 
-	// When: it runs
-	const report = unwrap(await run({ jobs: [publish] }));
+	await t.step(
+		"a plan that carries on is still Blocked before its run",
+		async () => {
+			// Given: a plan that keeps the Err as data and returns a plan
+			let ran = false;
+			const publish = job({
+				name: "publish",
+				plan: async (p) => ({ version: await p.result(version) }),
+				run: () => {
+					ran = true;
+				},
+			});
 
-	// Then: the plan never resumed, and the job is Blocked by version
-	assertEquals(outcomeOf({ report, name: "publish" }), Blocked(["version"]));
-	assertEquals(resumed, false);
+			// When: it runs
+			const report = unwrap(await run({ jobs: [publish] }));
+
+			// Then: the awaited job counts as a need, so the run never starts
+			assertEquals(
+				outcomeOf({ report, name: "publish" }),
+				Blocked(["version"]),
+			);
+			assertEquals(ran, false);
+		},
+	);
+
+	await t.step("a plan may turn the Err into a skip", async () => {
+		// Given: a plan that skips when version has no value
+		const publish = job({
+			name: "publish",
+			plan: async (p) => {
+				const versioned = await p.result(version);
+				return isErr(versioned) ? skip() : { version: unwrap(versioned) };
+			},
+			run: () => {},
+		});
+
+		// When: it runs
+		const report = unwrap(await run({ jobs: [publish] }));
+
+		// Then: skip() is the plan's own decision
+		assertEquals(outcomeOf({ report, name: "publish" }), Skipped());
+	});
 });
 
 Deno.test("p.outcome never blocks: failure() and always() are plans", async () => {
@@ -744,8 +806,8 @@ Deno.test("an untyped caller's non-plain plan panics, failing its job", async ()
 	}
 });
 
-Deno.test("a stopped plan's job ends after every job it declared", async (t) => {
-	await t.step("stopped by a failed result", async () => {
+Deno.test("a job ends after every job its plan touched", async (t) => {
+	await t.step("giving up on a failed result", async () => {
 		// Given: a plan that declares a slow need, then awaits a failing result
 		const events: string[] = [];
 		const slow = job({
@@ -760,7 +822,9 @@ Deno.test("a stopped plan's job ends after every job it declared", async (t) => 
 			name: "a",
 			plan: async (p) => {
 				const s = p.needs(slow);
-				return { s, bad: await p.result(bad) };
+				const badResult = await p.result(bad);
+				if (isErr(badResult)) return badResult;
+				return { s, bad: unwrap(badResult) };
 			},
 			run: () => {},
 		});
@@ -1110,4 +1174,23 @@ Deno.test("only the abort itself makes a body Cancelled", async (t) => {
 			assertEquals(outcomeOf({ report, name: "abortError" }), Cancelled());
 		},
 	);
+});
+
+Deno.test("an Err no unmet p.result produced fails the plan's job", async () => {
+	// Given: a plan that returns an Err of its own making, with no failed need
+	const forged = job({
+		name: "forged",
+		plan: () => Err({ job: "nobody", outcome: Skipped() }),
+		run: () => {},
+	});
+
+	// When: it runs
+	const report = unwrap(await run({ jobs: [forged] }));
+
+	// Then: nothing explains the Err, so the job Failed with a panic
+	const outcome = outcomeOf({ report, name: "forged" });
+	assert(isolate(outcome, "Failed"));
+	const panic = union(outcome);
+	assertInstanceOf(panic, Panic);
+	assertEquals(panic.name, "Panic (UnexplainedErr)");
 });

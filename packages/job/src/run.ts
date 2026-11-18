@@ -28,7 +28,7 @@ import {
 	Skipped,
 	Succeeded,
 } from "@/src/outcome.ts";
-import { openPlanner } from "@/src/planner.ts";
+import { openPlanner, unexplainedErr } from "@/src/planner.ts";
 import { decideFromNeeds, passed } from "@/src/verdict.ts";
 
 /**
@@ -208,7 +208,6 @@ export async function runJobs<C>({
 	 */
 	async function lifecycle<T>(job: Job<T, C>): Promise<JobOutcome<T>> {
 		const { name, plan } = getStructParams(job);
-		const stopped = Promise.withResolvers<void>();
 		const dependencies = new Map<AnyJob, Dependency>();
 		let observed = false;
 		let ordinary = false;
@@ -238,9 +237,8 @@ export async function runJobs<C>({
 			result: async (need) => {
 				if (!settled.has(need)) ordinary = true;
 				const outcome = await touch({ need, blocks: true });
-				if (isolate(outcome, "Succeeded")) return union(outcome);
-				stopped.resolve();
-				return new Promise<never>(() => {});
+				if (isolate(outcome, "Succeeded")) return Ok(union(outcome));
+				return Err({ job: nameOf(need), outcome });
 			},
 			outcome: (need) => {
 				observed = true;
@@ -254,21 +252,18 @@ export async function runJobs<C>({
 					readonly stage: Awaited<ReturnType<typeof plan>>;
 			  }
 			| { readonly kind: "failed"; readonly error: unknown }
-			| { readonly kind: "stopped" };
+			| { readonly kind: "cancelled" };
 		const planning = plan(planner).then(
 			(stage): Planned => ({ kind: "stage", stage }),
 			(error: unknown): Planned => ({ kind: "failed", error }),
 		);
-		const halted = stopped.promise.then((): Planned => ({ kind: "stopped" }));
 		const settlePlan = async (): Promise<Planned> => {
 			const raced = await Promise.race([
 				planning,
-				halted,
-				cancelled.then(() => "cancelled" as const),
+				cancelled.then((): Planned => ({ kind: "cancelled" })),
 			]);
-			if (raced !== "cancelled") return raced;
-			if (!observesOnly()) return { kind: "stopped" };
-			return await Promise.race([planning, halted]);
+			if (raced.kind !== "cancelled" || !observesOnly()) return raced;
+			return await planning;
 		};
 		const planned = await settlePlan();
 		close();
@@ -283,8 +278,11 @@ export async function runJobs<C>({
 		if (planned.kind === "failed") {
 			return finish({ job, outcome: Failed(planned.error) });
 		}
-		if (planned.kind === "stopped") {
+		if (planned.kind === "cancelled") {
 			return finish({ job, outcome: forced ?? Cancelled() });
+		}
+		if (planned.stage.kind === "unmet") {
+			return finish({ job, outcome: forced ?? Failed(unexplainedErr(name)) });
 		}
 		if (planned.stage.kind === "skip") {
 			return finish({ job, outcome: Skipped() });

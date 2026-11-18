@@ -16,7 +16,7 @@ many jobs need it, and ends with a `JobOutcome`: `Succeeded`, `Failed`,
 
 ```ts
 import { isolate } from "@sekhmet/enum/core/mini";
-import { unwrap } from "@sekhmet/enum/result/mini";
+import { isErr, unwrap } from "@sekhmet/enum/result/mini";
 import {
 	defineJobs,
 	type JobEvent,
@@ -49,11 +49,12 @@ const publish = job({
 	name: "publish",
 	// A staged plan: it awaits a result to decide what else it needs
 	plan: async (p) => {
-		const v = await p.result(version);
+		const versioned = await p.result(version);
+		if (isErr(versioned)) return versioned; // give up: Blocked by version
 		if (!p.context.release) return skip();
 		return {
 			build: p.needs(build),
-			channel: v.startsWith("0.") ? "beta" : "stable",
+			channel: unwrap(versioned).startsWith("0.") ? "beta" : "stable",
 		};
 	},
 	run: (_t, { build, channel }) => `${build.outDir} -> ${channel}`,
@@ -99,10 +100,12 @@ assertEquals(report.passed, true);
   - `plan(p)` may be async, and returns a plain object of handles from
     `p.needs(job)` plus any data, or `skip()`. A job that needs nothing omits
     it.
-  - `p.result(job)` waits for a job's value (a staged plan); if that job
-    doesn't succeed, the plan never resumes and its job ends as a `needs`
-    would. `p.outcome(job)` waits for its outcome and never blocks, so
-    `always`/`failure` conditions are ordinary code.
+  - `p.result(job)` waits for a job's value (a staged plan) and resolves to
+    `Ok(value)`, or `Err` with the job's outcome if it didn't succeed. The
+    plan always resumes; the awaited job then counts as a need, so the job
+    ends `Blocked` (or `Skipped`/`Cancelled`) before its run. Return the `Err`
+    to give up early. `p.outcome(job)` waits for its outcome and never
+    blocks, so `always`/`failure` conditions are ordinary code.
   - `run(t, plan)` receives the plan with its top-level handles resolved and
     typed `Readonly`, inferred from `plan` with no annotations. `t` has
     `context`, `signal` and `step(name, fn)`.

@@ -58,6 +58,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("job/src/job.ts", "Job", "Struct"),
 	privateTypeRef("job/src/job.ts", "Handle", "Struct"),
 	privateTypeRef("job/src/job.ts", "Skip", "Struct"),
+	privateTypeRef("job/src/job.ts", "NeedResult", "Result"),
 	privateTypeRef("job/src/outcome.ts", "JobOutcome", "Enum"),
 	privateTypeRef("job/src/plan.ts", "JobPlan", "Enum"),
 	privateTypeRef("job/src/plan.ts", "planJobs", "Result"),

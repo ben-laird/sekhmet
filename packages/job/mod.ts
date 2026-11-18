@@ -53,7 +53,9 @@ export {
 	type JobParams,
 	type JobRun,
 	type LeafJobDefinition,
+	type NeedResult,
 	type NonPlainPlanCause,
+	type PlanExit,
 	type PlannedJobDefinition,
 	type Planner,
 	type PlanRecord,
@@ -63,6 +65,7 @@ export {
 	type Stage,
 	type StringKeysOnly,
 	skip,
+	type UnmetNeed,
 } from "./src/job.ts";
 export {
 	Blocked,
@@ -81,7 +84,10 @@ export {
 	type PlanOptions,
 	planJobs,
 } from "./src/plan.ts";
-export type { ClosedPlannerCause } from "./src/planner.ts";
+export type {
+	ClosedPlannerCause,
+	UnexplainedErrCause,
+} from "./src/planner.ts";
 export {
 	type JobMisuseCause,
 	type RunOptions,

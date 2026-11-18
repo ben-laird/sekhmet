@@ -13,7 +13,7 @@ import { getStructParams } from "@sekhmet/primordials/struct";
 import { settleAll, trackGraph } from "@/src/graph.ts";
 import type { GraphError } from "@/src/graph-error.ts";
 import { type AnyJob, Handle, type Job, nameOf } from "@/src/job.ts";
-import { openPlanner } from "@/src/planner.ts";
+import { openPlanner, unexplainedErr } from "@/src/planner.ts";
 
 /**
  * The variants of a {@linkcode JobPlan}, for type-level work on them.
@@ -167,6 +167,10 @@ export async function planJobs<C>({
 		const settled = plan(planner).then(
 			(stage) => {
 				if (stage.kind === "skip") return new JobPlan("Skipped");
+				// A dry run's p.result never resolves, so no p.result Err exists
+				if (stage.kind === "unmet") {
+					return new JobPlan("Failed", unexplainedErr(name));
+				}
 				return new JobPlan("Planned", {
 					needs: [...new Set(declared)],
 					plan: stage.plan,

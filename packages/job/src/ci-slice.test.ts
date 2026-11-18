@@ -7,7 +7,7 @@
  */
 
 import { isolate } from "@sekhmet/enum/core/mini";
-import { unwrap } from "@sekhmet/enum/result/mini";
+import { isErr, unwrap } from "@sekhmet/enum/result/mini";
 import {
 	Blocked,
 	defineJobs,
@@ -51,12 +51,13 @@ const test = job({
 });
 
 // "Show coverage report": dependsOn ["Deno Test"], condition () => isCI || isAI.
-// A predicate is "success, then skipped when false": awaiting the result first
-// keeps Blocked ahead of Skipped, as gateStep does.
+// A predicate is "success, then skipped when false": giving up on an unmet
+// result first keeps Blocked ahead of Skipped, as gateStep does.
 const coverage = job({
 	name: "Show coverage report",
 	plan: async (p) => {
-		await p.result(test);
+		const tested = await p.result(test);
+		if (isErr(tested)) return tested;
 		return p.context.reportsCoverage ? {} : skip();
 	},
 	run: stub("Show coverage report"),

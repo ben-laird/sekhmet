@@ -4,7 +4,7 @@
  * @module
  */
 
-import { panic } from "@sekhmet/panic/mini/core";
+import { Panic, panic } from "@sekhmet/panic/mini/core";
 import type { Planner } from "@/src/job.ts";
 
 /**
@@ -66,4 +66,28 @@ export function openPlanner<C>({
 			open = false;
 		},
 	};
+}
+
+/**
+ * The cause of the `UnexplainedErr` panic.
+ */
+export interface UnexplainedErrCause {
+	/** The job whose plan returned the `Err` */
+	readonly job: string;
+}
+
+/**
+ * The panic for a plan that returned an `Err` while every job it awaited or
+ * needed succeeded: only an untyped caller can return an `Err` that no
+ * `p.result` produced.
+ *
+ * @param job The planning job's name
+ * @returns The panic, to record as the job's failure (it is not thrown)
+ */
+export function unexplainedErr(job: string): Panic<UnexplainedErrCause> {
+	return new Panic({
+		name: "UnexplainedErr",
+		message: `the plan of job "${job}" returned an Err that no unmet p.result produced`,
+		cause: { job },
+	});
 }

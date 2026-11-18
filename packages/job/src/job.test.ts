@@ -1,4 +1,11 @@
-import { defineJobs, type Job, type JobRun, skip } from "@sekhmet/job";
+import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import {
+	defineJobs,
+	type Job,
+	type JobRun,
+	type NeedResult,
+	skip,
+} from "@sekhmet/job";
 import { assertType, type IsExact } from "@std/testing/types";
 
 interface Ctx {
@@ -66,12 +73,15 @@ Deno.test("run's plan parameter is inferred from plan's return", async (t) => {
 	await t.step("a staged async plan infers the same way", () => {
 		// Given: an async plan that awaits a result before declaring needs
 		// When: run receives the plan
-		// Then: the awaited value is data, the handle is resolved
+		// Then: p.result is a NeedResult, the returned Err is excluded, the
+		// unwrapped value is data and the handle is resolved
 		job({
 			name: "staged",
 			plan: async (p) => {
-				const v = await p.result(version);
-				return { v, build: p.needs(build) };
+				const versioned = await p.result(version);
+				assertType<IsExact<typeof versioned, NeedResult<string>>>(true);
+				if (isErr(versioned)) return versioned;
+				return { v: unwrap(versioned), build: p.needs(build) };
 			},
 			run: (_t, { v, build }) => {
 				assertType<IsExact<typeof v, string>>(true);
