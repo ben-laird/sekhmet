@@ -18,11 +18,11 @@ function cleanRepo(): Map<string, string> {
 				exports: { ".": "./mod.ts" },
 			}),
 		],
-		["packages/a/README.md", 'import { a } from "@sekhmet/a";'],
+		["packages/a/README.md", '```ts\nimport { a } from "@sekhmet/a";\n```'],
 		["packages/a/LICENSE.md", MIT],
 		[
 			"packages/a/mod.ts",
-			'import { b } from "@std/assert";\n/** ```ts\n * import { a } from "@sekhmet/a";\n * ``` */\nexport const a = b;',
+			'/**\n * A.\n *\n * @module\n */\nimport { b } from "@std/assert";\n/** ```ts\n * import { a } from "@sekhmet/a";\n * ``` */\nexport const a = b;',
 		],
 		[
 			"packages/a/mod.test.ts",
@@ -101,10 +101,29 @@ Deno.test("staticFindings reports each kind of failure with its check", () => {
 	assertEquals(findings.map(({ check }) => check).sort(), [
 		"given-when-then",
 		"imports",
+		"module-doc",
 		"package-files",
 		"publish-exclude",
 		"specifiers",
 	]);
+});
+
+Deno.test("staticFindings asks only published packages for module docs and README examples", () => {
+	// Given: the published package's README loses its example and its module
+	// doc, and the unpublished package has neither
+	const files = cleanRepo();
+	files.set("packages/a/README.md", "# a\n\nProse only.");
+	files.set("packages/a/mod.ts", "/** A. */\nexport const a = 1;");
+	files.set("packages/b/README.md", "# b");
+
+	// When: running the static checks
+	const findings = staticFindings(files);
+
+	// Then: only the published package is reported, once per check
+	assertEquals(
+		findings.map(({ check, file }) => `${check} ${file}`),
+		["module-doc packages/a/mod.ts", "readme-examples packages/a/README.md"],
+	);
 });
 
 Deno.test("staticFindings reports a todo import only in package source", () => {

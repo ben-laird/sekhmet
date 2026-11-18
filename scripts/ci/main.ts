@@ -224,8 +224,9 @@ export function denoTestArgs({
  * A publish-readiness run (see `readiness.ts`):
  * - `doc-lint`: `deno doc --lint` per workspace member over its export set,
  *   which is what JSR documents
- * - `static`: README/LICENSE, exports, imports, `publish.exclude`,
- *   Given/When/Then and README/JSDoc specifier checks
+ * - `static`: README/LICENSE, exports, entrypoint module docs, README
+ *   examples, imports, `publish.exclude`, Given/When/Then, README/JSDoc
+ *   specifier, module state and `todo` checks
  *
  * Known failures are allowlisted in `src/readiness/allowlisted.ts`.
  *
