@@ -888,3 +888,39 @@ Deno.test("a handle smuggled from another plan panics when resolved", async () =
 	assertInstanceOf(panic, Panic);
 	assertEquals(panic.name, "Panic (UndeclaredHandle)");
 });
+
+Deno.test("a throwing onEvent still leaves the caller's signal clean", async () => {
+	// Given: a signal that counts its listeners, and a hook that throws
+	const controller = new AbortController();
+	let listeners = 0;
+	const add = controller.signal.addEventListener.bind(controller.signal);
+	const remove = controller.signal.removeEventListener.bind(controller.signal);
+	controller.signal.addEventListener = (...args: Parameters<typeof add>) => {
+		listeners += 1;
+		add(...args);
+	};
+	controller.signal.removeEventListener = (
+		...args: Parameters<typeof remove>
+	) => {
+		listeners -= 1;
+		remove(...args);
+	};
+	const only = job({ name: "only", run: () => 1 });
+
+	// When: the run's hook throws on the first event
+	const thrown = await runJobs({
+		jobs: [only],
+		context: null,
+		signal: controller.signal,
+		onEvent: () => {
+			throw new Error("hook bug");
+		},
+	}).then(
+		() => undefined,
+		(error: unknown) => error,
+	);
+
+	// Then: the throw escaped (it's a bug in the hook), and no listener leaked
+	assertInstanceOf(thrown, Error);
+	assertEquals(listeners, 0);
+});

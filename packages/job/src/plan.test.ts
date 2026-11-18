@@ -77,14 +77,15 @@ Deno.test("plans read the context in a dry run too", async () => {
 });
 
 Deno.test("a plan that awaits a result is pending on that job", async () => {
-	// Given: a staged plan that declares a need, then awaits a result
+	// Given: a staged plan that declares a need twice, then awaits a result
 	const lint = job({ name: "lint", run: () => {} });
 	const version = job({ name: "version", run: () => "1.0.0" });
 	const publish = job({
 		name: "publish",
 		plan: async (p) => {
 			const lintHandle = p.needs(lint);
-			return { lint: lintHandle, version: await p.result(version) };
+			const again = p.needs(lint);
+			return { lint: lintHandle, again, version: await p.result(version) };
 		},
 		run: () => {},
 	});
@@ -94,7 +95,7 @@ Deno.test("a plan that awaits a result is pending on that job", async () => {
 		await planJobs({ jobs: [publish], context: { release: true } }),
 	);
 
-	// Then: publish is pending on version, having declared lint so far
+	// Then: publish is pending on version, having declared lint (once) so far
 	assertEquals(
 		planOf({ graph, name: "publish" }),
 		new JobPlan("Pending", { on: "version", needs: ["lint"] }),

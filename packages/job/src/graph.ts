@@ -33,6 +33,22 @@ export interface GraphTracker {
 }
 
 /**
+ * Waits until every entry of `pending` has settled, including entries added
+ * while earlier ones settle (a plan reaching a new job adds one).
+ *
+ * @param pending Each job's settling promise, keyed by job
+ */
+export async function settleAll(
+	pending: ReadonlyMap<AnyJob, Promise<unknown>>,
+): Promise<void> {
+	let seen = -1;
+	while (seen !== pending.size) {
+		seen = pending.size;
+		await Promise.all(pending.values());
+	}
+}
+
+/**
  * Starts tracking an empty graph.
  *
  * @returns The tracker

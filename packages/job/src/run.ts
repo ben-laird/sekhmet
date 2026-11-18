@@ -11,7 +11,7 @@ import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
 import { panic } from "@sekhmet/panic/mini/core";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { JobEvent } from "@/src/event.ts";
-import { trackGraph } from "@/src/graph.ts";
+import { settleAll, trackGraph } from "@/src/graph.ts";
 import type { GraphError } from "@/src/graph-error.ts";
 import {
 	type AnyJob,
@@ -134,9 +134,14 @@ export async function runJobs<C>({
 	if (signal?.aborted) forwardAbort();
 	signal?.addEventListener("abort", forwardAbort, { once: true });
 
-	for (const root of jobs) void schedule(root);
-	await settleAll(runs);
-	signal?.removeEventListener("abort", forwardAbort);
+	try {
+		for (const root of jobs) void schedule(root);
+		await settleAll(runs);
+	} finally {
+		// Even when onEvent throws, which it must not, leave the caller's
+		// signal as it was
+		signal?.removeEventListener("abort", forwardAbort);
+	}
 
 	if (graphError !== undefined) return Err(graphError);
 	return Ok({
@@ -380,20 +385,6 @@ function terminalEvent({
 		return new JobEvent("Blocked", { job, blockedBy: union(outcome) });
 	}
 	return new JobEvent("Finished", { job, outcome });
-}
-
-/**
- * Waits until every job the run reached has settled, including jobs that
- * plans reach while earlier ones settle.
- */
-async function settleAll(
-	runs: ReadonlyMap<AnyJob, Promise<unknown>>,
-): Promise<void> {
-	let seen = -1;
-	while (seen !== runs.size) {
-		seen = runs.size;
-		await Promise.all(runs.values());
-	}
 }
 
 /**

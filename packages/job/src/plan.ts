@@ -10,7 +10,7 @@ import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { isErr } from "@sekhmet/enum/result/mini/predicates";
 import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
 import { getStructParams } from "@sekhmet/primordials/struct";
-import { trackGraph } from "@/src/graph.ts";
+import { settleAll, trackGraph } from "@/src/graph.ts";
 import type { GraphError } from "@/src/graph-error.ts";
 import { type AnyJob, Handle, type Job, nameOf } from "@/src/job.ts";
 import { openPlanner } from "@/src/planner.ts";
@@ -70,6 +70,10 @@ export interface PlanOptions<C> {
  * plan that awaits a job's result or outcome is reported `Pending` on that
  * job. Duplicate names and cycles are an `Err`, as in `runJobs`.
  *
+ * An `Ok` dry run doesn't promise that `runJobs` finds no cycle: a `Pending`
+ * plan's later needs depend on a result only a real run produces, so a
+ * cycle closed after a staged await shows up only there.
+ *
  * @param options The roots and the context
  * @returns Each job's plan, or why the jobs don't form a graph
  *
@@ -101,11 +105,7 @@ export async function planJobs<C>({
 	let graphError: GraphError | undefined;
 
 	for (const root of jobs) visit(root);
-	let seen = -1;
-	while (seen !== plans.size) {
-		seen = plans.size;
-		await Promise.all(plans.values());
-	}
+	await settleAll(plans);
 
 	if (graphError !== undefined) return Err(graphError);
 	const found = await Promise.all(
@@ -142,7 +142,10 @@ export async function planJobs<C>({
 		const park = (on: Job<unknown, C>): Promise<never> => {
 			depend({ from: job, to: on });
 			parked.resolve(
-				new JobPlan("Pending", { on: nameOf(on), needs: [...declared] }),
+				new JobPlan("Pending", {
+					on: nameOf(on),
+					needs: [...new Set(declared)],
+				}),
 			);
 			return new Promise<never>(() => {});
 		};
