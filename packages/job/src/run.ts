@@ -201,11 +201,18 @@ export async function runJobs<C>({
 	 * One job's way through a run: plan, wait for every job the plan touched,
 	 * decide, then run the body if nothing forced an outcome. Waiting for all
 	 * of them first is what puts each job's terminal event after theirs.
+	 *
+	 * An observer (a plan that only awaited `p.outcome`, as `always()` and
+	 * `failure()` jobs do) is not cancelled with the run: its body runs with
+	 * `t.signal` already aborted, so it can tell.
 	 */
 	async function lifecycle<T>(job: Job<T, C>): Promise<JobOutcome<T>> {
 		const { name, plan } = getStructParams(job);
 		const stopped = Promise.withResolvers<void>();
 		const dependencies = new Map<AnyJob, Dependency>();
+		let observed = false;
+		let ordinary = false;
+		const observesOnly = (): boolean => observed && !ordinary;
 
 		const touch = <U>({
 			need,
@@ -224,16 +231,21 @@ export async function runJobs<C>({
 			job: name,
 			context,
 			needs: (need) => {
+				ordinary = true;
 				void touch({ need, blocks: true });
 				return new Handle({ job: need });
 			},
 			result: async (need) => {
+				if (!settled.has(need)) ordinary = true;
 				const outcome = await touch({ need, blocks: true });
 				if (isolate(outcome, "Succeeded")) return union(outcome);
 				stopped.resolve();
 				return new Promise<never>(() => {});
 			},
-			outcome: (need) => touch({ need, blocks: false }),
+			outcome: (need) => {
+				observed = true;
+				return touch({ need, blocks: false });
+			},
 		});
 
 		type Planned =
@@ -243,14 +255,22 @@ export async function runJobs<C>({
 			  }
 			| { readonly kind: "failed"; readonly error: unknown }
 			| { readonly kind: "stopped" };
-		const planned = await Promise.race<Planned>([
-			plan(planner).then(
-				(stage) => ({ kind: "stage", stage }),
-				(error: unknown) => ({ kind: "failed", error }),
-			),
-			stopped.promise.then(() => ({ kind: "stopped" })),
-			cancelled.then(() => ({ kind: "stopped" })),
-		]);
+		const planning = plan(planner).then(
+			(stage): Planned => ({ kind: "stage", stage }),
+			(error: unknown): Planned => ({ kind: "failed", error }),
+		);
+		const halted = stopped.promise.then((): Planned => ({ kind: "stopped" }));
+		const settlePlan = async (): Promise<Planned> => {
+			const raced = await Promise.race([
+				planning,
+				halted,
+				cancelled.then(() => "cancelled" as const),
+			]);
+			if (raced !== "cancelled") return raced;
+			if (!observesOnly()) return { kind: "stopped" };
+			return await Promise.race([planning, halted]);
+		};
+		const planned = await settlePlan();
 		close();
 
 		const settledNeeds = await Promise.all(
@@ -270,7 +290,9 @@ export async function runJobs<C>({
 			return finish({ job, outcome: Skipped() });
 		}
 		if (forced !== undefined) return finish({ job, outcome: forced });
-		if (cancel.signal.aborted) return finish({ job, outcome: Cancelled() });
+		if (cancel.signal.aborted && !observesOnly()) {
+			return finish({ job, outcome: Cancelled() });
+		}
 
 		onEvent(new JobEvent("Started", { job: name }));
 		const outcome = await body({

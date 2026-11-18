@@ -7,6 +7,7 @@ import {
 	DuplicateName,
 	defineJobs,
 	type GraphError,
+	isUnhealthy,
 	type Job,
 	type JobEvent,
 	type JobOutcome,
@@ -979,4 +980,75 @@ Deno.test("a cycle closed after a staged await is an Err", async () => {
 
 	// Then: it is found, and the run settles
 	assertEquals(unwrapErr(result), Cycle(["b", "a", "b"]));
+});
+
+Deno.test("observer jobs survive cancellation, as always() does", async (t) => {
+	await t.step("failFast still runs a failure() notifier", async () => {
+		// Given: a failing build, an ordinary sibling, and a notifier that only
+		// observes build's outcome
+		let sawAbort = false;
+		const build = job({
+			name: "build",
+			run: () => Promise.reject(new Error("x")),
+		});
+		const lint = job({ name: "lint", run: (t) => untilAborted(t.signal) });
+		const notify = job({
+			name: "notify",
+			plan: async (p) => {
+				return isUnhealthy(await p.outcome(build)) ? {} : skip();
+			},
+			run: (t) => {
+				sawAbort = t.signal.aborted;
+				return "paged";
+			},
+		});
+
+		// When: running with failFast
+		const report = unwrap(
+			await run({ jobs: [build, lint, notify], failFast: true }),
+		);
+
+		// Then: the ordinary sibling is cancelled; the notifier runs, and knows
+		assertEquals(outcomeOf({ report, name: "lint" }), Cancelled());
+		assertEquals(outcomeOf({ report, name: "notify" }), Succeeded("paged"));
+		assertEquals(sawAbort, true);
+	});
+
+	await t.step("the run's signal still runs an always() cleanup", async () => {
+		// Given: a long job, a cleanup that only observes it, and a signal
+		const controller = new AbortController();
+		const long = job({
+			name: "long",
+			run: (t) => {
+				controller.abort("stop");
+				return untilAborted(t.signal);
+			},
+		});
+		const cleanup = job({
+			name: "cleanup",
+			plan: async (p) => {
+				await p.outcome(long);
+				return {};
+			},
+			run: (t) => (t.signal.aborted ? "cleaned after abort" : "cleaned"),
+		});
+		const after = job({
+			name: "after",
+			plan: (p) => ({ long: p.needs(long) }),
+			run: () => {},
+		});
+
+		// When: the run is cancelled
+		const report = unwrap(
+			await run({ jobs: [cleanup, after], signal: controller.signal }),
+		);
+
+		// Then: long and its ordinary dependent are cancelled; cleanup ran
+		assertEquals(outcomeOf({ report, name: "long" }), Cancelled());
+		assertEquals(outcomeOf({ report, name: "after" }), Cancelled());
+		assertEquals(
+			outcomeOf({ report, name: "cleanup" }),
+			Succeeded("cleaned after abort"),
+		);
+	});
 });
