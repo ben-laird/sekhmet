@@ -227,6 +227,7 @@ sekhmet/
 │   ├── matrix/       # Cartesian-product test case generation
 │   ├── panic/        # Panic errors and the panic runtime (hook, catchUnwind)
 │   ├── primordials/  # Core primitives (Struct, Subtle, scoping helpers)
+│   ├── schema/       # Typed validation and transformation (Schema, composites, algebra)
 │   ├── vow/          # Synchronous promise-like values
 │   └── workflow/     # Workflow helpers (todo/unimplemented, unreachable, invariant checks)
 ├── scripts/          # Build and development scripts
@@ -602,6 +603,7 @@ Use package names as scopes:
 - `@sekhmet/matrix`
 - `@sekhmet/panic`
 - `@sekhmet/primordials`
+- `@sekhmet/schema`
 - `@sekhmet/vow`
 - `@sekhmet/workflow`
 - `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/playground` (scripts)
