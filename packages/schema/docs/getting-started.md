@@ -11,15 +11,16 @@ transforming what it parses. Each step is a complete program you can run.
 
 ## Install
 
-Add the package, and `@sekhmet/enum`, whose `Result` helpers we will use to
-read what a schema returns:
+Add the package, `@sekhmet/enum`, whose `Result` helpers we will use to read
+what a schema returns, and `@std/assert`, which each step uses to check its
+output:
 
 ```sh
-deno add jsr:@sekhmet/schema jsr:@sekhmet/enum
+deno add jsr:@sekhmet/schema jsr:@sekhmet/enum jsr:@std/assert
 ```
 
 On Node.js, Bun or another npm-compatible runtime, use
-`npx jsr add @sekhmet/schema @sekhmet/enum` instead.
+`npx jsr add @sekhmet/schema @sekhmet/enum @std/assert` instead.
 
 ## Parse a string
 
