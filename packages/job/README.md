@@ -40,7 +40,10 @@ const build = job({
 	name: "build",
 	plan: (p) => ({ version: p.needs(version) }),
 	run: async (t, { version }) => {
-		await t.step("compile", () => t.context.log.push(`compile ${version}`));
+		await t.step({
+			name: "compile",
+			run: () => t.context.log.push(`compile ${version}`),
+		});
 		return { outDir: "dist", version }; // what dependents receive
 	},
 });
@@ -108,7 +111,7 @@ assertEquals(report.passed, true);
     blocks, so `always`/`failure` conditions are ordinary code.
   - `run(t, plan)` receives the plan with its top-level handles resolved and
     typed `Readonly`, inferred from `plan` with no annotations. `t` has
-    `context`, `signal` and `step(name, fn)`.
+    `context`, `signal` and `step({ name, run })`.
 - **`runJobs({ jobs, context, signal?, failFast?, onEvent? })`** runs every
   job reachable from the roots once and returns
   `Result<RunReport, GraphError>`. A failed or blocked need makes a job

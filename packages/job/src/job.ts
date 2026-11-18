@@ -164,10 +164,23 @@ export interface JobRun<C> {
 	/** Aborted when the run is cancelled; pass it to `fetch` and friends */
 	readonly signal: AbortSignal;
 	/**
-	 * Runs a named sub-step, reported through `StepStarted` and `StepSucceeded`/`StepFailed`
-	 * events. A step's throw is reported, then rethrown into the body.
+	 * Runs a named sub-step, reported through `StepStarted`, then
+	 * `StepSucceeded` or `StepFailed`. A step's throw is reported, then
+	 * rethrown into the body.
 	 */
-	step<U>(name: string, fn: () => U | Promise<U>): Promise<U>;
+	step<U>(step: StepDefinition<U>): Promise<U>;
+}
+
+/**
+ * A sub-step of a job's run, for `t.step`.
+ *
+ * @template U What the step returns
+ */
+export interface StepDefinition<U> {
+	/** The step's display name, reported in its events */
+	readonly name: string;
+	/** Does the step's work */
+	readonly run: () => U | Promise<U>;
 }
 
 /**

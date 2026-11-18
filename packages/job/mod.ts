@@ -63,6 +63,7 @@ export {
 	type ResolvedField,
 	Skip,
 	type Stage,
+	type StepDefinition,
 	type StringKeysOnly,
 	skip,
 	type UnmetNeed,

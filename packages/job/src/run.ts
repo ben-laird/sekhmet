@@ -326,17 +326,17 @@ export async function runJobs<C>({
 		const t: JobRun<C> = {
 			context,
 			signal: cancel.signal,
-			step: async (step, fn) => {
+			step: async ({ name: step, run: work }) => {
 				if (!running) {
 					panic<JobMisuseCause>({
 						name: "StepAfterFinish",
-						message: `t.step("${step}") was called after job "${name}" finished`,
+						message: `t.step({ name: "${step}" }) was called after job "${name}" finished`,
 						cause: { job: name },
 					});
 				}
 				onEvent(new JobEvent("StepStarted", { job: name, step }));
 				try {
-					const value = await fn();
+					const value = await work();
 					onEvent(new JobEvent("StepSucceeded", { job: name, step }));
 					return value;
 				} catch (error) {

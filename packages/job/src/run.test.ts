@@ -706,8 +706,8 @@ Deno.test("events arrive in order: needs end before dependents start", async () 
 	const build = job({
 		name: "build",
 		run: async (t) => {
-			await t.step("compile", () => {});
-			await t.step("bundle", () => "out.js");
+			await t.step({ name: "compile", run: () => {} });
+			await t.step({ name: "bundle", run: () => "out.js" });
 			return "dist";
 		},
 	});
@@ -747,8 +747,11 @@ Deno.test("a failing step is reported, then fails its job", async () => {
 	const build = job({
 		name: "build",
 		run: async (t) => {
-			await t.step("compile", () => {
-				throw new Error("syntax error");
+			await t.step({
+				name: "compile",
+				run: () => {
+					throw new Error("syntax error");
+				},
 			});
 		},
 	});
@@ -999,9 +1002,12 @@ Deno.test("a body cancelled mid-step reports the step, then Cancelled", async ()
 	const deploy = job({
 		name: "deploy",
 		run: async (t) => {
-			await t.step("upload", () => {
-				controller.abort("stop");
-				return untilAborted(t.signal);
+			await t.step({
+				name: "upload",
+				run: () => {
+					controller.abort("stop");
+					return untilAborted(t.signal);
+				},
 			});
 		},
 	});
