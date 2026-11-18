@@ -45,7 +45,8 @@ export type UnimplementedOptions = TodoOptions;
 /**
  * The cause of the panic {@linkcode todo} throws: its options, with absent
  * parts as `undefined` and an absent checklist as `[]`. The checklist is a
- * frozen copy, so changing the caller's array later does not change it.
+ * frozen copy, with each subtask's `complete` spelled out as `true` or
+ * `false`, so changing the caller's array later does not change it.
  */
 export interface TodoCause {
 	/** What is missing, if given */
@@ -73,6 +74,10 @@ export type UnimplementedCause = TodoCause;
  *   - [x] read the file
  *   - [ ] validate it
  * ```
+ *
+ * With a tracking URL but no description, the URL gets a line of its own:
+ * `Tracked at https://example.com/issues/1`. The message lists at most fifty
+ * subtasks, then `… N more subtasks`; the cause keeps them all.
  *
  * @param options What is missing, all optional
  * @returns Never; it always panics
@@ -103,7 +108,8 @@ export function todo(options: TodoOptions = {}): never {
  * Panics as `Panic (Unimplemented)`: this code path is deliberately not
  * supported, and is not planned. Unlike {@linkcode todo}, it may ship.
  *
- * The message has the same layout as {@linkcode todo}'s:
+ * The message has the same layout as {@linkcode todo}'s, under its own
+ * header and label:
  *
  * ```txt
  * a code path that is deliberately not implemented was executed
