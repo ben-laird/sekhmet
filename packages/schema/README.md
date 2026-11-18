@@ -12,7 +12,23 @@ Built-in schemas fail with a `SchemaIssue`, an `Enum` describing why a value
 was rejected; `formatIssue` renders it as an English message. Composite schemas
 collect every failure, each with its path, as `Issues<E>`.
 
-The package is not published yet.
+## Install
+
+The package is published on [JSR](https://jsr.io/@sekhmet/schema).
+
+```sh
+deno add jsr:@sekhmet/schema
+```
+
+For Node.js, Bun and other npm-compatible runtimes, install through JSR's npm
+compatibility layer:
+
+```sh
+npx jsr add @sekhmet/schema      # npm
+pnpm dlx jsr add @sekhmet/schema # pnpm
+yarn dlx jsr add @sekhmet/schema # yarn
+bunx jsr add @sekhmet/schema     # bun
+```
 
 ## Entrypoints
 
