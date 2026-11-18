@@ -209,9 +209,12 @@ export type Resolved<P> = { readonly [K in keyof P]: ResolvedField<P[K]> };
 export type ResolvedField<F> = F extends Handle<infer U> ? Readonly<U> : F;
 
 /**
- * What a plan returns, unless it skips: a plain object literal with string
+ * What a plan returns, unless it exits: a plain object literal with string
  * keys. Arrays, `Map`s, class instances and interface-typed values are
  * rejected, since only an object literal's own string keys are resolved.
+ * To name a plan's shape, declare it with `type`, not `interface`: only a
+ * type alias gets the implicit index signature this needs. (TypeScript's
+ * error then says the type "does not satisfy the constraint `PlanRecord`".)
  */
 export type PlanRecord = { readonly [key: string]: unknown };
 

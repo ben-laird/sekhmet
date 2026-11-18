@@ -1,6 +1,7 @@
 import { isErr, unwrap } from "@sekhmet/enum/result/mini";
 import {
 	defineJobs,
+	type Handle,
 	type Job,
 	type JobRun,
 	type NeedResult,
@@ -179,27 +180,50 @@ Deno.test("Job is covariant in its result, contravariant in its context", () => 
 });
 
 Deno.test("a plan must be a plain object with string keys", () => {
-	// Given: a symbol, and the shapes that resolution can't walk
-	const key = Symbol("key");
+	// Given: a symbol, an interface, and a build handle type. Each case names
+	// its plan type, which rules out the leaf overload (it takes one type
+	// argument), so each expected error can only be the plan constraint.
+	const key: unique symbol = Symbol("key");
+	type BuildHandle = Handle<{ outDir: string; files: string[] }>;
+	interface InterfacePlan {
+		build: BuildHandle;
+	}
 
-	// When / Then: tuples, arrays, Maps, class instances and symbol keys are rejected
-	// @ts-expect-error a tuple is not a plan record
-	job({ name: "tuple", plan: (p) => [p.needs(build)] as const, run: () => {} });
-	// @ts-expect-error an array is not a plan record
-	job({ name: "array", plan: () => [1, 2], run: () => {} });
-	// @ts-expect-error a Map is not a plan record
-	job({ name: "map", plan: () => new Map<string, number>(), run: () => {} });
-	// @ts-expect-error a class instance is not a plan record
-	job({ name: "date", plan: () => new Date(), run: () => {} });
-	job({
+	// When / Then: tuples, arrays, Maps, class instances and interfaces are rejected
+	// @ts-expect-error a tuple is not a PlanRecord
+	job<readonly [BuildHandle], void>({
+		name: "tuple",
+		plan: (p) => [p.needs(build)] as const,
+		run: () => {},
+	});
+	// @ts-expect-error an array is not a PlanRecord
+	job<number[], void>({ name: "array", plan: () => [1, 2], run: () => {} });
+	// @ts-expect-error a Map is not a PlanRecord
+	job<Map<string, number>, void>({
+		name: "map",
+		plan: () => new Map<string, number>(),
+		run: () => {},
+	});
+	// @ts-expect-error a class instance is not a PlanRecord
+	job<Date, void>({ name: "date", plan: () => new Date(), run: () => {} });
+	// @ts-expect-error an interface has no implicit index signature; use `type`
+	job<InterfacePlan, void>({
+		name: "interface",
+		plan: (p) => ({ build: p.needs(build) }),
+		run: () => {},
+	});
+
+	// When / Then: a symbol key fails StringKeysOnly, at the plan itself
+	job<{ [key]: BuildHandle }, void>({
 		name: "symbol",
 		// @ts-expect-error a symbol key would never be resolved
 		plan: (p) => ({ [key]: p.needs(build) }),
 		run: () => {},
 	});
 
-	// Then: object literals, empty plans and skip-only plans are accepted
-	job({
+	// Then: the same calls with a plain record type, or none, are accepted
+	type RecordPlan = { build: BuildHandle };
+	job<RecordPlan, void>({
 		name: "record",
 		plan: (p) => ({ build: p.needs(build) }),
 		run: () => {},
