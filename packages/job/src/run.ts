@@ -48,7 +48,11 @@ export interface RunOptions<C> {
 	 * their signals; jobs not yet started end `Cancelled` (default `false`)
 	 */
 	readonly failFast?: boolean | undefined;
-	/** Receives each {@linkcode JobEvent} as it happens; must not throw */
+	/**
+	 * Receives each {@linkcode JobEvent} as it happens. It must not throw: a
+	 * throw cancels the run, the hook gets no more events, and `runJobs`
+	 * rejects with it once every job has settled
+	 */
 	readonly onEvent?: ((event: JobEvent) => void) | undefined;
 }
 
@@ -119,10 +123,22 @@ export async function runJobs<C>({
 	context,
 	signal,
 	failFast = false,
-	onEvent = () => {},
+	onEvent: hook = () => {},
 }: RunOptions<C>): Promise<Result<RunReport, GraphError>> {
 	const graph = trackGraph();
 	const cancel = new AbortController();
+	let hookFailure: { readonly error: unknown } | undefined;
+	// A hook that throws is a bug: wind the run down (every body sees its
+	// signal abort), stop calling the hook, and rethrow once all settled
+	const onEvent = (event: JobEvent): void => {
+		if (hookFailure !== undefined) return;
+		try {
+			hook(event);
+		} catch (error) {
+			hookFailure = { error };
+			cancel.abort(error);
+		}
+	};
 	const cancelled = new Promise<void>((resolve) => {
 		cancel.signal.addEventListener("abort", () => resolve(), { once: true });
 	});
@@ -134,14 +150,18 @@ export async function runJobs<C>({
 	if (signal?.aborted) forwardAbort();
 	signal?.addEventListener("abort", forwardAbort, { once: true });
 
+	let ended = false;
 	try {
 		for (const root of jobs) void schedule(root);
 		await settleAll(runs);
+		ended = true;
 	} finally {
-		// Even when onEvent throws, which it must not, leave the caller's
-		// signal as it was
+		// However the run ends, no body outlives it, and the caller's signal
+		// is left as it was
+		if (!ended) cancel.abort(new Error("runJobs ended abnormally"));
 		signal?.removeEventListener("abort", forwardAbort);
 	}
+	if (hookFailure !== undefined) throw hookFailure.error;
 
 	if (graphError !== undefined) return Err(graphError);
 	return Ok({

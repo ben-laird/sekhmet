@@ -1351,3 +1351,37 @@ Deno.test("a plan the run abandoned finishes with an inert p", async () => {
 	assertEquals(otherPlanned, 0);
 	assertEquals(outcomeOf({ report, name: "staged" }), Cancelled());
 });
+
+Deno.test("a throwing onEvent cancels the run instead of orphaning jobs", async () => {
+	// Given: a quick job whose Finished event makes the hook throw, and a
+	// sibling that waits for its signal
+	let sawAbort = false;
+	const quick = job({ name: "quick", run: () => 1 });
+	const sibling = job({
+		name: "sibling",
+		run: async (t) => {
+			try {
+				await untilAborted(t.signal);
+			} finally {
+				sawAbort = t.signal.aborted;
+			}
+		},
+	});
+	const hookError = new Error("hook bug");
+
+	// When: the run's hook throws
+	const thrown = await runJobs({
+		jobs: [quick, sibling],
+		context: null,
+		onEvent: (event) => {
+			if (isolate(event, "Finished")) throw hookError;
+		},
+	}).then(
+		() => undefined,
+		(error: unknown) => error,
+	);
+
+	// Then: the sibling saw its signal abort, and runJobs rejected with the bug
+	assertEquals(sawAbort, true);
+	assert(thrown === hookError);
+});
