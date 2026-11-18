@@ -247,12 +247,11 @@ const bare = assertThrows(
 assertEquals(bare.cause, null);
 ```
 
-## How to read a panic's metadata
+## How to keep your own metadata about panics
 
-Every `Panic` carries an `id` (a version 4 UUID) and a `timestamp` (when it
-was constructed). To keep your own metadata about panics, such as which part
-of the program handled them, store it in a `PanicMetadataRegistry`, keyed by
-the panic's `id`:
+To record what your program knows about a panic, such as which part of it
+handled the panic, store that metadata in a `PanicMetadataRegistry`. It keys
+each entry by the panic's unique `id`:
 
 1. Create the registry with a function that builds the metadata for a panic.
 2. In the hook, call `registry.getOrInsert(payload)` for each `Panic`.
@@ -266,7 +265,7 @@ import {
 	PanicMetadataRegistry,
 } from "@sekhmet/panic";
 import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
-import { assert, assertEquals, assertInstanceOf } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 
 interface PanicMeta {
 	handler: string;
@@ -287,8 +286,7 @@ const payload = unwrapErr(
 );
 
 assert(payload instanceof Panic);
-assertEquals(payload.id.length, 36);
-assertInstanceOf(payload.timestamp, Date);
+assertEquals(registry.size, 1);
 assertEquals(registry.get(payload), {
 	handler: "main",
 	seenAt: payload.timestamp,

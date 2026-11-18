@@ -79,12 +79,12 @@ can check them:
 
 ```ts
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
-const reports: string[] = [];
+const reports: unknown[] = [];
 runtime.setHook(({ payload }) => {
-	reports.push(payload instanceof Panic ? payload.message : String(payload));
+	reports.push(payload);
 });
 
 function port(): number {
@@ -92,7 +92,10 @@ function port(): number {
 }
 runtime.catchUnwind(port);
 
-assertEquals(reports, ["config is missing a port"]);
+assertEquals(reports.length, 1);
+const [report] = reports;
+assert(report instanceof Panic);
+assertEquals(report.message, "config is missing a port");
 ```
 
 The boundary called our hook once, with the panic as its payload, before it
@@ -123,17 +126,22 @@ assertEquals(chosen, 3000);
 assertEquals(reports.length, 1);
 ```
 
-The panic was reported once, by the hook, and recovered from at the boundary,
-which handed us a `Result` to decide with. Reporting and recovery are two
-separate steps: the hook never decides what the program does next.
+The program kept going with a usable port.
 
-## Next steps
+## What we built
 
-- The [recipes](./recipes.md) show how to report panics to a logger, recover
-  from async work, pass a panic on to an outer boundary, attach a cause and
-  read a panic's metadata.
-- The [concepts](./concepts.md) explain why there is one runtime per program
-  and no global state, how a panic differs from an error value, and why each
-  panic is reported once per runtime.
+You have run a program inside a panic runtime, made it panic, watched the
+hook report the panic once, and recovered from it at the boundary, which
+handed you a `Result` to decide with. Reporting and recovery are two separate
+steps: the hook never decides what the program does next.
+
+From here:
+
+- [Recipes](./recipes.md) show how to report panics to a logger, recover from
+  async work, pass a panic on to an outer boundary, attach a cause and keep
+  your own metadata about panics.
+- [Concepts](./concepts.md) explain why there is one runtime per program and
+  no global state, how a panic differs from an error value, and why each panic
+  is reported once per runtime.
 - The [API reference on JSR](https://jsr.io/@sekhmet/panic/doc) documents
   every export.

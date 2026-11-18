@@ -1,4 +1,4 @@
-# Panic
+# @sekhmet/panic
 
 Rust-style panics for TypeScript. `@sekhmet/panic` gives you a structured
 `Panic` for broken invariants, and a **panic runtime** that splits reporting a
@@ -13,21 +13,25 @@ In Sekhmet, errors are values (`Result`), and `throw` means panic.
    boundary recovers and hands you a `Result`.
 2. **No global state.** There is no default runtime and no module-level hook.
    You create a runtime and run your program inside it.
-3. **Reported once per runtime.** Each runtime reports a payload once,
-   however many of its boundaries the payload passes through.
+3. **Reported once per runtime.** Each runtime reports a thrown `Panic` (or
+   any other object) once, however many of its boundaries it passes through.
 
-## Installation
+## Install
 
-### Deno
+The package is published on [JSR](https://jsr.io/@sekhmet/panic).
 
-```bash
+```sh
 deno add jsr:@sekhmet/panic
 ```
 
-### Node, Bun and other npm-compatible tools
+For Node.js, Bun and other npm-compatible runtimes, install through JSR's npm
+compatibility layer:
 
-```bash
-npx jsr add @sekhmet/panic
+```sh
+npx jsr add @sekhmet/panic      # npm
+pnpm dlx jsr add @sekhmet/panic # pnpm
+yarn dlx jsr add @sekhmet/panic # yarn
+bunx jsr add @sekhmet/panic     # bun
 ```
 
 ## Example
@@ -60,8 +64,8 @@ assertEquals(result, Err("config is missing a port"));
 - **How-to guides:** [Recipes](./docs/recipes.md) for running a program in a
   runtime, reporting to a logger, chaining hooks, turning a panic into an app
   error, recovering from async work, passing a panic to an outer boundary,
-  attaching a cause, reading panic metadata and recognizing a hook that
-  failed.
+  attaching a cause, keeping your own metadata about panics and recognizing a
+  hook that failed.
 - **Explanation:** [Concepts](./docs/concepts.md) covers panics versus error
   values, why reporting and recovery are separate, one runtime per program
   with no global state, why each panic is reported once per runtime, and what
