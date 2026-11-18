@@ -129,7 +129,9 @@ Scripts (`scripts/`, unpublished):
   every package's `README.md` and `docs/*.md` into a sidebar per package,
   grouped by each page's Diátaxis `kind` frontmatter (see CONTRIBUTING.md,
   "Documenting your change") (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
-  `.github/workflows/docs.yml`)
+  `.github/workflows/docs.yml`). A package's decision log is not a guide: it
+  lives at `docs/decisions/<package>.md` at the repo root, off the site and
+  JSR, linked from the package README's design-record line
 - `@sekhmet/dv`: the pinned dv release CLI, run frozen (`deno task dv <args>`,
   e.g. `deno task dv add`, `deno task dv status`)
 - `@sekhmet/dv-plugin`: the dv plugin that versions and publishes `packages/*`
