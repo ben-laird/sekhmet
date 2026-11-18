@@ -77,9 +77,10 @@ export interface UnexplainedErrCause {
 }
 
 /**
- * The panic for a plan that returned an `Err` while every job it awaited or
- * needed succeeded: only an untyped caller can return an `Err` that no
- * `p.result` produced.
+ * The panic for a plan that returned an `Err` while every job it needed or
+ * awaited with `p.result` succeeded, so nothing in its own plan explains it:
+ * an `Err` it built itself (typed code can), or one from another plan's
+ * `p.result`.
  *
  * @param job The planning job's name
  * @returns The panic, to record as the job's failure (it is not thrown)
@@ -87,7 +88,7 @@ export interface UnexplainedErrCause {
 export function unexplainedErr(job: string): Panic<UnexplainedErrCause> {
 	return new Panic({
 		name: "UnexplainedErr",
-		message: `the plan of job "${job}" returned an Err that no unmet p.result produced`,
+		message: `the plan of job "${job}" returned an Err, but every job it needed or awaited succeeded`,
 		cause: { job },
 	});
 }

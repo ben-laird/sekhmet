@@ -149,9 +149,10 @@ export type NeedResult<T> = Result<Readonly<T>, UnmetNeed>;
 
 /**
  * What a plan may return instead of a plan record: `skip()`, or the `Err` of
- * a `p.result` it gives up on.
+ * a `p.result` it gives up on. Only the `Err` side: returning a `NeedResult`
+ * that may be `Ok` is a type error, since an `Ok` is not a plan.
  */
-export type PlanExit = Skip | NeedResult<unknown>;
+export type PlanExit = Skip | NeedResult<never>;
 
 /**
  * What a run receives as `t`.
@@ -374,7 +375,8 @@ function assertPlainPlan({ job, plan }: { job: string; plan: object }): void {
 /**
  * Replaces each top-level handle in `plan` with its resolved value.
  *
- * A cast (one of two in the package): an object built key by key can't be
+ * A cast (one of three in the package, with `recallUnsafely` and
+ * `valueOfUnsafely` in run.ts): an object built key by key can't be
  * typed as a mapped type over a generic `P`. The caller has ruled out a
  * `PlanExit` and checked that `plan` is a plain object with only string keys, so
  * `Object.entries` visits exactly the keys `Resolved<P>` maps.

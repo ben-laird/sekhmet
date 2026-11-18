@@ -207,3 +207,27 @@ Deno.test("a plan must be a plain object with string keys", () => {
 	job({ name: "empty", plan: () => ({}), run: () => {} });
 	job({ name: "skipping", plan: () => skip(), run: () => {} });
 });
+
+Deno.test("a plan exits only with skip() or an Err, never an Ok", () => {
+	// Given: a job whose result a plan awaits
+	// When / Then: returning the unnarrowed NeedResult (which may be Ok) is
+	// rejected; the type arguments rule out the leaf overload, so the only
+	// error is the plan constraint
+	// @ts-expect-error a NeedResult that may be Ok is not a PlanExit
+	job<NeedResult<string>, void>({
+		name: "ok-hole",
+		plan: async (p) => await p.result(version),
+		run: () => {},
+	});
+
+	// Then: returning the narrowed Err is accepted
+	job({
+		name: "gives-up",
+		plan: async (p) => {
+			const versioned = await p.result(version);
+			if (isErr(versioned)) return versioned;
+			return { v: unwrap(versioned) };
+		},
+		run: () => {},
+	});
+});
