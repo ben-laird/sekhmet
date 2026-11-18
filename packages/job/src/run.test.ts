@@ -15,6 +15,7 @@ import {
 	type Job,
 	type JobEvent,
 	type JobOutcome,
+	type PlanRecord,
 	type RunOptions,
 	type RunReport,
 	runJobs,
@@ -695,4 +696,26 @@ Deno.test("p used after its plan settled panics", async () => {
 	const outcome = outcomeOf({ report, name: "leaky" });
 	assert(isolate(outcome, "Failed"));
 	assertInstanceOf(union(outcome), Panic);
+});
+
+Deno.test("an untyped caller's non-plain plan panics, failing its job", async () => {
+	// Given: values typed as plan records that aren't plain at run time, as an
+	// untyped (JavaScript) caller can return
+	const arrayPlan: PlanRecord = JSON.parse("[1]");
+	const symbolPlan: PlanRecord = JSON.parse("{}");
+	Object.defineProperty(symbolPlan, Symbol("key"), { enumerable: true });
+	const array = job({ name: "array", plan: () => arrayPlan, run: () => {} });
+	const symbol = job({ name: "symbol", plan: () => symbolPlan, run: () => {} });
+
+	// When: they run
+	const report = unwrap(await run({ jobs: [array, symbol] }));
+
+	// Then: each job Failed with a NonPlainPlan panic instead of misresolving
+	for (const name of ["array", "symbol"]) {
+		const outcome = outcomeOf({ report, name });
+		assert(isolate(outcome, "Failed"));
+		const panic = union(outcome);
+		assertInstanceOf(panic, Panic);
+		assertEquals(panic.name, "Panic (NonPlainPlan)");
+	}
 });

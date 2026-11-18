@@ -167,3 +167,33 @@ Deno.test("Job is covariant in its result, contravariant in its context", () => 
 	const widenedAgain: Job<unknown, Ctx> = narrowed;
 	void [richer, poorer, narrowedAgain, widenedAgain];
 });
+
+Deno.test("a plan must be a plain object with string keys", () => {
+	// Given: a symbol, and the shapes that resolution can't walk
+	const key = Symbol("key");
+
+	// When / Then: tuples, arrays, Maps, class instances and symbol keys are rejected
+	// @ts-expect-error a tuple is not a plan record
+	job({ name: "tuple", plan: (p) => [p.needs(build)] as const, run: () => {} });
+	// @ts-expect-error an array is not a plan record
+	job({ name: "array", plan: () => [1, 2], run: () => {} });
+	// @ts-expect-error a Map is not a plan record
+	job({ name: "map", plan: () => new Map<string, number>(), run: () => {} });
+	// @ts-expect-error a class instance is not a plan record
+	job({ name: "date", plan: () => new Date(), run: () => {} });
+	job({
+		name: "symbol",
+		// @ts-expect-error a symbol key would never be resolved
+		plan: (p) => ({ [key]: p.needs(build) }),
+		run: () => {},
+	});
+
+	// Then: object literals, empty plans and skip-only plans are accepted
+	job({
+		name: "record",
+		plan: (p) => ({ build: p.needs(build) }),
+		run: () => {},
+	});
+	job({ name: "empty", plan: () => ({}), run: () => {} });
+	job({ name: "skipping", plan: () => skip(), run: () => {} });
+});

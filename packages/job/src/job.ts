@@ -6,6 +6,7 @@
  * @module
  */
 
+import { panic } from "@sekhmet/panic/mini/core";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import type { JobOutcome } from "@/src/outcome.ts";
 
@@ -182,13 +183,33 @@ export type Resolved<P> = { readonly [K in keyof P]: ResolvedField<P[K]> };
 export type ResolvedField<F> = F extends Handle<infer U> ? Readonly<U> : F;
 
 /**
+ * What a plan returns, unless it skips: a plain object literal with string
+ * keys. Arrays, `Map`s, class instances and interface-typed values are
+ * rejected, since only an object literal's own string keys are resolved.
+ */
+export type PlanRecord = { readonly [key: string]: unknown };
+
+/**
+ * Rejects a plan with symbol keys, which `PlanRecord`'s string index
+ * signature lets through: `unknown` when every key is a string, else a type
+ * that makes the definition's `plan` fail to type-check.
+ *
+ * @template P The plan's value, or `Skip`
+ */
+export type StringKeysOnly<P> = [Exclude<P, Skip>] extends [never]
+	? unknown
+	: [Extract<keyof Exclude<P, Skip>, symbol>] extends [never]
+		? unknown
+		: { readonly plan: "a plan's keys must be strings" };
+
+/**
  * A job with a plan.
  *
  * @template C The run's context type
  * @template P The plan's value, or `Skip`
  * @template T What the run returns
  */
-export interface PlannedJobDefinition<C, P extends object, T> {
+export interface PlannedJobDefinition<C, P extends PlanRecord | Skip, T> {
 	/** The job's display name, unique within a run */
 	readonly name: string;
 	/** Declares what the job needs, as data; may be async, may `skip()` */
@@ -228,8 +249,8 @@ export interface JobKit<C> {
 	 * returns; a job that needs nothing omits `plan`.
 	 */
 	readonly job: {
-		<P extends object, T = void>(
-			definition: PlannedJobDefinition<C, P, T>,
+		<P extends PlanRecord | Skip, T = void>(
+			definition: PlannedJobDefinition<C, P, T> & StringKeysOnly<P>,
 		): Job<T, C>;
 		<T = void>(definition: LeafJobDefinition<C, T>): Job<T, C>;
 	};
@@ -265,7 +286,7 @@ export interface JobKit<C> {
 export function defineJobs<C>(): JobKit<C> {
 	return { job: defineJob };
 
-	function defineJob<P extends object, T>(
+	function defineJob<P extends PlanRecord | Skip, T>(
 		definition: PlannedJobDefinition<C, P, T> | LeafJobDefinition<C, T>,
 	): Job<T, C> {
 		if ("plan" in definition) return plannedJob(definition);
@@ -278,7 +299,7 @@ export function defineJobs<C>(): JobKit<C> {
 	}
 }
 
-function plannedJob<C, P extends object, T>({
+function plannedJob<C, P extends PlanRecord | Skip, T>({
 	name,
 	plan,
 	run,
@@ -290,6 +311,7 @@ function plannedJob<C, P extends object, T>({
 		plan: async (p) => {
 			const value = await plan(p);
 			if (value instanceof Skip) return { kind: "skip" };
+			assertPlainPlan({ job: name, plan: value });
 			return {
 				kind: "planned",
 				plan: value,
@@ -302,13 +324,41 @@ function plannedJob<C, P extends object, T>({
 }
 
 /**
+ * The cause of a panic for a plan that isn't a plain object with string keys,
+ * which only untyped (JavaScript) callers can return.
+ */
+export interface NonPlainPlanCause {
+	/** The job whose plan returned it */
+	readonly job: string;
+	/** What it returned */
+	readonly plan: unknown;
+}
+
+/**
+ * Panics unless `plan` is a plain object (its prototype is `Object.prototype`
+ * or `null`) with no symbol keys, the shape `PlanRecord` and
+ * `StringKeysOnly` demand of typed callers.
+ */
+function assertPlainPlan({ job, plan }: { job: string; plan: object }): void {
+	const prototype = Object.getPrototypeOf(plan);
+	const plain = prototype === Object.prototype || prototype === null;
+	if (plain && Object.getOwnPropertySymbols(plan).length === 0) return;
+	panic<NonPlainPlanCause>({
+		name: "NonPlainPlan",
+		message: `the plan of job "${job}" must return a plain object with string keys, or skip()`,
+		cause: { job, plan },
+	});
+}
+
+/**
  * Replaces each top-level handle in `plan` with its resolved value.
  *
  * A cast (one of two in the package): an object built key by key can't be
- * typed as a mapped type over a generic `P`. `Resolved<P>` describes exactly
- * this loop, and the caller has ruled out `Skip`.
+ * typed as a mapped type over a generic `P`. The caller has ruled out `Skip`
+ * and checked that `plan` is a plain object with only string keys, so
+ * `Object.entries` visits exactly the keys `Resolved<P>` maps.
  */
-function resolvePlanUnsafely<P extends object>({
+function resolvePlanUnsafely<P extends PlanRecord | Skip>({
 	plan,
 	read,
 }: {

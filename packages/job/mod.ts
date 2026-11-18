@@ -67,12 +67,15 @@ export {
 	type JobParams,
 	type JobRun,
 	type LeafJobDefinition,
+	type NonPlainPlanCause,
 	type PlannedJobDefinition,
 	type Planner,
+	type PlanRecord,
 	type Resolved,
 	type ResolvedField,
 	Skip,
 	type Stage,
+	type StringKeysOnly,
 	skip,
 } from "./src/job.ts";
 export {
