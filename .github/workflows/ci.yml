@@ -10,8 +10,10 @@ on:
   push:
     branches: [main]
 
+# A PR's newer push supersedes its older run; each commit on main keeps its
+# own, so a release bump commit cannot cancel the merge commit's run.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -21,7 +23,7 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: denoland/setup-deno@v2
         with:

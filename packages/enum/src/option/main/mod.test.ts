@@ -8,7 +8,7 @@ import { assertType, type IsExact } from "@std/testing/types";
 import * as coreMini from "@/src/core/mini/mod.ts";
 import { Err, Ok, Result } from "@/src/result/main/mod.ts";
 import * as mini from "../mini/mod.ts";
-import { flatten, None, Option, Some, transpose, unzip } from "./mod.ts";
+import { flatten, maybe, None, Option, Some, transpose, unzip } from "./mod.ts";
 
 Deno.test("Option methods chain on main constructors", () => {
 	// Given: a main Some
@@ -130,6 +130,22 @@ Deno.test("unzip returns a tuple of main Options", () => {
 	assertInstanceOf(second, Option);
 	assertEquals(first.map((n) => n + 1).unwrap(), 2);
 	assertEquals(second.map((s) => s.toUpperCase()).unwrap(), "A");
+});
+
+Deno.test("maybe returns a main Option that chains", () => {
+	// Given: a present value and an absent one
+	const present: number | null = 0;
+	const absent: number | null = null;
+
+	// When: wrapping each with main maybe and chaining on it
+	const some = maybe(present);
+	const none = maybe(absent);
+
+	// Then: both are main Options and the chain runs
+	assertInstanceOf(some, Option);
+	assertInstanceOf(none, Option);
+	assertEquals(some.map((n) => n + 1).unwrapOr(-1), 1);
+	assertEquals(none.map((n) => n + 1).unwrapOr(-1), -1);
 });
 
 Deno.test("transpose returns a main Result holding a main Option", () => {

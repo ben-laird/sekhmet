@@ -12,10 +12,18 @@
 # JSR auth is GitHub OIDC (id-token: write); every @sekhmet package is linked
 # to this repository on jsr.io, so no token is stored.
 #
-# GITHUB_TOKEN pushes the bump commit and tags. That works because main has
-# no branch protection; protecting main later needs a bypass-capable token.
-# Pushes made with GITHUB_TOKEN do not trigger workflows, so the bump commit
-# cannot re-trigger this one; the `if:` guard covers other pushers too.
+# main is protected by the `Protect Main` ruleset: changes land through pull
+# requests, and GITHUB_TOKEN cannot push to it. The bump commit and the tags
+# are pushed with DV_PAT, the owner's fine-grained token (this repository
+# only, `contents: write` and `workflows: write`), which has the ruleset's
+# admin bypass. Unlike GITHUB_TOKEN pushes, PAT pushes trigger workflows:
+#   - this one: the bump commit starts a `release` run that the job's `if:`
+#     guard skips, so a release never recurses;
+#   - ci.yml and compat.yml run on the bump commit, as on any push to main;
+#   - docs.yml redeploys the site from the bump commit;
+#   - compat-smoke.yml fires when each `release` run completes, but smokes
+#     only after a successful one, so the skipped run adds nothing.
+# No workflow triggers on tags or releases.
 
 name: release
 
@@ -47,18 +55,22 @@ jobs:
     steps:
       # Third-party actions are SHA-pinned in this job, which holds write and
       # OIDC permissions; .github/dependabot.yml proposes the bumps.
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           fetch-tags: true
+          # checkout persists this token for git, so `git push` and
+          # `dv release --push` use it; GITHUB_TOKEN cannot push to main.
+          token: ${{ secrets.DV_PAT }}
 
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: v2.9.8
           cache: true
 
-      # Never publish a red tree. main has no branch protection, so the merge
-      # may not have passed ci.yml; run the same gate before any dv step.
+      # Never publish a red tree. The ruleset requires a green ci.yml before a
+      # PR merges, but admins can bypass it and push straight to main, so run
+      # the same gate again before any dv step.
       - name: Quality gate
         run: deno task ci
 
@@ -72,6 +84,10 @@ jobs:
 
       - name: Release
         env:
+          # gh only views and creates GitHub Releases for tags already pushed
+          # (scripts/release/main.ts); that is not a push to main, so the
+          # job's `contents: write` GITHUB_TOKEN suffices and the PAT stays
+          # with git alone. No workflow listens for release events.
           GH_TOKEN: ${{ github.token }}
           FORCE: ${{ inputs.force && '--force' || '' }}
         run: deno run --frozen --allow-all scripts/release/main.ts $FORCE

@@ -10,6 +10,7 @@ import {
 } from "./package.ts";
 import { sourceViews } from "./source.ts";
 import { checkSpecifiers } from "./specifiers.ts";
+import { checkTodo, isTodoCheckedPath } from "./todo.ts";
 import {
 	type Manifest,
 	type Member,
@@ -42,6 +43,7 @@ export const STATIC_CHECKS: ReadonlySet<CheckId> = new Set<CheckId>([
 	"given-when-then",
 	"specifiers",
 	"module-state",
+	"todo",
 ]);
 
 /**
@@ -111,6 +113,7 @@ export function docLintMembers(workspace: Workspace): Member[] {
  * - every `*.test.ts`: `given-when-then`
  * - every `README.md`, and JSDoc in package source: `specifiers`
  * - non-test source under a stateless root: `module-state`
+ * - non-test source of every package but `@sekhmet/workflow`: `todo`
  */
 export function staticFindings(files: WorkspaceFiles): Finding[] {
 	const workspace = readWorkspace(files);
@@ -143,9 +146,10 @@ export function staticFindings(files: WorkspaceFiles): Finding[] {
 		if (!path.endsWith(".ts")) continue;
 
 		const isTest = path.endsWith(".test.ts");
-		const inPackage = packages.some((member) =>
-			path.startsWith(`${member.dir}/`),
-		);
+		const owner = packages.find((member) => {
+			return path.startsWith(`${member.dir}/`);
+		});
+		const inPackage = owner !== undefined;
 		if (!isTest && !inPackage) continue;
 
 		const views = sourceViews(text);
@@ -159,6 +163,16 @@ export function staticFindings(files: WorkspaceFiles): Finding[] {
 			if (isStatelessSource(path)) {
 				findings.push(...checkModuleState({ path, text, views }));
 			}
+		}
+		if (
+			owner !== undefined &&
+			isTodoCheckedPath({
+				path,
+				packageDir: owner.dir,
+				packageName: owner.manifest.name,
+			})
+		) {
+			findings.push(...checkTodo({ path, text, views, packageDir: owner.dir }));
 		}
 	}
 

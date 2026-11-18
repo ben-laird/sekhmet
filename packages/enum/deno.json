@@ -1,6 +1,6 @@
 {
 	"name": "@sekhmet/enum",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"license": "MIT",
 
 	"exports": {
@@ -25,6 +25,7 @@
 		"./option/mini/combinators": "./src/option/mini/combinators.ts",
 		"./option/mini/core": "./src/option/mini/core.ts",
 		"./option/mini/mutation": "./src/option/mini/mutation.ts",
+		"./option/mini/nullable": "./src/option/mini/nullable.ts",
 		"./option/mini/predicates": "./src/option/mini/predicates.ts",
 		"./option/mini/result": "./src/option/mini/result.ts",
 		"./option/mini/transform": "./src/option/mini/transform.ts",
@@ -38,7 +39,9 @@
 		"./result/mini": "./src/result/mini/mod.ts",
 		"./result/mini/combinators": "./src/result/mini/combinators.ts",
 		"./result/mini/core": "./src/result/mini/core.ts",
+		"./result/mini/fallible": "./src/result/mini/fallible.ts",
 		"./result/mini/predicates": "./src/result/mini/predicates.ts",
+		"./result/mini/promise": "./src/result/mini/promise.ts",
 		"./result/mini/transform": "./src/result/mini/transform.ts",
 		"./result/mini/unwrap": "./src/result/mini/unwrap.ts",
 

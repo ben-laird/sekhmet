@@ -396,12 +396,22 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
     `[first: Option<T>, second: Option<U>]`);
   - the yielded values of a returned `Generator`/`IterableIterator` whose
     return type is `void`; the method becomes a generator that re-yields each
-    value, so it stays lazy (`Enum.iterAnyIsolated`).
+    value, so it stays lazy (`Enum.iterAnyIsolated`);
+  - the fulfilled value of a `Promise` in any of these positions
+    (`promiseResult` returns `Promise<Result<T, E>>`), converted through
+    `.then`, which settles one microtask later than the mini promise;
+  - the return value of a non-generic function type in any of these positions
+    (`fallible` returns `(...args: A) => Result<U, E>`, and `fallibleAsync`
+    `(...args: A) => Promise<Result<U, E>>`). The wrapper binds the mini
+    function to a name, so the mini call still runs once, and returns a
+    function whose every call converts; a curried function is bound the same
+    way at every level. It forwards arguments but not `this`.
 
   Parameters keep their mini types (they accept main and mini values alike),
   as do positions the generator can't convert without changing behaviour:
   unions, tuples with optional elements, generators with a non-`void` return
-  value, and other generic containers.
+  value, generic function types (their wrapper couldn't stay generic),
+  `PromiseLike`s other than `Promise`, and other generic containers.
 - **Import cycles.** Because of that rule, main modules that convert to each
   other import each other (`option/main` ↔ `result/main`; `latch/main` imports
   both). The cycle is safe because a generated module uses another feature's
@@ -445,9 +455,10 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   point. Generation fails if such a function returns no converted value.
 - **Constructors and other free functions.** A function without `self` whose
   return needs converting (`Some`, `None`, `flatten`, `unzip`, `transpose`,
-  `compareNumbers`, `fork`) is re-declared in main as a wrapper that returns
-  main classes, so `Some(1).map(…)` chains. Everything else mini exports is
-  re-exported unchanged.
+  `compareNumbers`, `fork`, `fallible`, `fallibleAsync`, `promiseResult`) is
+  re-declared in main as a wrapper that returns main classes, so
+  `Some(1).map(…)` chains. Everything else mini exports is re-exported
+  unchanged.
 
 ```ts ignore
 // mini/transform.ts
@@ -494,6 +505,10 @@ methods.
 - Annotate every return type (`isolatedDeclarations` already requires it).
 - Use plain or rest parameters; destructured or defaulted parameters are
   rejected.
+- Don't start a parameter name with `$`: generated code reserves that prefix
+  for its own locals (`$converted`, `$item`, `$element0`, `$value0`,
+  `$args0`), so they never collide with a parameter, and generation rejects a
+  parameter that uses it.
 - If generation fails, `deno task gen:main` names the feature, the symbol and
   the reason.
 
@@ -592,6 +607,22 @@ Deno.test("validates type inference", () => {
 	}
 });
 ```
+
+### Exact, rejection and variance type tests
+
+`IsExact` alone is not enough for a public generic type. Write all three kinds
+(see CONTRIBUTING.md, "Type tests: exact, rejection and variance"):
+
+1. **Exact:** `assertType<IsExact<…>>(true)` for what it infers.
+2. **Rejection:** `// @ts-expect-error` on the one line that must not compile:
+   forging the type by hand, narrowing it, reading a member an operation
+   removed.
+3. **Variance:** assignment between instantiations, widening accepted and
+   narrowing rejected, in more than one order.
+
+Implementer briefs and reviews check all three. _Why: two reviews (2026-11-16)
+found a forgeable typed key and an order-dependent variance bug past 600+
+passing tests, nearly all `IsExact`._
 
 ### Nested step pattern for complex tests
 

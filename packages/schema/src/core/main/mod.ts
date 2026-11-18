@@ -531,8 +531,10 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```
 	 * @see {@link mini.parseAsync}
 	 */
-	parseAsync(input: I): Promise<MiniResult<O, E>> {
-		return mini.parseAsync(this, input);
+	parseAsync(input: I): Promise<Result<O, E>> {
+		return mini.parseAsync(this, input).then(($value0) => {
+			return Result.fromMini($value0);
+		});
 	}
 
 	/**
@@ -814,10 +816,10 @@ export class SchemaWith<
 	brand<const B extends string>(
 		name: B,
 	): Schema<I, algebra.Branded<O, B>, E> & mini.ViewOf<Self> {
-		const value = algebra.brand(this.#self, name);
-		if (value instanceof Schema) return value;
+		const $value = algebra.brand(this.#self, name);
+		if ($value instanceof Schema) return $value;
 
-		return Schema.fromMiniView(value);
+		return Schema.fromMiniView($value);
 	}
 
 	/**

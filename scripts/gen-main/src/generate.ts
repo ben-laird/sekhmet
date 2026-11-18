@@ -32,6 +32,7 @@ import {
 	conversionKey,
 	convertedBody,
 	convertReturn,
+	GENERATED_PREFIX,
 } from "./convert.ts";
 import { moduleScopeValueUses } from "./cycle.ts";
 import type {
@@ -320,6 +321,19 @@ function signaturesOf(symbol: DocSymbol): FunctionDeclaration[] {
 	return functions.length > 1
 		? functions.filter((declaration) => !declaration.hasBody)
 		: functions;
+}
+
+/**
+ * Why `params` can't be generated, if one takes the prefix reserved for
+ * generated locals and so could collide with one.
+ */
+function reservedParamError(params: readonly Param[]): string | undefined {
+	const reserved = params.find((param) => {
+		return param.name.startsWith(GENERATED_PREFIX);
+	});
+	if (reserved === undefined) return undefined;
+
+	return `parameter ${reserved.name} starts with "${GENERATED_PREFIX}", which generated code reserves; rename it in mini`;
 }
 
 /** A type reference. */
@@ -872,14 +886,18 @@ function methodHead({
 			: returnType;
 	const methodParams =
 		returnType.kind === "function" && curried ? returnType.params : params;
+	const reserved = reservedParamError([...params, ...methodParams]);
+	if (reserved !== undefined) {
+		return failure({ feature, symbol: name, message: reserved });
+	}
 	const methodTypeParams =
 		returnType.kind === "function" && curried
 			? [...ownParams, ...returnType.typeParams]
 			: ownParams;
 
-	const reserved = new Set(classNames);
-	if (receiver.self === NAMESPACE_SELF) reserved.add(NAMESPACE_SELF_TYPE);
-	const clash = methodTypeParams.find((tp) => reserved.has(tp.name));
+	const shadowed = new Set(classNames);
+	if (receiver.self === NAMESPACE_SELF) shadowed.add(NAMESPACE_SELF_TYPE);
+	const clash = methodTypeParams.find((tp) => shadowed.has(tp.name));
 	if (clash !== undefined) {
 		return failure({
 			feature,
@@ -975,8 +993,8 @@ function methodHead({
 
 /**
  * Whether a function configured to return its receiver itself (`brand`)
- * gets an identity body: only a converted plain value can be one, so any
- * other conversion fails generation.
+ * gets an identity body: only a value converted to a wrap target can be one,
+ * so any other conversion fails generation.
  */
 function checkIdentity({
 	feature,
@@ -989,12 +1007,15 @@ function checkIdentity({
 	conversion: Conversion;
 	identity: boolean;
 }): Generated<boolean> {
-	if (identity && conversion.kind !== "value") {
+	if (
+		identity &&
+		(conversion.kind !== "value" || conversion.target === undefined)
+	) {
 		return failure({
 			feature,
 			symbol: name,
 			message:
-				"a function that returns its receiver must return a converted value",
+				"a function that returns its receiver must return a converted wrap target",
 		});
 	}
 
@@ -1168,6 +1189,10 @@ function renderWrapper({
 
 	for (const declared of signatures) {
 		const signature = labelled(module, declared);
+		const reserved = reservedParamError(signature.params);
+		if (reserved !== undefined) {
+			return failure({ feature, symbol: symbol.name, message: reserved });
+		}
 		const context = contextFor({
 			module,
 			fileUrl: signature.location.filename,

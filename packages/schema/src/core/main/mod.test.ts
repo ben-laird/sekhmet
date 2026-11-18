@@ -1,4 +1,4 @@
-import { Ok as MainOk, Result } from "@sekhmet/enum/result";
+import { Err as MainErr, Ok as MainOk, Result } from "@sekhmet/enum/result";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
@@ -436,7 +436,7 @@ Deno.test("the Result-style transforms chain as methods and take main Results", 
 
 	// Then: each method ran in the chain's order and returned a main Schema
 	// with the chain's types
-	assertEquals(results, [Ok(21), Ok(-1), Err("not digits")]);
+	assertEquals(results, [MainOk(21), MainOk(-1), MainErr("not digits")]);
 	assertEquals(seen, [21, 0, 0]);
 	assertType<IsExact<Input<typeof halved>, string>>(true);
 	assertType<IsExact<Output<typeof halved>, number>>(true);

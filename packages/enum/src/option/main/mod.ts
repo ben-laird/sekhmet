@@ -26,7 +26,12 @@ import type { Result as MiniResult } from "@/src/result/mini/core.ts";
 import { Result } from "../../result/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
-export type { OptionVariants } from "../mini/mod.ts";
+export type {
+	Absent,
+	MaybeOptions,
+	OptionVariants,
+	Present,
+} from "../mini/mod.ts";
 
 /**
  * A type-safe optional value that can be either Some (containing a value) or None (empty).
@@ -836,8 +841,8 @@ export class Option<out T> extends mini.Option<T> {
 export function unzip<T, U>(
 	opt: mini.Option<[first: T, second: U]>,
 ): [first: Option<T>, second: Option<U>] {
-	const [element0, element1] = mini.unzip(opt);
-	return [Option.fromMini(element0), Option.fromMini(element1)];
+	const [$element0, $element1] = mini.unzip(opt);
+	return [Option.fromMini($element0), Option.fromMini($element1)];
 }
 
 /**
@@ -862,9 +867,9 @@ export function unzip<T, U>(
 export function transpose<T, E>(
 	opt: mini.Option<MiniResult<T, E>>,
 ): Result<Option<T>, E> {
-	return Result.fromMini(mini.transpose(opt)).map((value0) =>
-		Option.fromMini(value0),
-	);
+	return Result.fromMini(mini.transpose(opt)).map(($value0) => {
+		return Option.fromMini($value0);
+	});
 }
 
 /**
@@ -918,4 +923,34 @@ export function Some<T>(value: T): Option<T> {
  */
 export function None<T = never>(): Option<T> {
 	return Option.fromMini(mini.None());
+}
+
+/**
+ * Wraps a value in an `Option`: `None` when it is absent, `Some` otherwise.
+ *
+ * Only `null` and `undefined` can be absent, never a falsy value: `0`, `""`,
+ * `false` and `NaN` are all `Some`. The `absent` option picks which of the
+ * two count, and the `Some` type narrows to match.
+ *
+ * @template T - The possibly absent type
+ * @template A - Which values count as absent, or `undefined` for the default
+ * @param value - The value to wrap
+ * @param options - Which values count as absent (`"nullish"` when missing or `undefined`)
+ * @returns `None` if `value` is absent, otherwise `Some(value)`
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { maybe, None, Some } from "@sekhmet/enum/option";
+ *
+ * assertEquals(maybe(0), Some(0));
+ * assertEquals(maybe(null), None());
+ * assertEquals(maybe(null, { absent: "undefined" }), Some(null));
+ * assertEquals(maybe(undefined, { absent: "null" }), Some(undefined));
+ * ```
+ */
+export function maybe<T, A extends mini.Absent | undefined = undefined>(
+	value: T,
+	options?: mini.MaybeOptions<A>,
+): Option<mini.Present<T, A>> {
+	return Option.fromMini(mini.maybe(value, options));
 }

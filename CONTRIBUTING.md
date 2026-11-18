@@ -227,7 +227,8 @@ sekhmet/
 │   ├── matrix/       # Cartesian-product test case generation
 │   ├── panic/        # Panic errors and the panic runtime (hook, catchUnwind)
 │   ├── primordials/  # Core primitives (Struct, Subtle, scoping helpers)
-│   └── vow/          # Synchronous promise-like values
+│   ├── vow/          # Synchronous promise-like values
+│   └── workflow/     # Workflow helpers (todo/unimplemented, unreachable, invariant checks)
 ├── scripts/          # Build and development scripts
 │   ├── add/          # Package scaffolding tool (deno task add)
 │   ├── ci/           # CI workflow runner (deno task ci)
@@ -513,6 +514,46 @@ Deno.test("Feature behaves correctly", async (t) => {
 - Use descriptive test names that describe the behavior, not implementation
 - Group related assertions using `t.step()` for better test output
 
+#### Type tests: exact, rejection and variance
+
+A public generic type (and every API whose safety rests on its types) gets
+three kinds of type test, not just the first. `IsExact` checks a type in
+isolation; soundness bugs live in the relationships between types, which only
+the other two kinds see. _Why: two reviews of `@sekhmet/schema` (2026-11-16)
+found a forgeable typed key and an order-dependent variance bug that 600+
+passing tests, nearly all `IsExact`, had missed._
+
+1. **Exact**: what a construct infers, with `assertType<IsExact<…>>(true)`.
+2. **Rejection**: what must _not_ compile, with `// @ts-expect-error` on the
+   exact line that should fail (and a word on why). Forge the type by hand,
+   narrow it, read a member that an operation should have removed. Keep each
+   expected error on one line: a `@ts-expect-error` above a multi-line
+   expression may be satisfied by a different error.
+3. **Variance**: assignment between instantiations in both directions. Widening
+   is accepted and narrowing rejected, checked in more than one order, since
+   TypeScript caches variance and an order-dependent bug can hide behind the
+   first check.
+
+```ts ignore
+import { assertType, type IsExact } from "@std/testing/types";
+
+Deno.test("Schema's output is covariant", () => {
+	// Given: a schema of a narrow output, and one of a wide output
+	const narrow = literal("a");
+	const wide = string();
+
+	// When / Then: inference is exact
+	assertType<IsExact<Output<typeof narrow>, "a">>(true);
+
+	// Then: widening is accepted
+	const widened: Schema<unknown, string, SchemaIssue> = narrow;
+
+	// Then: narrowing is rejected
+	// @ts-expect-error a string schema is not an "a" schema
+	const narrowed: Schema<unknown, "a", SchemaIssue> = wide;
+});
+```
+
 ### Running Tests
 
 ```bash
@@ -562,6 +603,7 @@ Use package names as scopes:
 - `@sekhmet/panic`
 - `@sekhmet/primordials`
 - `@sekhmet/vow`
+- `@sekhmet/workflow`
 - `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/playground` (scripts)
 - Or specific areas within packages
 
@@ -620,8 +662,10 @@ deno task hooks
   `ignore` is a code change.
 - **The workflow:** stage everything (`git add`), run `deno task ci`, then
   commit. Any edit or `git add` after the run needs a new run.
-- **Merges:** `.githooks/pre-merge-commit` holds a merge commit to the same
-  rule. When `git merge --no-ff` is refused, the merge stays staged: run
+- **Merges:** changes reach `main` only through a pull request merged on
+  GitHub (see [Pull Request Process](#pull-request-process)), so the hook
+  never sees that merge. Locally, `.githooks/pre-merge-commit` holds a merge
+  commit (say, `main` merged into your branch) to the same rule. When `git merge --no-ff` is refused, the merge stays staged: run
   `deno task ci`, then `git commit`. Or start with `git merge --no-commit`.
   A fast-forward makes no commit, so nothing is checked.
 - **Escape hatch:** `git commit --no-verify` skips the hook. It is for human
@@ -629,10 +673,25 @@ deno task hooks
 
 ## Pull Request Process
 
-1. **Create a feature branch**:
+Sekhmet follows GitHub Flow. `main` is protected by a ruleset: it cannot be
+deleted or force-pushed, and every change lands through a pull request, merged
+by squash or rebase so history stays linear. Nobody pushes to `main` directly;
+only the release bot does (see [What happens on merge](#what-happens-on-merge)).
+A PR merges once its branch is up to date with `main`, its review threads are
+resolved, and these checks pass:
+
+- `ci` (`ci.yml`: `deno task ci`)
+- `validate` (`dv-validate.yml`: dv Records and the dv plugin)
+- the seven `compat` suite jobs (`compat.yml`): `suite (node, Node 24)`,
+  `suite (node, Node 26)`, `suite (bun)`, `suite (chromium)`,
+  `suite (firefox)`, `suite (webkit)` and `suite (workerd)`
+
+No approval is required. Repository admins can bypass the ruleset.
+
+1. **Create a feature branch** off `main`:
 
    ```bash
-   git checkout -b feat/my-feature
+   git switch -c feat/my-feature main
    ```
 
 2. **Make your changes**:
@@ -650,14 +709,17 @@ deno task hooks
 4. **Commit your changes** using conventional commits; the
    [commit gate](#commit-gate) refuses a commit without a green run
 
-5. **Push and create a PR**:
+5. **Push your branch and open a PR** against `main`:
    - Provide a clear description of changes
    - Reference any related issues
-   - Ensure CI passes
+   - Ensure the required checks pass
 
 6. **Address review feedback**:
    - Make requested changes
    - Keep commits clean (squash if needed)
+
+7. **Merge** with **Squash and merge** or **Rebase and merge**; merge commits
+   are not allowed. Update the branch from `main` first if GitHub asks.
 
 ### Documenting your change
 
@@ -689,8 +751,8 @@ deno task hooks
 
 ## Releasing
 
-Every merge to `main` can release. There is no release branch or release PR:
-the Records a PR carries decide what ships.
+Every PR merged to `main` can release. There is no release branch or release
+PR: the Records a PR carries decide what ships.
 
 ### Adding a Record
 
@@ -727,6 +789,13 @@ points at:
    is stored. Then it pushes the tags.
 3. Each package uploaded to JSR gets a GitHub Release with its changelog
    section.
+
+The release bot is the one pusher to `main` outside a PR. It pushes the
+`chore(release): …` commit and the tags with `DV_PAT`, the owner's
+fine-grained token (this repository only, `contents: write` and
+`workflows: write`), which has the ruleset's admin bypass. That push runs
+`ci`, `compat` and the docs deploy again on the bump commit; the `release`
+run it starts skips itself, so releases never recurse.
 
 An untagged version is released even without a Record, which is how the
 first run publishes every package at its current `0.1.0`. A merge with no

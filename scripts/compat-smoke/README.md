@@ -30,7 +30,14 @@ deno task compat:smoke <node|bun|chromium|firefox|webkit|workerd> [options]
 
 3. Imports **every export path** each package publishes (root, every subpath,
    every `/mini` path and single-function path) and runs one exercise per
-   package through its main and mini entrypoints (`probe/exercises/`).
+   package through its main and mini entrypoints (`probe/exercises/`). An
+   exercise calls the package's functions, not just imports them: for
+   example, `@sekhmet/workflow`'s `defined`, `satisfies` and `invariantEqual`
+   must panic with their own `cause.check.kind`, and `@sekhmet/enum`'s
+   `maybe`, `fallible`, `fallibleAsync` and `promiseResult` must return main
+   Option and Result values that chain. No exercise leaves a promise
+   rejection unhandled, since several runtimes treat one as an uncaught
+   error.
 4. Prints a per-package, per-export-path summary and exits non-zero on any
    failure: a path that does not load, a failed exercise, or a package
    installed at a different version than the one under test.

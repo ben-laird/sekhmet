@@ -1,6 +1,9 @@
 /**
  * Exercises `@sekhmet/enum`: every feature through its main entrypoint, and
- * Option and Result again through mini barrels and single-function paths.
+ * Option and Result again through mini barrels and single-function paths,
+ * including the 0.2.0 additions `maybe`, `fallible`, `fallibleAsync` and
+ * `promiseResult`. Every rejection they meet is captured as an `Err`, so the
+ * exercise never leaves an unhandled rejection behind.
  *
  * @module
  */
@@ -8,15 +11,24 @@
 import { Enum, type Split } from "@sekhmet/enum/core";
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Active, type Latch } from "@sekhmet/enum/latch";
-import { None, type Option, Some } from "@sekhmet/enum/option";
+import { maybe, None, type Option, Some } from "@sekhmet/enum/option";
 import { filter, Some as MiniSome } from "@sekhmet/enum/option/mini";
+import { maybe as miniMaybe } from "@sekhmet/enum/option/mini/nullable";
 import { map } from "@sekhmet/enum/option/mini/transform";
 import { unwrapOr } from "@sekhmet/enum/option/mini/unwrap";
 import { compareNumbers, compareStrings } from "@sekhmet/enum/ordering";
 import { Pending, Ready } from "@sekhmet/enum/poll";
-import { Err, Ok, type Result } from "@sekhmet/enum/result";
+import {
+	Err,
+	fallible,
+	fallibleAsync,
+	Ok,
+	promiseResult,
+	type Result,
+} from "@sekhmet/enum/result";
 import { mapErr } from "@sekhmet/enum/result/mini";
 import { Err as MiniErr } from "@sekhmet/enum/result/mini/core";
+import { fallible as miniFallible } from "@sekhmet/enum/result/mini/fallible";
 import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
 import { expectEqual } from "../check.ts";
 
@@ -33,8 +45,102 @@ function parsePort(text: string): Result<number, string> {
 
 type Shape = Split<{ Circle: [radius: number]; Square: [side: number] }>;
 
+const parseJson = fallible({
+	fn: (text: string): unknown => {
+		return JSON.parse(text);
+	},
+	parseErr: ({ args: [text] }) => {
+		return `not JSON: ${text}`;
+	},
+});
+
+const loadUser = fallibleAsync({
+	fn: async (id: number): Promise<string> => {
+		await Promise.resolve();
+		if (id !== 1) throw new Error(`no user ${id}`);
+		return "Ada";
+	},
+	parseErr: ({ error }) => {
+		return error instanceof Error ? error.message : String(error);
+	},
+});
+
+function settle(ok: boolean): Promise<Result<number, string>> {
+	return promiseResult<number, string>((resolve, reject) => {
+		if (ok) {
+			resolve(21);
+		} else {
+			reject("refused");
+		}
+	});
+}
+
+async function exerciseAdditions(): Promise<void> {
+	expectEqual({
+		label: "maybe main chain",
+		actual: [
+			maybe(null).isNone(),
+			maybe(0)
+				.map((n) => n + 1)
+				.unwrapOr(-1),
+		],
+		expected: [true, 1],
+	});
+	expectEqual({
+		label: "maybe mini",
+		actual: [unwrapOr(miniMaybe(undefined), 7), unwrapOr(miniMaybe(""), "x")],
+		expected: [7, ""],
+	});
+
+	expectEqual({
+		label: "fallible main chain",
+		actual: [
+			parseJson("{")
+				.mapErr((e) => e.toUpperCase())
+				.unwrapErr(),
+			parseJson("[1,2]")
+				.map((value) => Array.isArray(value))
+				.unwrapOr(false),
+		],
+		expected: ["NOT JSON: {", true],
+	});
+	const miniParse = miniFallible({
+		fn: (text: string): unknown => {
+			return JSON.parse(text);
+		},
+		parseErr: () => {
+			return "bad";
+		},
+	});
+	expectEqual({
+		label: "fallible mini",
+		actual: unwrapErr(miniParse("{")),
+		expected: "bad",
+	});
+
+	const [found, missing] = await Promise.all([loadUser(1), loadUser(2)]);
+	expectEqual({
+		label: "fallibleAsync main chain",
+		actual: [
+			found.map((name) => name.length).unwrapOr(0),
+			missing.mapErr((e) => e.toUpperCase()).unwrapErr(),
+		],
+		expected: [3, "NO USER 2"],
+	});
+
+	const [settled, refused] = await Promise.all([settle(true), settle(false)]);
+	expectEqual({
+		label: "promiseResult main chain",
+		actual: [
+			settled.map((n) => n * 2).unwrapOr(0),
+			refused.mapErr((e) => e.length).unwrapErr(),
+		],
+		expected: [42, 7],
+	});
+}
+
 /** Runs the exercise. */
-export function exercise(): void {
+export async function exercise(): Promise<void> {
 	expectEqual({
 		label: "option main chain",
 		actual: [1, 2].map((id) =>
@@ -114,4 +220,6 @@ export function exercise(): void {
 			Square: (side) => side ** 2,
 		});
 	expectEqual({ label: "core match", actual: area(square), expected: 9 });
+
+	await exerciseAdditions();
 }

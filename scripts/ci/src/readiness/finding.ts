@@ -11,6 +11,8 @@
  * - `specifiers`: `@sekhmet/*` imports in READMEs and JSDoc name real exports
  * - `module-state`: stateless package source declares no top-level mutable
  *   state (a `let`/`var`, or a `Map`/`Set` registry)
+ * - `todo`: package source does not import, re-export or reach `todo`
+ *   from `@sekhmet/workflow`
  * - `doc-lint`: `deno doc --lint` over each package's export set
  * - `allowlist`: an allowlist entry that no longer matches a finding
  */
@@ -23,6 +25,7 @@ export type CheckId =
 	| "given-when-then"
 	| "specifiers"
 	| "module-state"
+	| "todo"
 	| "doc-lint"
 	| "allowlist";
 
