@@ -4,8 +4,10 @@
  * @module
  */
 
+import { Err } from "@sekhmet/enum/result/mini";
 import { Panic, panic } from "@sekhmet/panic/mini/core";
-import type { Planner } from "@/src/job.ts";
+import { Handle, nameOf, type Planner } from "@/src/job.ts";
+import { Cancelled } from "@/src/outcome.ts";
 
 /**
  * The cause of a panic for a `p` used after its plan settled.
@@ -18,13 +20,24 @@ export interface ClosedPlannerCause {
 }
 
 /**
+ * Where a plan's `p` stands: open while the plan runs, closed once the plan
+ * settled, abandoned when the runner stopped waiting for it.
+ */
+type PlannerState = "open" | "closed" | "abandoned";
+
+/**
  * Wraps a runner's `needs`, `result` and `outcome` as the `p` for one plan.
- * Once `close` is called, using `p` panics: a plan that leaks `p` into a
- * callback would otherwise add needs after the runner decided the job.
+ *
+ * - `close`, once the plan settled: using `p` then panics, since a plan that
+ *   leaks `p` into a callback would add needs after the runner decided.
+ * - `abandon`, when the run was cancelled under a still-running plan: `p`
+ *   turns inert, so the plan can finish (its `finally` included) without a
+ *   panic and without touching the run. `needs` returns a handle that
+ *   schedules nothing; `result` and `outcome` resolve as `Cancelled`.
  *
  * @param behaviour.job The planning job's name, for the panic
  * @param behaviour.context The run's context
- * @returns The planner, and `close` to call when the plan settles
+ * @returns The planner, `close` and `abandon`
  */
 export function openPlanner<C>({
 	job,
@@ -35,10 +48,11 @@ export function openPlanner<C>({
 }: { readonly job: string } & Planner<C>): {
 	planner: Planner<C>;
 	close: () => void;
+	abandon: () => void;
 } {
-	let open = true;
-	const ensureOpen = (method: ClosedPlannerCause["method"]): void => {
-		if (open) return;
+	let state: PlannerState = "open";
+	const ensureNotClosed = (method: ClosedPlannerCause["method"]): void => {
+		if (state !== "closed") return;
 		panic<ClosedPlannerCause>({
 			name: "ClosedPlanner",
 			message: `p.${method}() was called after the plan of job "${job}" settled`,
@@ -50,20 +64,28 @@ export function openPlanner<C>({
 		planner: {
 			context,
 			needs: (need) => {
-				ensureOpen("needs");
+				ensureNotClosed("needs");
+				if (state === "abandoned") return new Handle({ job: need });
 				return needs(need);
 			},
-			result: (need) => {
-				ensureOpen("result");
-				return result(need);
+			result: async (need) => {
+				ensureNotClosed("result");
+				if (state === "abandoned") {
+					return Err({ job: nameOf(need), outcome: Cancelled() });
+				}
+				return await result(need);
 			},
-			outcome: (need) => {
-				ensureOpen("outcome");
-				return outcome(need);
+			outcome: async (need) => {
+				ensureNotClosed("outcome");
+				if (state === "abandoned") return Cancelled();
+				return await outcome(need);
 			},
 		},
 		close: () => {
-			open = false;
+			state = "closed";
+		},
+		abandon: () => {
+			state = "abandoned";
 		},
 	};
 }

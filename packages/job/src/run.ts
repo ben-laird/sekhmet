@@ -226,7 +226,7 @@ export async function runJobs<C>({
 			return outcome;
 		};
 
-		const { planner, close } = openPlanner<C>({
+		const { planner, close, abandon } = openPlanner<C>({
 			job: name,
 			context,
 			needs: (need) => {
@@ -266,7 +266,13 @@ export async function runJobs<C>({
 			return await planning;
 		};
 		const planned = await settlePlan();
-		close();
+		// A plan the run stopped waiting for may still resume: make its p
+		// inert. One that settled is done: later use of its p is misuse
+		if (planned.kind === "cancelled") {
+			abandon();
+		} else {
+			close();
+		}
 
 		const settledNeeds = await Promise.all(
 			[...dependencies].map(async ([need, { outcome, blocks }]) => {

@@ -1303,3 +1303,51 @@ Deno.test("continueOnError exempts a failure from failFast", async () => {
 	assertEquals(outcomeOf({ report, name: "slow" }), Succeeded(false));
 	assert(report.passed);
 });
+
+Deno.test("a plan the run abandoned finishes with an inert p", async () => {
+	// Given: a staged plan that, after the run is cancelled under it, still
+	// needs and observes another job
+	const controller = new AbortController();
+	const finished = Promise.withResolvers<string>();
+	let otherPlanned = 0;
+	const other = job({
+		name: "other",
+		plan: () => {
+			otherPlanned += 1;
+			return {};
+		},
+		run: () => {},
+	});
+	const long = job({
+		name: "long",
+		run: (t) => {
+			controller.abort("stop");
+			return untilAborted(t.signal);
+		},
+	});
+	const staged = job({
+		name: "staged",
+		plan: async (p) => {
+			try {
+				await p.result(long);
+				p.needs(other);
+				finished.resolve(kind(await p.outcome(other)));
+			} catch (error) {
+				finished.resolve(`threw ${String(error)}`);
+			}
+			return {};
+		},
+		run: () => {},
+	});
+
+	// When: the run is cancelled while staged waits, and its plan resumes
+	const report = unwrap(
+		await run({ jobs: [staged], signal: controller.signal }),
+	);
+	const seen = await finished.promise;
+
+	// Then: no ClosedPlanner panic, nothing scheduled, and staged Cancelled
+	assertEquals(seen, "Cancelled");
+	assertEquals(otherPlanned, 0);
+	assertEquals(outcomeOf({ report, name: "staged" }), Cancelled());
+});
