@@ -18,8 +18,17 @@
  *
  * A value that does not convert fails with an `InvalidType` issue carrying
  * the original input; a converted value that then fails a check (such as
- * `NaN`) is reported as the converted value. Each schema documents what its
- * strict mode accepts.
+ * `NaN`) is reported as the converted value. What strict mode accepts
+ * besides the schema's own type:
+ *
+ * | Schema    | `coerce: true` also accepts                                                       | Still rejects (examples)                        |
+ * | --------- | --------------------------------------------------------------------------------- | ----------------------------------------------- |
+ * | `number`  | decimal or exponent strings (trimmed), booleans as 1/0, safe-integer bigints      | `""`, `"0x10"`, `null`, `undefined`, `[]`, `{}` |
+ * | `string`  | finite numbers, bigints, booleans                                                 | `null`, `undefined`, `NaN`, objects, symbols    |
+ * | `boolean` | `0`/`1`, `0n`/`1n`, and `stringbool`'s default words                              | `"maybe"`, `2`, `null`, objects                 |
+ *
+ * `bigint` and `date` do not coerce. To read a boolean from a string, prefer
+ * `stringbool()`, which accepts only strings.
  *
  * @example
  * ```ts

@@ -1,5 +1,10 @@
 # Schema design
 
+> The decision record for `@sekhmet/schema`, kept as project history. The user
+> docs are the package's [README](../../packages/schema/README.md) and its
+> [`docs/`](../../packages/schema/docs/) pages, and the API reference is on
+> [JSR](https://jsr.io/@sekhmet/schema/doc).
+
 Status: **Accepted** (2026-11-16). Implementation is in progress; each section
 names the feature directory that owns it.
 

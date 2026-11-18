@@ -212,6 +212,24 @@ export type SchemaIssueVariants = Split<{
  * Why a built-in schema rejected a value. Every variant's details carry the
  * rejected `input`; {@linkcode formatIssue} renders a default message.
  *
+ * | Variant         | Raised when                                     | Details besides `input`                     |
+ * | --------------- | ----------------------------------------------- | ------------------------------------------- |
+ * | `InvalidType`   | The value has the wrong type                    | `expected` (a type name), `received`        |
+ * | `InvalidValue`  | The value is not one of the allowed values      | `expected` (the allowed values)             |
+ * | `InvalidFormat` | A string format, affix or pattern check failed  | `format`, and `pattern` for a pattern       |
+ * | `TooSmall`      | The value, length or size is below a minimum    | `origin`, `minimum`, `inclusive`            |
+ * | `TooBig`        | The value, length or size is above a maximum    | `origin`, `maximum`, `inclusive`            |
+ * | `NotMultipleOf` | A `multipleOf` check failed                     | `origin`, `divisor`                         |
+ * | `UnknownKey`    | A `"strict"` object found an undeclared key     | `key` (`input` is the value under it)       |
+ * | `InvalidUnion`  | No union branch accepted the value              | `branches`, each branch's `Issues`          |
+ * | `Custom`        | A user check failed                             | `message`                                   |
+ *
+ * `received` is the input's {@linkcode TypeName}. `origin` says what was
+ * measured (see {@linkcode Origin}) and fixes the bound's type (see
+ * {@linkcode LimitOf}). Each variant has a constructor of the same name that
+ * takes its details, except that {@linkcode InvalidType} derives `received`
+ * from the input itself: `InvalidType({ input, expected })`.
+ *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";

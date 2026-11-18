@@ -778,6 +778,14 @@ No approval is required. Repository admins can bypass the ruleset.
   as a table above the page.
   `deno task docs:dev` serves the site that assembles them with every README;
   `deno task docs:build` builds it.
+- **Decision logs** are project records, not guides: a package's log lives at
+  `docs/decisions/<package>.md` at the repo root (e.g.
+  `docs/decisions/schema.md`), outside `packages/`, so neither the docs site
+  nor JSR presents it (#54, owner decision 2026-11-18). Before a log moves
+  there, lift any user-facing reference it alone holds into JSDoc or a guide.
+  Link it from the package README's design-record line with an absolute
+  GitHub URL, since JSR renders the README:
+  `https://github.com/ben-laird/sekhmet/blob/main/docs/decisions/<package>.md`.
 
 ### PR Checklist
 
