@@ -77,33 +77,8 @@ export class Handle<out T> extends Struct<HandleParams<T>> {}
  * @template T What the needed job returns
  */
 export interface HandleParams<T> {
-	/** The needed job */
-	readonly job: AnyJob;
-	/** The needed job's outcome in this run */
-	readonly outcome: Promise<JobOutcome<T>>;
-	/** The outcome once it has settled, for the synchronous resolution */
-	settled: JobOutcome<T> | undefined;
-}
-
-/**
- * Makes a handle on `job`'s `outcome` in one run.
- *
- * @param params.job The needed job
- * @param params.outcome Its outcome in this run
- * @returns The handle
- */
-export function handleOn<T>({
-	job,
-	outcome,
-}: {
-	job: AnyJob;
-	outcome: Promise<JobOutcome<T>>;
-}): Handle<T> {
-	const params: HandleParams<T> = { job, outcome, settled: undefined };
-	void outcome.then((settled) => {
-		params.settled = settled;
-	});
-	return new Handle(params);
+	/** The needed job; the run looks its outcome up when resolving */
+	readonly job: Job<T, never>;
 }
 
 /**

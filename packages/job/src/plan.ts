@@ -12,7 +12,7 @@ import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { trackGraph } from "@/src/graph.ts";
 import type { GraphError } from "@/src/graph-error.ts";
-import { type AnyJob, handleOn, type Job, nameOf } from "@/src/job.ts";
+import { type AnyJob, Handle, type Job, nameOf } from "@/src/job.ts";
 import { openPlanner } from "@/src/planner.ts";
 
 /**
@@ -153,7 +153,7 @@ export async function planJobs<C>({
 			needs: (need) => {
 				depend({ from: job, to: need });
 				declared.push(nameOf(need));
-				return handleOn({ job: need, outcome: new Promise(() => {}) });
+				return new Handle({ job: need });
 			},
 			result: park,
 			outcome: park,

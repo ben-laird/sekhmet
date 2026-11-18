@@ -15,8 +15,8 @@ import { trackGraph } from "@/src/graph.ts";
 import type { GraphError } from "@/src/graph-error.ts";
 import {
 	type AnyJob,
+	Handle,
 	type HandleReader,
-	handleOn,
 	type Job,
 	type JobRun,
 	nameOf,
@@ -219,10 +219,8 @@ export async function runJobs<C>({
 			job: name,
 			context,
 			needs: (need) => {
-				return handleOn({
-					job: need,
-					outcome: touch({ need, blocks: true }),
-				});
+				void touch({ need, blocks: true });
+				return new Handle({ job: need });
 			},
 			result: async (need) => {
 				const outcome = await touch({ need, blocks: true });
@@ -270,22 +268,29 @@ export async function runJobs<C>({
 		if (cancel.signal.aborted) return finish({ job, outcome: Cancelled() });
 
 		onEvent(new JobEvent("Started", { job: name }));
-		const outcome = await body({ name, run: planned.stage.run });
+		const outcome = await body({
+			name,
+			run: planned.stage.run,
+			touched: new Set(dependencies.keys()),
+		});
 		return finish({ job, outcome });
 	}
 
 	async function body<T>({
 		name,
 		run,
+		touched,
 	}: {
 		name: string;
 		run: (t: JobRun<C>, read: HandleReader) => Promise<T>;
+		touched: ReadonlySet<AnyJob>;
 	}): Promise<JobOutcome<T>> {
 		let running = true;
 		const read: HandleReader = (handle) => {
-			const { settled } = getStructParams(handle);
-			if (settled !== undefined && isolate(settled, "Succeeded")) {
-				return union(settled);
+			const { job: need } = getStructParams(handle);
+			const outcome = touched.has(need) ? settled.get(need) : undefined;
+			if (outcome !== undefined && isolate(outcome, "Succeeded")) {
+				return valueOfUnsafely({ handle, value: union(outcome) });
 			}
 			return panic<JobMisuseCause>({
 				name: "UndeclaredHandle",
@@ -396,6 +401,7 @@ async function settleAll(
  *
  * A cast: a `Map` can't relate each key's `T` to its value's, but `schedule`
  * stores only `lifecycle(job)` under `job`, so the value's `T` is the key's.
+ * The same holds for `valueOfUnsafely`.
  */
 function recallUnsafely<T>({
 	known,
@@ -404,4 +410,19 @@ function recallUnsafely<T>({
 	known: Promise<JobOutcome<unknown>>;
 }): Promise<JobOutcome<T>> {
 	return known as Promise<JobOutcome<T>>;
+}
+
+/**
+ * The succeeded value of a handle's job, read from the run's settled map.
+ *
+ * A cast for the reason `recallUnsafely` gives: `finish` stores only a job's
+ * own outcome under it, so the value read for `handle`'s job is its `T`.
+ */
+function valueOfUnsafely<U>({
+	value,
+}: {
+	handle: Handle<U>;
+	value: unknown;
+}): Readonly<U> {
+	return value as Readonly<U>;
 }

@@ -15,6 +15,7 @@ import {
 	type Job,
 	type JobEvent,
 	type JobOutcome,
+	type Planner,
 	type PlanRecord,
 	type RunOptions,
 	type RunReport,
@@ -854,4 +855,36 @@ Deno.test("failFast still blocks a staged plan whose declared need failed", asyn
 	// Then: staged is Blocked by the failure, not Cancelled
 	assertEquals(outcomeOf({ report, name: "slow" }), Cancelled());
 	assertEquals(outcomeOf({ report, name: "staged" }), Blocked(["failing"]));
+});
+
+Deno.test("a handle smuggled from another plan panics when resolved", async () => {
+	// Given: a's plan declares x; b's plan returns a's handle without declaring x
+	const x = job({ name: "x", run: () => 1 });
+	const smuggled: { handle?: ReturnType<Planner<null>["needs"]> } = {};
+	const a = job({
+		name: "a",
+		plan: (p) => {
+			smuggled.handle = p.needs(x);
+			return { x: smuggled.handle };
+		},
+		run: () => {},
+	});
+	const b = job({
+		name: "b",
+		plan: async (p) => {
+			await p.outcome(a);
+			return { x: smuggled.handle };
+		},
+		run: () => {},
+	});
+
+	// When: b runs
+	const report = unwrap(await run({ jobs: [b] }));
+
+	// Then: resolving the undeclared handle panicked, failing b
+	const outcome = outcomeOf({ report, name: "b" });
+	assert(isolate(outcome, "Failed"));
+	const panic = union(outcome);
+	assertInstanceOf(panic, Panic);
+	assertEquals(panic.name, "Panic (UndeclaredHandle)");
 });
