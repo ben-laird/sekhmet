@@ -13,7 +13,7 @@ Deno.test("undefined_ accepts only undefined", () => {
 		const result = parseSync(schema, input);
 
 		// Then: it is accepted unchanged
-		assertEquals(result, Ok(input), Deno.inspect(input));
+		assertEquals(result, Ok(input));
 	}
 });
 
@@ -29,7 +29,6 @@ Deno.test("undefined_ rejects every other value with InvalidType", () => {
 		assertEquals(
 			result,
 			Err(ParseError(InvalidType({ input, expected: "undefined" }))),
-			Deno.inspect(input),
 		);
 	}
 });

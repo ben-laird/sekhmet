@@ -17,7 +17,7 @@ Deno.test("literal accepts exactly its value", () => {
 		const result = parseSync(schema, value);
 
 		// Then: it is accepted
-		assertEquals(result, Ok(value), Deno.inspect(value));
+		assertEquals(result, Ok(value));
 	}
 });
 
@@ -42,7 +42,6 @@ Deno.test("literal rejects other values with InvalidValue", () => {
 		assertEquals(
 			result,
 			Err(ParseError(InvalidValue({ input, expected: [value] }))),
-			Deno.inspect(input),
 		);
 	}
 });

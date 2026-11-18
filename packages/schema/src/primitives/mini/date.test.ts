@@ -44,7 +44,6 @@ Deno.test("date does not coerce strings or timestamps", () => {
 		assertEquals(
 			result,
 			Err(ParseError(InvalidType({ input, expected: "date" }))),
-			Deno.inspect(input),
 		);
 	}
 });

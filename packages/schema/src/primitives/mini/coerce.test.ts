@@ -16,9 +16,27 @@ interface Table<T> {
 	readonly rejects: readonly unknown[];
 }
 
+/**
+ * A test name's rendering of an input, the same on every runtime (no
+ * `Deno.inspect`, which only Deno has).
+ */
+function label(input: unknown): string {
+	if (typeof input === "string") return JSON.stringify(input);
+	if (typeof input === "bigint") return `${input}n`;
+	if (Object.is(input, -0)) return "-0";
+	if (input instanceof Date) return `Date(${input.getTime()})`;
+	if (typeof input === "object" && input !== null) {
+		if (Object.getPrototypeOf(input) === null) return "a null-prototype object";
+
+		return JSON.stringify(input);
+	}
+
+	return String(input);
+}
+
 function runTable<T>(table: Table<T>): void {
 	for (const [input, output] of table.accepts) {
-		Deno.test(`${table.name} converts ${Deno.inspect(input)}`, () => {
+		Deno.test(`${table.name} converts ${label(input)}`, () => {
 			// Given: the coercing schema
 			// When: parsing a convertible input
 			const result = parseSync(table.schema, input);
@@ -28,7 +46,7 @@ function runTable<T>(table: Table<T>): void {
 		});
 	}
 	for (const input of table.rejects) {
-		Deno.test(`${table.name} rejects ${Deno.inspect(input)}`, () => {
+		Deno.test(`${table.name} rejects ${label(input)}`, () => {
 			// Given: the coercing schema
 			// When: parsing an input it must not convert
 			const result = parseSync(table.schema, input);

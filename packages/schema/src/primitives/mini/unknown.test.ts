@@ -13,7 +13,7 @@ Deno.test("unknown accepts every value unchanged", () => {
 		const result = parseSync(schema, input);
 
 		// Then: it is accepted as is
-		assertEquals(result, Ok(input), Deno.inspect(input));
+		assertEquals(result, Ok(input));
 	}
 });
 

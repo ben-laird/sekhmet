@@ -92,7 +92,7 @@ Deno.test("bigint accepts bigints", () => {
 		const result = parseSync(schema, input);
 
 		// Then: it is accepted unchanged
-		assertEquals(result, Ok(input), Deno.inspect(input));
+		assertEquals(result, Ok(input));
 	}
 });
 
@@ -108,7 +108,6 @@ Deno.test("bigint rejects every other value with InvalidType", () => {
 		assertEquals(
 			result,
 			Err(ParseError(InvalidType({ input, expected: "bigint" }))),
-			Deno.inspect(input),
 		);
 	}
 });

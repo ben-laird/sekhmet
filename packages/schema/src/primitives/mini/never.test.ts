@@ -17,7 +17,6 @@ Deno.test("never rejects every value with InvalidType", () => {
 		assertEquals(
 			result,
 			Err(ParseError(InvalidType({ input, expected: "never" }))),
-			Deno.inspect(input),
 		);
 	}
 });
