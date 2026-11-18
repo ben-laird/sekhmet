@@ -1052,3 +1052,62 @@ Deno.test("observer jobs survive cancellation, as always() does", async (t) => {
 		);
 	});
 });
+
+Deno.test("only the abort itself makes a body Cancelled", async (t) => {
+	await t.step("a real bug thrown after the abort is Failed", async () => {
+		// Given: a body that, once aborted, throws an unrelated error
+		const controller = new AbortController();
+		const buggy = job({
+			name: "buggy",
+			run: async (t) => {
+				controller.abort("stop");
+				await Promise.resolve();
+				if (t.signal.aborted) throw new TypeError("cleanup bug");
+			},
+		});
+
+		// When: the run is cancelled
+		const report = unwrap(
+			await run({ jobs: [buggy], signal: controller.signal }),
+		);
+
+		// Then: the bug is reported, not hidden as a cancellation
+		const outcome = outcomeOf({ report, name: "buggy" });
+		assert(isolate(outcome, "Failed"));
+		assertInstanceOf(union(outcome), TypeError);
+	});
+
+	await t.step(
+		"the signal's reason or an AbortError is Cancelled",
+		async () => {
+			// Given: bodies that rethrow the reason, and an AbortError
+			const controller = new AbortController();
+			const reason = job({
+				name: "reason",
+				run: (t) => {
+					controller.abort(new Error("stop"));
+					throw t.signal.reason;
+				},
+			});
+			const abortError = job({
+				name: "abortError",
+				plan: async (p) => {
+					await p.outcome(reason);
+					return {};
+				},
+				run: () => {
+					throw new DOMException("aborted", "AbortError");
+				},
+			});
+
+			// When: the run is cancelled
+			const report = unwrap(
+				await run({ jobs: [reason, abortError], signal: controller.signal }),
+			);
+
+			// Then: both are Cancelled
+			assertEquals(outcomeOf({ report, name: "reason" }), Cancelled());
+			assertEquals(outcomeOf({ report, name: "abortError" }), Cancelled());
+		},
+	);
+});

@@ -351,7 +351,8 @@ export async function runJobs<C>({
 		try {
 			return Succeeded(await run(t, read));
 		} catch (error) {
-			return cancel.signal.aborted ? Cancelled() : Failed(error);
+			if (isAbort({ error, signal: cancel.signal })) return Cancelled();
+			return Failed(error);
 		} finally {
 			running = false;
 		}
@@ -372,6 +373,24 @@ export async function runJobs<C>({
 		}
 		return outcome;
 	}
+}
+
+/**
+ * Whether a body's `error` is the run's abort itself, so its job ends
+ * `Cancelled`: `signal` is aborted and `error` is its `reason`, or an
+ * `AbortError` (what `fetch` and friends reject with). Any other error, even
+ * one thrown after the abort, is a real failure.
+ */
+function isAbort({
+	error,
+	signal,
+}: {
+	error: unknown;
+	signal: AbortSignal;
+}): boolean {
+	if (!signal.aborted) return false;
+	if (error === signal.reason) return true;
+	return error instanceof DOMException && error.name === "AbortError";
 }
 
 /** A job a plan touched, and whether its failure blocks the plan's job. */
