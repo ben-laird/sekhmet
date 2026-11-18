@@ -309,7 +309,7 @@ A view is own properties holding the same children the schema's node holds;
 it adds no state. Give a composite of your own typed children with
 `viewed({ init, view })` and a `custom()` node. A view can't use a main
 `Schema` member, `schema` or a symbol as a key. See
-[Typed sub-schemas](docs/design.md#typed-sub-schemas-37) in the design.
+[Typed sub-schemas](https://github.com/ben-laird/sekhmet/blob/main/docs/decisions/schema.md#typed-sub-schemas-37) in the design record.
 
 ## Schemas describe themselves
 
@@ -437,7 +437,7 @@ core feature's mini functions, and the adapter lives in its own feature.
 
 ## Design
 
-[docs/design.md](./docs/design.md) records the accepted design: the error model
+The [design record](https://github.com/ben-laird/sekhmet/blob/main/docs/decisions/schema.md) records the accepted design: the error model
 (`SchemaIssue`, `Issues`), the primitives, the declarative composites, the
 Standard Schema adapter, the algebra, how schemas describe themselves, and
 type guards.
