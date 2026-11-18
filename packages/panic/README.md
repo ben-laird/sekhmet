@@ -5,8 +5,7 @@ Rust-style panics for TypeScript. `@sekhmet/panic` gives you a structured
 panic (the panic hook) from recovering from one (`catchUnwind`), the way Rust's
 `std::panic` does.
 
-In Sekhmet, errors are values (`Result`), and `throw` means panic: something
-happened that cannot happen unless the program is wrong.
+In Sekhmet, errors are values (`Result`), and `throw` means panic.
 
 ## Features
 
@@ -14,9 +13,8 @@ happened that cannot happen unless the program is wrong.
    boundary recovers and hands you a `Result`.
 2. **No global state.** There is no default runtime and no module-level hook.
    You create a runtime and run your program inside it.
-3. **Reported once per runtime.** Each runtime reports a payload at its
-   innermost boundary that catches it, and never again, however many of its
-   boundaries the payload passes through.
+3. **Reported once per runtime.** Each runtime reports a payload once,
+   however many of its boundaries the payload passes through.
 
 ## Installation
 
@@ -32,7 +30,7 @@ deno add jsr:@sekhmet/panic
 npx jsr add @sekhmet/panic
 ```
 
-## Run your program inside a runtime
+## Example
 
 ```ts
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
@@ -48,45 +46,34 @@ function main(): number {
 
 // Every throw inside main is reported once (to console.error by default),
 // then returned as Err
-const result = mapErr(runtime.catchUnwind(main), (payload) =>
-	payload instanceof Panic ? payload.message : "unknown failure",
-);
+const result = mapErr(runtime.catchUnwind(main), (payload) => {
+	return payload instanceof Panic ? payload.message : "unknown failure";
+});
 
 assertEquals(result, Err("config is missing a port"));
 ```
 
-`catchUnwind` catches **every** throw, not only `Panic`s. The `Err` holds the
-thrown value unchanged, typed `unknown`; narrow it with `instanceof Panic`. For
-async work, use `catchUnwindAsync`, which catches both a rejection and a
-synchronous throw from the function you pass.
+## Learn more
 
-## Rust mapping
+- **Tutorial:** [Getting started](./docs/getting-started.md) runs a program in
+  a runtime, panics, watches the hook report it and recovers with a fallback.
+- **How-to guides:** [Recipes](./docs/recipes.md) for running a program in a
+  runtime, reporting to a logger, chaining hooks, turning a panic into an app
+  error, recovering from async work, passing a panic to an outer boundary,
+  attaching a cause, reading panic metadata and recognizing a hook that
+  failed.
+- **Explanation:** [Concepts](./docs/concepts.md) covers panics versus error
+  values, why reporting and recovery are separate, one runtime per program
+  with no global state, why each panic is reported once per runtime, and what
+  happens when the hook throws.
+- **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/panic/doc)
+  documents every export and maps each Rust `std::panic` item to its
+  counterpart.
 
-| Rust (`std::panic`) | `@sekhmet/panic`                                   |
-| ------------------- | -------------------------------------------------- |
-| `panic!`            | `panic(source)` / `panicWithoutCause(source)`      |
-| `set_hook`          | `runtime.setHook(hook)`                            |
-| `take_hook`         | `runtime.takeHook()` (restores `defaultPanicHook`) |
-| `PanicHookInfo`     | `PanicHookInfo` (`payload`, `stack`)               |
-| `catch_unwind`      | `runtime.catchUnwind(fn)` / `catchUnwindAsync(fn)` |
-| `resume_unwind`     | `runtime.resumeUnwind(payload)`                    |
-| `Box<dyn Any>`      | `unknown`                                          |
+The guides are also on the
+[docs site](https://ben-laird.github.io/sekhmet/panic/).
 
-Two differences follow from having no global state:
+## License
 
-- **The hook runs at the boundary, not at the throw, once per runtime.** Rust
-  calls its one global hook when `panic!` runs. Here each runtime keeps a
-  private record of the object payloads it has reported or resumed: its
-  innermost `catchUnwind` that catches an unwind reports it, and no other
-  boundary of that runtime reports it again. Every other runtime the payload
-  passes through, such as a library's own runtime, reports it once through its
-  own hook; one runtime can never silence another. Payloads are never mutated.
-  Primitives (strings, `undefined` and so on) can't be recorded, so every
-  boundary that catches one reports it: throw `Panic`s.
-- **A throwing hook does not abort.** Rust aborts on a panic while panicking.
-  Here the boundary gives up recovering and throws a `Panic (PanicHook)` whose
-  cause holds the original payload and what the hook threw; an outer boundary
-  reports and catches it. Recognize it with `isPanicHookFailure(payload)`.
-
-See [the guide](./docs/guide.md) for hooks, chaining, nested boundaries and
-converting payloads into app errors.
+MIT. See
+[LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/panic/LICENSE.md).
