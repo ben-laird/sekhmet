@@ -1,98 +1,153 @@
+---
+kind: tutorial
+---
+
 # Getting started
 
-## When to use a vow
+In this tutorial we will build an order total from a price and a quantity that
+arrive separately. We will start with one pending value, derive a new value
+from it, combine it with a second one, and finish by handing the total to
+async code. Each step is a complete program you can run.
 
-Use a `Vow` where you want promise-style composition but cannot or do not want
-to wait for a microtask: wiring values that arrive from callbacks, building a
-dependency graph that should settle in one pass, or testing code without
-`await`. Use a `Promise` for work that is asynchronous anyway; `wait` and
-`fromPromise` convert between the two.
+## Install
 
-## Create a vow
+Add the package and `@std/assert`, which each step uses to check its output:
 
-```ts
-import { assertEquals } from "@std/assert";
-import { resolved, Vow, vowWithResolver, wait } from "@sekhmet/vow";
-
-// Resolved inside the executor: resolved as soon as it is constructed
-const now = new Vow<number>((resolve) => resolve(1));
-
-// Already resolved, shorter
-const alsoNow = resolved(2);
-
-// Resolved later by whoever holds `resolve`
-const { vow: later, resolve } = vowWithResolver<number>();
-resolve(3);
-
-assertEquals(
-	await Promise.all([wait(now), wait(alsoNow), wait(later)]),
-	[1, 2, 3],
-);
+```sh
+deno add jsr:@sekhmet/vow jsr:@std/assert
 ```
 
-## Resolution is synchronous
+## Wait for a price
 
-`map` returns a new vow. If the source is already resolved, the mapping runs
-immediately; otherwise it runs inside the source's `resolve` call.
+First, we make a vow for the price, which we don't know yet, and attach a
+callback that records it:
 
 ```ts
 import { assertEquals } from "@std/assert";
 import { map, vowWithResolver } from "@sekhmet/vow";
 
-const order: string[] = [];
-const { vow, resolve } = vowWithResolver<string>();
+const { vow: price, resolve: setPrice } = vowWithResolver<number>();
+const seen: number[] = [];
+map(price, (value) => seen.push(value));
 
-map(vow, (value) => order.push(`mapped ${value}`));
-order.push("before resolve");
-resolve("x");
-order.push("after resolve");
+assertEquals(seen, []);
 
-assertEquals(order, ["before resolve", "mapped x", "after resolve"]);
+setPrice(5);
+assertEquals(seen, [5]);
 ```
 
-A vow resolves once. Calling its resolver again does nothing.
+Before `setPrice` is called, `seen` is empty: the vow is pending. Once it is
+called, `seen` is `[5]` on the very next line. The callback ran inside
+`setPrice`, with no `await` in between.
 
-## Bridge to promises
+## Add a fee
 
-`wait` turns a vow into a promise. `fromPromise` goes the other way; since a vow
-cannot fail, the outcome is carried as a `Result` from `@sekhmet/enum/result`:
+Next, we derive a new vow from the price. `map` returns a vow of the
+callback's result:
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { fromPromise, map, wait } from "@sekhmet/vow";
-import { match } from "@sekhmet/enum/core/mini";
+import { map, vowWithResolver } from "@sekhmet/vow";
 
-const loaded = fromPromise(Promise.reject(new Error("offline")));
-const message = map(loaded, (result) =>
-	match(result)({
-		Ok: (value) => `loaded ${String(value)}`,
-		Err: (reason) =>
-			`failed: ${reason instanceof Error ? reason.message : String(reason)}`,
-	}),
-);
+const { vow: price, resolve: setPrice } = vowWithResolver<number>();
+const withFee = map(price, (value) => value + 1);
 
-assertEquals(await wait(message), "failed: offline");
+const seen: number[] = [];
+map(withFee, (value) => seen.push(value));
+
+setPrice(5);
+assertEquals(seen, [6]);
 ```
 
-## Errors in dependents
+Resolving the price resolved `withFee` too, in the same call: `seen` is `[6]`.
 
-If a callback attached to a vow throws while the vow resolves, the other
-callbacks still run, and the `resolve` call throws an `AggregateError` that
-holds every thrown error. The vow itself is resolved either way.
+## Combine it with a quantity
+
+Now let's bring in the quantity, which arrives on its own. `zipWith` waits for
+both vows and combines their values:
 
 ```ts
-import { assertEquals, assertThrows } from "@std/assert";
-import { map, vowWithResolver, wait } from "@sekhmet/vow";
+import { assertEquals } from "@std/assert";
+import { map, vowWithResolver, zipWith } from "@sekhmet/vow";
 
-const { vow, resolve } = vowWithResolver<number>();
+const { vow: price, resolve: setPrice } = vowWithResolver<number>();
+const { vow: quantity, resolve: setQuantity } = vowWithResolver<number>();
+const withFee = map(price, (value) => value + 1);
+const total = zipWith(withFee, quantity, (each, count) => each * count);
+
 const seen: number[] = [];
+map(total, (value) => seen.push(value));
 
-map(vow, () => {
-	throw new Error("bad dependent");
-});
-map(vow, (n) => seen.push(n));
+setPrice(5);
+assertEquals(seen, []);
 
-assertThrows(() => resolve(1), AggregateError);
-assertEquals(seen, [1]);
-assertEquals(await wait(vow), 1);
+setQuantity(3);
+assertEquals(seen, [18]);
 ```
+
+After the price, `seen` is still empty, because the total needs the quantity
+too. After the quantity, it is `[18]`.
+
+## Change your mind
+
+Let's try to set the quantity a second time:
+
+```ts
+import { assertEquals } from "@std/assert";
+import { map, vowWithResolver, zipWith } from "@sekhmet/vow";
+
+const { vow: price, resolve: setPrice } = vowWithResolver<number>();
+const { vow: quantity, resolve: setQuantity } = vowWithResolver<number>();
+const withFee = map(price, (value) => value + 1);
+const total = zipWith(withFee, quantity, (each, count) => each * count);
+
+const seen: number[] = [];
+map(total, (value) => seen.push(value));
+
+setPrice(5);
+setQuantity(3);
+setQuantity(10);
+
+assertEquals(seen, [18]);
+```
+
+`seen` is still `[18]`. A vow is resolved once, and the first value stays.
+
+## Await the total
+
+Last, we hand the total to code that works with promises. `wait` turns a vow
+into a `Promise` of its value:
+
+```ts
+import { assertEquals } from "@std/assert";
+import { map, vowWithResolver, wait, zipWith } from "@sekhmet/vow";
+
+const { vow: price, resolve: setPrice } = vowWithResolver<number>();
+const { vow: quantity, resolve: setQuantity } = vowWithResolver<number>();
+const withFee = map(price, (value) => value + 1);
+const total = zipWith(withFee, quantity, (each, count) => each * count);
+
+setPrice(5);
+setQuantity(3);
+
+assertEquals(await wait(total), 18);
+```
+
+`await wait(total)` gives `18`, the same value the callbacks saw.
+
+## What we built
+
+You have built a small graph of values: a price, a price with a fee derived from
+it, and a total that waits for a quantity too. Each value settled the moment
+its inputs did, all in one call stack, and the result crossed into async code
+at the end.
+
+From here:
+
+- [Recipes](./recipes.md) show how to resolve a vow from a callback, combine
+  vows, and convert between vows and promises, including a promise that can
+  fail.
+- [Concepts](./concepts.md) explain when to use a vow rather than a promise,
+  why resolution is synchronous, and what happens when a dependent throws.
+- The [API reference on JSR](https://jsr.io/@sekhmet/vow/doc) documents every
+  export.

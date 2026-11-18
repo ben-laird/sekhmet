@@ -60,15 +60,22 @@ assertEquals(await wait(total), 15);
 | `wait(vow)`                     | a `Promise` of the value                                       |
 | `fromPromise(promise)`          | a vow of `Ok(value)` or `Err(reason)` once the promise settles |
 
-A vow resolves once; later calls to its resolver do nothing. If dependents throw
-while a vow resolves, the rest still run and the `resolve` call throws an
-`AggregateError` of their errors.
-
 ## Learn more
 
-- Guide: [getting started](docs/getting-started.md), also on the
-  [docs site](https://ben-laird.github.io/sekhmet/vow/).
-- API reference: [jsr.io/@sekhmet/vow](https://jsr.io/@sekhmet/vow).
+- **Tutorial:** [Getting started](./docs/getting-started.md) builds an order
+  total from values that arrive separately, step by step.
+- **How-to guides:** [Recipes](./docs/recipes.md) for resolving a vow from a
+  callback or an executor, combining vows, awaiting a vow, turning a promise
+  into a vow and handling its failure, and catching errors thrown by
+  dependents.
+- **Explanation:** [Concepts](./docs/concepts.md) covers when to use a vow
+  rather than a promise, why resolution is synchronous, resolve-once
+  semantics, why a vow cannot fail, and errors in dependents.
+- **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/vow/doc)
+  documents every export.
+
+The guides are also on the
+[docs site](https://ben-laird.github.io/sekhmet/vow/).
 
 ## License
 
