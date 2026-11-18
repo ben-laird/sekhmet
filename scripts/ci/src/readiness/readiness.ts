@@ -2,6 +2,7 @@ import { dirname } from "@std/path/posix";
 import type { CheckId, Finding } from "./finding.ts";
 import { checkGivenWhenThen } from "./given-when-then.ts";
 import { checkImports } from "./imports.ts";
+import { checkModuleDocs } from "./module-doc.ts";
 import { checkModuleState, isStatelessSource } from "./module-state.ts";
 import {
 	checkExports,
@@ -44,6 +45,7 @@ export const STATIC_CHECKS: ReadonlySet<CheckId> = new Set<CheckId>([
 	"specifiers",
 	"module-state",
 	"todo",
+	"module-doc",
 ]);
 
 /**
@@ -107,7 +109,7 @@ export function docLintMembers(workspace: Workspace): Member[] {
 /**
  * Runs every check that reads files only (all but `doc-lint`):
  *
- * - published packages: `package-files`, `license`
+ * - published packages: `package-files`, `license`, `module-doc`
  * - every package: `exports`, and `imports` over its non-test source
  * - the root manifest: `publish-exclude`
  * - every `*.test.ts`: `given-when-then`
@@ -135,6 +137,7 @@ export function staticFindings(files: WorkspaceFiles): Finding[] {
 	for (const member of packages) {
 		if (member.manifest.publish) {
 			findings.push(...checkPackageFiles({ member, files }));
+			findings.push(...checkModuleDocs({ member, files }));
 		}
 		findings.push(...checkExports({ member, files }));
 	}

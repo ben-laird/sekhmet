@@ -22,7 +22,7 @@ function cleanRepo(): Map<string, string> {
 		["packages/a/LICENSE.md", MIT],
 		[
 			"packages/a/mod.ts",
-			'import { b } from "@std/assert";\n/** ```ts\n * import { a } from "@sekhmet/a";\n * ``` */\nexport const a = b;',
+			'/**\n * A.\n *\n * @module\n */\nimport { b } from "@std/assert";\n/** ```ts\n * import { a } from "@sekhmet/a";\n * ``` */\nexport const a = b;',
 		],
 		[
 			"packages/a/mod.test.ts",
@@ -101,6 +101,7 @@ Deno.test("staticFindings reports each kind of failure with its check", () => {
 	assertEquals(findings.map(({ check }) => check).sort(), [
 		"given-when-then",
 		"imports",
+		"module-doc",
 		"package-files",
 		"publish-exclude",
 		"specifiers",
