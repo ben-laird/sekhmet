@@ -4,32 +4,37 @@
  * @module
  */
 
-import { Enum, type Split } from "@sekhmet/enum/core/mini";
-import type { Result } from "@sekhmet/enum/result/mini";
+import { Enum } from "@sekhmet/enum/core/mini";
 import type { JobOutcome } from "@/src/outcome.ts";
 
 /**
  * The variants of a {@linkcode JobEvent}, for type-level work on them.
  */
-type Variants = Split<{
-	Started: [started: { readonly job: string }];
-	StepStarted: [step: { readonly job: string; readonly step: string }];
-	StepFinished: [
-		step: {
-			readonly job: string;
-			readonly step: string;
-			readonly result: Result<undefined, unknown>;
-		},
-	];
-	Finished: [
-		finished: { readonly job: string; readonly outcome: JobOutcome<unknown> },
-	];
-	Skipped: [skipped: { readonly job: string }];
-	Blocked: [
-		blocked: { readonly job: string; readonly blockedBy: readonly string[] },
-	];
-	Cancelled: [cancelled: { readonly job: string }];
-}>;
+type Variants =
+	| [kind: "Started", started: { readonly job: string }]
+	| [kind: "StepStarted", step: { readonly job: string; readonly step: string }]
+	| [
+			kind: "StepSucceeded",
+			step: { readonly job: string; readonly step: string },
+	  ]
+	| [
+			kind: "StepFailed",
+			step: {
+				readonly job: string;
+				readonly step: string;
+				readonly error: unknown;
+			},
+	  ]
+	| [
+			kind: "Finished",
+			finished: { readonly job: string; readonly outcome: JobOutcome<unknown> },
+	  ]
+	| [kind: "Skipped", skipped: { readonly job: string }]
+	| [
+			kind: "Blocked",
+			blocked: { readonly job: string; readonly blockedBy: readonly string[] },
+	  ]
+	| [kind: "Cancelled", cancelled: { readonly job: string }];
 
 export type { Variants as JobEventVariants };
 
@@ -40,8 +45,9 @@ export type { Variants as JobEventVariants };
  * `Cancelled`, after the terminal event of every job it needs.
  *
  * - `Started`: the body is about to run.
- * - `StepStarted` / `StepFinished`: a `t.step` began or ended, between the
- *   job's `Started` and its terminal event.
+ * - `StepStarted`, then `StepSucceeded` or `StepFailed` (with what it threw):
+ *   a `t.step` began and ended, between the job's `Started` and its terminal
+ *   event.
  * - `Finished`: the body ended (`Succeeded` or `Failed`), or the plan threw
  *   (`Failed`, with no `Started` before it).
  * - `Skipped`, `Blocked`: decided before the body, so no `Started`.

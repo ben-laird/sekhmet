@@ -4,15 +4,14 @@
  * @module
  */
 
-import { Enum, type Split } from "@sekhmet/enum/core/mini";
+import { Enum } from "@sekhmet/enum/core/mini";
 
 /**
  * The variants of a {@linkcode GraphError}, for type-level work on them.
  */
-type Variants = Split<{
-	DuplicateName: [duplicate: { readonly name: string }];
-	Cycle: [cycle: { readonly path: readonly string[] }];
-}>;
+type Variants =
+	| [kind: "DuplicateName", duplicate: { readonly name: string }]
+	| [kind: "Cycle", cycle: { readonly path: readonly string[] }];
 
 export type { Variants as GraphErrorVariants };
 

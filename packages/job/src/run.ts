@@ -317,22 +317,10 @@ export async function runJobs<C>({
 				onEvent(new JobEvent("StepStarted", { job: name, step }));
 				try {
 					const value = await fn();
-					onEvent(
-						new JobEvent("StepFinished", {
-							job: name,
-							step,
-							result: Ok(undefined),
-						}),
-					);
+					onEvent(new JobEvent("StepSucceeded", { job: name, step }));
 					return value;
 				} catch (error) {
-					onEvent(
-						new JobEvent("StepFinished", {
-							job: name,
-							step,
-							result: Err(error),
-						}),
-					);
+					onEvent(new JobEvent("StepFailed", { job: name, step, error }));
 					throw error;
 				}
 			},

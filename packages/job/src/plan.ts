@@ -5,7 +5,7 @@
  * @module
  */
 
-import { Enum, type Split } from "@sekhmet/enum/core/mini";
+import { Enum } from "@sekhmet/enum/core/mini";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { isErr } from "@sekhmet/enum/result/mini/predicates";
 import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
@@ -18,16 +18,17 @@ import { openPlanner } from "@/src/planner.ts";
 /**
  * The variants of a {@linkcode JobPlan}, for type-level work on them.
  */
-type Variants = Split<{
-	Planned: [
-		planned: { readonly needs: readonly string[]; readonly plan: object },
-	];
-	Skipped: [];
-	Pending: [
-		pending: { readonly on: string; readonly needs: readonly string[] },
-	];
-	Failed: [error: unknown];
-}>;
+type Variants =
+	| [
+			kind: "Planned",
+			planned: { readonly needs: readonly string[]; readonly plan: object },
+	  ]
+	| [kind: "Skipped"]
+	| [
+			kind: "Pending",
+			pending: { readonly on: string; readonly needs: readonly string[] },
+	  ]
+	| [kind: "Failed", error: unknown];
 
 export type { Variants as JobPlanVariants };
 

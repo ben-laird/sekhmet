@@ -1,10 +1,5 @@
 import { isolate, match, union } from "@sekhmet/enum/core/mini";
-import {
-	isErr,
-	type Result,
-	unwrap,
-	unwrapErr,
-} from "@sekhmet/enum/result/mini";
+import { type Result, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import {
 	Blocked,
 	Cancelled,
@@ -72,9 +67,8 @@ function describe(event: JobEvent): string {
 	return match(event)({
 		Started: ({ job }) => `Started ${job}`,
 		StepStarted: ({ job, step }) => `StepStarted ${job}/${step}`,
-		StepFinished: ({ job, step, result }) => {
-			return `StepFinished ${job}/${step} ${isErr(result) ? "Err" : "Ok"}`;
-		},
+		StepSucceeded: ({ job, step }) => `StepSucceeded ${job}/${step}`,
+		StepFailed: ({ job, step }) => `StepFailed ${job}/${step}`,
 		Finished: ({ job, outcome }) => `Finished ${job} ${kind(outcome)}`,
 		Skipped: ({ job }) => `Skipped ${job}`,
 		Blocked: ({ job, blockedBy }) => `Blocked ${job} by ${blockedBy.join(",")}`,
@@ -674,9 +668,9 @@ Deno.test("events arrive in order: needs end before dependents start", async () 
 		[
 			"Started build",
 			"StepStarted build/compile",
-			"StepFinished build/compile Ok",
+			"StepSucceeded build/compile",
 			"StepStarted build/bundle",
-			"StepFinished build/bundle Ok",
+			"StepSucceeded build/bundle",
 			"Finished build Succeeded",
 			"Started test",
 			"Finished test Succeeded",
@@ -703,7 +697,7 @@ Deno.test("a failing step is reported, then fails its job", async () => {
 	assertEquals(events, [
 		"Started build",
 		"StepStarted build/compile",
-		"StepFinished build/compile Err",
+		"StepFailed build/compile",
 		"Finished build Failed",
 	]);
 	assert(isolate(outcomeOf({ report, name: "build" }), "Failed"));
@@ -956,7 +950,7 @@ Deno.test("a body cancelled mid-step reports the step, then Cancelled", async ()
 	assertEquals(events, [
 		"Started deploy",
 		"StepStarted deploy/upload",
-		"StepFinished deploy/upload Err",
+		"StepFailed deploy/upload",
 		"Cancelled deploy",
 	]);
 	assertEquals(outcomeOf({ report, name: "deploy" }), Cancelled());

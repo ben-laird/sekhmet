@@ -135,7 +135,7 @@ export interface JobRun<C> {
 	/** Aborted when the run is cancelled; pass it to `fetch` and friends */
 	readonly signal: AbortSignal;
 	/**
-	 * Runs a named sub-step, reported through `StepStarted`/`StepFinished`
+	 * Runs a named sub-step, reported through `StepStarted` and `StepSucceeded`/`StepFailed`
 	 * events. A step's throw is reported, then rethrown into the body.
 	 */
 	step<U>(name: string, fn: () => U | Promise<U>): Promise<U>;

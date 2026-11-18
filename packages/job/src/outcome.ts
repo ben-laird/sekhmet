@@ -4,20 +4,19 @@
  * @module
  */
 
-import { Enum, isolate, type Split } from "@sekhmet/enum/core/mini";
+import { Enum, isolate } from "@sekhmet/enum/core/mini";
 
 /**
  * The variants of a {@linkcode JobOutcome}, for type-level work on them.
  *
  * @template T What a succeeded job returned
  */
-type Variants<T> = Split<{
-	Succeeded: [value: T];
-	Failed: [error: unknown];
-	Skipped: [];
-	Blocked: [blockedBy: readonly string[]];
-	Cancelled: [];
-}>;
+type Variants<T> =
+	| [kind: "Succeeded", value: T]
+	| [kind: "Failed", error: unknown]
+	| [kind: "Skipped"]
+	| [kind: "Blocked", blockedBy: readonly string[]]
+	| [kind: "Cancelled"];
 
 export type { Variants as JobOutcomeVariants };
 

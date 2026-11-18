@@ -35,20 +35,6 @@
  * @module
  */
 
-// Cross-package types in this package's public signatures, re-exported so
-// `deno doc --lint` can resolve them (one of #11's options; see that issue)
-export type {
-	Enum,
-	Kinds,
-	RawEnum,
-	SomeSplitVariants,
-	SomeVariant,
-	Split,
-	Values,
-} from "@sekhmet/enum/core/mini";
-export type { Result, ResultVariants } from "@sekhmet/enum/result/mini";
-export { type Struct, struct } from "@sekhmet/primordials/struct";
-
 export { JobEvent, type JobEventVariants } from "./src/event.ts";
 export {
 	Cycle,
