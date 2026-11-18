@@ -86,10 +86,15 @@ assertEquals([label, config.port], ["afternoon", 8080]);
 
 ## Learn more
 
-- Guide: [concepts](docs/concepts.md), also on the
-  [docs site](https://ben-laird.github.io/sekhmet/primordials/).
-- API reference:
-  [jsr.io/@sekhmet/primordials](https://jsr.io/@sekhmet/primordials).
+- **Explanation:** [Concepts](./docs/concepts.md) covers why `Struct` keeps its
+  data behind a symbol, why `Subtle` hides a creator, and what `block` and
+  `define` are for.
+- **Reference:** the
+  [API reference on JSR](https://jsr.io/@sekhmet/primordials/doc) documents
+  `Struct`, `getStructParams`, `Subtle`, `useSubtle`, `block` and `define`.
+
+The guide is also on the
+[docs site](https://ben-laird.github.io/sekhmet/primordials/).
 
 ## License
 

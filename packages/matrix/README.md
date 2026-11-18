@@ -62,8 +62,11 @@ for (const { a, b } of matrix({ a: [1, 2, 3], b: [10, 20] })) {
 
 ## Learn more
 
-- API reference: [jsr.io/@sekhmet/matrix](https://jsr.io/@sekhmet/matrix).
-- [Docs site](https://ben-laird.github.io/sekhmet/matrix/).
+- **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/matrix/doc)
+  documents `matrix` and its `Matrix` and `MatrixCase` types.
+
+This page is also on the
+[docs site](https://ben-laird.github.io/sekhmet/matrix/).
 
 ## License
 
