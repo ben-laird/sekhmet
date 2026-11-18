@@ -1,3 +1,7 @@
+---
+kind: explanation
+---
+
 # Concepts
 
 The model behind `@sekhmet/enum`: what an enum value is, how you narrow and

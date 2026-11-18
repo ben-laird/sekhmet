@@ -1,3 +1,7 @@
+---
+kind: tutorial
+---
+
 # Getting started
 
 This guide installs `@sekhmet/enum` and walks through `Option` and `Result`, the
