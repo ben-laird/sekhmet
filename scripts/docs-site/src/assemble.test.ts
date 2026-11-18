@@ -1,5 +1,7 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import {
+	apiReferenceLink,
+	describePageError,
 	docLinks,
 	planSite,
 	readmeLinks,
@@ -82,55 +84,188 @@ Deno.test("rootLinks points other relative links at the repository", () => {
 	);
 });
 
-Deno.test("planSite builds a section per package with guides in order", () => {
-	// Given: a package with a README and three guides, and one with nothing
+Deno.test("apiReferenceLink points at the package's API docs on JSR", () => {
+	// Given: a package directory
+	const dir = "enum";
+
+	// When: linking its API reference
+	const link = apiReferenceLink(dir);
+
+	// Then: it is JSR's docs page, generated from the package's TSDoc
+	assertEquals(link, {
+		text: "API on JSR",
+		link: "https://jsr.io/@sekhmet/enum/doc",
+	});
+});
+
+Deno.test("planSite groups a package's pages by Diátaxis kind", () => {
+	// Given: tagged pages of every kind but reference, out of order, and a package with nothing
 	const packages = [
 		{
 			dir: "enum",
 			readme: "# Enum\n\nSee [concepts](docs/concepts.md).",
 			docs: [
-				{ name: "recipes.md", text: "# Recipes" },
-				{ name: "aaa-extra.md", text: "# Extra" },
-				{ name: "concepts.md", text: "# Concepts" },
-				{ name: "getting-started.md", text: "# Getting started" },
+				{ name: "recipes.md", text: "---\nkind: how-to\n---\n# Recipes" },
+				{
+					name: "concepts.md",
+					text: "---\nkind: explanation\n---\n# Concepts",
+				},
+				{ name: "migrate.md", text: "---\nkind: how-to\n---\n# Migrating" },
+				{
+					name: "getting-started.md",
+					text: "---\nkind: tutorial\n---\n# Getting started",
+				},
 			],
 		},
 		{ dir: "empty", readme: undefined, docs: [] },
 	];
 
 	// When: planning the site
-	const site = planSite({ rootReadme: "# Sekhmet", packages });
+	const planned = planSite({ rootReadme: "# Sekhmet", packages });
+	assert(planned.ok);
+	const site = planned.value;
 
-	// Then: the home page and the package pages are written, the empty package is left out
+	// Then: every page is written, frontmatter kept for VitePress, and the empty package is left out
 	assertEquals(
 		site.pages.map((page) => page.path),
 		[
 			"index.md",
 			"enum/index.md",
-			"enum/getting-started.md",
 			"enum/concepts.md",
+			"enum/getting-started.md",
+			"enum/migrate.md",
 			"enum/recipes.md",
-			"enum/aaa-extra.md",
 		],
 	);
 	assertEquals(site.pages[1]?.text, "# Enum\n\nSee [concepts](./concepts.md).");
+	assertEquals(site.pages[2]?.text, "---\nkind: explanation\n---\n# Concepts");
 
-	// Then: the sidebar leads with the overview and the standard guides
+	// Then: the overview leads, then a sub-group per kind in Diátaxis order, titled by each page's heading
 	assertEquals(site.sidebar, {
 		"/enum/": [
 			{
 				text: "@sekhmet/enum",
 				items: [
 					{ text: "Overview", link: "/enum/" },
-					{ text: "Getting started", link: "/enum/getting-started" },
-					{ text: "Concepts", link: "/enum/concepts" },
-					{ text: "Recipes", link: "/enum/recipes" },
-					{ text: "Extra", link: "/enum/aaa-extra" },
+					{
+						text: "Tutorials",
+						items: [{ text: "Getting started", link: "/enum/getting-started" }],
+					},
+					{
+						text: "How-to guides",
+						items: [
+							{ text: "Migrating", link: "/enum/migrate" },
+							{ text: "Recipes", link: "/enum/recipes" },
+						],
+					},
+					{
+						text: "Explanation",
+						items: [{ text: "Concepts", link: "/enum/concepts" }],
+					},
+					{ text: "Reference", items: [apiReferenceLink("enum")] },
 				],
 			},
 		],
 	});
 	assertEquals(site.nav, [{ text: "enum", link: "/enum/" }]);
+});
+
+Deno.test("planSite leads each group with getting-started, then sorts by title", () => {
+	// Given: three how-to pages, getting-started's title sorting last
+	const packages = [
+		{
+			dir: "vow",
+			readme: "# Vow",
+			docs: [
+				{ name: "b.md", text: "---\nkind: how-to\n---\n# Alpha" },
+				{
+					name: "getting-started.md",
+					text: "---\nkind: how-to\n---\n# Zebra start",
+				},
+				{ name: "a.md", text: "---\nkind: how-to\n---\n# Beta" },
+			],
+		},
+	];
+
+	// When: planning the site
+	const planned = planSite({ rootReadme: "# Sekhmet", packages });
+	assert(planned.ok);
+	const site = planned.value;
+
+	// Then: getting-started leads, then the rest by title, not file name
+	assertEquals(site.sidebar["/vow/"]?.[0]?.items[1], {
+		text: "How-to guides",
+		items: [
+			{ text: "Zebra start", link: "/vow/getting-started" },
+			{ text: "Alpha", link: "/vow/b" },
+			{ text: "Beta", link: "/vow/a" },
+		],
+	});
+});
+
+Deno.test("planSite lists untagged pages after the overview, before the kind groups", () => {
+	// Given: an untagged page, a local reference page and a tutorial
+	const packages = [
+		{
+			dir: "schema",
+			readme: "# Schema",
+			docs: [
+				{ name: "design.md", text: "# Schema design" },
+				{ name: "issues.md", text: "---\nkind: reference\n---\n# Issues" },
+				{
+					name: "getting-started.md",
+					text: "---\nkind: tutorial\n---\n# Getting started",
+				},
+			],
+		},
+	];
+
+	// When: planning the site
+	const planned = planSite({ rootReadme: "# Sekhmet", packages });
+	assert(planned.ok);
+	const site = planned.value;
+
+	// Then: the untagged page stays listed, and Reference leads with the JSR API
+	assertEquals(site.sidebar["/schema/"]?.[0]?.items, [
+		{ text: "Overview", link: "/schema/" },
+		{ text: "Schema design", link: "/schema/design" },
+		{
+			text: "Tutorials",
+			items: [{ text: "Getting started", link: "/schema/getting-started" }],
+		},
+		{
+			text: "Reference",
+			items: [
+				apiReferenceLink("schema"),
+				{ text: "Issues", link: "/schema/issues" },
+			],
+		},
+	]);
+});
+
+Deno.test("planSite rejects every page with an invalid kind, naming its file", () => {
+	// Given: one page with an unknown kind and one with an unclosed block
+	const packages = [
+		{
+			dir: "enum",
+			readme: "# Enum",
+			docs: [
+				{ name: "recipes.md", text: "---\nkind: recipe\n---\n# Recipes" },
+				{ name: "concepts.md", text: "---\nkind: explanation\n# Concepts" },
+			],
+		},
+	];
+
+	// When: planning the site
+	const planned = planSite({ rootReadme: "# Sekhmet", packages });
+	assert(!planned.ok);
+	const errors = planned.error;
+
+	// Then: both pages are reported with their repository paths
+	assertEquals(errors.map(describePageError), [
+		"packages/enum/docs/concepts.md: frontmatter has no closing `---` line",
+		'packages/enum/docs/recipes.md: unknown kind "recipe"; expected one of tutorial, how-to, explanation, reference',
+	]);
 });
 
 Deno.test("planSite gives a docs-only package a placeholder overview", () => {
@@ -144,7 +279,9 @@ Deno.test("planSite gives a docs-only package a placeholder overview", () => {
 	];
 
 	// When: planning the site
-	const site = planSite({ rootReadme: "# Sekhmet", packages });
+	const planned = planSite({ rootReadme: "# Sekhmet", packages });
+	assert(planned.ok);
+	const site = planned.value;
 
 	// Then: the overview page exists so the section has a landing page
 	assertEquals(
