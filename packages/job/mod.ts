@@ -8,6 +8,8 @@
  *   `run`, which receives that data with its handles resolved.
  * - {@linkcode runJobs} runs every job reachable from the roots once, and
  *   reports a {@linkcode JobOutcome} for each.
+ * - {@linkcode planJobs} is the dry run: it calls the plans only and
+ *   returns the graph.
  *
  * @example
  * ```ts
@@ -82,6 +84,13 @@ export {
 	Skipped,
 	Succeeded,
 } from "./src/outcome.ts";
+export {
+	type JobGraph,
+	JobPlan,
+	type JobPlanVariants,
+	type PlanOptions,
+	planJobs,
+} from "./src/plan.ts";
 export type { ClosedPlannerCause } from "./src/planner.ts";
 export {
 	type JobMisuseCause,
