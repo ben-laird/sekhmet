@@ -56,6 +56,10 @@ export interface UnreachableCause {
  * Please file an issue at https://example.com/issues
  * ```
  *
+ * The `Impossible value` line appears exactly when the call passed `value`,
+ * even if that value is `undefined`, and the issue line only with an
+ * `issueUrl`.
+ *
  * @param options An issue URL, optional; the overload taking
  *   {@linkcode UnreachableValueOptions} also takes the impossible value
  * @returns Never; it always panics

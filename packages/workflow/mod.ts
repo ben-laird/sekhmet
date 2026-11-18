@@ -2,10 +2,24 @@
  * Workflow helpers: functions that mark the state of the code itself. `todo`
  * and `unimplemented` mark missing code, `unreachable` makes a `switch`
  * exhaustive, and `invariant`, `invariantEqual`, `defined` and `satisfies`
- * check what only a bug can break. Each panics
- * through `@sekhmet/panic` as `Panic (Todo)`, `Panic (Unimplemented)`,
- * `Panic (Unreachable)` or `Panic (Invariant)`, with a typed cause and a
- * type guard to recognize it.
+ * check what only a bug can break. Each panics through `@sekhmet/panic`,
+ * with a typed cause and a type guard to recognize it:
+ *
+ * | Helper           | Panics as               | Cause                | Guard                  |
+ * | ---------------- | ----------------------- | -------------------- | ---------------------- |
+ * | `todo`           | `Panic (Todo)`          | `TodoCause`          | `isTodoPanic`          |
+ * | `unimplemented`  | `Panic (Unimplemented)` | `UnimplementedCause` | `isUnimplementedPanic` |
+ * | `unreachable`    | `Panic (Unreachable)`   | `UnreachableCause`   | `isUnreachablePanic`   |
+ * | `invariant`      | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
+ * | `invariantEqual` | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
+ * | `defined`        | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
+ * | `satisfies`      | `Panic (Invariant)`     | `InvariantCause`     | `isInvariantPanic`     |
+ *
+ * The name is always the helper's own, even when the options object carries
+ * extra fields at runtime. Every message opens with a header line; the lines
+ * after it appear only when their part was given, so `todo()`,
+ * `unimplemented()` and `unreachable()` without options panic with the header
+ * alone.
  *
  * @example
  * ```ts

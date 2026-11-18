@@ -26,7 +26,9 @@ export interface SatisfiesGuardOptions<T, S extends T>
  * Returns `value` when `predicate` accepts it, narrowed to `S` when the
  * predicate is a type guard `(value: T) => value is S`, and otherwise panics
  * as `Panic (Invariant)`. Use it where a rejected value means the program has
- * a bug, never to check input. To reuse a check, wrap the call in a function.
+ * a bug, never to check input. `T` is inferred from the value, so a guard
+ * over a wider type (say, `unknown`) still narrows. The predicate is called
+ * as a method of the options; to reuse a check, wrap the call in a function.
  *
  * A predicate need not be written as a guard to narrow: TypeScript 5.5 and
  * later infer a function like `(v) => typeof v === "string"` or

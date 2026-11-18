@@ -45,12 +45,21 @@ export interface DefinedOptions<
 /**
  * Returns `value` when it is present, typed without what counts as absent,
  * and otherwise panics as `Panic (Invariant)`. Only `null` and `undefined`
- * can be absent: `0`, `""`, `false` and `NaN` are present. Use it where a
- * missing value means the program has a bug, never to check input.
+ * can be absent: it never tests truthiness, so `0`, `""`, `false` and `NaN`
+ * are present (use `invariant` to assert truthiness). Use it where
+ * a missing value means the program has a bug, never to check input.
  *
- * `absent` picks what counts as absent: `"nullish"` (the default) rejects
- * both, `"undefined"` only `undefined` and `"null"` only `null`. The message
- * shows the absent value:
+ * `absent` picks what counts as absent:
+ *
+ * | `absent`              | Rejects                | Returns                 |
+ * | --------------------- | ---------------------- | ----------------------- |
+ * | `"nullish"` (default) | `null` and `undefined` | `NonNullable<T>`        |
+ * | `"undefined"`         | `undefined`            | `Exclude<T, undefined>` |
+ * | `"null"`              | `null`                 | `Exclude<T, null>`      |
+ *
+ * Leaving `absent` out and passing `absent: undefined` both mean
+ * `"nullish"`, in the type as at runtime. The message shows the absent
+ * value:
  *
  * ```txt
  * an invariant was violated
