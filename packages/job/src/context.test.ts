@@ -131,6 +131,55 @@ Deno.test("a job that never starts never builds a context", async () => {
 	assertEquals([...meta.built].sort(), ["broken", "ok"]);
 });
 
+Deno.test("a job cancelled before it starts never builds a context", async (t) => {
+	await t.step("by failFast, after a sibling fails", async () => {
+		// Given: a failing job, a long sibling, and a job waiting on the sibling
+		const { job } = recordingKit();
+		const broken = job({
+			name: "broken",
+			run: () => {
+				throw new Error("broke");
+			},
+		});
+		const long = job({ name: "long", run: (r) => untilAborted(r.signal) });
+		const later = job({
+			name: "later",
+			plan: (p) => ({ long: p.needs(long) }),
+			run: () => {},
+		});
+		const meta: Meta = { built: [] };
+
+		// When: they run with failFast
+		const report = unwrap(
+			await runJobs({ jobs: { broken, later }, meta, failFast: true }),
+		);
+
+		// Then: later was cancelled before it started, and built no context
+		assertEquals(report.outcomes.later, Cancelled());
+		assertEquals([...meta.built].sort(), ["broken", "long"]);
+	});
+
+	await t.step("by a signal aborted before the run", async () => {
+		// Given: a default job and an already-aborted signal
+		const { job } = recordingKit();
+		const plain = job({ name: "plain", run: () => {} });
+		const meta: Meta = { built: [] };
+
+		// When: the run starts
+		const report = unwrap(
+			await runJobs({
+				jobs: { plain },
+				meta,
+				signal: AbortSignal.abort(new Error("stop")),
+			}),
+		);
+
+		// Then: the job is Cancelled and the factory was never called
+		assertEquals(report.outcomes.plain, Cancelled());
+		assertEquals(meta.built, []);
+	});
+});
+
 Deno.test("a factory that throws fails its job, and only its job", async () => {
 	// Given: a factory that throws for one job
 	const boom = new Error("no connection");
