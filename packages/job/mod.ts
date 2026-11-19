@@ -4,10 +4,11 @@
  * language's own promises and `AbortSignal`.
  *
  * - {@linkcode defineJobs} fixes the run's context type and returns `job`,
- * and `family`, which makes jobs on the fly (the same key, the same job).
- *   A job pairs a pure `plan`, which declares what it needs as data
- *   (`p.needs`, or `p.needsIf` with a guard), with a `run`, which receives
- *   that data with each need resolved.
+ *   and `family`, which makes jobs on the fly (the same key, the same job).
+ *   A job pairs a pure `plan`, its dependency list (`p.needs`, or
+ *   `p.needsIf` with a guard, in plain arrays and records), with a `run`,
+ *   which receives that list with each need resolved and reads anything
+ *   else from its context or a closure.
  * - A job's `runIf` decides whether `run` is called once its needs settle:
  *   {@linkcode success} (the default), {@linkcode failure},
  *   {@linkcode cancelled}, {@linkcode always}, or a predicate.
@@ -27,8 +28,10 @@
  * const version = job({ name: "version", run: () => "1.2.0" });
  * const publish = job({
  * 	name: "publish",
- * 	plan: (p) => ({ version: p.needs(version), dryRun: !p.context.release }),
- * 	run: (_t, { version, dryRun }) => `${dryRun ? "would publish" : "published"} ${version}`,
+ * 	plan: (p) => ({ version: p.needs(version) }),
+ * 	run: (r, { version }) => {
+ * 		return `${r.context.release ? "published" : "would publish"} ${version}`;
+ * 	},
  * });
  * const cleanup = job({
  * 	name: "cleanup",

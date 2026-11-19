@@ -7,8 +7,8 @@
 
 Named jobs run as a dependency graph, in the style of GitHub Actions and other
 CI runners, built on the language's own promises and `AbortSignal`. A job pairs
-a pure **plan**, which declares what it needs as plain data, with a **run**,
-which receives that data with each need resolved. A **`runIf`** decides, once
+a pure **plan**, the job's dependency list, with a **run**, which receives that
+list with each need resolved. A **`runIf`** decides, once
 the needs settle, whether the run is called. Each job runs once per run,
 however many jobs need it, and ends with a `JobOutcome`: `Succeeded`, `Failed`,
 `Skipped`, `Blocked` or `Cancelled`.
@@ -30,7 +30,7 @@ import {
 } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
-// The context every plan and run can read: config and a logger, not data
+// The context every plan and run can read: config and a logger
 const { job } = defineJobs<{
 	readonly release: boolean;
 	readonly log: string[];
@@ -54,7 +54,7 @@ const sign = job({ name: "sign", run: () => "signature" });
 
 const publish = job({
 	name: "publish",
-	// A plan is pure data: needs, a guarded need, and plain values
+	// A plan is the dependency list: needs, and a guarded need
 	plan: (p) => {
 		const v = p.needs(version);
 		const stable = succeededWith({
@@ -66,10 +66,11 @@ const publish = job({
 			version: v,
 			builds: [p.needs(build)], // needs resolve at any depth
 			signature: p.needsIf({ job: sign, when: stable }),
-			channel: p.context.release ? "stable" : "dry-run",
 		};
 	},
-	run: (_t, { builds, signature, channel }) => {
+	// Anything else comes from the context (or a closure), not the plan
+	run: (t, { builds, signature }) => {
+		const channel = t.context.release ? "stable" : "dry-run";
 		return `${builds[0]?.outDir} -> ${channel} (${signature ?? "unsigned"})`;
 	},
 });
@@ -132,11 +133,19 @@ assertEquals(report.passed, true);
   family of one. Two different identities may not share a display name.
 
 - **`job({ name, plan?, runIf?, run, continueOnError? })`** defines a job.
-  - `plan(p)` is pure and synchronous: it returns a plain object of needs and
-    data. `p.needs(job)` declares a need; `p.needsIf({ job, when })` declares
-    one pulled in only if the guard `when` holds. Needs may sit anywhere in
-    plain arrays and plain objects, at any depth; anything else passes
-    through untouched. A job that needs nothing omits `plan`.
+  - `plan(p)` is pure and synchronous, and returns the job's dependency list:
+    needs, in plain arrays and records at any depth. `p.needs(job)` declares
+    a need; `p.needsIf({ job, when })` declares one pulled in only if the
+    guard `when` holds, and `undefined` stands for one left out. A job that
+    needs nothing omits `plan`.
+  - Plain leaf values (a string, a flag) still type-check and pass through
+    untouched, but they are a second-class escape hatch, never necessary: a
+    plan sees only the context and closures, and `run` has both. Read config
+    from `t.context` in `run` instead. The hatch's accepted papercut: a class
+    instance that isn't a `Struct` (your own class, a `Date`) is typed
+    structurally in `run`, so its `#private` members are lost; a
+    `Struct`-based value (an `Option`, a `Job`) and a function keep their
+    types.
   - Guards are data that describe themselves, so a dry run can show them:
     `succeeded(need)`, `failed(need)` and
     `succeededWith({ need, where, describe })`. A guard reads only the

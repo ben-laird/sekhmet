@@ -1,8 +1,8 @@
 /**
  * Defining jobs: {@linkcode defineJobs} fixes a run's context type and
- * returns `job`, which pairs a pure plan (what the job needs, as data) with
- * a run (the work, given that data resolved), and `family`, which makes
- * jobs on the fly.
+ * returns `job`, which pairs a pure plan (the job's dependency list) with a
+ * run (the work, given that list resolved), and `family`, which makes jobs
+ * on the fly.
  *
  * @module
  */
@@ -173,9 +173,11 @@ export interface JobDefinitionBase<C, P> {
 	/** The job's display name, unique within a run */
 	readonly name: string;
 	/**
-	 * Declares what the job needs, as data: pure and synchronous. A job that
-	 * needs nothing omits it. A plan that throws is a bug: `runJobs` and
-	 * `planJobs` rethrow it before any job starts.
+	 * Returns the job's dependency list: needs in plain arrays and records,
+	 * pure and synchronous. A job that needs nothing omits it. Anything else
+	 * `run` uses comes from its context or a closure (leaf values in a plan
+	 * are a second-class escape hatch; see `PlanRecord`). A plan that throws
+	 * is a bug: `runJobs` and `planJobs` rethrow it before any job starts.
 	 */
 	readonly plan?: ((p: Planner<C>) => P) | undefined;
 	/**

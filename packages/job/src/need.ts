@@ -1,6 +1,7 @@
 /**
  * What a plan declares: {@linkcode Need}s on other jobs, made with the
- * {@linkcode Planner} `p`, anywhere in plain data.
+ * {@linkcode Planner} `p`, in plain arrays and records. A plan is the job's
+ * dependency list.
  *
  * @module
  */
@@ -10,15 +11,22 @@ import type { BoundJob, Job } from "@/src/job.ts";
 import type { JobOutcome } from "@/src/outcome/main/mod.ts";
 
 /**
- * What a plan returns: a plain record of needs and data. Needs may also sit
- * in plain arrays and records nested in it, at any depth.
+ * What a plan returns: the job's dependency list, a plain record of needs.
+ * Needs may sit in plain arrays and records nested in it, at any depth, and
+ * `undefined` stands for one left out.
+ *
+ * Plain leaf values (a string, a flag) type-check too, but they are a
+ * second-class escape hatch, never necessary: a plan sees only the context
+ * and closures, and `run` has both. See {@linkcode Field} for the hatch's
+ * papercut.
  */
 export type PlanRecord = { readonly [key: string]: unknown };
 
 /**
  * A declared dependency on a job that returns `T`, made by `p.needs(job)`
- * or `p.needsIf({ job, when })`. Put it anywhere in the plan's plain data,
- * and `run` receives the job's value (or outcome) in its place.
+ * or `p.needsIf({ job, when })`. Put it anywhere in the plan's plain arrays
+ * and records, and `run` receives the job's value (or outcome) in its
+ * place.
  *
  * @template T What the needed job returns
  * @template Conditional `true` for `needsIf`, whose value may be absent
@@ -50,12 +58,13 @@ export type AnyNeed = Need<unknown, boolean>;
 
 /**
  * What a plan receives as `p`: the run's context, and the two ways to
- * declare a need. A plan is pure and synchronous: it only builds data.
+ * declare a need. A plan is pure and synchronous: it only builds the job's
+ * dependency list.
  *
  * @template C The run's context type
  */
 export interface Planner<C> {
-	/** The run's context, so a plan can decide from config */
+	/** The run's context, so a plan can decide from config which jobs it needs */
 	readonly context: C;
 	/**
 	 * Declares that the job needs `job`. Under the default `runIf`,
@@ -125,10 +134,17 @@ export type ConditionKind = "success" | "any";
 /**
  * One plan field as `run` receives it. A need resolves (to its value under
  * `"success"`, its outcome under `"any"`, or `undefined` for a `needsIf`
- * left out) wherever it sits in arrays and objects; functions and
- * `Struct`-based values (an `Option`, a `Job`) pass through as they are.
- * At run time only plain arrays and plain objects are walked; anything else
- * passes through untouched.
+ * left out) wherever it sits in arrays and objects. At run time only plain
+ * arrays and plain objects are walked; anything else passes through
+ * untouched.
+ *
+ * Leaf values are the plan's second-class escape hatch (see
+ * {@linkcode PlanRecord}). Functions and `Struct`-based values (an
+ * `Option`, a `Job`) keep their types, but any other class instance is
+ * typed structurally, as a mapped copy of its public members, so its
+ * `#private` members are lost and it no longer fits its own class. That
+ * papercut is accepted: `run` can read such a value from its context or a
+ * closure instead.
  *
  * @template F The field's type in the plan
  * @template K How needs resolve
