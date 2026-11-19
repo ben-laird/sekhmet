@@ -97,8 +97,9 @@ Packages (`packages/`):
   `ordering` built on it
 - `@sekhmet/job` (prototype, `"publish": false`; #57): named jobs run as a
   dependency graph on promises and `AbortSignal`: `defineJobs`/`job` (a
-  plan as data, a typed run), `observer` (an `always()`/`failure()` job
-  that survives cancellation), `runJobs` and the dry run `planJobs`
+  pure plan as data, a `runIf` condition, a typed run), `runJobs` over a
+  record of roots, the dry run `planJobs`, and `JobOutcome` with methods
+  (`@sekhmet/job/outcome`, a main/mini feature)
 - `@sekhmet/matrix`: `matrix()` builds the Cartesian product of value arrays for
   parameterized tests
 - `@sekhmet/panic`: `Panic` error, `panic()`/`panicWithoutCause()`, a Rust-style

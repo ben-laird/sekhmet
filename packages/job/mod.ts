@@ -4,18 +4,22 @@
  * language's own promises and `AbortSignal`.
  *
  * - {@linkcode defineJobs} fixes the run's context type and returns `job`.
- *   A job pairs a `plan`, which declares what it needs as data, with a
- *   `run`, which receives that data with its handles resolved.
- * - {@linkcode runJobs} runs every job reachable from the roots once, and
- *   reports a {@linkcode JobOutcome} for each.
+ *   A job pairs a pure `plan`, which declares what it needs as data
+ *   (`p.needs`, or `p.needsIf` with a guard), with a `run`, which receives
+ *   that data with each need resolved.
+ * - A job's `runIf` decides whether `run` is called once its needs settle:
+ *   {@linkcode success} (the default), {@linkcode failure},
+ *   {@linkcode cancelled}, {@linkcode always}, or a predicate.
+ * - {@linkcode runJobs} runs every job reachable from a record of roots
+ *   once, and reports each root's {@linkcode JobOutcome}, typed per key.
  * - {@linkcode planJobs} is the dry run: it calls the plans only and
- *   returns the graph.
+ *   returns the whole graph, guards included.
  *
  * @example
  * ```ts
- * import { defineJobs, runJobs } from "@sekhmet/job";
+ * import { always, defineJobs, runJobs } from "@sekhmet/job";
  * import { unwrap } from "@sekhmet/enum/result/mini";
- * import { assert } from "@std/assert";
+ * import { assert, assertEquals } from "@std/assert";
  *
  * const { job } = defineJobs<{ readonly release: boolean }>();
  *
@@ -25,17 +29,34 @@
  * 	plan: (p) => ({ version: p.needs(version), dryRun: !p.context.release }),
  * 	run: (_t, { version, dryRun }) => `${dryRun ? "would publish" : "published"} ${version}`,
  * });
+ * const cleanup = job({
+ * 	name: "cleanup",
+ * 	plan: (p) => ({ publish: p.needs(publish) }),
+ * 	runIf: always(),
+ * 	run: (_t, { publish }) => publish.isSucceeded(),
+ * });
  *
  * const report = unwrap(
- * 	await runJobs({ jobs: [publish], context: { release: false } }),
+ * 	await runJobs({ jobs: { publish, cleanup }, context: { release: false } }),
  * );
  * assert(report.passed);
+ * assertEquals(report.outcomes.publish.value().unwrap(), "would publish 1.2.0");
  * ```
  *
  * @module
  */
 
+export {
+	always,
+	type Condition,
+	type ConditionInput,
+	cancelled,
+	failure,
+	type NeedOutcomes,
+	success,
+} from "./src/condition.ts";
 export { JobEvent, type JobEventVariants } from "./src/event.ts";
+export type { NonPlainPlanCause } from "./src/graph.ts";
 export {
 	Cycle,
 	DuplicateName,
@@ -43,34 +64,43 @@ export {
 	type GraphErrorVariants,
 } from "./src/graph-error.ts";
 export {
+	failed,
+	type SucceededWithOptions,
+	succeeded,
+	succeededWith,
+} from "./src/guard.ts";
+export {
 	type AnyJob,
+	type AnyJobDefinition,
+	type BodyInput,
+	type BoundJob,
 	defineJobs,
-	Handle,
-	type HandleParams,
-	type HandleReader,
+	type EmptyPlan,
 	Job,
+	type JobDefinitionBase,
+	type JobId,
 	type JobKit,
 	type JobParams,
 	type JobRun,
-	type LeafJobDefinition,
-	type NeedResult,
-	type NonPlainPlanCause,
-	type ObserverDefinition,
-	type ObserverDependencyCause,
-	type ObserverPlanner,
-	type PlanExit,
-	type PlannedJobDefinition,
+	type Roots,
+	type RunIfInput,
+	type ShouldRunInput,
+	type StepDefinition,
+	type SuccessJobDefinition,
+} from "./src/job.ts";
+export {
+	type AnyNeed,
+	type ConditionKind,
+	type Field,
+	type Guard,
+	Need,
+	type NeedParams,
+	type NeedsIfOptions,
+	type OutcomeView,
 	type Planner,
 	type PlanRecord,
 	type Resolved,
-	type ResolvedField,
-	Skip,
-	type Stage,
-	type StepDefinition,
-	type StringKeysOnly,
-	skip,
-	type UnmetNeed,
-} from "./src/job.ts";
+} from "./src/need.ts";
 export {
 	type AllValues,
 	all,
@@ -84,17 +114,14 @@ export {
 } from "./src/outcome/main/mod.ts";
 export {
 	type JobGraph,
-	JobPlan,
-	type JobPlanVariants,
+	type PlannedJob,
+	type PlannedNeed,
 	type PlanOptions,
 	planJobs,
 } from "./src/plan.ts";
-export type {
-	ClosedPlannerCause,
-	UnexplainedErrCause,
-} from "./src/planner.ts";
 export {
 	type JobMisuseCause,
+	type Outcomes,
 	type RunOptions,
 	type RunReport,
 	runJobs,

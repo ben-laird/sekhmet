@@ -6,17 +6,17 @@
  * stubs that record they ran and fail on demand.
  */
 
-import { isolate } from "@sekhmet/enum/core/mini";
-import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import { unwrap } from "@sekhmet/enum/result/mini";
 import {
+	all,
+	always,
 	Blocked,
 	defineJobs,
-	type JobOutcome,
-	type RunReport,
+	failure,
+	type JobRun,
 	runJobs,
 	Skipped,
 	Succeeded,
-	skip,
 } from "@sekhmet/job";
 import { assert, assertEquals } from "@std/assert";
 
@@ -29,15 +29,15 @@ interface CiContext {
 	readonly ran: string[];
 }
 
-const { job, observer } = defineJobs<CiContext>();
+const { job } = defineJobs<CiContext>();
 
 /** A stub body: records the step, then fails if the context says so. */
-const stub = (name: string) => {
-	return (t: { readonly context: CiContext }): void => {
+function stub(name: string): (t: JobRun<CiContext>) => void {
+	return (t) => {
 		t.context.ran.push(name);
 		if (t.context.failing.has(name)) throw new Error(`${name} failed`);
 	};
-};
+}
 
 // "Deno Lint": no dependencies.
 const lint = job({ name: "Deno Lint", run: stub("Deno Lint") });
@@ -49,59 +49,45 @@ const test = job({
 	run: stub("Deno Test"),
 });
 
-// "Show coverage report": dependsOn ["Deno Test"], condition () => isCI || isAI.
-// A predicate is "success, then skipped when false": giving up on an unmet
-// result first keeps Blocked ahead of Skipped, as gateStep does.
+// "Show coverage report": dependsOn ["Deno Test"], condition () => isCI ||
+// isAI: the default rule (all the needs succeeded) plus a predicate.
 const coverage = job({
 	name: "Show coverage report",
-	plan: async (p) => {
-		const tested = await p.result(test);
-		if (isErr(tested)) return tested;
-		return p.context.reportsCoverage ? {} : skip();
+	plan: (p) => ({ test: p.needs(test) }),
+	runIf: ({ context, needs }) => {
+		return context.reportsCoverage && all(needs).isSucceeded();
 	},
 	run: stub("Show coverage report"),
 });
 
 // A "failure" step (none in main.ts today): runs only if a dependency is
-// unhealthy, else skipped. An observer, so a cancelled run still runs it.
-const explainFailure = observer({
+// unhealthy, else skipped, even after a cancel.
+const explainFailure = job({
 	name: "Explain failure",
-	plan: async (p) => ((await p.outcome(test)).isUnhealthy() ? {} : skip()),
+	plan: (p) => ({ test: p.needs(test) }),
+	runIf: failure(),
 	run: stub("Explain failure"),
 });
 
 // "Cleanup coverage data": dependsOn ["Show coverage report"], condition
-// "always", continueOnError. An observer, as "always" survives cancellation.
-const cleanup = observer({
+// "always", continueOnError.
+const cleanup = job({
 	name: "Cleanup coverage data",
+	plan: (p) => ({ coverage: p.needs(coverage) }),
+	runIf: always(),
 	continueOnError: true,
-	plan: async (p) => {
-		await p.outcome(coverage);
-		return {};
-	},
 	run: stub("Cleanup coverage data"),
 });
-
-const workflow = [lint, test, coverage, explainFailure, cleanup];
 
 async function ci(context: Omit<CiContext, "ran">) {
 	const ran: string[] = [];
 	const report = unwrap(
-		await runJobs({ jobs: workflow, context: { ...context, ran } }),
+		await runJobs({
+			jobs: { explainFailure, cleanup },
+			context: { ...context, ran },
+		}),
 	);
 	return { report, ran };
-}
-
-function outcomeOf({
-	report,
-	name,
-}: {
-	report: RunReport;
-	name: string;
-}): JobOutcome<unknown> {
-	const outcome = report.outcomes.get(name);
-	assert(outcome !== undefined, `no outcome for ${name}`);
-	return outcome;
 }
 
 Deno.test("scripts/ci slice: everything passes in CI", async () => {
@@ -119,7 +105,7 @@ Deno.test("scripts/ci slice: everything passes in CI", async () => {
 		"Show coverage report",
 		"Cleanup coverage data",
 	]);
-	assertEquals(outcomeOf({ report, name: "Explain failure" }), Skipped());
+	assertEquals(report.outcomes.explainFailure, Skipped());
 	assert(report.passed);
 });
 
@@ -131,22 +117,13 @@ Deno.test("scripts/ci slice: a lint failure blocks downstream", async () => {
 		failing: new Set(["Deno Lint"]),
 	});
 
-	// Then: test is blocked by lint, coverage by test (blocked, not skipped)
-	assertEquals(
-		outcomeOf({ report, name: "Deno Test" }),
-		Blocked(["Deno Lint"]),
-	);
-	assertEquals(
-		outcomeOf({ report, name: "Show coverage report" }),
-		Blocked(["Deno Test"]),
-	);
+	// Then: test is blocked by lint; coverage's own condition is false
+	assertEquals(report.all.get("Deno Test"), Blocked(["Deno Lint"]));
+	assertEquals(report.all.get("Show coverage report"), Skipped());
 
 	// Then: the failure step and the always step still ran
 	assertEquals(ran, ["Deno Lint", "Explain failure", "Cleanup coverage data"]);
-	assertEquals(
-		outcomeOf({ report, name: "Explain failure" }),
-		Succeeded(undefined),
-	);
+	assertEquals(report.outcomes.explainFailure, Succeeded(undefined));
 	assertEquals(report.passed, false);
 });
 
@@ -159,12 +136,10 @@ Deno.test("scripts/ci slice: local runs skip coverage, cleanup may fail", async 
 	});
 
 	// Then: coverage is skipped by its predicate, and cleanup still ran
-	assertEquals(outcomeOf({ report, name: "Show coverage report" }), Skipped());
+	assertEquals(report.all.get("Show coverage report"), Skipped());
 	assertEquals(ran, ["Deno Lint", "Deno Test", "Cleanup coverage data"]);
 
 	// Then: cleanup failed, but continueOnError keeps the run passing
-	assert(
-		isolate(outcomeOf({ report, name: "Cleanup coverage data" }), "Failed"),
-	);
+	assert(report.outcomes.cleanup.isFailed());
 	assert(report.passed);
 });

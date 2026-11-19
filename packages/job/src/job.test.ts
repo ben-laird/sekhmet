@@ -1,12 +1,10 @@
-import { isErr, unwrap } from "@sekhmet/enum/result/mini";
 import {
+	always,
 	defineJobs,
-	type Handle,
 	type Job,
-	type JobRun,
-	type NeedResult,
-	type ObserverPlanner,
-	skip,
+	type JobOutcome,
+	type Need,
+	succeeded,
 } from "@sekhmet/job";
 import { assertType, type IsExact } from "@std/testing/types";
 
@@ -14,38 +12,38 @@ interface Ctx {
 	readonly release: boolean;
 }
 
-const { job, observer } = defineJobs<Ctx>();
+type Build = { outDir: string; files: string[] };
+
+const { job } = defineJobs<Ctx>();
 const version = job({ name: "version", run: () => "1.2.0" });
 const build = job({
 	name: "build",
-	run: () => ({ outDir: "dist", files: ["mod.js"] }),
+	run: (): Build => ({ outDir: "dist", files: ["mod.js"] }),
 });
 
 Deno.test("job infers what its run returns", () => {
-	// Given: jobs defined with no annotations
+	// Given: jobs defined with no plan type annotations
 	// When: their types are read
 	// Then: each is a Job of what its run returns, in the defined context
 	assertType<IsExact<typeof version, Job<string, Ctx>>>(true);
-	assertType<
-		IsExact<typeof build, Job<{ outDir: string; files: string[] }, Ctx>>
-	>(true);
+	assertType<IsExact<typeof build, Job<Build, Ctx>>>(true);
 });
 
-Deno.test("run's plan parameter is inferred from plan's return", async (t) => {
-	await t.step("handles resolve to Readonly values, data passes as is", () => {
-		// Given: a plan returning handles and data, with no annotations
-		// When: run destructures its second parameter
-		// Then: each handle arrives as its job's Readonly result
+Deno.test("run's needs are typed by the plan and the runIf", async (t) => {
+	await t.step("under success(), needs arrive as Readonly values", () => {
+		// Given: a plan returning needs and data
+		// When: run receives it
+		// Then: each need is its job's Readonly result, data as is
 		job({
 			name: "publish",
 			plan: (p) => ({ version: p.needs(version), build: p.needs(build), n: 1 }),
-			run: (_t, plan) => {
+			run: (_t, needs) => {
 				assertType<
 					IsExact<
-						typeof plan,
+						typeof needs,
 						{
 							readonly version: string;
-							readonly build: Readonly<{ outDir: string; files: string[] }>;
+							readonly build: Readonly<Build>;
 							readonly n: number;
 						}
 					>
@@ -54,89 +52,126 @@ Deno.test("run's plan parameter is inferred from plan's return", async (t) => {
 		});
 	});
 
-	await t.step("Handle<T> | undefined arrives as T | undefined", () => {
-		// Given: a plan that needs a job only on a condition
+	await t.step("under any other runIf, needs arrive as outcomes", () => {
+		// Given: an always() job
+		// When: run receives its needs
+		// Then: each is the job's JobOutcome
+		job({
+			name: "cleanup",
+			plan: (p) => ({ build: p.needs(build) }),
+			runIf: always(),
+			run: (_t, { build }) => {
+				assertType<IsExact<typeof build, JobOutcome<Readonly<Build>>>>(true);
+			},
+		});
+	});
+
+	await t.step("a needsIf may be absent", () => {
+		// Given: a conditional need
 		// When: run receives it
-		// Then: the field is the result or undefined
+		// Then: it is the value or undefined
 		job({
 			name: "sign",
-			plan: (p) => ({ build: p.context.release ? p.needs(build) : undefined }),
-			run: (_t, { build }) => {
-				assertType<
-					IsExact<
-						typeof build,
-						Readonly<{ outDir: string; files: string[] }> | undefined
-					>
-				>(true);
+			plan: (p) => {
+				const built = p.needs(build);
+				return {
+					built,
+					version: p.needsIf({ job: version, when: succeeded(built) }),
+				};
+			},
+			run: (_t, { version }) => {
+				assertType<IsExact<typeof version, string | undefined>>(true);
 			},
 		});
 	});
 
-	await t.step("a staged async plan infers the same way", () => {
-		// Given: an async plan that awaits a result before declaring needs
-		// When: run receives the plan
-		// Then: p.result is a NeedResult, the returned Err is excluded, the
-		// unwrapped value is data and the handle is resolved
-		job({
-			name: "staged",
-			plan: async (p) => {
-				const versioned = await p.result(version);
-				assertType<IsExact<typeof versioned, NeedResult<string>>>(true);
-				if (isErr(versioned)) return versioned;
-				return { v: unwrap(versioned), build: p.needs(build) };
-			},
-			run: (_t, { v, build }) => {
-				assertType<IsExact<typeof v, string>>(true);
-				assertType<
-					IsExact<typeof build, Readonly<{ outDir: string; files: string[] }>>
-				>(true);
-			},
-		});
-	});
+	await t.step(
+		"needs nested in arrays and records resolve at any depth",
+		() => {
+			// Given: needs in an array of records, and a function beside them
+			// When: run receives them
+			// Then: each need is resolved in place, and the function is kept
+			job({
+				name: "matrix",
+				plan: (p) => {
+					return {
+						rows: [{ label: "v", value: p.needs(version) }],
+						format: (text: string) => text.toUpperCase(),
+					};
+				},
+				run: (_t, { rows, format }) => {
+					assertType<
+						IsExact<
+							typeof rows,
+							readonly { readonly label: string; readonly value: string }[]
+						>
+					>(true);
+					assertType<IsExact<typeof format, (text: string) => string>>(true);
+				},
+			});
+		},
+	);
 
-	await t.step("skip() is excluded from what run receives", () => {
-		// Given: a plan that may skip
-		// When: run receives the plan
-		// Then: Skip is not part of its type
-		job({
-			name: "maybe",
-			plan: (p) => (p.context.release ? { build: p.needs(build) } : skip()),
-			run: (_t, plan) => {
-				assertType<
-					IsExact<
-						typeof plan,
-						{ readonly build: Readonly<{ outDir: string; files: string[] }> }
-					>
-				>(true);
-			},
-		});
-	});
-
-	await t.step("a leaf job's run takes only t", () => {
-		// Given: a job with no plan
-		// When: its run is typed
-		// Then: t is the run's tools in the defined context
+	await t.step("a job without a plan takes only t", () => {
+		// Given: a leaf job
+		// When: its run is read
+		// Then: it needs no second parameter
 		job({
 			name: "leaf",
 			run: (t) => {
-				assertType<IsExact<typeof t, JobRun<Ctx>>>(true);
+				assertType<IsExact<typeof t.context, Ctx>>(true);
 			},
 		});
 	});
 });
 
-Deno.test("resolved plans are Readonly", () => {
-	// Given: a plan with a handle
+Deno.test("a hand-written runIf reads the context and the needs' outcomes", () => {
+	// Given: a predicate runIf
+	// When: it is typed
+	// Then: it gets the context, the cancel flag and outcomes
+	job({
+		name: "report",
+		plan: (p) => ({ build: p.needs(build) }),
+		runIf: ({ context, cancelled, needs }) => {
+			assertType<IsExact<typeof needs.build, JobOutcome<Readonly<Build>>>>(
+				true,
+			);
+			return context.release && !cancelled;
+		},
+		run: () => {},
+	});
+});
+
+Deno.test("resolved needs are Readonly", () => {
+	// Given: a plan with a need
 	job({
 		name: "mutator",
 		plan: (p) => ({ build: p.needs(build) }),
-		run: (_t, plan) => {
-			// When / Then: neither the plan nor a shared result can be reassigned
-			// @ts-expect-error the plan is Readonly
-			plan.build = { outDir: "x", files: [] };
+		run: (_t, needs) => {
+			// When / Then: neither the needs nor a shared result can be reassigned
+			// @ts-expect-error the needs are Readonly
+			needs.build = { outDir: "x", files: [] };
 			// @ts-expect-error a shared result is Readonly
-			plan.build.outDir = "elsewhere";
+			needs.build.outDir = "elsewhere";
 		},
+	});
+});
+
+Deno.test("p.needs returns a Need typed by the job", () => {
+	// Given: a plan
+	job({
+		name: "typed",
+		plan: (p) => {
+			// When: it declares needs
+			const plain = p.needs(version);
+			const guarded = p.needsIf({ job: version, when: succeeded(plain) });
+
+			// Then: each Need carries the job's type and whether it's conditional
+			assertType<IsExact<typeof plain, Need<string, false>>>(true);
+			assertType<IsExact<typeof guarded, Need<string, true>>>(true);
+			return { plain, guarded };
+		},
+		run: () => {},
 	});
 });
 
@@ -172,124 +207,16 @@ Deno.test("Job is covariant in its result, contravariant in its context", () => 
 	const richer: Job<string, Ctx> = loose;
 	// @ts-expect-error a job reading Ctx can't run with any object
 	const poorer: Job<string, object> = wide;
-
-	// Then: the checks hold in the other order too
-	// @ts-expect-error narrowing still rejected after widening was checked
-	const narrowedAgain: Job<"a", Ctx> = widened;
-	const widenedAgain: Job<unknown, Ctx> = narrowed;
-	void [richer, poorer, narrowedAgain, widenedAgain];
+	void [widened, narrowed, richer, poorer];
 });
 
-Deno.test("a plan must be a plain object with string keys", () => {
-	// Given: a symbol, an interface, and a build handle type. Each case names
-	// its plan type, which rules out the leaf overload (it takes one type
-	// argument), so each expected error can only be the plan constraint.
-	const key: unique symbol = Symbol("key");
-	type BuildHandle = Handle<{ outDir: string; files: string[] }>;
-	interface InterfacePlan {
-		build: BuildHandle;
-	}
-
-	// When / Then: tuples, arrays, Maps, class instances and interfaces are rejected
-	// @ts-expect-error a tuple is not a PlanRecord
-	job<readonly [BuildHandle], void>({
-		name: "tuple",
-		plan: (p) => [p.needs(build)] as const,
-		run: () => {},
-	});
-	// @ts-expect-error an array is not a PlanRecord
-	job<number[], void>({ name: "array", plan: () => [1, 2], run: () => {} });
-	// @ts-expect-error a Map is not a PlanRecord
-	job<Map<string, number>, void>({
-		name: "map",
-		plan: () => new Map<string, number>(),
-		run: () => {},
-	});
-	// @ts-expect-error a class instance is not a PlanRecord
-	job<Date, void>({ name: "date", plan: () => new Date(), run: () => {} });
-	// @ts-expect-error an interface has no implicit index signature; use `type`
-	job<InterfacePlan, void>({
-		name: "interface",
-		plan: (p) => ({ build: p.needs(build) }),
-		run: () => {},
-	});
-
-	// When / Then: a symbol key fails StringKeysOnly, at the plan itself
-	job<{ [key]: BuildHandle }, void>({
-		name: "symbol",
-		// @ts-expect-error a symbol key would never be resolved
-		plan: (p) => ({ [key]: p.needs(build) }),
-		run: () => {},
-	});
-
-	// Then: the same calls with a plain record type, or none, are accepted
-	type RecordPlan = { build: BuildHandle };
-	job<RecordPlan, void>({
-		name: "record",
-		plan: (p) => ({ build: p.needs(build) }),
-		run: () => {},
-	});
-	job({ name: "empty", plan: () => ({}), run: () => {} });
-	job({ name: "skipping", plan: () => skip(), run: () => {} });
-});
-
-Deno.test("a plan exits only with skip() or an Err, never an Ok", () => {
-	// Given: a job whose result a plan awaits
-	// When / Then: returning the unnarrowed NeedResult (which may be Ok) is
-	// rejected; the type arguments rule out the leaf overload, so the only
-	// error is the plan constraint
-	// @ts-expect-error a NeedResult that may be Ok is not a PlanExit
-	job<NeedResult<string>, void>({
-		name: "ok-hole",
-		plan: async (p) => await p.result(version),
-		run: () => {},
-	});
-
-	// Then: returning the narrowed Err is accepted
+Deno.test("a success() job can't take a non-success runIf's outcome type", () => {
+	// Given: a default job
 	job({
-		name: "gives-up",
-		plan: async (p) => {
-			const versioned = await p.result(version);
-			if (isErr(versioned)) return versioned;
-			return { v: unwrap(versioned) };
-		},
-		run: () => {},
-	});
-});
-
-Deno.test("an observer's plan can only observe, and its run gets plain data", () => {
-	// Given: an observer that reads the context and observes build's outcome
-	observer({
-		name: "notify",
-		plan: async (p) => {
-			assertType<IsExact<typeof p, ObserverPlanner<Ctx>>>(true);
-			const outcome = await p.outcome(build);
-			return p.context.release ? { failed: outcome.isUnhealthy() } : skip();
-		},
-		// When: its run receives the plan
-		// Then: the data arrives Readonly, without Skip
-		run: (_t, plan) => {
-			assertType<IsExact<typeof plan, { readonly failed: boolean }>>(true);
-		},
-	});
-
-	// When / Then: needs and result don't exist on an observer's p
-	observer({
-		name: "needs",
-		plan: (p) => {
-			// @ts-expect-error an observer can't declare a need
-			p.needs(build);
-			return {};
-		},
-		run: () => {},
-	});
-	observer({
-		name: "result",
-		plan: async (p) => {
-			// @ts-expect-error an observer can't await a result
-			await p.result(version);
-			return {};
-		},
-		run: () => {},
+		name: "strict",
+		plan: (p) => ({ build: p.needs(build) }),
+		// When / Then: treating a value as an outcome is a type error
+		// @ts-expect-error under success(), build is a value, not an outcome
+		run: (_t, { build }) => build.isSucceeded(),
 	});
 });

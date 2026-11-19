@@ -1,201 +1,119 @@
 /**
- * {@linkcode planJobs}: the dry run. It calls every plan and runs no body,
- * so it shows the graph a run would start from.
+ * {@linkcode planJobs}: the dry run. Plans are pure, so it calls every plan
+ * and shows the whole graph, guards and conditions included, running
+ * nothing.
  *
  * @module
  */
 
-import { Enum } from "@sekhmet/enum/core/mini";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import { Ok, type Result } from "@sekhmet/enum/result/mini";
 import { isErr } from "@sekhmet/enum/result/mini/predicates";
-import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+import { unwrap } from "@sekhmet/enum/result/mini/unwrap";
 import { getStructParams } from "@sekhmet/primordials/struct";
-import { settleAll, trackGraph } from "@/src/graph.ts";
+import { planGraph } from "@/src/graph.ts";
 import type { GraphError } from "@/src/graph-error.ts";
-import { type AnyJob, Handle, type Job, nameOf } from "@/src/job.ts";
-import { openPlanner, unexplainedErr } from "@/src/planner.ts";
+import type { Roots } from "@/src/job.ts";
+import type { PlanRecord } from "@/src/need.ts";
 
 /**
- * The variants of a {@linkcode JobPlan}, for type-level work on them.
+ * One job as a dry run found it.
  */
-type Variants =
-	| [
-			kind: "Planned",
-			planned: { readonly needs: readonly string[]; readonly plan: object },
-	  ]
-	| [kind: "Skipped"]
-	| [
-			kind: "Pending",
-			pending: { readonly on: string; readonly needs: readonly string[] },
-	  ]
-	| [kind: "Failed", error: unknown];
-
-export type { Variants as JobPlanVariants };
+export interface PlannedJob {
+	/** Its `runIf`, as a dry run shows it (`success()`, `always()`, `custom`) */
+	readonly runIf: string;
+	/** Whether it was defined with `continueOnError` */
+	readonly continueOnError: boolean;
+	/** What it needs, in the order its plan declared them */
+	readonly needs: readonly PlannedNeed[];
+	/** Its plan's value as returned, needs unresolved */
+	readonly plan: PlanRecord;
+}
 
 /**
- * What a dry run found for one job's plan.
- *
- * - `Planned`: the plan settled; `needs` names the jobs it declared, in
- *   order, and `plan` is its value as returned (handles unresolved).
- * - `Skipped`: the plan returned `skip()`.
- * - `Pending`: the plan awaits `p.result` or `p.outcome` of the job `on`,
- *   which only a real run produces; `needs` names what it declared first.
- * - `Failed`: the plan threw or rejected.
+ * One need of a {@linkcode PlannedJob}.
  */
-export class JobPlan extends Enum<Variants> {}
+export interface PlannedNeed {
+	/** The needed job's name */
+	readonly job: string;
+	/** The guard of a `needsIf` (`build succeeded`), else `undefined` */
+	readonly when: string | undefined;
+}
 
 /**
- * The graph a dry run found: each reachable job's plan, by name, in the order
- * plans reached them, and which of those jobs are observers.
+ * The graph a dry run found.
  */
 export interface JobGraph {
-	/** Each job's plan, by name */
-	readonly jobs: ReadonlyMap<string, JobPlan>;
-	/**
-	 * The names of the jobs defined with `observer`, which a run never
-	 * cancels. An observer's plan usually awaits `p.outcome`, so it is
-	 * typically `Pending` here.
-	 */
-	readonly observers: ReadonlySet<string>;
+	/** Every reachable job, by name, in the order planning reached it */
+	readonly jobs: ReadonlyMap<string, PlannedJob>;
 }
 
 /**
  * What {@linkcode planJobs} takes.
  *
  * @template C The run's context type
+ * @template J The roots
  */
-export interface PlanOptions<C> {
-	/** The roots; every job their plans reach is planned once */
-	readonly jobs: readonly Job<unknown, C>[];
+export interface PlanOptions<C, J extends Roots<C>> {
+	/** The roots, by key; every job their plans reach is planned once */
+	readonly jobs: J;
 	/** The context a run would get, since plans may read it */
 	readonly context: C;
 }
 
 /**
- * The dry run: calls the plan of every job reachable from `jobs` (observers
- * included, listed in `observers`), runs no body, and returns the graph. Plans that await nothing settle at once; a
- * plan that awaits a job's result or outcome is reported `Pending` on that
- * job. Duplicate names and cycles are an `Err`, as in `runJobs`.
+ * The dry run: calls the plan of every job reachable from `jobs`, the
+ * targets of `needsIf` included, runs nothing, and returns the graph.
+ * Duplicate names and cycles are an `Err`, exactly as `runJobs` finds them.
+ * A plan that throws is a bug, and the throw propagates.
  *
- * An `Ok` dry run doesn't promise that `runJobs` finds no cycle: a `Pending`
- * plan's later needs depend on a result only a real run produces, so a
- * cycle closed after a staged await shows up only there.
- *
- * In a dry run `p.result` and `p.outcome` never settle: the plan stays
- * parked at that await, so the code after it, `finally` blocks included,
- * doesn't run there (it does in a real run).
- *
+ * @template C The run's context type
+ * @template J The roots
  * @param options The roots and the context
  * @returns Each job's plan, or why the jobs don't form a graph
  *
  * @example
  * ```ts
- * import { union } from "@sekhmet/enum/core/mini";
  * import { unwrap } from "@sekhmet/enum/result/mini";
- * import { defineJobs, planJobs } from "@sekhmet/job";
+ * import { always, defineJobs, planJobs } from "@sekhmet/job";
  * import { assertEquals } from "@std/assert";
  *
  * const { job } = defineJobs<null>();
  * const build = job({ name: "build", run: () => "dist" });
- * const publish = job({
- * 	name: "publish",
- * 	plan: (p) => ({ outDir: p.needs(build), tag: "latest" }),
+ * const cleanup = job({
+ * 	name: "cleanup",
+ * 	plan: (p) => ({ build: p.needs(build) }),
+ * 	runIf: always(),
  * 	run: () => {},
  * });
  *
- * const graph = unwrap(await planJobs({ jobs: [publish], context: null }));
- * assertEquals([...graph.jobs.keys()], ["publish", "build"]);
+ * const graph = unwrap(planJobs({ jobs: { cleanup }, context: null }));
+ * assertEquals([...graph.jobs.keys()], ["cleanup", "build"]);
+ * assertEquals(graph.jobs.get("cleanup")?.runIf, "always()");
  * ```
  */
-export async function planJobs<C>({
+export function planJobs<C, J extends Roots<C>>({
 	jobs,
 	context,
-}: PlanOptions<C>): Promise<Result<JobGraph, GraphError>> {
-	const graph = trackGraph();
-	const plans = new Map<AnyJob, Promise<JobPlan>>();
-	let graphError: GraphError | undefined;
-
-	for (const root of jobs) visit(root);
-	await settleAll(plans);
-
-	if (graphError !== undefined) return Err(graphError);
-	const found = await Promise.all(
-		[...plans].map(async ([job, plan]) => [nameOf(job), await plan] as const),
-	);
-	const observers = [...plans.keys()].filter((job) => {
-		return getStructParams(job).observer;
+}: PlanOptions<C, J>): Result<JobGraph, GraphError> {
+	const roots = Object.values(jobs).map((job) => {
+		return getStructParams(job).bind(context);
 	});
-	return Ok({
-		jobs: new Map(found),
-		observers: new Set(observers.map(nameOf)),
-	});
+	const planned = planGraph(roots);
+	if (isErr(planned)) return planned;
 
-	function visit(job: Job<unknown, C>): void {
-		if (plans.has(job)) return;
-		const discovered = graph.discover(job);
-		if (isErr(discovered)) {
-			graphError ??= unwrapErr(discovered);
-			return;
-		}
-		// Reserve the slot first: the plan may reach other jobs synchronously
-		const plan = Promise.withResolvers<JobPlan>();
-		plans.set(job, plan.promise);
-		plan.resolve(planOf(job));
-	}
-
-	function depend({ from, to }: { from: AnyJob; to: Job<unknown, C> }): void {
-		const linked = graph.link({ from, to });
-		if (isErr(linked)) {
-			graphError ??= unwrapErr(linked);
-			return;
-		}
-		visit(to);
-	}
-
-	async function planOf(job: Job<unknown, C>): Promise<JobPlan> {
-		const name = nameOf(job);
-		const declared: string[] = [];
-		const parked = Promise.withResolvers<JobPlan>();
-		const park = (on: Job<unknown, C>): Promise<never> => {
-			depend({ from: job, to: on });
-			parked.resolve(
-				new JobPlan("Pending", {
-					on: nameOf(on),
-					needs: [...new Set(declared)],
-				}),
-			);
-			return new Promise<never>(() => {});
+	const found = unwrap(planned).nodes.map(({ job, plan, needs }) => {
+		const planned: PlannedJob = {
+			runIf: job.runIf.describe,
+			continueOnError: job.continueOnError,
+			plan,
+			needs: needs.map(({ need, node }) => {
+				return {
+					job: node.job.name,
+					when: getStructParams(need).guard?.describe,
+				};
+			}),
 		};
-
-		const { planner, close } = openPlanner<C>({
-			job: name,
-			context,
-			needs: (need) => {
-				depend({ from: job, to: need });
-				declared.push(nameOf(need));
-				return new Handle({ job: need });
-			},
-			result: park,
-			outcome: park,
-		});
-
-		const { plan } = getStructParams(job);
-		const settled = plan(planner).then(
-			(stage) => {
-				if (stage.kind === "skip") return new JobPlan("Skipped");
-				// A dry run's p.result never resolves, so no p.result Err exists
-				if (stage.kind === "unmet") {
-					return new JobPlan("Failed", unexplainedErr(name));
-				}
-				return new JobPlan("Planned", {
-					needs: [...new Set(declared)],
-					plan: stage.plan,
-				});
-			},
-			(error: unknown) => new JobPlan("Failed", error),
-		);
-		const planned = await Promise.race([settled, parked.promise]);
-		close();
-		return planned;
-	}
+		return [job.name, planned] as const;
+	});
+	return Ok({ jobs: new Map(found) });
 }
