@@ -446,6 +446,15 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
     the _mini_ primary, which its getter fills with `this`; its methods
     render the exact receiver as `Self`. The bound must stay mini: holding
     the main class makes TypeScript's variance measurement circular (#31).
+- **Enum narrowings.** A returned intersection of one wrap target that has
+  no views with enum `Enum`s only (`catchFailure` returns
+  `Enum<Eliminate<JobOutcomeVariants<Result<T, unknown>>, "Failed">> &
+  JobOutcome<Result<T, unknown>>`) is a narrowing of the target's variants.
+  Main spells the target as its main class with its type arguments as they
+  are (the narrowing names them in mini, so they are not converted), and
+  converts through `Object.assign(Target.fromMini(value), value)`, which
+  keeps the narrowing's type with no cast. Any other member beside a target
+  without views still fails generation.
 - **Functions that return their receiver.** A mini function that returns
   its first argument itself, retyped (`brand`), is declared in the config:
   `identities: ["brand"]` on its feature, `identity: true` on a borrowed
