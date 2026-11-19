@@ -14,6 +14,7 @@ with TypeScript's strictest settings, including `isolatedDeclarations`.
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | [`@sekhmet/enum`](packages/enum/README.md)               | Rust-style enums: `Enum`, `Option`, `Result`, `Ordering`, `Latch` and `Poll`                              |
 | [`@sekhmet/effect`](packages/effect/README.md)           | Effects run on fibers: typed errors, schedulers, concurrency, cancellation with cleanup                   |
+| [`@sekhmet/job`](packages/job/README.md)                 | Named jobs run as a dependency graph, like GitHub Actions: `runIf` conditions and typed outcomes          |
 | [`@sekhmet/vow`](packages/vow/README.md)                 | `Vow`, a promise-like value that resolves synchronously                                                   |
 | [`@sekhmet/matrix`](packages/matrix/README.md)           | `matrix()`, every combination of a set of values, for parameterized tests                                 |
 | [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic)        | Rust-style panics: a reporting hook and a catchUnwind recovery boundary, with no global state             |

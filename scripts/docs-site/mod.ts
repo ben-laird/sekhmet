@@ -21,11 +21,14 @@ export {
 	docLinks,
 	LEADING_SLUG,
 	planSite,
+	prototypeBanner,
 	REPOSITORY_BLOB,
 	readmeLinks,
 	rootLinks,
 	titleOf,
 } from "./src/assemble.ts";
+export type { ContentChanges, ContentTree } from "./src/content-sync.ts";
+export { diffContent, SITE_JSON, siteTree } from "./src/content-sync.ts";
 export type { DocKind, UnknownDocKind } from "./src/doc-kind.ts";
 export {
 	DOC_KIND_HEADINGS,

@@ -224,6 +224,7 @@ sekhmet/
 ├── packages/         # Framework packages
 │   ├── effect/       # Effect system (effects, fibers, runtime, scheduler)
 │   ├── enum/         # Enum framework (core, option, result, latch, poll, ordering)
+│   ├── job/          # CI-runner-style job graphs (plans, runIf conditions, typed outcomes)
 │   ├── matrix/       # Cartesian-product test case generation
 │   ├── panic/        # Panic errors and the panic runtime (hook, catchUnwind)
 │   ├── primordials/  # Core primitives (Struct, Subtle, scoping helpers)
@@ -600,6 +601,7 @@ Use package names as scopes:
 
 - `@sekhmet/effect`
 - `@sekhmet/enum`
+- `@sekhmet/job`
 - `@sekhmet/matrix`
 - `@sekhmet/panic`
 - `@sekhmet/primordials`
@@ -803,7 +805,18 @@ No approval is required. Repository admins can bypass the ruleset.
   block into a rule and a `## kind: …` heading. GitHub shows the frontmatter
   as a table above the page.
   `deno task docs:dev` serves the site that assembles them with every README;
-  `deno task docs:build` builds it.
+  `deno task docs:build` builds it. To see an edit while `docs:dev` runs,
+  re-run `deno task docs:assemble --include-unpublished`: it writes only the
+  pages whose text changed and removes stale ones, so the server hot-updates
+  those pages instead of restarting. The built site, which
+  `.github/workflows/docs.yml` deploys, leaves out unpublished packages
+  (`"publish": false`): they have no JSR page, and links to them point at
+  GitHub. `docs:dev` previews them locally: it passes
+  `--include-unpublished` to `deno task docs:assemble`, so an unpublished
+  package gets its pages and kind-grouped sidebar like any other, without
+  the JSR API link, and each of its pages opens with a "Prototype" warning
+  that it isn't on JSR. Relative links to source files, such as `../mod.ts`,
+  point at the file on GitHub.
 - **Decision logs** are project records, not guides: a package's log lives at
   `docs/decisions/<package>.md` at the repo root (e.g.
   `docs/decisions/schema.md`), outside `packages/`, so neither the docs site

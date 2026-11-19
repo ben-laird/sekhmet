@@ -95,6 +95,15 @@ Packages (`packages/`):
   scheduler)
 - `@sekhmet/enum`: enum framework plus `option`, `result`, `latch`, `poll` and
   `ordering` built on it
+- `@sekhmet/job`: named jobs run as a
+  dependency graph on promises and `AbortSignal`: `defineJobs(factory)`
+  (a context factory building each job's `ctx` from the run's `meta`, with
+  a per-job `Cleanup` stack) and `job` (a pure plan, the job's dependency
+  list; a `runIf` condition; a typed run),
+  `family` (jobs made on the fly, one per key, deduped by identity),
+  `runJobs` over a record of roots, the dry run `planJobs`, and
+  `JobOutcome` with methods (`@sekhmet/job/outcome`, a main/mini feature).
+  Its decision record is `docs/decisions/job.md`
 - `@sekhmet/matrix`: `matrix()` builds the Cartesian product of value arrays for
   parameterized tests
 - `@sekhmet/panic`: `Panic` error, `panic()`/`panicWithoutCause()`, a Rust-style
@@ -129,7 +138,9 @@ Scripts (`scripts/`, unpublished):
   every package's `README.md` and `docs/*.md` into a sidebar per package,
   grouped by each page's Diátaxis `kind` frontmatter (see CONTRIBUTING.md,
   "Documenting your change") (`deno task docs:dev`, `deno task docs:build`; deployed to GitHub Pages by
-  `.github/workflows/docs.yml`). A package's decision log is not a guide: it
+  `.github/workflows/docs.yml`). The deployed build leaves out unpublished
+  packages; `docs:dev` passes `--include-unpublished` to preview them locally,
+  each page under a "Prototype" banner. A package's decision log is not a guide: it
   lives at `docs/decisions/<package>.md` at the repo root, off the site and
   JSR, linked from the package README's design-record line
 - `@sekhmet/dv`: the pinned dv release CLI, run frozen (`deno task dv <args>`,
@@ -282,7 +293,7 @@ fix(@sekhmet/primordials): correct Struct type inference
 **Types**: `feat`, `fix`, `test`, `refactor`, `docs`, `chore`, `perf`
 
 **Scopes**: Use package names: `@sekhmet/effect`, `@sekhmet/enum`,
-`@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/schema`,
+`@sekhmet/job`, `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/schema`,
 `@sekhmet/vow`, `@sekhmet/workflow`, and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`,
 `@sekhmet/dv`, `@sekhmet/dv-plugin`, `@sekhmet/gen-main`, `@sekhmet/playground`,
 `@sekhmet/release` for scripts

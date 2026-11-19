@@ -12,6 +12,7 @@ import type { Exercises } from "../probe.ts";
 export const EXERCISES: Exercises = {
 	"@sekhmet/effect": () => import("./effect.ts"),
 	"@sekhmet/enum": () => import("./enum.ts"),
+	"@sekhmet/job": () => import("./job.ts"),
 	"@sekhmet/matrix": () => import("./matrix.ts"),
 	"@sekhmet/panic": () => import("./panic.ts"),
 	"@sekhmet/primordials": () => import("./primordials.ts"),

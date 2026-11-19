@@ -214,6 +214,12 @@ const ENUM_RESULT: WrapTarget = {
 	from: "@sekhmet/enum/result",
 	mappers: ["map", "mapErr"],
 };
+/** Enum's main `Option`, imported from another package through its entrypoint. */
+const ENUM_OPTION: WrapTarget = {
+	type: "Option",
+	from: "@sekhmet/enum/option",
+	mappers: ["map"],
+};
 const SCHEMA_MAPPERS: readonly (string | undefined)[] = [
 	undefined,
 	"map",
@@ -697,6 +703,22 @@ export const FEATURES: readonly Feature[] = [
 			"const id = or({ left: string(), right: number() }).map(String);",
 			"",
 			'assertEquals(unwrap(id.parseSync(7)), "7");',
+		].join("\n"),
+	},
+	{
+		entrypoint: "@sekhmet/job/outcome",
+		mini: "packages/job/src/outcome/mini/mod.ts",
+		output: "packages/job/src/outcome/main/mod.ts",
+		primary: "JobOutcome",
+		construct: "variant",
+		mappers: ["map"],
+		wraps: [ENUM_OPTION, ENUM_RESULT],
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { Blocked, Succeeded } from "@sekhmet/job/outcome";',
+			"",
+			"assertEquals(Succeeded(2).map((n) => n * 10).value().unwrap(), 20);",
+			'assertEquals(Blocked(["lint"]).toResult().isErr(), true);',
 		].join("\n"),
 	},
 ];

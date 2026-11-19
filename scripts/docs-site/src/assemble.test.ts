@@ -4,6 +4,7 @@ import {
 	describePageError,
 	docLinks,
 	planSite,
+	prototypeBanner,
 	readmeLinks,
 	rootLinks,
 	titleOf,
@@ -37,7 +38,7 @@ Deno.test("readmeLinks points docs/ links at sibling pages", () => {
 		"[a](docs/concepts.md) [b](./docs/recipes.md#x) [c](https://jsr.io/@sekhmet/enum)";
 
 	// When: rewriting it for the site
-	const rewritten = readmeLinks(text);
+	const rewritten = readmeLinks({ text, dir: "enum" });
 
 	// Then: docs links become siblings and the external link is untouched
 	assertEquals(
@@ -46,15 +47,43 @@ Deno.test("readmeLinks points docs/ links at sibling pages", () => {
 	);
 });
 
+Deno.test("readmeLinks points source links at the repository", () => {
+	// Given: a README linking source files the site has no page for, and an anchor
+	const text = "[m](./mod.ts) [o](src/outcome/main/mod.ts#L3) [a](#example)";
+
+	// When: rewriting it for the site
+	const rewritten = readmeLinks({ text, dir: "job" });
+
+	// Then: each source link points at the package's file in the repository
+	assertEquals(
+		rewritten,
+		"[m](https://github.com/ben-laird/sekhmet/blob/main/packages/job/mod.ts) [o](https://github.com/ben-laird/sekhmet/blob/main/packages/job/src/outcome/main/mod.ts#L3) [a](#example)",
+	);
+});
+
 Deno.test("docLinks points the README link at the overview page", () => {
 	// Given: a doc page linking back to its README and to a sibling
 	const text = "[home](../README.md) [next](./recipes.md)";
 
 	// When: rewriting it for the site
-	const rewritten = docLinks(text);
+	const rewritten = docLinks({ text, dir: "enum" });
 
 	// Then: the README becomes the overview page
 	assertEquals(rewritten, "[home](./index.md) [next](./recipes.md)");
+});
+
+Deno.test("docLinks points source links at the repository", () => {
+	// Given: a doc page linking its package's entry point
+	const text = "starting at [`mod.ts`](../mod.ts)";
+
+	// When: rewriting it for the site
+	const rewritten = docLinks({ text, dir: "job" });
+
+	// Then: the link resolves from docs/ to the package's file in the repository
+	assertEquals(
+		rewritten,
+		"starting at [`mod.ts`](https://github.com/ben-laird/sekhmet/blob/main/packages/job/mod.ts)",
+	);
 });
 
 Deno.test("rootLinks points package links at package sections", () => {
@@ -63,7 +92,7 @@ Deno.test("rootLinks points package links at package sections", () => {
 		"[a](packages/enum) [b](./packages/effect/README.md) [c](packages/enum/docs/concepts.md)";
 
 	// When: rewriting it for the site
-	const rewritten = rootLinks(text);
+	const rewritten = rootLinks({ text, offSite: new Set() });
 
 	// Then: each link points into the package's section
 	assertEquals(rewritten, "[a](/enum/) [b](/effect/) [c](/enum/concepts)");
@@ -75,7 +104,7 @@ Deno.test("rootLinks points other relative links at the repository", () => {
 		"[l](LICENSE.md) [c](./CONTRIBUTING.md) [j](https://jsr.io/@sekhmet) [a](#packages)";
 
 	// When: rewriting it for the site
-	const rewritten = rootLinks(text);
+	const rewritten = rootLinks({ text, offSite: new Set() });
 
 	// Then: only the relative file links change, to the repository's files
 	assertEquals(
@@ -116,12 +145,17 @@ Deno.test("planSite groups a package's pages by Diátaxis kind", () => {
 					text: "---\nkind: tutorial\n---\n# Getting started",
 				},
 			],
+			published: true,
 		},
-		{ dir: "empty", readme: undefined, docs: [] },
+		{ dir: "empty", readme: undefined, docs: [], published: true },
 	];
 
 	// When: planning the site
-	const planned = planSite({ rootReadme: "# Sekhmet", packages });
+	const planned = planSite({
+		rootReadme: "# Sekhmet",
+		packages,
+		includeUnpublished: false,
+	});
 	assert(planned.ok);
 	const site = planned.value;
 
@@ -184,11 +218,16 @@ Deno.test("planSite leads each group with getting-started, then sorts by title",
 				},
 				{ name: "a.md", text: "---\nkind: how-to\n---\n# Beta" },
 			],
+			published: true,
 		},
 	];
 
 	// When: planning the site
-	const planned = planSite({ rootReadme: "# Sekhmet", packages });
+	const planned = planSite({
+		rootReadme: "# Sekhmet",
+		packages,
+		includeUnpublished: false,
+	});
 	assert(planned.ok);
 	const site = planned.value;
 
@@ -217,11 +256,16 @@ Deno.test("planSite lists untagged pages after the overview, before the kind gro
 					text: "---\nkind: tutorial\n---\n# Getting started",
 				},
 			],
+			published: true,
 		},
 	];
 
 	// When: planning the site
-	const planned = planSite({ rootReadme: "# Sekhmet", packages });
+	const planned = planSite({
+		rootReadme: "# Sekhmet",
+		packages,
+		includeUnpublished: false,
+	});
 	assert(planned.ok);
 	const site = planned.value;
 
@@ -253,11 +297,16 @@ Deno.test("planSite rejects every page with an invalid kind, naming its file", (
 				{ name: "recipes.md", text: "---\nkind: recipe\n---\n# Recipes" },
 				{ name: "concepts.md", text: "---\nkind: explanation\n# Concepts" },
 			],
+			published: true,
 		},
 	];
 
 	// When: planning the site
-	const planned = planSite({ rootReadme: "# Sekhmet", packages });
+	const planned = planSite({
+		rootReadme: "# Sekhmet",
+		packages,
+		includeUnpublished: false,
+	});
 	assert(!planned.ok);
 	const errors = planned.error;
 
@@ -275,11 +324,16 @@ Deno.test("planSite gives a docs-only package a placeholder overview", () => {
 			dir: "panic",
 			readme: undefined,
 			docs: [{ name: "concepts.md", text: "# Concepts" }],
+			published: true,
 		},
 	];
 
 	// When: planning the site
-	const planned = planSite({ rootReadme: "# Sekhmet", packages });
+	const planned = planSite({
+		rootReadme: "# Sekhmet",
+		packages,
+		includeUnpublished: false,
+	});
 	assert(planned.ok);
 	const site = planned.value;
 
@@ -288,4 +342,194 @@ Deno.test("planSite gives a docs-only package a placeholder overview", () => {
 		site.pages.find((page) => page.path === "panic/index.md")?.text,
 		"# @sekhmet/panic\n\nThis package has no README yet.\n",
 	);
+});
+
+Deno.test("planSite leaves out unpublished packages unless previewing them", () => {
+	// Given: a published package and a prototype marked "publish": false
+	const packages = [
+		{ dir: "enum", readme: "# Enum", docs: [], published: true },
+		{
+			dir: "job",
+			readme: "# Job",
+			docs: [{ name: "guide.md", text: "---\nkind: how-to\n---\n# Guide" }],
+			published: false,
+		},
+	];
+
+	// When: planning the site
+	const planned = planSite({
+		rootReadme: "# Sekhmet",
+		packages,
+		includeUnpublished: false,
+	});
+	assert(planned.ok);
+
+	// Then: the prototype has no pages, no nav entry and no dead JSR link
+	assertEquals(
+		planned.value.pages.map((page) => page.path),
+		["index.md", "enum/index.md"],
+	);
+	assertEquals(
+		planned.value.nav.map((link) => link.text),
+		["enum"],
+	);
+	assertEquals(Object.keys(planned.value.sidebar), ["/enum/"]);
+});
+
+Deno.test("rootLinks points links into unpublished packages at the repository", () => {
+	// Given: the root README linking a published package and an unpublished one
+	const text =
+		"[e](packages/enum/README.md) [j](packages/job/README.md) [g](./packages/job/docs/guide.md)";
+
+	// When: rewriting it with job off the site
+	const rewritten = rootLinks({ text, offSite: new Set(["job"]) });
+
+	// Then: the published package gets its section; job's links go to GitHub
+	assertEquals(
+		rewritten,
+		"[e](/enum/) [j](https://github.com/ben-laird/sekhmet/blob/main/packages/job/README.md) [g](https://github.com/ben-laird/sekhmet/blob/main/packages/job/docs/guide.md)",
+	);
+});
+
+Deno.test("planSite's home page links an unpublished package to the repository", () => {
+	// Given: a root README that links the unpublished job package
+	const packages = [
+		{ dir: "enum", readme: "# Enum", docs: [], published: true },
+		{ dir: "job", readme: "# Job", docs: [], published: false },
+	];
+	const rootReadme =
+		"See [job](packages/job/README.md) and [enum](packages/enum/README.md).";
+
+	// When: planning the site
+	const planned = planSite({ rootReadme, packages, includeUnpublished: false });
+	assert(planned.ok);
+
+	// Then: the home page has no route to the missing /job/ section
+	const home = planned.value.pages.find((page) => page.path === "index.md");
+	assertEquals(
+		home?.text,
+		"See [job](https://github.com/ben-laird/sekhmet/blob/main/packages/job/README.md) and [enum](/enum/).",
+	);
+});
+
+Deno.test("planSite previews unpublished packages under a prototype banner", () => {
+	// Given: a published package and a prototype with a README and tagged guides
+	const packages = [
+		{ dir: "enum", readme: "# Enum", docs: [], published: true },
+		{
+			dir: "job",
+			readme: "# Job\n\nStart at [`mod.ts`](./mod.ts).",
+			docs: [
+				{ name: "recipes.md", text: "---\nkind: how-to\n---\n# Recipes" },
+				{
+					name: "concepts.md",
+					text: "---\nkind: explanation\n---\n# Concepts\n\nSee [`mod.ts`](../mod.ts).",
+				},
+			],
+			published: false,
+		},
+	];
+
+	// When: planning the site with unpublished packages included
+	const planned = planSite({
+		rootReadme: "# Sekhmet",
+		packages,
+		includeUnpublished: true,
+	});
+	assert(planned.ok);
+	const site = planned.value;
+
+	// Then: the prototype gets its pages and nav entry beside the published package
+	assertEquals(
+		site.pages.map((page) => page.path),
+		[
+			"index.md",
+			"enum/index.md",
+			"job/index.md",
+			"job/concepts.md",
+			"job/recipes.md",
+		],
+	);
+	assertEquals(
+		site.nav.map((link) => link.text),
+		["enum", "job"],
+	);
+
+	// Then: each prototype page opens with the banner, after any frontmatter, and the published page has none
+	const banner = prototypeBanner("job");
+	const textOf = (path: string): string | undefined => {
+		return site.pages.find((page) => page.path === path)?.text;
+	};
+	assertEquals(
+		textOf("job/index.md"),
+		`${banner}\n# Job\n\nStart at [\`mod.ts\`](https://github.com/ben-laird/sekhmet/blob/main/packages/job/mod.ts).`,
+	);
+	assertEquals(
+		textOf("job/concepts.md"),
+		`---\nkind: explanation\n---\n${banner}\n# Concepts\n\nSee [\`mod.ts\`](https://github.com/ben-laird/sekhmet/blob/main/packages/job/mod.ts).`,
+	);
+	assertEquals(textOf("enum/index.md"), "# Enum");
+
+	// Then: the prototype's sidebar groups by kind like any package, but links no JSR API
+	assertEquals(site.sidebar["/job/"], [
+		{
+			text: "@sekhmet/job",
+			items: [
+				{ text: "Overview", link: "/job/" },
+				{
+					text: "How-to guides",
+					items: [{ text: "Recipes", link: "/job/recipes" }],
+				},
+				{
+					text: "Explanation",
+					items: [{ text: "Concepts", link: "/job/concepts" }],
+				},
+			],
+		},
+	]);
+	assertEquals(site.sidebar["/enum/"]?.[0]?.items.at(-1), {
+		text: "Reference",
+		items: [apiReferenceLink("enum")],
+	});
+});
+
+Deno.test("planSite's preview links the home page into an unpublished package's pages", () => {
+	// Given: a root README that links the unpublished job package and one of its guides
+	const packages = [
+		{ dir: "enum", readme: "# Enum", docs: [], published: true },
+		{
+			dir: "job",
+			readme: "# Job",
+			docs: [{ name: "recipes.md", text: "---\nkind: how-to\n---\n# Recipes" }],
+			published: false,
+		},
+	];
+	const rootReadme =
+		"See [job](packages/job/README.md), [recipes](packages/job/docs/recipes.md) and [enum](packages/enum/README.md).";
+
+	// When: planning the site with unpublished packages included
+	const planned = planSite({ rootReadme, packages, includeUnpublished: true });
+	assert(planned.ok);
+
+	// Then: the job links point at its site pages, not GitHub
+	const home = planned.value.pages.find((page) => page.path === "index.md");
+	assertEquals(
+		home?.text,
+		"See [job](/job/), [recipes](/job/recipes) and [enum](/enum/).",
+	);
+});
+
+Deno.test("prototypeBanner is a VitePress warning naming the package", () => {
+	// Given: an unpublished package directory
+	const dir = "job";
+
+	// When: building its banner
+	const banner = prototypeBanner(dir);
+
+	// Then: it is a closed warning container saying the package is a local-only prototype
+	assert(banner.startsWith("::: warning Prototype\n"));
+	assert(banner.endsWith("\n:::\n"));
+	assert(banner.includes("`@sekhmet/job` is an unpublished prototype"));
+	assert(banner.includes("isn't on JSR"));
+	assert(banner.includes("`deno task docs:dev`"));
 });

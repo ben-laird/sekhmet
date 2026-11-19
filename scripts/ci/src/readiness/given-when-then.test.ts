@@ -127,6 +127,97 @@ Deno.test("real", () => {
 	);
 });
 
+Deno.test("checkGivenWhenThen ignores a .step() call that isn't on a test context", () => {
+	// Given: a job's run body calling r.step at module level, and one calling
+	// x.step inside a test whose own context is unused
+	const text = `const job = define({
+	run: async (r) => {
+		await r.step({ name: "setup", run: () => {} });
+	},
+});
+Deno.test("runs", async () => {
+	// Given: a job
+	// When: it runs
+	// Then: it works
+	await define({
+		run: async (x) => {
+			await x.step({ name: "inner", run: () => {} });
+		},
+	});
+});`;
+
+	// When: checking it and finding its blocks
+	const findings = check(text);
+	const blocks = testBlocks(sourceViews(text));
+
+	// Then: neither step call is a test step, so nothing is reported
+	assertEquals(findings, []);
+	assertEquals(
+		blocks.map(({ name, children }) => [name, children.length]),
+		[["runs", 0]],
+	);
+});
+
+Deno.test("checkGivenWhenThen ignores a .step() on a name that shadows the test context", () => {
+	// Given: a test whose context is t, and a job body that rebinds t
+	const text = `Deno.test("shadow", async (t) => {
+	// Given: a job
+	// When: it runs
+	// Then: it works
+	await define({
+		run: async (t) => {
+			await t.step({ name: "inner", run: () => {} });
+		},
+	});
+});`;
+
+	// When: finding its blocks
+	const blocks = testBlocks(sourceViews(text));
+
+	// Then: the rebound t's step isn't a test step
+	assertEquals(
+		blocks.map(({ name, children }) => [name, children.length]),
+		[["shadow", 0]],
+	);
+});
+
+Deno.test("checkGivenWhenThen still requires markers on steps of the test context, whatever it's named", () => {
+	// Given: a step on t, and a nested step on a renamed context, both bare
+	const text = `Deno.test("suite", async (t) => {
+	// Given: shared setup
+	await t.step("outer", async (ctx) => {
+		await ctx.step({
+			name: "inner",
+			fn: () => {
+				doSomething();
+			},
+		});
+	});
+	await t.step("bare", () => {
+		doSomething();
+	});
+});
+Deno.test({
+	name: "options",
+	fn: async (context) => {
+		// Given: setup
+		await context.step("renamed", () => {
+			doSomething();
+		});
+	},
+});`;
+
+	// When: checking it
+	const findings = check(text);
+
+	// Then: every bare step is reported, the renamed contexts' included
+	assertEquals(findings, [
+		"4: t.step is missing // When:, // Then: comments",
+		'11: t.step "bare" is missing // When:, // Then: comments',
+		'19: t.step "renamed" is missing // When:, // Then: comments',
+	]);
+});
+
 Deno.test("markerComments reads bare and combined markers", () => {
 	// Given: a bare Given, a combined When/Then and a prose comment
 	const text = "// Given\n// When/Then: both\n// note: Then";

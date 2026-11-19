@@ -1,0 +1,106 @@
+# @sekhmet/job
+
+Named jobs that run as a dependency graph, in the style of GitHub Actions
+and other CI runners, built on the language's own promises and
+`AbortSignal`. A job pairs a pure **plan**, its dependency list, with a
+**run**, which receives that list with each need resolved. A **`runIf`**
+decides, once the needs settle, whether the run is called. Each job runs
+once per run, however many jobs need it, and ends with a `JobOutcome`:
+`Succeeded`, `Failed`, `Skipped`, `Blocked` or `Cancelled`.
+
+## Install
+
+The package is published on [JSR](https://jsr.io/@sekhmet/job).
+
+```sh
+deno add jsr:@sekhmet/job
+```
+
+For Node.js, Bun and other npm-compatible runtimes, install through JSR's npm
+compatibility layer:
+
+```sh
+npx jsr add @sekhmet/job      # npm
+pnpm dlx jsr add @sekhmet/job # pnpm
+yarn dlx jsr add @sekhmet/job # yarn
+bunx jsr add @sekhmet/job     # bun
+```
+
+## Example
+
+```ts
+import { unwrap } from "@sekhmet/enum/result/mini";
+import { always, Blocked, defineJobs, runJobs } from "@sekhmet/job";
+import { assertEquals } from "@std/assert";
+
+const { job } = defineJobs((_meta: { readonly log: string[] }) => ({}));
+
+const lint = job({
+	name: "lint",
+	run: (): void => {
+		throw new Error("unused variable");
+	},
+});
+
+const build = job({ name: "build", run: () => "dist" });
+
+const deploy = job({
+	name: "deploy",
+	plan: (p) => ({ linted: p.needs(lint), site: p.needs(build) }),
+	run: (r, { site }) => r.meta.log.push(`deployed ${site}`),
+});
+
+const cleanup = job({
+	name: "cleanup",
+	plan: (p) => ({ deploy: p.needs(deploy) }),
+	runIf: always(),
+	run: (r, { deploy }) => {
+		r.meta.log.push(
+			`cleaned up after ${deploy.isBlocked() ? "a block" : "a deploy"}`,
+		);
+	},
+});
+
+const log: string[] = [];
+const report = unwrap(
+	await runJobs({ jobs: { deploy, cleanup }, meta: { log } }),
+);
+
+assertEquals(report.outcomes.deploy, Blocked(["lint"]));
+assertEquals(log, ["cleaned up after a block"]);
+assertEquals(report.passed, false);
+```
+
+## Learn more
+
+- **Tutorial:** [Getting started](./docs/getting-started.md) builds a deploy
+  pipeline step by step: jobs that need each other, a failure, a cleanup,
+  and the typed report.
+- **How-to guides:** [Recipes](./docs/recipes.md) for needing a job only
+  when another succeeded, cleaning up or notifying after a failure, cleaning
+  up resources, writing
+  your own `runIf`, generating jobs from data with `family`, previewing a
+  run, cancelling a run, handing an outcome to `Result` code, reporting
+  progress with `r.step`, and matching on an outcome.
+- **Explanation:** [Concepts](./docs/concepts.md) covers plan and run,
+  the three lifetimes (`meta`, a job's context and cleanup, steps),
+  conditions as data and the GitHub Actions mapping, once per run, the
+  outcome algebra, planning before running, cancellation, and how job
+  differs from `@sekhmet/effect`.
+- **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/job/doc)
+  documents every export.
+
+The guides are also on the
+[docs site](https://ben-laird.github.io/sekhmet/job/).
+
+## Design record
+
+The
+[decision record](https://github.com/ben-laird/sekhmet/blob/main/docs/decisions/job.md)
+keeps the history of the package's design decisions and the alternatives they
+replaced.
+
+## License
+
+MIT. See
+[LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/job/LICENSE.md).
