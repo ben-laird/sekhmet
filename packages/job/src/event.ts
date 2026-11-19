@@ -5,7 +5,7 @@
  */
 
 import { Enum } from "@sekhmet/enum/core/mini";
-import type { JobOutcome } from "@/src/outcome.ts";
+import type { JobOutcome } from "@/src/outcome/main/mod.ts";
 
 /**
  * The variants of a {@linkcode JobEvent}, for type-level work on them.

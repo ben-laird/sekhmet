@@ -9,10 +9,9 @@ import { isolate } from "@sekhmet/enum/core/mini";
 import {
 	Blocked,
 	Cancelled,
-	isUnhealthy,
 	type JobOutcome,
 	Skipped,
-} from "@/src/outcome.ts";
+} from "@/src/outcome/main/mod.ts";
 
 /**
  * A settled need: the needed job's name and outcome.
@@ -41,7 +40,7 @@ export interface SettledNeed {
 export function decideFromNeeds(
 	needs: readonly SettledNeed[],
 ): JobOutcome<never> | undefined {
-	const unhealthy = needs.filter(({ outcome }) => isUnhealthy(outcome));
+	const unhealthy = needs.filter(({ outcome }) => outcome.isUnhealthy());
 	const blockedBy = [...new Set(unhealthy.map(({ name }) => name))];
 	if (blockedBy.length > 0) return Blocked(blockedBy);
 	if (needs.some(({ outcome }) => isolate(outcome, "Cancelled"))) {

@@ -13,7 +13,6 @@ import {
 	DuplicateName,
 	defineJobs,
 	type GraphError,
-	isUnhealthy,
 	type Job,
 	type JobEvent,
 	type JobOutcome,
@@ -212,8 +211,7 @@ Deno.test("a failed need blocks its dependents, transitively", async () => {
 
 	// Then: the failure is a value, never rethrown
 	const lintOutcome = outcomeOf({ report: result, name: "lint" });
-	assert(isolate(lintOutcome, "Failed"));
-	const lintError = union(lintOutcome);
+	const lintError = lintOutcome.error().unwrap();
 	assertInstanceOf(lintError, Error);
 	assertEquals(lintError.message, "unused variable");
 
@@ -266,8 +264,7 @@ Deno.test("a plan that throws fails its job", async () => {
 
 	// Then: the job Failed with the plan's error
 	const outcome = outcomeOf({ report, name: "broken" });
-	assert(isolate(outcome, "Failed"));
-	const error = union(outcome);
+	const error = outcome.error().unwrap();
 	assertInstanceOf(error, Error);
 	assertEquals(error.message, "bad plan");
 });
@@ -802,8 +799,7 @@ Deno.test("an untyped caller's non-plain plan panics, failing its job", async ()
 	// Then: each job Failed with a NonPlainPlan panic instead of misresolving
 	for (const name of ["array", "symbol"]) {
 		const outcome = outcomeOf({ report, name });
-		assert(isolate(outcome, "Failed"));
-		const panic = union(outcome);
+		const panic = outcome.error().unwrap();
 		assertInstanceOf(panic, Panic);
 		assertEquals(panic.name, "Panic (NonPlainPlan)");
 	}
@@ -953,8 +949,7 @@ Deno.test("a handle smuggled from another plan panics when resolved", async () =
 
 	// Then: resolving the undeclared handle panicked, failing b
 	const outcome = outcomeOf({ report, name: "b" });
-	assert(isolate(outcome, "Failed"));
-	const panic = union(outcome);
+	const panic = outcome.error().unwrap();
 	assertInstanceOf(panic, Panic);
 	assertEquals(panic.name, "Panic (UndeclaredHandle)");
 });
@@ -1064,7 +1059,7 @@ Deno.test("observers survive cancellation, as always() does", async (t) => {
 		const notify = observer({
 			name: "notify",
 			plan: async (p) => {
-				return isUnhealthy(await p.outcome(build)) ? {} : skip();
+				return (await p.outcome(build)).isUnhealthy() ? {} : skip();
 			},
 			run: (t) => {
 				sawAbort = t.signal.aborted;
@@ -1211,8 +1206,7 @@ Deno.test("an observer's p refuses needs and result at run time", async (t) => {
 			const outcome = await misuse(method);
 
 			// Then: an ObserverDependency panic failed the observer
-			assert(isolate(outcome, "Failed"));
-			const panic = union(outcome);
+			const panic = outcome.error().unwrap();
 			assertInstanceOf(panic, Panic);
 			assertEquals(panic.name, "Panic (ObserverDependency)");
 		});
@@ -1291,8 +1285,7 @@ Deno.test("an Err no unmet p.result produced fails the plan's job", async () => 
 
 	// Then: nothing explains the Err, so the job Failed with a panic
 	const outcome = outcomeOf({ report, name: "forged" });
-	assert(isolate(outcome, "Failed"));
-	const panic = union(outcome);
+	const panic = outcome.error().unwrap();
 	assertInstanceOf(panic, Panic);
 	assertEquals(panic.name, "Panic (UnexplainedErr)");
 });

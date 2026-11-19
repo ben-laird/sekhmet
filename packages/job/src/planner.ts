@@ -7,7 +7,7 @@
 import { Err } from "@sekhmet/enum/result/mini";
 import { Panic, panic } from "@sekhmet/panic/mini/core";
 import { Handle, nameOf, type Planner } from "@/src/job.ts";
-import { Cancelled } from "@/src/outcome.ts";
+import { Cancelled } from "@/src/outcome/main/mod.ts";
 
 /**
  * The cause of a panic for a `p` used after its plan settled.

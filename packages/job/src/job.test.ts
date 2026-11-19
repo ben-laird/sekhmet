@@ -2,7 +2,6 @@ import { isErr, unwrap } from "@sekhmet/enum/result/mini";
 import {
 	defineJobs,
 	type Handle,
-	isUnhealthy,
 	type Job,
 	type JobRun,
 	type NeedResult,
@@ -265,7 +264,7 @@ Deno.test("an observer's plan can only observe, and its run gets plain data", ()
 		plan: async (p) => {
 			assertType<IsExact<typeof p, ObserverPlanner<Ctx>>>(true);
 			const outcome = await p.outcome(build);
-			return p.context.release ? { failed: isUnhealthy(outcome) } : skip();
+			return p.context.release ? { failed: outcome.isUnhealthy() } : skip();
 		},
 		// When: its run receives the plan
 		// Then: the data arrives Readonly, without Skip

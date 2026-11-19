@@ -27,7 +27,7 @@ import {
 	type JobOutcome,
 	Skipped,
 	Succeeded,
-} from "@/src/outcome.ts";
+} from "@/src/outcome/main/mod.ts";
 import { openPlanner, unexplainedErr } from "@/src/planner.ts";
 import { decideFromNeeds, passed } from "@/src/verdict.ts";
 

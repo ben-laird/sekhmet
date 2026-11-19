@@ -10,7 +10,7 @@ import { Result } from "@sekhmet/enum/result/mini";
 import { isErr } from "@sekhmet/enum/result/mini/predicates";
 import { panic } from "@sekhmet/panic/mini/core";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
-import type { JobOutcome } from "@/src/outcome.ts";
+import type { JobOutcome } from "@/src/outcome/main/mod.ts";
 
 /**
  * A named unit of work in a job graph: a plan that declares what it needs,

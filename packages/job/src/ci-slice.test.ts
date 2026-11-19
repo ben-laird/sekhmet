@@ -11,7 +11,6 @@ import { isErr, unwrap } from "@sekhmet/enum/result/mini";
 import {
 	Blocked,
 	defineJobs,
-	isUnhealthy,
 	type JobOutcome,
 	type RunReport,
 	runJobs,
@@ -67,7 +66,7 @@ const coverage = job({
 // unhealthy, else skipped. An observer, so a cancelled run still runs it.
 const explainFailure = observer({
 	name: "Explain failure",
-	plan: async (p) => (isUnhealthy(await p.outcome(test)) ? {} : skip()),
+	plan: async (p) => ((await p.outcome(test)).isUnhealthy() ? {} : skip()),
 	run: stub("Explain failure"),
 });
 

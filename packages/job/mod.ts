@@ -72,15 +72,16 @@ export {
 	type UnmetNeed,
 } from "./src/job.ts";
 export {
+	type AllValues,
+	all,
 	Blocked,
 	Cancelled,
 	Failed,
-	isUnhealthy,
 	JobOutcome,
 	type JobOutcomeVariants,
 	Skipped,
 	Succeeded,
-} from "./src/outcome.ts";
+} from "./src/outcome/main/mod.ts";
 export {
 	type JobGraph,
 	JobPlan,
