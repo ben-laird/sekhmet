@@ -1,3 +1,4 @@
+import { type FunctionBinding, functionBindings } from "./bindings.ts";
 import type { Finding } from "./finding.ts";
 import { lineAt, type SourceViews } from "./source.ts";
 
@@ -25,38 +26,69 @@ export interface TestBlock {
 }
 
 const TEST_CALL = /\bDeno\.test(?:\.only|\.ignore)?\s*\(/g;
-// A step's first argument is its name or its options object
-const STEP_CALL = /\b[A-Za-z_$][\w$]*\.step\s*\(\s*(?=["'`{])/g;
+// A `.step(` call on a plain identifier (its receiver), whose first argument
+// is a name or an options object
+const STEP_CALL = /(?<![\w$.])([A-Za-z_$][\w$]*)\.step\s*\(\s*(?=["'`{])/g;
 // `// Given:` or a bare `// Given`, not prose such as `// When the queue drains`
 const MARKER_COMMENT =
 	/\/\/[ \t]*((?:Given|When|Then)(?:[ \t]*(?:\/|&|,|and)[ \t]*(?:Given|When|Then))*)[ \t]*(?::|\n|$)/g;
 
 /**
  * The test and step calls in a test file, as a forest of top-level tests.
+ *
+ * A step is a `.step(…)` call on the test context: the first parameter of
+ * the callback of an enclosing `Deno.test` or step, whatever it's named,
+ * and not rebound by a function in between. Any other `.step(…)` (a job's
+ * `r.step({ … })` in a run body, say) is ordinary code.
  */
 export function testBlocks(views: SourceViews): TestBlock[] {
-	const calls: TestBlock[] = [];
-	for (const [pattern, kind] of [
-		[TEST_CALL, "test"],
-		[STEP_CALL, "step"],
-	] as const) {
-		for (const match of views.structure.matchAll(pattern)) {
-			const start = views.structure.indexOf("(", match.index);
-			const end = matchingParen({ text: views.structure, open: start });
-			const name = /^\(\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1/.exec(
-				views.code.slice(start),
-			)?.[2];
-			calls.push({
-				kind,
-				...(name === undefined ? {} : { name }),
-				start,
-				end,
-				children: [],
-			});
-		}
-	}
+	const { structure } = views;
+	const functions = functionBindings(structure);
+	const contexts = new Set<FunctionBinding>();
 
-	calls.sort((a, b) => a.start - b.start);
+	const block = ({
+		kind,
+		index,
+	}: {
+		kind: TestBlock["kind"];
+		index: number;
+	}): TestBlock => {
+		const start = structure.indexOf("(", index);
+		const end = matchingParen({ text: structure, open: start });
+		const name = /^\(\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1/.exec(
+			views.code.slice(start),
+		)?.[2];
+		// The callback is the first function in the call's arguments
+		const callback = functions.find((fn) => fn.start > start && fn.start < end);
+		if (callback !== undefined) contexts.add(callback);
+		return {
+			kind,
+			...(name === undefined ? {} : { name }),
+			start,
+			end,
+			children: [],
+		};
+	};
+
+	const tests = [...structure.matchAll(TEST_CALL)].map((match) => {
+		return block({ kind: "test", index: match.index });
+	});
+	// In source order, so an outer step's callback is known before its steps
+	const steps = [...structure.matchAll(STEP_CALL)].flatMap((match) => {
+		const receiver = match[1] ?? "";
+		const binder = innermostBinder({
+			functions,
+			name: receiver,
+			at: match.index,
+		});
+		const onContext =
+			binder !== undefined &&
+			contexts.has(binder) &&
+			binder.params[0] === receiver;
+		return onContext ? [block({ kind: "step", index: match.index })] : [];
+	});
+
+	const calls = [...tests, ...steps].sort((a, b) => a.start - b.start);
 	const roots: TestBlock[] = [];
 	const open: TestBlock[] = [];
 	for (const call of calls) {
@@ -155,6 +187,25 @@ export function checkGivenWhenThen({
 
 	for (const root of testBlocks(views)) visit(root, new Set());
 	return findings;
+}
+
+/**
+ * The innermost function whose body holds `at` and that binds `name` as a
+ * parameter: where a use of `name` at `at` gets its value.
+ */
+function innermostBinder({
+	functions,
+	name,
+	at,
+}: {
+	functions: readonly FunctionBinding[];
+	name: string;
+	at: number;
+}): FunctionBinding | undefined {
+	return functions
+		.filter((fn) => fn.bodyStart <= at && at < fn.bodyEnd)
+		.filter((fn) => fn.params.includes(name))
+		.at(-1);
 }
 
 /** Index of the `)` matching the `(` at `open`, or the text's end. */
