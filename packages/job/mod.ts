@@ -1,7 +1,7 @@
 /**
- * `@sekhmet/job` (prototype, unpublished): named jobs run as a dependency
- * graph, in the style of GitHub Actions and other CI runners, on the
- * language's own promises and `AbortSignal`.
+ * `@sekhmet/job`: named jobs run as a dependency graph, in the style of
+ * GitHub Actions and other CI runners, on the language's own promises and
+ * `AbortSignal`.
  *
  * - {@linkcode defineJobs} takes a context factory, which fixes the run's
  *   metadata type (`meta`) and builds each job's own context (`ctx`) just
