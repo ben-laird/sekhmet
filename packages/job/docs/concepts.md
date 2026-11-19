@@ -239,6 +239,10 @@ and a hand-written `runIf` that allows it still run, with `t.signal`
 already aborted. Whether a job survives a cancel is decided by a value you
 can read, not by when it happened to start.
 
+A `runIf` other than `success()` that is false normally makes its job
+`Skipped`. Once a bug (a throwing guard, `runIf` or `onEvent`) has wound the
+run down, it makes the job `Cancelled` instead.
+
 A body that throws after the abort ends `Cancelled` only if it threw the
 abort itself: the signal's `reason`, or an `AbortError` such as `fetch`
 rejects with. Any other error is `Failed`, so a real bug hit while winding

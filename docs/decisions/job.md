@@ -219,6 +219,11 @@ sketched in the playground first, then implemented on `feat/job` (#67).
   reports `Skipped`. To be confirmed by dogfooding.
 - **A guarded need that's pulled in and fails blocks its dependent**, as in
   GitHub Actions.
+  - _Note (2026-11-19):_ the comparison is loose. What matches GitHub Actions
+    is the blocking: a failed need blocks a `success()` job. GitHub Actions
+    has no conditional needs, so `needsIf` itself has no counterpart, as the
+    [concepts page](../../packages/job/docs/concepts.md#the-github-actions-mapping)
+    says.
 - **Use cases for our own pipelines** (worked in
   `packages/job/src/pipelines.test.ts`): the `deno task ci` graph; release as
   one graph generated from the workspace's imports; and compat's runtime list
