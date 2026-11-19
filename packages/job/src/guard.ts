@@ -41,7 +41,8 @@ import type { Guard, Need } from "@/src/need.ts";
 export function succeeded<T>(need: Need<T, boolean>): Guard {
 	return {
 		describe: `${nameOf(need)} succeeded`,
-		test: (view) => view.outcome(need)?.isSucceeded() === true,
+		reads: [need],
+		test: (view) => view.outcome(need).isSucceeded(),
 	};
 }
 
@@ -83,7 +84,8 @@ export function succeeded<T>(need: Need<T, boolean>): Guard {
 export function failed<T>(need: Need<T, boolean>): Guard {
 	return {
 		describe: `${nameOf(need)} failed`,
-		test: (view) => view.outcome(need)?.isFailed() === true,
+		reads: [need],
+		test: (view) => view.outcome(need).isFailed(),
 	};
 }
 
@@ -142,7 +144,8 @@ export function succeededWith<T>({
 }: SucceededWithOptions<T>): Guard {
 	return {
 		describe: `${nameOf(need)} succeeded with ${describe}`,
-		test: (view) => view.outcome(need)?.isSucceededAnd(where) === true,
+		reads: [need],
+		test: (view) => view.outcome(need).isSucceededAnd(where),
 	};
 }
 

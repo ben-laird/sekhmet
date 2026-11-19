@@ -4,7 +4,9 @@ import {
 	DuplicateName,
 	defineJobs,
 	planJobs,
+	succeeded,
 	succeededWith,
+	UndeclaredGuardRead,
 } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
@@ -82,4 +84,31 @@ Deno.test("a dry run finds duplicate names, as a run does", () => {
 
 	// Then: DuplicateName
 	assertEquals(unwrapErr(result), DuplicateName("build"));
+});
+
+Deno.test("a dry run reports a guard reading outside its plan", () => {
+	// Given: a guard reading version, which the plan leaves out
+	const version = job({ name: "version", run: () => "1.2.0" });
+	const sign = job({ name: "sign", run: () => "sig" });
+	const publish = job({
+		name: "publish",
+		plan: (p) => {
+			const v = p.needs(version);
+			return { sign: p.needsIf({ job: sign, when: succeeded(v) }) };
+		},
+		run: () => {},
+	});
+
+	// When: it is planned
+	const result = planJobs({ jobs: { publish }, context: { release: true } });
+
+	// Then: UndeclaredGuardRead, as a run would find
+	assertEquals(
+		unwrapErr(result),
+		UndeclaredGuardRead({
+			job: "publish",
+			guard: "version succeeded",
+			read: "version",
+		}),
+	);
 });

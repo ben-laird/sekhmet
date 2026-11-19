@@ -14,6 +14,7 @@ import {
 	DuplicateKey,
 	DuplicateName,
 	type GraphError,
+	UndeclaredGuardRead,
 } from "@/src/graph-error.ts";
 import type { BoundJob, JobId } from "@/src/job.ts";
 import type { AnyNeed, PlanRecord } from "@/src/need.ts";
@@ -69,8 +70,8 @@ export interface NonPlainPlanCause {
  * A plan that throws is a bug: the throw propagates, before any job runs.
  *
  * @param roots The roots, bound to the run's context
- * @returns The graph, or the first duplicate name, duplicate key or cycle
- *   found
+ * @returns The graph, or the first duplicate name, duplicate key, guard
+ *   read outside its plan, or cycle found
  */
 export function planGraph(
 	roots: readonly BoundJob<unknown>[],
@@ -108,8 +109,11 @@ export function planGraph(
 		known.set(job.id.family, family.set(job.id.key, node));
 		nodes.push(node);
 
+		const declared = collectNeeds(node.plan);
+		error ??= undeclaredRead({ job, needs: declared });
+
 		path.push(node);
-		for (const need of collectNeeds(node.plan)) {
+		for (const need of declared) {
 			const target = visit(getStructParams(need).job);
 			if (target !== undefined) needs.push({ need, node: target });
 		}
@@ -120,6 +124,53 @@ export function planGraph(
 	const planned = roots.flatMap((root) => visit(root) ?? []);
 	if (error !== undefined) return Err(error);
 	return Ok({ roots: planned, nodes });
+}
+
+/**
+ * The first read of a `needsIf` guard in `needs` that isn't, by `JobId`, an
+ * unconditional need among them, as an `UndeclaredGuardRead` error.
+ */
+function undeclaredRead({
+	job,
+	needs,
+}: {
+	readonly job: BoundJob<unknown>;
+	readonly needs: readonly AnyNeed[];
+}): GraphError | undefined {
+	const unconditional = needs.flatMap((need) => {
+		const { guard, job: target } = getStructParams(need);
+		return guard === undefined ? [target.id] : [];
+	});
+	for (const need of needs) {
+		const { guard } = getStructParams(need);
+		if (guard === undefined) continue;
+		for (const read of guard.reads) {
+			const { id, name } = getStructParams(read).job;
+			if (unconditional.some((known) => sameJob({ a: known, b: id }))) continue;
+			return UndeclaredGuardRead({
+				job: job.name,
+				guard: guard.describe,
+				read: name,
+			});
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Whether two `JobId`s name the same job: the same family and key.
+ *
+ * @param ids The two identities
+ * @returns `true` if they are the same job
+ */
+export function sameJob({
+	a,
+	b,
+}: {
+	readonly a: JobId;
+	readonly b: JobId;
+}): boolean {
+	return a.family === b.family && a.key === b.key;
 }
 
 /** Calls a job's plan, and panics unless it returned a plain object. */

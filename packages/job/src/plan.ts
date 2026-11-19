@@ -63,8 +63,8 @@ export interface PlanOptions<C, J extends Roots<C>> {
 /**
  * The dry run: calls the plan of every job reachable from `jobs`, the
  * targets of `needsIf` included, runs nothing, and returns the graph.
- * Duplicate names, duplicate family keys and cycles are an `Err`, exactly
- * as `runJobs` finds them.
+ * Every `GraphError` (a duplicate name or family key, a guard reading
+ * outside its plan, a cycle) is an `Err`, exactly as `runJobs` finds it.
  * A plan that throws is a bug, and the throw propagates.
  *
  * @template C The run's context type

@@ -148,9 +148,13 @@ assertEquals(report.passed, true);
     types.
   - Guards are data that describe themselves, so a dry run can show them:
     `succeeded(need)`, `failed(need)` and
-    `succeededWith({ need, where, describe })`. A guard reads only the
-    plan's unconditional needs, which settle first, so the need it reads must
-    itself sit in the plan.
+    `succeededWith({ need, where, describe })`. A guard declares the needs
+    it reads (`reads`; the built-ins fill it in), and it may read only the
+    unconditional needs of its own plan, which settle first, as GitHub
+    Actions' `if:` sees only `needs:`. Reading one left out of the plan, or
+    one that is itself guarded, is an `UndeclaredGuardRead` graph error
+    before anything runs, and a hand-written guard whose `test` asks for
+    anything outside its `reads` panics.
   - `runIf` is `success()` (the default), `failure()` (some need is
     unhealthy), `cancelled()`, `always()`, or a hand-written
     `({ context, cancelled, needs }) => boolean`.
@@ -168,8 +172,9 @@ assertEquals(report.passed, true);
   - Every plan is called first, so a `GraphError` is an `Err` before
     anything starts, never a throw or a hang: `DuplicateName` (two different
     jobs share a name), `DuplicateKey` (a `family` built two different jobs,
-    by name, for one key, which would otherwise silently run only the first)
-    or `Cycle`. A plan that throws is a bug, rethrown before anything starts.
+    by name, for one key, which would otherwise silently run only the first),
+    `UndeclaredGuardRead` (a `needsIf` guard reads a need that isn't an
+    unconditional need of its own plan) or `Cycle`. A plan that throws is a bug, rethrown before anything starts.
   - Under `success()`, a job whose needs aren't all successful ends with
     exactly the outcome `all` gives them: `Blocked` (naming the unhealthy
     needs), `Cancelled` or `Skipped`. Any other `runIf` that is false makes

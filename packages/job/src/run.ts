@@ -13,10 +13,18 @@ import { getStructParams } from "@sekhmet/primordials/struct";
 import type { NeedOutcomes } from "@/src/condition.ts";
 import { unerased } from "@/src/erasure.ts";
 import { JobEvent } from "@/src/event.ts";
-import { type GraphNode, type NodeNeed, planGraph } from "@/src/graph.ts";
-import type { GraphError } from "@/src/graph-error.ts";
+import {
+	type GraphNode,
+	type NodeNeed,
+	planGraph,
+	sameJob,
+} from "@/src/graph.ts";
+import type {
+	GraphError,
+	UndeclaredGuardReadCause,
+} from "@/src/graph-error.ts";
 import type { BoundJob, Job, Roots, StepDefinition } from "@/src/job.ts";
-import type { AnyNeed, OutcomeView } from "@/src/need.ts";
+import type { AnyNeed, Guard, OutcomeView } from "@/src/need.ts";
 import {
 	Cancelled,
 	Failed,
@@ -97,9 +105,9 @@ export interface JobMisuseCause {
  * jobs need it.
  *
  * The runner first calls every reachable plan (they are pure), so a
- * duplicate name, a duplicate family key or a cycle is an `Err` before
- * anything starts, and a plan
- * that throws is rethrown before anything starts. Then each job:
+ * `GraphError` (a duplicate name or family key, a guard reading outside its
+ * plan, a cycle) is an `Err` before anything starts, and a plan that throws
+ * is rethrown before anything starts. Then each job:
  *
  * 1. waits for its unconditional needs;
  * 2. tests each `needsIf` guard against them, and waits for those it pulls
@@ -257,14 +265,42 @@ export async function runJobs<C, J extends Roots<C>>({
 		};
 
 		await Promise.all(needs.filter((need) => !isGuarded(need)).map(pull));
-		const view: OutcomeView = {
-			cancelled: cancel.signal.aborted,
-			outcome: (need) => unerased(settled.get(need)),
+		const cancelledBeforeGuards = cancel.signal.aborted;
+		// A guard's view answers only its declared reads, which the graph
+		// checked are unconditional needs of this plan, settled by now
+		const viewFor = (guard: Guard): OutcomeView => {
+			return {
+				cancelled: cancelledBeforeGuards,
+				outcome: (read) => {
+					const { id, name } = getStructParams(read).job;
+					const declared = guard.reads.some((known) => {
+						return sameJob({ a: getStructParams(known).job.id, b: id });
+					});
+					const settledRead = needs.find(({ need, node }) => {
+						return (
+							!isGuarded({ need, node }) && sameJob({ a: node.job.id, b: id })
+						);
+					});
+					const outcome =
+						settledRead === undefined
+							? undefined
+							: settled.get(settledRead.need);
+					if (!declared || outcome === undefined) {
+						return panic<UndeclaredGuardReadCause>({
+							name: "UndeclaredGuardRead",
+							message: `a guard of job "${job.name}" (${guard.describe}) read "${name}", which it didn't declare in its reads`,
+							cause: { job: job.name, guard: guard.describe, read: name },
+						});
+					}
+					return unerased(outcome);
+				},
+			};
 		};
 		await Promise.all(
 			needs.filter(isGuarded).map(async (need) => {
 				const guard = getStructParams(need.need).guard;
-				if (decide(() => guard?.test(view) === true)) await pull(need);
+				if (guard === undefined) return;
+				if (decide(() => guard.test(viewFor(guard)))) await pull(need);
 			}),
 		);
 

@@ -19,6 +19,7 @@ import {
 	type Job,
 	type JobEvent,
 	type JobOutcome,
+	type OutcomeView,
 	type PlanRecord,
 	type Roots,
 	type RunReport,
@@ -27,6 +28,7 @@ import {
 	Succeeded,
 	succeeded,
 	succeededWith,
+	UndeclaredGuardRead,
 } from "@sekhmet/job";
 import { Panic } from "@sekhmet/panic/mini/core";
 import { assert, assertEquals, assertInstanceOf } from "@std/assert";
@@ -304,7 +306,10 @@ Deno.test("needsIf pulls a job in only when its guard holds", async (t) => {
 						where: (value) => !value.startsWith("0."),
 						describe: "a stable version",
 					});
-					return { signature: p.needsIf({ job: sign, when: stable }) };
+					return {
+						version: v,
+						signature: p.needsIf({ job: sign, when: stable }),
+					};
 				},
 				run: (_t, { signature }) => signature ?? "none",
 			});
@@ -343,30 +348,132 @@ Deno.test("a pulled-in need that fails blocks its dependent", async () => {
 	assertEquals(report.outcomes.release, Blocked(["deploy"]));
 });
 
-Deno.test("a guard reads only the plan's unconditional needs", async () => {
-	// Given: a second guard that reads the first conditional need
-	const build = job({ name: "build", run: () => "dist" });
-	const docs = job({ name: "docs", run: () => "site" });
-	const extra = job({ name: "extra", run: () => "extra" });
-	const site = job({
-		name: "site",
-		plan: (p) => {
-			const built = p.needs(build);
-			const documented = p.needsIf({ job: docs, when: succeeded(built) });
-			return {
-				built,
-				documented,
-				extra: p.needsIf({ job: extra, when: succeeded(documented) }),
-			};
+Deno.test("a guard may read only its own plan's unconditional needs", async (t) => {
+	let ran = 0;
+	const versionJob = job({
+		name: "version",
+		run: () => {
+			ran += 1;
+			return "1.2.0";
 		},
-		run: (_t, { documented, extra }) => [documented, extra ?? "none"],
+	});
+	const signJob = job({
+		name: "sign",
+		run: () => {
+			ran += 1;
+			return "sig";
+		},
 	});
 
-	// When: it runs
-	const report = unwrap(await run({ jobs: { site } }));
+	await t.step("a read left out of the plan is a graph error", async () => {
+		// Given: a guard reading version, which the plan leaves out
+		ran = 0;
+		const publish = job({
+			name: "publish",
+			plan: (p) => {
+				const version = p.needs(versionJob);
+				return { sign: p.needsIf({ job: signJob, when: succeeded(version) }) };
+			},
+			run: () => {},
+		});
 
-	// Then: the second guard saw no outcome for docs, so extra stayed out
-	assertEquals(report.outcomes.site, Succeeded(["site", "none"]));
+		// When: it runs
+		const result = await run({ jobs: { publish } });
+
+		// Then: UndeclaredGuardRead names the job, the guard and the read,
+		// and nothing ran
+		assertEquals(
+			unwrapErr(result),
+			UndeclaredGuardRead({
+				job: "publish",
+				guard: "version succeeded",
+				read: "version",
+			}),
+		);
+		assertEquals(ran, 0);
+	});
+
+	await t.step("the same read in the plan works", async () => {
+		// Given: the same plan with version in it
+		ran = 0;
+		const publish = job({
+			name: "publish",
+			plan: (p) => {
+				const version = p.needs(versionJob);
+				return {
+					version,
+					sign: p.needsIf({ job: signJob, when: succeeded(version) }),
+				};
+			},
+			run: (_t, { version, sign }) => `${version} ${sign ?? "unsigned"}`,
+		});
+
+		// When: it runs
+		const report = unwrap(await run({ jobs: { publish } }));
+
+		// Then: the guard read version, and sign was pulled in
+		assertEquals(report.outcomes.publish, Succeeded("1.2.0 sig"));
+		assertEquals(ran, 2);
+	});
+
+	await t.step("a read of another guarded need is a graph error", async () => {
+		// Given: a second guard reading the first guard's need
+		const docs = job({ name: "docs", run: () => "site" });
+		const site = job({
+			name: "site",
+			plan: (p) => {
+				const version = p.needs(versionJob);
+				const documented = p.needsIf({ job: docs, when: succeeded(version) });
+				return {
+					version,
+					documented,
+					sign: p.needsIf({ job: signJob, when: succeeded(documented) }),
+				};
+			},
+			run: () => {},
+		});
+
+		// When: it runs
+		const result = await run({ jobs: { site } });
+
+		// Then: guards run after the unconditional needs, so it's an error
+		assertEquals(
+			unwrapErr(result),
+			UndeclaredGuardRead({
+				job: "site",
+				guard: "docs succeeded",
+				read: "docs",
+			}),
+		);
+	});
+
+	await t.step("a guard asking outside its declared reads panics", async () => {
+		// Given: a hand-written guard that declares version but reads sign
+		const sneaky = job({
+			name: "sneaky",
+			plan: (p) => {
+				const v = p.needs(versionJob);
+				const s = p.needs(signJob);
+				const when = {
+					describe: "sign looks fine",
+					reads: [v],
+					test: (view: OutcomeView) => view.outcome(s).isSucceeded(),
+				};
+				return { v, s, extra: p.needsIf({ job: versionJob, when }) };
+			},
+			run: () => {},
+		});
+
+		// When: it runs
+		const thrown = await run({ jobs: { sneaky } }).then(
+			() => undefined,
+			(error: unknown) => error,
+		);
+
+		// Then: the run rejects with an UndeclaredGuardRead panic
+		assertInstanceOf(thrown, Panic);
+		assertEquals(thrown.name, "Panic (UndeclaredGuardRead)");
+	});
 });
 
 Deno.test("runIf decides whether run is called", async (t) => {
@@ -797,7 +904,7 @@ Deno.test("an invalid graph is an Err before anything runs", async (t) => {
 			name: "a",
 			plan: (p) => {
 				const s = p.needs(seed);
-				return { b: p.needsIf({ job: b, when: failed(s) }) };
+				return { s, b: p.needsIf({ job: b, when: failed(s) }) };
 			},
 			run: () => {},
 		});
@@ -1056,6 +1163,7 @@ Deno.test("a throwing runIf or guard is a bug: the run winds down, then rethrows
 					if (where === "runIf") return { s };
 					const when = {
 						describe: "throws",
+						reads: [s],
 						test: (): boolean => {
 							throw decisionError;
 						},

@@ -68,6 +68,8 @@ export {
 	DuplicateName,
 	GraphError,
 	type GraphErrorVariants,
+	UndeclaredGuardRead,
+	type UndeclaredGuardReadCause,
 } from "./src/graph-error.ts";
 export {
 	failed,

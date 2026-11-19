@@ -73,12 +73,12 @@ export interface Planner<C> {
 	needs<T>(job: Job<T, C>): Need<T, false>;
 	/**
 	 * Declares that the job needs `job` only if `when` holds once the plan's
-	 * unconditional needs have settled. A guard reads only those: they
-	 * settle first, then every guard is tested, so the need a guard reads
-	 * must itself sit in the plan, unconditionally (one that doesn't reads as
-	 * absent, and the built-in guards are then false). A need pulled in this way
-	 * counts like any other (a failure blocks, under `success()`); one left
-	 * out is `undefined` where it sits in the plan.
+	 * unconditional needs have settled. A guard may read only those, as
+	 * GitHub Actions' `if:` sees only `needs:`: every need in its `reads`
+	 * must match, by `JobId`, an unconditional need in the same plan, or the
+	 * graph is an `UndeclaredGuardRead` error before anything runs. A need
+	 * pulled in this way counts like any other (a failure blocks, under
+	 * `success()`); one left out is `undefined` where it sits in the plan.
 	 */
 	needsIf<T>(options: NeedsIfOptions<T, C>): Need<T, true>;
 }
@@ -97,27 +97,35 @@ export interface NeedsIfOptions<T, C> {
 }
 
 /**
- * What a guard can read once the plan's unconditional needs settle.
+ * What a guard can read once the plan's unconditional needs settle: the
+ * outcomes of the needs it declared in its `reads`, and nothing else.
  */
 export interface OutcomeView {
 	/** Whether the run has been cancelled */
 	readonly cancelled: boolean;
 	/**
-	 * A need's outcome, or `undefined` if it isn't one of the plan's
-	 * unconditional needs: a guard can read neither a conditional need nor
-	 * one left out of the plan
+	 * The outcome of `need`, which must be one of the guard's `reads`
+	 * (matched by `JobId`). Asking for any other need is a bug, so it panics
+	 * (`UndeclaredGuardRead`), and the run rejects with that panic once
+	 * every job has settled.
 	 */
-	outcome<T>(need: Need<T, boolean>): JobOutcome<Readonly<T>> | undefined;
+	outcome<T>(need: Need<T, boolean>): JobOutcome<Readonly<T>>;
 }
 
 /**
  * The condition on a conditional need: data the runner tests once the needs
  * it reads have settled. Make one with `succeeded`, `failed` or
- * `succeededWith`. `describe` is what a dry run shows.
+ * `succeededWith`, which fill in `reads`; a hand-written guard declares its
+ * own. `describe` is what a dry run shows.
  */
 export interface Guard {
 	/** What the guard checks, for a dry run (`build succeeded`) */
 	readonly describe: string;
+	/**
+	 * The needs `test` reads. Each must match, by `JobId`, an unconditional
+	 * need in the same plan; the graph checks it before anything runs
+	 */
+	readonly reads: readonly AnyNeed[];
 	/** Whether to pull the need in */
 	readonly test: (view: OutcomeView) => boolean;
 }

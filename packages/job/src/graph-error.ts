@@ -12,6 +12,7 @@ import { Enum } from "@sekhmet/enum/core/mini";
 type Variants =
 	| [kind: "DuplicateName", duplicate: { readonly name: string }]
 	| [kind: "DuplicateKey", duplicate: DuplicateKeyCause]
+	| [kind: "UndeclaredGuardRead", read: UndeclaredGuardReadCause]
 	| [kind: "Cycle", cycle: { readonly path: readonly string[] }];
 
 export type { Variants as GraphErrorVariants };
@@ -24,6 +25,9 @@ export type { Variants as GraphErrorVariants };
  * - `DuplicateKey`: a `family` built two different jobs (two names) for one
  *   key, so the key doesn't identify them; the runner would otherwise run
  *   only the first.
+ * - `UndeclaredGuardRead`: a `needsIf` guard reads a need that isn't an
+ *   unconditional need of the same plan (one left out of the plan, or one
+ *   that is itself guarded), as GitHub Actions' `if:` sees only `needs:`.
  * - `Cycle`: these jobs need each other; the path starts and ends with the
  *   same job.
  *
@@ -60,6 +64,32 @@ export interface DuplicateKeyCause {
  */
 export function DuplicateKey(duplicate: DuplicateKeyCause): GraphError {
 	return new GraphError("DuplicateKey", duplicate);
+}
+
+/**
+ * What an `UndeclaredGuardRead` error (or the panic of the same name, for a
+ * guard that reads outside its declared `reads` at run time) names.
+ */
+export interface UndeclaredGuardReadCause {
+	/** The job whose plan holds the guard */
+	readonly job: string;
+	/** The guard, as it describes itself (`version succeeded`) */
+	readonly guard: string;
+	/** The name of the job the guard reads, which the plan doesn't need unconditionally */
+	readonly read: string;
+}
+
+/**
+ * A `needsIf` guard in `job`'s plan reads `read`, which isn't one of that
+ * plan's unconditional needs.
+ *
+ * @param read The job, the guard, and the undeclared read
+ * @returns The `UndeclaredGuardRead` error
+ */
+export function UndeclaredGuardRead(
+	read: UndeclaredGuardReadCause,
+): GraphError {
+	return new GraphError("UndeclaredGuardRead", read);
 }
 
 /**
