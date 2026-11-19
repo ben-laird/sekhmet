@@ -243,6 +243,29 @@ export interface JobKit<C> {
 			definition: AnyJobDefinition<C, P, T>,
 		): Job<T, C>;
 	};
+	/**
+	 * Makes jobs on the fly: `define` builds the job for an argument, and
+	 * `key` names its identity within the family. The same key gives the
+	 * same job, however many times it is built, so a family can need itself
+	 * (a package's publish needs its dependencies') and cover a matrix.
+	 */
+	readonly family: <A, T>(
+		options: FamilyOptions<A, T, C>,
+	) => (arg: A) => Job<T, C>;
+}
+
+/**
+ * What `family` takes.
+ *
+ * @template A What each job of the family is built from
+ * @template T What its jobs return
+ * @template C The run's context type
+ */
+export interface FamilyOptions<A, T, C> {
+	/** The identity of the job for `arg` within the family */
+	readonly key: (arg: A) => string;
+	/** Builds the job for `arg`; its name must differ per key */
+	readonly define: (arg: A) => Job<T, C>;
 }
 
 /**
@@ -254,7 +277,7 @@ export type Roots<C> = { readonly [key: string]: Job<unknown, C> };
 
 /**
  * Fixes the context type `C` of the runs these jobs take part in, and
- * returns `job` to define them with.
+ * returns `job` and `family` to define them with.
  *
  * @template C The run's context type
  * @returns The job constructors for context `C`
@@ -281,7 +304,23 @@ export type Roots<C> = { readonly [key: string]: Job<unknown, C> };
  * ```
  */
 export function defineJobs<C>(): JobKit<C> {
-	return { job: defineJob };
+	return { job: defineJob, family: defineFamily };
+
+	function defineFamily<A, T>({
+		key,
+		define,
+	}: FamilyOptions<A, T, C>): (arg: A) => Job<T, C> {
+		const family = Symbol("family");
+		return (arg) => {
+			const { name, bind } = getStructParams(define(arg));
+			const id: JobId = { family, key: key(arg) };
+			return new Job<T, C>({
+				name,
+				id,
+				bind: (context) => ({ ...bind(context), id }),
+			});
+		};
+	}
 
 	function defineJob<P extends PlanRecord, T>(
 		definition: SuccessJobDefinition<C, P, T> | AnyJobDefinition<C, P, T>,

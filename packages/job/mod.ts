@@ -3,7 +3,8 @@
  * graph, in the style of GitHub Actions and other CI runners, on the
  * language's own promises and `AbortSignal`.
  *
- * - {@linkcode defineJobs} fixes the run's context type and returns `job`.
+ * - {@linkcode defineJobs} fixes the run's context type and returns `job`,
+ * and `family`, which makes jobs on the fly (the same key, the same job).
  *   A job pairs a pure `plan`, which declares what it needs as data
  *   (`p.needs`, or `p.needsIf` with a guard), with a `run`, which receives
  *   that data with each need resolved.
@@ -76,6 +77,7 @@ export {
 	type BoundJob,
 	defineJobs,
 	type EmptyPlan,
+	type FamilyOptions,
 	Job,
 	type JobDefinitionBase,
 	type JobId,

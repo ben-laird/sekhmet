@@ -123,7 +123,14 @@ assertEquals(report.passed, true);
 
 ## Concepts
 
-- **`defineJobs<C>()`** fixes the run's context type `C` and returns `job`.
+- **`defineJobs<C>()`** fixes the run's context type `C` and returns `job`
+  and `family`.
+- **`family({ key, define })`** makes jobs on the fly: the same key gives
+  the same job, so the runner, which dedupes by identity (`JobId`: the
+  family and the key), runs it once. A family can need itself (a package's
+  publish needs its dependencies') and covers a matrix. A plain `job` is a
+  family of one. Two different identities may not share a display name.
+
 - **`job({ name, plan?, runIf?, run, continueOnError? })`** defines a job.
   - `plan(p)` is pure and synchronous: it returns a plain object of needs and
     data. `p.needs(job)` declares a need; `p.needsIf({ job, when })` declares
