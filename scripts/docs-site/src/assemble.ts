@@ -9,6 +9,7 @@
  * @module
  */
 
+import { join } from "@std/path/posix/join";
 import {
 	DOC_KIND_HEADINGS,
 	DOC_KINDS,
@@ -161,35 +162,73 @@ function rewriteLinks(
 	);
 }
 
+/** Where repository files are browsed, for links to files the site has no page for. */
+export const REPOSITORY_BLOB =
+	"https://github.com/ben-laird/sekhmet/blob/main/";
+
+/** Whether a link target is relative to its page: not a URL, a site path or an anchor. */
+function isRelative(target: string): boolean {
+	return !/^(?:[a-z]+:|\/|#)/i.test(target);
+}
+
+/** Whether a link target names a markdown file, which the site may have a page for. */
+function isMarkdown(target: string): boolean {
+	return /\.md(?:[#?]|$)/.test(target);
+}
+
+/** The repository URL of `target`, relative to the repository directory `from`. */
+function repositoryLink({
+	from,
+	target,
+}: {
+	from: string;
+	target: string;
+}): string {
+	return `${REPOSITORY_BLOB}${join(from, target)}`;
+}
+
 /**
  * Rewrites a package README's links for the site: `docs/x.md` (a sibling
- * page there) becomes `./x.md`.
+ * page there) becomes `./x.md`, and a relative link to a file the site has
+ * no page for, such as `./mod.ts`, points at the file in the repository.
  *
- * @param text - The README markdown
+ * @param options.text - The README markdown
+ * @param options.dir - The package directory name, e.g. `enum`
  * @returns The page markdown
  */
-export function readmeLinks(text: string): string {
-	return rewriteLinks(text, (target) =>
-		target.replace(/^(?:\.\/)?docs\//, "./"),
-	);
+export function readmeLinks({
+	text,
+	dir,
+}: {
+	text: string;
+	dir: string;
+}): string {
+	return rewriteLinks(text, (target) => {
+		if (!isRelative(target) || isMarkdown(target)) {
+			return target.replace(/^(?:\.\/)?docs\//, "./");
+		}
+		return repositoryLink({ from: `packages/${dir}`, target });
+	});
 }
 
 /**
  * Rewrites a `docs/*.md` page's links for the site: `../README.md` (the
- * package overview) becomes `./index.md`.
+ * package overview) becomes `./index.md`, and a relative link to a file the
+ * site has no page for, such as `../mod.ts`, points at the file in the
+ * repository.
  *
- * @param text - The page markdown
+ * @param options.text - The page markdown
+ * @param options.dir - The package directory name, e.g. `enum`
  * @returns The page markdown
  */
-export function docLinks(text: string): string {
-	return rewriteLinks(text, (target) =>
-		target.replace(/^\.\.\/README\.md/, "./index.md"),
-	);
+export function docLinks({ text, dir }: { text: string; dir: string }): string {
+	return rewriteLinks(text, (target) => {
+		if (!isRelative(target) || isMarkdown(target)) {
+			return target.replace(/^\.\.\/README\.md/, "./index.md");
+		}
+		return repositoryLink({ from: `packages/${dir}/docs`, target });
+	});
 }
-
-/** Where repository files are browsed, for links to files the site has no page for. */
-export const REPOSITORY_BLOB =
-	"https://github.com/ben-laird/sekhmet/blob/main/";
 
 /**
  * Rewrites the root README's links for the site: links into
@@ -220,8 +259,7 @@ export function rootLinks({
 			.replace(/^(?:\.\/)?packages\/([\w-]+)\/?$/, "/$1/");
 		if (packagePage !== target) return packagePage;
 
-		const isRelative = !/^(?:[a-z]+:|\/|#)/i.test(target);
-		return isRelative
+		return isRelative(target)
 			? `${REPOSITORY_BLOB}${target.replace(/^\.\//, "")}`
 			: target;
 	});
@@ -310,7 +348,7 @@ function overviewOf(pkg: PackageSource): string {
 	if (pkg.readme === undefined) {
 		return `# @sekhmet/${pkg.dir}\n\nThis package has no README yet.\n`;
 	}
-	return readmeLinks(pkg.readme);
+	return readmeLinks({ text: pkg.readme, dir: pkg.dir });
 }
 
 /**
@@ -361,7 +399,10 @@ export function planSite({
 				continue;
 			}
 			docPages.push(docPage.value);
-			pages.push({ path: `${pkg.dir}/${doc.name}`, text: docLinks(doc.text) });
+			pages.push({
+				path: `${pkg.dir}/${doc.name}`,
+				text: docLinks({ text: doc.text, dir: pkg.dir }),
+			});
 		}
 
 		sidebar[base] = [packageSidebar({ dir: pkg.dir, pages: docPages })];

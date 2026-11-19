@@ -37,7 +37,7 @@ Deno.test("readmeLinks points docs/ links at sibling pages", () => {
 		"[a](docs/concepts.md) [b](./docs/recipes.md#x) [c](https://jsr.io/@sekhmet/enum)";
 
 	// When: rewriting it for the site
-	const rewritten = readmeLinks(text);
+	const rewritten = readmeLinks({ text, dir: "enum" });
 
 	// Then: docs links become siblings and the external link is untouched
 	assertEquals(
@@ -46,15 +46,43 @@ Deno.test("readmeLinks points docs/ links at sibling pages", () => {
 	);
 });
 
+Deno.test("readmeLinks points source links at the repository", () => {
+	// Given: a README linking source files the site has no page for, and an anchor
+	const text = "[m](./mod.ts) [o](src/outcome/main/mod.ts#L3) [a](#example)";
+
+	// When: rewriting it for the site
+	const rewritten = readmeLinks({ text, dir: "job" });
+
+	// Then: each source link points at the package's file in the repository
+	assertEquals(
+		rewritten,
+		"[m](https://github.com/ben-laird/sekhmet/blob/main/packages/job/mod.ts) [o](https://github.com/ben-laird/sekhmet/blob/main/packages/job/src/outcome/main/mod.ts#L3) [a](#example)",
+	);
+});
+
 Deno.test("docLinks points the README link at the overview page", () => {
 	// Given: a doc page linking back to its README and to a sibling
 	const text = "[home](../README.md) [next](./recipes.md)";
 
 	// When: rewriting it for the site
-	const rewritten = docLinks(text);
+	const rewritten = docLinks({ text, dir: "enum" });
 
 	// Then: the README becomes the overview page
 	assertEquals(rewritten, "[home](./index.md) [next](./recipes.md)");
+});
+
+Deno.test("docLinks points source links at the repository", () => {
+	// Given: a doc page linking its package's entry point
+	const text = "starting at [`mod.ts`](../mod.ts)";
+
+	// When: rewriting it for the site
+	const rewritten = docLinks({ text, dir: "job" });
+
+	// Then: the link resolves from docs/ to the package's file in the repository
+	assertEquals(
+		rewritten,
+		"starting at [`mod.ts`](https://github.com/ben-laird/sekhmet/blob/main/packages/job/mod.ts)",
+	);
 });
 
 Deno.test("rootLinks points package links at package sections", () => {
