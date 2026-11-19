@@ -33,9 +33,9 @@ import {
 import { Panic } from "@sekhmet/panic/mini/core";
 import { assert, assertEquals, assertInstanceOf } from "@std/assert";
 
-const { job } = defineJobs<null>();
+const { job } = defineJobs((_meta: null) => ({}));
 
-/** Runs `jobs` with a null context, failing the test if it takes over 2s. */
+/** Runs `jobs` with null metadata, failing the test if it takes over 2s. */
 async function run<J extends Roots<null>>({
 	jobs,
 	events,
@@ -55,7 +55,7 @@ async function run<J extends Roots<null>>({
 		return await Promise.race([
 			runJobs({
 				jobs,
-				context: null,
+				meta: null,
 				signal,
 				failFast,
 				onEvent: (event) => events?.push(describe(event)),
@@ -154,17 +154,17 @@ Deno.test("each job runs once per run, and dependents share its result", async (
 	const test = job({
 		name: "test",
 		plan: (p) => ({ build: p.needs(build) }),
-		run: (_t, { build }) => build,
+		run: (_r, { build }) => build,
 	});
 	const lint = job({
 		name: "lint",
 		plan: (p) => ({ build: p.needs(build) }),
-		run: (_t, { build }) => build,
+		run: (_r, { build }) => build,
 	});
 	const gate = job({
 		name: "gate",
 		plan: (p) => ({ test: p.needs(test), lint: p.needs(lint) }),
-		run: (_t, { test, lint }) => test === lint,
+		run: (_r, { test, lint }) => test === lint,
 	});
 
 	// When: the root and build itself run
@@ -239,7 +239,7 @@ Deno.test("needs nested in arrays and records resolve in place", async () => {
 				lookup,
 			};
 		},
-		run: (_t, { items, lookup: found }) => {
+		run: (_r, { items, lookup: found }) => {
 			const total: number = items.reduce((n, { value }) => n + value, 0);
 			return { total, labels: items.map(({ label }) => label), found };
 		},
@@ -276,7 +276,7 @@ Deno.test("needsIf pulls a job in only when its guard holds", async (t) => {
 			});
 			return { version: v, signature: p.needsIf({ job: sign, when: stable }) };
 		},
-		run: (_t, { version, signature }) => `${version} ${signature ?? "none"}`,
+		run: (_r, { version, signature }) => `${version} ${signature ?? "none"}`,
 	});
 
 	await t.step("a true guard pulls the job in", async () => {
@@ -311,7 +311,7 @@ Deno.test("needsIf pulls a job in only when its guard holds", async (t) => {
 						signature: p.needsIf({ job: sign, when: stable }),
 					};
 				},
-				run: (_t, { signature }) => signature ?? "none",
+				run: (_r, { signature }) => signature ?? "none",
 			});
 
 			// When: it runs
@@ -405,7 +405,7 @@ Deno.test("a guard may read only its own plan's unconditional needs", async (t) 
 					sign: p.needsIf({ job: signJob, when: succeeded(version) }),
 				};
 			},
-			run: (_t, { version, sign }) => `${version} ${sign ?? "unsigned"}`,
+			run: (_r, { version, sign }) => `${version} ${sign ?? "unsigned"}`,
 		});
 
 		// When: it runs
@@ -485,7 +485,7 @@ Deno.test("runIf decides whether run is called", async (t) => {
 			name: "notify",
 			plan: (p) => ({ broken: p.needs(broken) }),
 			runIf: failure(),
-			run: (_t, { broken }) => broken.error().isSome(),
+			run: (_r, { broken }) => broken.error().isSome(),
 		});
 		const quiet = job({
 			name: "quiet",
@@ -509,7 +509,7 @@ Deno.test("runIf decides whether run is called", async (t) => {
 			name: "cleanup",
 			plan: (p) => ({ broken: p.needs(broken) }),
 			runIf: always(),
-			run: (_t, { broken }) => broken.isFailed(),
+			run: (_r, { broken }) => broken.isFailed(),
 		});
 
 		// When: it runs
@@ -519,33 +519,31 @@ Deno.test("runIf decides whether run is called", async (t) => {
 		assertEquals(report.outcomes.cleanup, Succeeded(true));
 	});
 
-	await t.step(
-		"a hand-written runIf gets the context and outcomes",
-		async () => {
-			// Given: a predicate over the context and the needs' outcomes
-			const ctx = defineJobs<{ readonly enabled: boolean }>();
-			const build = ctx.job({ name: "build", run: () => "dist" });
-			const report = ctx.job({
-				name: "report",
-				plan: (p) => ({ build: p.needs(build) }),
-				runIf: ({ context, needs }) =>
-					context.enabled && needs.build.isSucceeded(),
-				run: (_t, { build }) => build.value().unwrap(),
-			});
+	await t.step("a hand-written runIf gets meta and outcomes", async () => {
+		// Given: a predicate over the metadata and the needs' outcomes
+		const kit = defineJobs((_meta: { readonly enabled: boolean }) => ({}));
+		const build = kit.job({ name: "build", run: () => "dist" });
+		const report = kit.job({
+			name: "report",
+			plan: (p) => ({ build: p.needs(build) }),
+			runIf: ({ meta, needs }) => {
+				return meta.enabled && needs.build.isSucceeded();
+			},
+			run: (_r, { build }) => build.value().unwrap(),
+		});
 
-			// When: it runs enabled, then disabled
-			const on = unwrap(
-				await runJobs({ jobs: { report }, context: { enabled: true } }),
-			);
-			const off = unwrap(
-				await runJobs({ jobs: { report }, context: { enabled: false } }),
-			);
+		// When: it runs enabled, then disabled
+		const on = unwrap(
+			await runJobs({ jobs: { report }, meta: { enabled: true } }),
+		);
+		const off = unwrap(
+			await runJobs({ jobs: { report }, meta: { enabled: false } }),
+		);
 
-			// Then: true runs it; false skips it
-			assertEquals(on.outcomes.report, Succeeded("dist"));
-			assertEquals(off.outcomes.report, Skipped());
-		},
-	);
+		// Then: true runs it; false skips it
+		assertEquals(on.outcomes.report, Succeeded("dist"));
+		assertEquals(off.outcomes.report, Skipped());
+	});
 });
 
 Deno.test("a hand-written runIf that is false after a cancel ends Skipped", async () => {
@@ -586,7 +584,7 @@ Deno.test("a guarded field follows its guard, even when its job ran for another 
 			const built = p.needs(build);
 			return { built, again: p.needsIf({ job: build, when: failed(built) }) };
 		},
-		run: (_t, { built, again }) => [built, again ?? "left out"],
+		run: (_r, { built, again }) => [built, again ?? "left out"],
 	});
 
 	// When: it runs
@@ -1065,8 +1063,8 @@ Deno.test("a body cancelled mid-step reports the step, then Cancelled", async ()
 	assertEquals(report.outcomes.deploy, Cancelled());
 });
 
-Deno.test("t.step after the body finished panics", async () => {
-	// Given: a body that leaks t.step past its end
+Deno.test("r.step after the body finished panics", async () => {
+	// Given: a body that leaks r.step past its end
 	let late: (() => Promise<unknown>) | undefined;
 	const leaky = job({
 		name: "leaky",
@@ -1121,7 +1119,7 @@ Deno.test("a throwing onEvent cancels the run instead of orphaning jobs", async 
 	// When: the run's hook throws
 	const thrown = await runJobs({
 		jobs: { quick, sibling },
-		context: null,
+		meta: null,
 		signal: controller.signal,
 		onEvent: (event) => {
 			if (isolate(event, "Finished")) throw hookError;

@@ -10,7 +10,13 @@ import {
 } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
-const { job } = defineJobs<{ readonly release: boolean }>();
+/** The jobs the context factory was called for. */
+const built: string[] = [];
+
+const { job } = defineJobs((_meta: { readonly release: boolean }, { job }) => {
+	built.push(job);
+	return {};
+});
 
 Deno.test("a dry run shows the whole graph, guards and conditions included", () => {
 	// Given: a release graph with a guarded need and an always() cleanup
@@ -35,7 +41,7 @@ Deno.test("a dry run shows the whole graph, guards and conditions included", () 
 			return {
 				version: v,
 				signature: p.needsIf({ job: sign, when: stable }),
-				dryRun: !p.context.release,
+				dryRun: !p.meta.release,
 			};
 		},
 		run: () => {},
@@ -50,7 +56,7 @@ Deno.test("a dry run shows the whole graph, guards and conditions included", () 
 
 	// When: it is planned, not run
 	const graph = unwrap(
-		planJobs({ jobs: { cleanup }, context: { release: false } }),
+		planJobs({ jobs: { cleanup }, meta: { release: false } }),
 	);
 
 	// Then: every job is there, the guarded one included, and nothing ran
@@ -59,6 +65,9 @@ Deno.test("a dry run shows the whole graph, guards and conditions included", () 
 		["cleanup", "publish", "version", "sign"],
 	);
 	assertEquals(ran, false);
+
+	// Then: no context was built: the factory is for jobs that start
+	assertEquals(built, []);
 
 	// Then: each job shows its needs, guards and runIf
 	assertEquals(graph.jobs.get("publish")?.needs, [
@@ -79,7 +88,7 @@ Deno.test("a dry run finds duplicate names, as a run does", () => {
 	// When: they are planned
 	const result = planJobs({
 		jobs: { first, second },
-		context: { release: true },
+		meta: { release: true },
 	});
 
 	// Then: DuplicateName
@@ -100,7 +109,7 @@ Deno.test("a dry run reports a guard reading outside its plan", () => {
 	});
 
 	// When: it is planned
-	const result = planJobs({ jobs: { publish }, context: { release: true } });
+	const result = planJobs({ jobs: { publish }, meta: { release: true } });
 
 	// Then: UndeclaredGuardRead, as a run would find
 	assertEquals(

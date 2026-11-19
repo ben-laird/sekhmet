@@ -3,9 +3,10 @@
  *
  * GitHub Actions keeps *where and when* (triggers, VMs, permissions, the
  * matrix's one VM per runtime); the job graph owns *what*, in TypeScript,
- * and runs the same on a laptop. Shell commands go through the context
- * (`sh`), so these tests swap in a fake shell that records what ran and
- * fails on demand.
+ * and runs the same on a laptop. Shell commands go through each job's
+ * context (`r.ctx.sh`), which the factory builds from the run's metadata,
+ * so these tests swap in a fake shell that records what ran and fails on
+ * demand.
  */
 
 import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
@@ -27,7 +28,7 @@ import {
 import { assert, assertEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 
-/** What every pipeline's context carries: a way to run a command. */
+/** What every pipeline's metadata carries: a way to run a command. */
 interface Shell {
 	readonly sh: (command: string) => Promise<void>;
 }
@@ -49,12 +50,12 @@ function fakeShell({
 
 // 1. `deno task ci`: scripts/ci's step graph, as jobs.
 
-interface CiContext extends Shell {
+interface CiMeta extends Shell {
 	/** `isCI || isAI` in scripts/ci/main.ts */
 	readonly reportsCoverage: boolean;
 }
 
-const ci = defineJobs<CiContext>();
+const ci = defineJobs((meta: CiMeta) => ({ sh: meta.sh }));
 
 function command({
 	name,
@@ -62,8 +63,8 @@ function command({
 }: {
 	readonly name: string;
 	readonly run: string;
-}): Job<void, CiContext> {
-	return ci.job({ name, run: (t) => t.context.sh(run) });
+}): Job<void, CiMeta> {
+	return ci.job({ name, run: (r) => r.ctx.sh(run) });
 }
 
 const lint = command({ name: "Deno Lint", run: "deno lint" });
@@ -73,7 +74,7 @@ const biome = command({ name: "Biome Check", run: "biome check" });
 const test = ci.job({
 	name: "Deno Test",
 	plan: (p) => ({ lint: p.needs(lint) }),
-	run: (t) => t.context.sh("deno test --coverage"),
+	run: (r) => r.ctx.sh("deno test --coverage"),
 });
 
 // scripts/ci's `condition: () => isCI || isAI` on a success step: the
@@ -81,10 +82,10 @@ const test = ci.job({
 const coverage = ci.job({
 	name: "Show coverage report",
 	plan: (p) => ({ test: p.needs(test) }),
-	runIf: ({ context, needs }) => {
-		return context.reportsCoverage && all(needs).isSucceeded();
+	runIf: ({ meta, needs }) => {
+		return meta.reportsCoverage && all(needs).isSucceeded();
 	},
-	run: (t) => t.context.sh("deno coverage"),
+	run: (r) => r.ctx.sh("deno coverage"),
 });
 
 // scripts/ci's `condition: "always"` with continueOnError.
@@ -93,7 +94,7 @@ const cleanup = ci.job({
 	plan: (p) => ({ coverage: p.needs(coverage) }),
 	runIf: always(),
 	continueOnError: true,
-	run: (t) => t.context.sh("rm -rf coverage"),
+	run: (r) => r.ctx.sh("rm -rf coverage"),
 });
 
 // The verdict: what has to pass. Coverage isn't in it, since a skipped need
@@ -119,7 +120,7 @@ Deno.test("ci: the report is typed like Promise.all", async () => {
 	const report = unwrap(
 		await runJobs({
 			jobs: { gate, cleanup },
-			context: { sh: shell.sh, reportsCoverage: false },
+			meta: { sh: shell.sh, reportsCoverage: false },
 		}),
 	);
 
@@ -146,7 +147,7 @@ Deno.test("ci: a lint failure blocks test, not its siblings", async () => {
 	const report = unwrap(
 		await runJobs({
 			jobs: { gate, cleanup },
-			context: { sh: shell.sh, reportsCoverage: true },
+			meta: { sh: shell.sh, reportsCoverage: true },
 		}),
 	);
 
@@ -192,11 +193,11 @@ const WORKSPACE: readonly Package[] = [
 function releaseGraph(workspace: readonly Package[]): {
 	readonly announce: Job<readonly string[], Shell>;
 } {
-	const { job, family } = defineJobs<Shell>();
+	const { job, family } = defineJobs((shell: Shell) => shell);
 
 	const qualityGate = job({
 		name: "Quality gate",
-		run: (t) => t.context.sh("deno task ci"),
+		run: (r) => r.ctx.sh("deno task ci"),
 	});
 
 	// The same job for the same key; the annotation breaks the type cycle.
@@ -211,9 +212,9 @@ function releaseGraph(workspace: readonly Package[]): {
 						deps: pkg.deps.map((dep) => p.needs(publish(dep))),
 					};
 				},
-				run: async (t, { deps }) => {
+				run: async (r, { deps }) => {
 					assertType<IsExact<typeof deps, readonly string[]>>(true);
-					await t.context.sh(`deno publish ${pkg.name}`);
+					await r.ctx.sh(`deno publish ${pkg.name}`);
 					return `${pkg.name}@0.2.0`;
 				},
 			});
@@ -225,7 +226,7 @@ function releaseGraph(workspace: readonly Package[]): {
 		name: "announce",
 		plan: (p) => ({ published: workspace.map((pkg) => p.needs(publish(pkg))) }),
 		runIf: always(),
-		run: (_t, { published }) => {
+		run: (_r, { published }) => {
 			return published.flatMap((outcome) => [...outcome.value().iter()]);
 		},
 	});
@@ -239,7 +240,7 @@ Deno.test("release: a dry run shows the publish order before anything ships", ()
 	const { announce } = releaseGraph(WORKSPACE);
 
 	// When: it's planned, not run
-	const graph = unwrap(planJobs({ jobs: { announce }, context: shell }));
+	const graph = unwrap(planJobs({ jobs: { announce }, meta: shell }));
 
 	// Then: each package waits for the gate and for what it imports
 	assertEquals(
@@ -256,7 +257,7 @@ Deno.test("release: a failed publish blocks only what imports it", async () => {
 
 	// When: the release runs
 	const report = unwrap(
-		await runJobs({ jobs: { announce }, context: { sh: shell.sh } }),
+		await runJobs({ jobs: { announce }, meta: { sh: shell.sh } }),
 	);
 
 	// Then: vow and schema are blocked; unrelated packages still ship
@@ -320,7 +321,7 @@ function setupCommands(rt: Runtime): readonly string[] {
 	return [toolchain, ...browser];
 }
 
-const compat = defineJobs<Shell>();
+const compat = defineJobs((shell: Shell) => shell);
 
 // The matrix: a family over the runtime list.
 const suite = compat.family({
@@ -330,9 +331,9 @@ const suite = compat.family({
 			name: `compat (${label(rt)})`,
 			run: async (r) => {
 				for (const setup of setupCommands(rt)) {
-					await r.step({ name: setup, run: () => r.context.sh(setup) });
+					await r.step({ name: setup, run: () => r.ctx.sh(setup) });
 				}
-				await r.context.sh(`deno task compat:test ${rt.runtime}`);
+				await r.ctx.sh(`deno task compat:test ${rt.runtime}`);
 			},
 		});
 	},
@@ -349,7 +350,7 @@ const summary = compat.job({
 		};
 	},
 	runIf: always(),
-	run: (_t, { results }) => {
+	run: (_r, { results }) => {
 		return results.map(({ runtime, outcome }) => {
 			return `${outcome.isSucceeded() ? "pass" : "FAIL"} ${runtime}`;
 		});
@@ -362,7 +363,7 @@ Deno.test("compat: one failing runtime hides nothing", async () => {
 
 	// When: every suite runs, locally, in one process
 	const report = unwrap(
-		await runJobs({ jobs: { summary }, context: { sh: shell.sh } }),
+		await runJobs({ jobs: { summary }, meta: { sh: shell.sh } }),
 	);
 
 	// Then: the summary still reports all seven
@@ -389,7 +390,7 @@ Deno.test("compat: a family gives the same job for the same key", async () => {
 	const report = unwrap(
 		await runJobs({
 			jobs: { bun: suite(bun), again: suite(bun), webkit: suite(webkit) },
-			context: { sh: shell.sh },
+			meta: { sh: shell.sh },
 		}),
 	);
 
@@ -406,7 +407,7 @@ Deno.test("compat: a family gives the same job for the same key", async () => {
 
 Deno.test("family: different identities may not share a name", () => {
 	// Given: a family whose display name ignores its key
-	const { family } = defineJobs<Shell>();
+	const { family } = defineJobs((shell: Shell) => shell);
 	const sloppy = family({
 		key: (n: number) => String(n),
 		define: () => compat.job({ name: "same", run: () => {} }),
@@ -415,7 +416,7 @@ Deno.test("family: different identities may not share a name", () => {
 	// When: two keys are planned together
 	const result = planJobs({
 		jobs: { one: sloppy(1), two: sloppy(2) },
-		context: fakeShell(),
+		meta: fakeShell(),
 	});
 
 	// Then: DuplicateName, since the identities differ
@@ -424,7 +425,7 @@ Deno.test("family: different identities may not share a name", () => {
 
 Deno.test("family: a job that needs itself through its family is a Cycle", async () => {
 	// Given: a family whose job for n needs the job for the same n
-	const { family, job } = defineJobs<Shell>();
+	const { family, job } = defineJobs((shell: Shell) => shell);
 	const looping: (n: number) => Job<void, Shell> = family({
 		key: (n: number) => String(n),
 		define: (n) => {
@@ -439,7 +440,7 @@ Deno.test("family: a job that needs itself through its family is a Cycle", async
 	// When: it runs
 	const result = await runJobs({
 		jobs: { loop: looping(1) },
-		context: fakeShell(),
+		meta: fakeShell(),
 	});
 
 	// Then: the cycle is named, starting and ending with the same job
@@ -449,7 +450,7 @@ Deno.test("family: a job that needs itself through its family is a Cycle", async
 Deno.test("family: two different jobs under one key are a GraphError", async () => {
 	// Given: a family whose key ignores its argument, while its name doesn't
 	let ran = 0;
-	const { family, job } = defineJobs<Shell>();
+	const { family, job } = defineJobs((shell: Shell) => shell);
 	const colliding = family({
 		key: () => "same",
 		define: (n: number) => {
@@ -465,7 +466,7 @@ Deno.test("family: two different jobs under one key are a GraphError", async () 
 	// When: two arguments are run together
 	const result = await runJobs({
 		jobs: { one: colliding(1), two: colliding(2) },
-		context: fakeShell(),
+		meta: fakeShell(),
 	});
 
 	// Then: DuplicateKey names both jobs, and nothing ran

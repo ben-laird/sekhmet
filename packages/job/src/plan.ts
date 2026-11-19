@@ -50,14 +50,14 @@ export interface JobGraph {
 /**
  * What {@linkcode planJobs} takes.
  *
- * @template C The run's context type
+ * @template M The run's metadata type
  * @template J The roots
  */
-export interface PlanOptions<C, J extends Roots<C>> {
+export interface PlanOptions<M, J extends Roots<M>> {
 	/** The roots, by key; every job their plans reach is planned once */
 	readonly jobs: J;
-	/** The context a run would get, since plans may read it */
-	readonly context: C;
+	/** The metadata a run would get, since plans may read it */
+	readonly meta: M;
 }
 
 /**
@@ -65,11 +65,12 @@ export interface PlanOptions<C, J extends Roots<C>> {
  * targets of `needsIf` included, runs nothing, and returns the graph.
  * Every `GraphError` (a duplicate name or family key, a guard reading
  * outside its plan, a cycle) is an `Err`, exactly as `runJobs` finds it.
- * A plan that throws is a bug, and the throw propagates.
+ * A plan that throws is a bug, and the throw propagates. No job starts, so
+ * no context factory is called.
  *
- * @template C The run's context type
+ * @template M The run's metadata type
  * @template J The roots
- * @param options The roots and the context
+ * @param options The roots and the metadata
  * @returns Each job's plan, or why the jobs don't form a graph
  *
  * @example
@@ -78,7 +79,7 @@ export interface PlanOptions<C, J extends Roots<C>> {
  * import { always, defineJobs, planJobs } from "@sekhmet/job";
  * import { assertEquals } from "@std/assert";
  *
- * const { job } = defineJobs<null>();
+ * const { job } = defineJobs(() => ({}));
  * const build = job({ name: "build", run: () => "dist" });
  * const cleanup = job({
  * 	name: "cleanup",
@@ -87,17 +88,17 @@ export interface PlanOptions<C, J extends Roots<C>> {
  * 	run: () => {},
  * });
  *
- * const graph = unwrap(planJobs({ jobs: { cleanup }, context: null }));
+ * const graph = unwrap(planJobs({ jobs: { cleanup }, meta: null }));
  * assertEquals([...graph.jobs.keys()], ["cleanup", "build"]);
  * assertEquals(graph.jobs.get("cleanup")?.runIf, "always()");
  * ```
  */
-export function planJobs<C, J extends Roots<C>>({
+export function planJobs<M, J extends Roots<M>>({
 	jobs,
-	context,
-}: PlanOptions<C, J>): Result<JobGraph, GraphError> {
+	meta,
+}: PlanOptions<M, J>): Result<JobGraph, GraphError> {
 	const roots = Object.values(jobs).map((job) => {
-		return getStructParams(job).bind(context);
+		return getStructParams(job).bind(meta);
 	});
 	const planned = planGraph(roots);
 	if (isErr(planned)) return planned;

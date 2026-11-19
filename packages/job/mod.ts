@@ -3,12 +3,14 @@
  * graph, in the style of GitHub Actions and other CI runners, on the
  * language's own promises and `AbortSignal`.
  *
- * - {@linkcode defineJobs} fixes the run's context type and returns `job`,
- *   and `family`, which makes jobs on the fly (the same key, the same job).
- *   A job pairs a pure `plan`, its dependency list (`p.needs`, or
- *   `p.needsIf` with a guard, in plain arrays and records), with a `run`,
- *   which receives that list with each need resolved and reads anything
- *   else from its context or a closure.
+ * - {@linkcode defineJobs} takes a context factory, which fixes the run's
+ *   metadata type (`meta`) and builds each job's own context (`ctx`) just
+ *   before its `run`. It returns `job`, and `family`, which makes jobs on
+ *   the fly (the same key, the same job). A job pairs a pure `plan`, its
+ *   dependency list (`p.needs`, or `p.needsIf` with a guard, in plain
+ *   arrays and records), with a `run`, which receives that list with each
+ *   need resolved and reads anything else from `r.meta`, `r.ctx` or a
+ *   closure.
  * - A job's `runIf` decides whether `run` is called once its needs settle:
  *   {@linkcode success} (the default), {@linkcode failure},
  *   {@linkcode cancelled}, {@linkcode always}, or a predicate.
@@ -23,25 +25,27 @@
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { assert, assertEquals } from "@std/assert";
  *
- * const { job } = defineJobs<{ readonly release: boolean }>();
+ * const { job } = defineJobs((meta: { readonly release: boolean }) => {
+ * 	return { verb: meta.release ? "published" : "would publish" };
+ * });
  *
  * const version = job({ name: "version", run: () => "1.2.0" });
  * const publish = job({
  * 	name: "publish",
  * 	plan: (p) => ({ version: p.needs(version) }),
  * 	run: (r, { version }) => {
- * 		return `${r.context.release ? "published" : "would publish"} ${version}`;
+ * 		return `${r.ctx.verb} ${version}`;
  * 	},
  * });
  * const cleanup = job({
  * 	name: "cleanup",
  * 	plan: (p) => ({ publish: p.needs(publish) }),
  * 	runIf: always(),
- * 	run: (_t, { publish }) => publish.isSucceeded(),
+ * 	run: (_r, { publish }) => publish.isSucceeded(),
  * });
  *
  * const report = unwrap(
- * 	await runJobs({ jobs: { publish, cleanup }, context: { release: false } }),
+ * 	await runJobs({ jobs: { publish, cleanup }, meta: { release: false } }),
  * );
  * assert(report.passed);
  * assertEquals(report.outcomes.publish.value().unwrap(), "would publish 1.2.0");
@@ -83,6 +87,8 @@ export {
 	type AnyJobDefinition,
 	type BodyInput,
 	type BoundJob,
+	type ContextFactory,
+	type ContextFactoryInput,
 	defineJobs,
 	type EmptyPlan,
 	type FamilyOptions,

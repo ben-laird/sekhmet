@@ -21,7 +21,7 @@ the report gives back.
 A job's body is any `async` function. Job adds no runtime of its own:
 cancellation is an `AbortSignal`, so it reaches `fetch`, Deno and Node APIs
 and other libraries unchanged. That makes cancellation cooperative. A
-promise can't be stopped from outside, so a body that ignores `t.signal`
+promise can't be stopped from outside, so a body that ignores `r.signal`
 runs to the end.
 
 ## A plan and a run
@@ -32,9 +32,9 @@ does the work, given what those needs returned:
 - `plan(p)` is pure and synchronous. It returns the job's dependency list:
   needs made with `p.needs` and `p.needsIf`, in plain records and arrays at
   any depth, with `undefined` for a need left out.
-- `run(t, needs)` receives that list with each need resolved in place, typed
-  from the plan with no annotations. `t` carries the run's `context`, its
-  `signal`, and `step` for reporting progress.
+- `run(r, needs)` receives that list with each need resolved in place,
+  typed from the plan with no annotations. `r` carries the run's `meta`, the
+  job's own `ctx`, its `signal`, and `step` for reporting progress.
 
 A job that needs nothing omits `plan`.
 
@@ -43,12 +43,12 @@ starts. It also keeps each half honest. A plan describes the work and `run`
 interprets it, so a dry run can show every plan, each half can be tested
 alone, and `run` can't reach `p` to declare a need late.
 
-A plan sees only the run's context and whatever its closure captured, and
+A plan sees only the run's metadata and whatever its closure captured, and
 `run` has both of those too. So a plan can't compute anything `run`
 couldn't, and its job is only to say what the job depends on. Plain values
 in a plan (a string, a flag) still type-check and pass through untouched,
 but they are a second-class escape hatch, never necessary: read config from
-`t.context` in `run` instead. The hatch has an accepted papercut. A class
+`r.meta` in `run` instead. The hatch has an accepted papercut. A class
 instance that isn't a `Struct` (your own class, or a `Date`) arrives in
 `run` typed structurally, so its `#private` members are lost; a
 `Struct`-based value, such as an `Option` or a `Job`, and a function keep
@@ -73,7 +73,7 @@ values, not code paths:
 - `cancelled()`: the run was cancelled;
 - `always()`: whatever happened.
 
-A hand-written `runIf` is a function of `{ context, cancelled, needs }`.
+A hand-written `runIf` is a function of `{ meta, cancelled, needs }`.
 
 The condition also types `run`. Under `success()`, `run` is reached only
 when every need succeeded, so it gets their values. Under any other
@@ -219,7 +219,7 @@ panics:
   cancels the run, and so does a `runIf` or `onEvent` that throws. Every
   body sees its signal abort, and `runJobs` rejects with the error once
   every job has settled;
-- calling `t.step` after the body finished panics.
+- calling `r.step` after the body finished panics.
 
 Planning up front is also what makes `planJobs`, the dry run, possible: it
 is the same pass, without the bodies. An earlier design let a plan await
@@ -230,12 +230,12 @@ couldn't show it.
 ## Cancellation
 
 A run is cancelled by its `signal`, or by `failFast` when a job fails
-without `continueOnError`. Either way, every body's `t.signal` aborts.
+without `continueOnError`. Either way, every body's `r.signal` aborts.
 
 A job that hasn't started yet runs only if its `runIf` holds for a
 cancelled run. The default `success()` doesn't, so ordinary jobs end
 `Cancelled`; `always()`, `cancelled()`, `failure()` with an unhealthy need,
-and a hand-written `runIf` that allows it still run, with `t.signal`
+and a hand-written `runIf` that allows it still run, with `r.signal`
 already aborted. Whether a job survives a cancel is decided by a value you
 can read, not by when it happened to start.
 

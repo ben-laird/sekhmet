@@ -20,7 +20,7 @@ import {
 } from "@sekhmet/job";
 import { assert, assertEquals } from "@std/assert";
 
-interface CiContext {
+interface CiMeta {
 	/** `isCI || isAI` in `scripts/ci/main.ts` */
 	readonly reportsCoverage: boolean;
 	/** The stub bodies that should fail */
@@ -29,13 +29,13 @@ interface CiContext {
 	readonly ran: string[];
 }
 
-const { job } = defineJobs<CiContext>();
+const { job } = defineJobs((_meta: CiMeta) => ({}));
 
-/** A stub body: records the step, then fails if the context says so. */
-function stub(name: string): (t: JobRun<CiContext>) => void {
-	return (t) => {
-		t.context.ran.push(name);
-		if (t.context.failing.has(name)) throw new Error(`${name} failed`);
+/** A stub body: records the step, then fails if the metadata says so. */
+function stub(name: string): (r: JobRun<CiMeta, unknown>) => void {
+	return (r) => {
+		r.meta.ran.push(name);
+		if (r.meta.failing.has(name)) throw new Error(`${name} failed`);
 	};
 }
 
@@ -54,8 +54,8 @@ const test = job({
 const coverage = job({
 	name: "Show coverage report",
 	plan: (p) => ({ test: p.needs(test) }),
-	runIf: ({ context, needs }) => {
-		return context.reportsCoverage && all(needs).isSucceeded();
+	runIf: ({ meta, needs }) => {
+		return meta.reportsCoverage && all(needs).isSucceeded();
 	},
 	run: stub("Show coverage report"),
 });
@@ -79,12 +79,12 @@ const cleanup = job({
 	run: stub("Cleanup coverage data"),
 });
 
-async function ci(context: Omit<CiContext, "ran">) {
+async function ci(meta: Omit<CiMeta, "ran">) {
 	const ran: string[] = [];
 	const report = unwrap(
 		await runJobs({
 			jobs: { explainFailure, cleanup },
-			context: { ...context, ran },
+			meta: { ...meta, ran },
 		}),
 	);
 	return { report, ran };

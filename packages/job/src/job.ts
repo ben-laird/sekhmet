@@ -1,8 +1,8 @@
 /**
- * Defining jobs: {@linkcode defineJobs} fixes a run's context type and
- * returns `job`, which pairs a pure plan (the job's dependency list) with a
- * run (the work, given that list resolved), and `family`, which makes jobs
- * on the fly.
+ * Defining jobs: {@linkcode defineJobs} takes a context factory, which fixes
+ * a run's metadata type and each job's context type, and returns `job`,
+ * which pairs a pure plan (the job's dependency list) with a run (the work,
+ * given that list resolved), and `family`, which makes jobs on the fly.
  *
  * @module
  */
@@ -35,15 +35,15 @@ export interface JobId {
  * A named unit of work in a job graph: a plan that declares what it needs,
  * and a run that does the work. A job is a value; its identity is its
  * {@linkcode JobId}, and its name is for display, unique within a run.
- * Make one with `defineJobs().job` or `defineJobs().family`.
+ * Make one with `defineJobs(factory).job` or `defineJobs(factory).family`.
  *
  * @template T What the run returns, which dependents receive
- * @template C The run's context type
+ * @template M The run's metadata type
  */
-export class Job<out T, in C> extends Struct<JobParams<T, C>> {}
+export class Job<out T, in M> extends Struct<JobParams<T, M>> {}
 
 /**
- * Any job, whatever it returns or reads from the context.
+ * Any job, whatever it returns or reads from the run's metadata.
  */
 export type AnyJob = Job<unknown, never>;
 
@@ -51,20 +51,20 @@ export type AnyJob = Job<unknown, never>;
  * What a {@linkcode Job} holds.
  *
  * @template T What the run returns
- * @template C The run's context type
+ * @template M The run's metadata type
  */
-export interface JobParams<T, C> {
+export interface JobParams<T, M> {
 	/** The job's display name, unique within a run */
 	readonly name: string;
 	/** The job's identity */
 	readonly id: JobId;
-	/** Binds the job to a run's context, erasing the plan's type */
-	readonly bind: (context: C) => BoundJob<T>;
+	/** Binds the job to a run's metadata, erasing the plan's type */
+	readonly bind: (meta: M) => BoundJob<T>;
 }
 
 /**
- * A job bound to a run's context, as the runner sees it: the plan's type is
- * erased, and `run` resolves needs from what the runner hands it.
+ * A job bound to a run's metadata, as the runner sees it: the plan's type
+ * is erased, and `run` resolves needs from what the runner hands it.
  *
  * @template T What the run returns
  */
@@ -84,7 +84,10 @@ export interface BoundJob<T> {
 	readonly plan: () => PlanRecord;
 	/** Tests the `runIf`, given the settled needs */
 	readonly shouldRun: (input: ShouldRunInput) => boolean;
-	/** Runs the body, given the plan with its needs resolved */
+	/**
+	 * Builds the job's context with its kit's factory, then runs the body,
+	 * given the plan with its needs resolved. A throw from either rejects.
+	 */
 	readonly run: (input: BodyInput) => Promise<T>;
 }
 
@@ -113,13 +116,16 @@ export interface BodyInput {
 }
 
 /**
- * What a run receives as `t`.
+ * What a run receives as its first parameter (`r` in the docs).
  *
- * @template C The run's context type
+ * @template M The run's metadata type
+ * @template C The job's context type
  */
-export interface JobRun<C> {
-	/** The run's read-only context, such as a logger and config */
-	readonly context: C;
+export interface JobRun<M, C> {
+	/** The run's metadata, as `runJobs` was given it, shared by every job */
+	readonly meta: M;
+	/** This job's own context, built by the factory just before `run` */
+	readonly ctx: C;
 	/**
 	 * Aborted when the run is cancelled; pass it to `fetch` and friends. A
 	 * job that runs after a cancel (its `runIf` held with `cancelled: true`)
@@ -137,7 +143,7 @@ export interface JobRun<C> {
 }
 
 /**
- * A sub-step of a job's run, for `t.step`.
+ * A sub-step of a job's run, for `r.step`.
  *
  * @template U What the step returns
  */
@@ -149,14 +155,15 @@ export interface StepDefinition<U> {
 }
 
 /**
- * What a hand-written `runIf` receives.
+ * What a hand-written `runIf` receives. It reads the run's metadata, never
+ * a context: the context is built only once the job is known to run.
  *
- * @template C The run's context type
+ * @template M The run's metadata type
  * @template P The plan's value
  */
-export interface RunIfInput<C, P> {
-	/** The run's context */
-	readonly context: C;
+export interface RunIfInput<M, P> {
+	/** The run's metadata */
+	readonly meta: M;
 	/** Whether the run has been cancelled */
 	readonly cancelled: boolean;
 	/** The plan, each need replaced by its outcome */
@@ -164,22 +171,44 @@ export interface RunIfInput<C, P> {
 }
 
 /**
+ * What a context factory receives besides the run's metadata.
+ */
+export interface ContextFactoryInput {
+	/** The display name of the job the context is for */
+	readonly job: string;
+}
+
+/**
+ * Builds a job's context from the run's metadata: called once per job,
+ * just before its `run`, and never for a dry run or a job that doesn't
+ * start. It is synchronous. A throw makes the job `Failed`.
+ *
+ * Its two parameters are positional, so `defineJobs` can infer the
+ * metadata type from the first one's annotation.
+ *
+ * @template M The run's metadata type
+ * @template C The job's context type
+ */
+export type ContextFactory<M, C> = (meta: M, input: ContextFactoryInput) => C;
+
+/**
  * What every job definition has.
  *
- * @template C The run's context type
+ * @template M The run's metadata type
  * @template P The plan's value
  */
-export interface JobDefinitionBase<C, P> {
+export interface JobDefinitionBase<M, P> {
 	/** The job's display name, unique within a run */
 	readonly name: string;
 	/**
 	 * Returns the job's dependency list: needs in plain arrays and records,
 	 * pure and synchronous. A job that needs nothing omits it. Anything else
-	 * `run` uses comes from its context or a closure (leaf values in a plan
-	 * are a second-class escape hatch; see `PlanRecord`). A plan that throws
-	 * is a bug: `runJobs` and `planJobs` rethrow it before any job starts.
+	 * `run` uses comes from its context, its metadata or a closure (leaf
+	 * values in a plan are a second-class escape hatch; see `PlanRecord`). A
+	 * plan that throws is a bug: `runJobs` and `planJobs` rethrow it before
+	 * any job starts.
 	 */
-	readonly plan?: ((p: Planner<C>) => P) | undefined;
+	readonly plan?: ((p: Planner<M>) => P) | undefined;
 	/**
 	 * A failure leaves the run's verdict passing, and doesn't trigger
 	 * `failFast` (default `false`)
@@ -192,15 +221,20 @@ export interface JobDefinitionBase<C, P> {
  * cancelled: the default `runIf`, `success()`. Its `run` gets the needs'
  * values.
  *
- * @template C The run's context type
+ * @template M The run's metadata type
+ * @template C The job's context type
  * @template P The plan's value
  * @template T What the run returns
  */
-export interface SuccessJobDefinition<C, P, T> extends JobDefinitionBase<C, P> {
+export interface SuccessJobDefinition<M, C, P, T>
+	extends JobDefinitionBase<M, P> {
 	/** `success()`, the default */
 	readonly runIf?: Condition<"success"> | undefined;
 	/** Does the work, given the plan with each need's value in its place */
-	readonly run: (t: JobRun<C>, needs: Resolved<P, "success">) => T | Promise<T>;
+	readonly run: (
+		r: JobRun<M, C>,
+		needs: Resolved<P, "success">,
+	) => T | Promise<T>;
 }
 
 /**
@@ -208,18 +242,19 @@ export interface SuccessJobDefinition<C, P, T> extends JobDefinitionBase<C, P> {
  * `failure()`, `cancelled()`, `always()`, or a hand-written predicate. Its
  * `run` gets the needs' `JobOutcome`s.
  *
- * @template C The run's context type
+ * @template M The run's metadata type
+ * @template C The job's context type
  * @template P The plan's value
  * @template T What the run returns
  */
-export interface AnyJobDefinition<C, P, T> extends JobDefinitionBase<C, P> {
+export interface AnyJobDefinition<M, C, P, T> extends JobDefinitionBase<M, P> {
 	/**
 	 * When to call `run`, tested once the needs settle. A hand-written one
 	 * runs after a cancel whenever it returns `true` for `cancelled: true`.
 	 */
-	readonly runIf: Condition<"any"> | ((input: RunIfInput<C, P>) => boolean);
+	readonly runIf: Condition<"any"> | ((input: RunIfInput<M, P>) => boolean);
 	/** Does the work, given the plan with each need's outcome in its place */
-	readonly run: (t: JobRun<C>, needs: Resolved<P, "any">) => T | Promise<T>;
+	readonly run: (r: JobRun<M, C>, needs: Resolved<P, "any">) => T | Promise<T>;
 }
 
 /**
@@ -230,20 +265,21 @@ export type EmptyPlan = Record<never, never>;
 /**
  * What {@linkcode defineJobs} returns.
  *
- * @template C The run's context type
+ * @template M The run's metadata type
+ * @template C The job's context type
  */
-export interface JobKit<C> {
+export interface JobKit<M, C> {
 	/**
 	 * Defines a job. `run`'s second parameter is inferred from what `plan`
 	 * returns, resolved per `runIf`.
 	 */
 	readonly job: {
 		<P extends PlanRecord = EmptyPlan, T = void>(
-			definition: SuccessJobDefinition<C, P, T>,
-		): Job<T, C>;
+			definition: SuccessJobDefinition<M, C, P, T>,
+		): Job<T, M>;
 		<P extends PlanRecord = EmptyPlan, T = void>(
-			definition: AnyJobDefinition<C, P, T>,
-		): Job<T, C>;
+			definition: AnyJobDefinition<M, C, P, T>,
+		): Job<T, M>;
 	};
 	/**
 	 * Makes jobs on the fly: `define` builds the job for an argument, and
@@ -252,8 +288,8 @@ export interface JobKit<C> {
 	 * (a package's publish needs its dependencies') and cover a matrix.
 	 */
 	readonly family: <A, T>(
-		options: FamilyOptions<A, T, C>,
-	) => (arg: A) => Job<T, C>;
+		options: FamilyOptions<A, T, M>,
+	) => (arg: A) => Job<T, M>;
 }
 
 /**
@@ -261,28 +297,37 @@ export interface JobKit<C> {
  *
  * @template A What each job of the family is built from
  * @template T What its jobs return
- * @template C The run's context type
+ * @template M The run's metadata type
  */
-export interface FamilyOptions<A, T, C> {
+export interface FamilyOptions<A, T, M> {
 	/** The identity of the job for `arg` within the family */
 	readonly key: (arg: A) => string;
 	/** Builds the job for `arg`; its name must differ per key */
-	readonly define: (arg: A) => Job<T, C>;
+	readonly define: (arg: A) => Job<T, M>;
 }
 
 /**
  * The roots of a run or a dry run: jobs by key.
  *
- * @template C The run's context type
+ * @template M The run's metadata type
  */
-export type Roots<C> = { readonly [key: string]: Job<unknown, C> };
+export type Roots<M> = { readonly [key: string]: Job<unknown, M> };
 
 /**
- * Fixes the context type `C` of the runs these jobs take part in, and
- * returns `job` and `family` to define them with.
+ * Takes the context factory for a set of jobs, and returns `job` and
+ * `family` to define them with. The factory's parameter annotation fixes
+ * the run's metadata type `M`, which `runJobs` and `planJobs` take as
+ * `meta`, and its return fixes the context type `C` each `run` gets as
+ * `r.ctx`.
  *
- * @template C The run's context type
- * @returns The job constructors for context `C`
+ * Each job that starts gets its own context, built just before its `run`,
+ * so one job can't change another's. A dry run never calls the factory, and
+ * plans and `runIf` see only `meta`, so the factory may do real work.
+ *
+ * @template M The run's metadata type
+ * @template C The job's context type
+ * @param factory Builds a job's context from the run's metadata
+ * @returns The job constructors
  *
  * @example
  * ```ts
@@ -290,68 +335,71 @@ export type Roots<C> = { readonly [key: string]: Job<unknown, C> };
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { assertEquals } from "@std/assert";
  *
- * const { job } = defineJobs<{ readonly greeting: string }>();
+ * const { job } = defineJobs((meta: { readonly greeting: string }, { job }) => {
+ * 	return { prefix: `[${job}] ${meta.greeting}` };
+ * });
  *
  * const name = job({ name: "name", run: () => "world" });
  * const greet = job({
  * 	name: "greet",
  * 	plan: (p) => ({ who: p.needs(name) }),
- * 	run: (t, { who }) => `${t.context.greeting}, ${who}`,
+ * 	run: (r, { who }) => `${r.ctx.prefix}, ${who}`,
  * });
  *
  * const report = unwrap(
- * 	await runJobs({ jobs: { greet }, context: { greeting: "hello" } }),
+ * 	await runJobs({ jobs: { greet }, meta: { greeting: "hello" } }),
  * );
- * assertEquals(report.outcomes.greet.value().unwrap(), "hello, world");
+ * assertEquals(report.outcomes.greet.value().unwrap(), "[greet] hello, world");
  * ```
  */
-export function defineJobs<C>(): JobKit<C> {
+export function defineJobs<M, C>(factory: ContextFactory<M, C>): JobKit<M, C> {
 	return { job: defineJob, family: defineFamily };
 
 	function defineFamily<A, T>({
 		key,
 		define,
-	}: FamilyOptions<A, T, C>): (arg: A) => Job<T, C> {
+	}: FamilyOptions<A, T, M>): (arg: A) => Job<T, M> {
 		const family = Symbol("family");
 		return (arg) => {
 			const { name, bind } = getStructParams(define(arg));
 			const id: JobId = { family, key: key(arg) };
-			return new Job<T, C>({
+			return new Job<T, M>({
 				name,
 				id,
-				bind: (context) => ({ ...bind(context), id }),
+				bind: (meta) => ({ ...bind(meta), id }),
 			});
 		};
 	}
 
 	function defineJob<P extends PlanRecord, T>(
-		definition: SuccessJobDefinition<C, P, T> | AnyJobDefinition<C, P, T>,
-	): Job<T, C> {
+		definition: SuccessJobDefinition<M, C, P, T> | AnyJobDefinition<M, C, P, T>,
+	): Job<T, M> {
 		const { name, plan, runIf, run, continueOnError = false } = definition;
 		const id: JobId = { family: Symbol(name), key: "" };
 		const condition = conditionOf(runIf);
 
-		return new Job<T, C>({
+		return new Job<T, M>({
 			name,
 			id,
-			bind: (context) => {
+			bind: (meta) => {
 				return {
 					name,
 					id,
 					continueOnError,
 					runIf: condition,
-					plan: () => plan?.(planner(context)) ?? {},
+					plan: () => plan?.(planner(meta)) ?? {},
 					shouldRun: ({ cancelled, needs, outcomes }) => {
 						if (runIf === undefined) {
 							return success().test({ cancelled, outcomes });
 						}
 						if (typeof runIf === "function") {
-							return runIf({ context, cancelled, needs: unerased(needs) });
+							return runIf({ meta, cancelled, needs: unerased(needs) });
 						}
 						return runIf.test({ cancelled, outcomes });
 					},
 					run: async ({ needs, signal, step }) => {
-						return await run({ context, signal, step }, unerased(needs));
+						const ctx = factory(meta, { job: name });
+						return await run({ meta, ctx, signal, step }, unerased(needs));
 					},
 				};
 			},
@@ -370,20 +418,20 @@ function conditionOf(
 	});
 }
 
-/** The `p` a plan receives: it binds each needed job to the context. */
-function planner<C>(context: C): Planner<C> {
+/** The `p` a plan receives: it binds each needed job to the metadata. */
+function planner<M>(meta: M): Planner<M> {
 	return {
-		context,
+		meta,
 		needs: (job) => {
 			return new Need({
-				job: getStructParams(job).bind(context),
+				job: getStructParams(job).bind(meta),
 				guard: undefined,
 				conditional: false,
 			});
 		},
 		needsIf: ({ job, when }) => {
 			return new Need({
-				job: getStructParams(job).bind(context),
+				job: getStructParams(job).bind(meta),
 				guard: when,
 				conditional: true,
 			});

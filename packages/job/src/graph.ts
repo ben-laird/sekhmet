@@ -24,7 +24,7 @@ import { collectNeeds, isPlainRecord } from "@/src/plan-data.ts";
  * One job of a planned graph: its plan, and the jobs that plan needs.
  */
 export interface GraphNode {
-	/** The job, bound to the run's context */
+	/** The job, bound to the run's metadata */
 	readonly job: BoundJob<unknown>;
 	/** What its plan returned, needs unresolved */
 	readonly plan: PlanRecord;
@@ -69,7 +69,7 @@ export interface NonPlainPlanCause {
  *
  * A plan that throws is a bug: the throw propagates, before any job runs.
  *
- * @param roots The roots, bound to the run's context
+ * @param roots The roots, bound to the run's metadata
  * @returns The graph, or the first duplicate name, duplicate key, guard
  *   read outside its plan, or cycle found
  */

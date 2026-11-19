@@ -24,7 +24,7 @@ import { unwrap } from "@sekhmet/enum/result/mini";
 import { always, Blocked, defineJobs, runJobs } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
-const { job } = defineJobs<{ readonly log: string[] }>();
+const { job } = defineJobs((_meta: { readonly log: string[] }) => ({}));
 
 const lint = job({
 	name: "lint",
@@ -38,15 +38,15 @@ const build = job({ name: "build", run: () => "dist" });
 const deploy = job({
 	name: "deploy",
 	plan: (p) => ({ linted: p.needs(lint), site: p.needs(build) }),
-	run: (t, { site }) => t.context.log.push(`deployed ${site}`),
+	run: (r, { site }) => r.meta.log.push(`deployed ${site}`),
 });
 
 const cleanup = job({
 	name: "cleanup",
 	plan: (p) => ({ deploy: p.needs(deploy) }),
 	runIf: always(),
-	run: (t, { deploy }) => {
-		t.context.log.push(
+	run: (r, { deploy }) => {
+		r.meta.log.push(
 			`cleaned up after ${deploy.isBlocked() ? "a block" : "a deploy"}`,
 		);
 	},
@@ -54,7 +54,7 @@ const cleanup = job({
 
 const log: string[] = [];
 const report = unwrap(
-	await runJobs({ jobs: { deploy, cleanup }, context: { log } }),
+	await runJobs({ jobs: { deploy, cleanup }, meta: { log } }),
 );
 
 assertEquals(report.outcomes.deploy, Blocked(["lint"]));
@@ -71,7 +71,7 @@ assertEquals(report.passed, false);
   when another succeeded, cleaning up or notifying after a failure, writing
   your own `runIf`, generating jobs from data with `family`, previewing a
   run, cancelling a run, handing an outcome to `Result` code, reporting
-  progress with `t.step`, and matching on an outcome.
+  progress with `r.step`, and matching on an outcome.
 - **Explanation:** [Concepts](./docs/concepts.md) covers plan and run,
   conditions as data and the GitHub Actions mapping, once per run, the
   outcome algebra, planning before running, cancellation, and how job

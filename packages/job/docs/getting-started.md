@@ -22,7 +22,7 @@ each step uses to check its output, is already in the root import map.
 ## Run one job
 
 First, we define a job that lints the code. Our jobs run commands, so we
-give every run a context with a `sh` function. Here it only records each
+hand every run a shell with a `sh` function. Here it only records each
 command, which keeps the tutorial runnable anywhere:
 
 ```ts
@@ -34,9 +34,9 @@ interface Shell {
 	readonly sh: (command: string) => Promise<void>;
 }
 
-const { job } = defineJobs<Shell>();
+const { job } = defineJobs((shell: Shell) => shell);
 
-const lint = job({ name: "lint", run: (t) => t.context.sh("deno lint") });
+const lint = job({ name: "lint", run: (r) => r.ctx.sh("deno lint") });
 
 const ran: string[] = [];
 const shell: Shell = {
@@ -44,18 +44,19 @@ const shell: Shell = {
 		ran.push(command);
 	},
 };
-const report = unwrap(await runJobs({ jobs: { lint }, context: shell }));
+const report = unwrap(await runJobs({ jobs: { lint }, meta: shell }));
 
 assertEquals(report.outcomes.lint, Succeeded(undefined));
 assertEquals(ran, ["deno lint"]);
 ```
 
-`defineJobs<Shell>()` fixes the context type, so `t.context.sh` is typed in
-every job we define with this `job`. `runJobs` takes the jobs to run as a
-record, and its report gives each one's outcome under the same key. It infers
-the context's type from the value we hand it, so we annotate `shell` as a
-`Shell` where we write it. The
-lint job returned nothing, so it `Succeeded` with `undefined`.
+`defineJobs` takes a context factory. The type we annotate its parameter
+with, `Shell`, is the run's metadata, which we hand `runJobs` as `meta`. What
+the factory returns is each job's context, `r.ctx`; ours passes the shell
+straight through, so `r.ctx.sh` is typed in every job we define with this
+`job`. `runJobs` takes the jobs to run as a record, and its report gives each
+one's outcome under the same key. The lint job returned nothing, so it
+`Succeeded` with `undefined`.
 
 `runJobs` returns a `Result`, because a set of jobs might not form a valid
 graph. Ours does, so we `unwrap` it.
@@ -74,21 +75,21 @@ interface Shell {
 	readonly sh: (command: string) => Promise<void>;
 }
 
-const { job } = defineJobs<Shell>();
+const { job } = defineJobs((shell: Shell) => shell);
 
-const lint = job({ name: "lint", run: (t) => t.context.sh("deno lint") });
+const lint = job({ name: "lint", run: (r) => r.ctx.sh("deno lint") });
 
 const test = job({
 	name: "test",
 	plan: (p) => ({ lint: p.needs(lint) }),
-	run: (t) => t.context.sh("deno test"),
+	run: (r) => r.ctx.sh("deno test"),
 });
 
 const build = job({
 	name: "build",
 	plan: (p) => ({ lint: p.needs(lint) }),
-	run: async (t) => {
-		await t.context.sh("deno task build");
+	run: async (r) => {
+		await r.ctx.sh("deno task build");
 		return "dist";
 	},
 });
@@ -96,7 +97,7 @@ const build = job({
 const deploy = job({
 	name: "deploy",
 	plan: (p) => ({ tested: p.needs(test), site: p.needs(build) }),
-	run: (t, { site }) => t.context.sh(`deploy ${site}`),
+	run: (r, { site }) => r.ctx.sh(`deploy ${site}`),
 });
 
 const ran: string[] = [];
@@ -105,7 +106,7 @@ const shell: Shell = {
 		ran.push(command);
 	},
 };
-const report = unwrap(await runJobs({ jobs: { deploy }, context: shell }));
+const report = unwrap(await runJobs({ jobs: { deploy }, meta: shell }));
 
 assertEquals(report.outcomes.deploy, Succeeded(undefined));
 assertEquals(ran.length, 4);
@@ -135,21 +136,21 @@ interface Shell {
 	readonly sh: (command: string) => Promise<void>;
 }
 
-const { job } = defineJobs<Shell>();
+const { job } = defineJobs((shell: Shell) => shell);
 
-const lint = job({ name: "lint", run: (t) => t.context.sh("deno lint") });
+const lint = job({ name: "lint", run: (r) => r.ctx.sh("deno lint") });
 
 const test = job({
 	name: "test",
 	plan: (p) => ({ lint: p.needs(lint) }),
-	run: (t) => t.context.sh("deno test"),
+	run: (r) => r.ctx.sh("deno test"),
 });
 
 const build = job({
 	name: "build",
 	plan: (p) => ({ lint: p.needs(lint) }),
-	run: async (t) => {
-		await t.context.sh("deno task build");
+	run: async (r) => {
+		await r.ctx.sh("deno task build");
 		return "dist";
 	},
 });
@@ -157,7 +158,7 @@ const build = job({
 const deploy = job({
 	name: "deploy",
 	plan: (p) => ({ tested: p.needs(test), site: p.needs(build) }),
-	run: (t, { site }) => t.context.sh(`deploy ${site}`),
+	run: (r, { site }) => r.ctx.sh(`deploy ${site}`),
 });
 
 const ran: string[] = [];
@@ -167,7 +168,7 @@ const shell: Shell = {
 		if (command === "deno test") throw new Error("deno test exited 1");
 	},
 };
-const report = unwrap(await runJobs({ jobs: { deploy }, context: shell }));
+const report = unwrap(await runJobs({ jobs: { deploy }, meta: shell }));
 
 assert(report.all.get("test")?.isFailed());
 assertEquals(report.all.get("build"), Succeeded("dist"));
@@ -200,21 +201,21 @@ interface Shell {
 	readonly sh: (command: string) => Promise<void>;
 }
 
-const { job } = defineJobs<Shell>();
+const { job } = defineJobs((shell: Shell) => shell);
 
-const lint = job({ name: "lint", run: (t) => t.context.sh("deno lint") });
+const lint = job({ name: "lint", run: (r) => r.ctx.sh("deno lint") });
 
 const test = job({
 	name: "test",
 	plan: (p) => ({ lint: p.needs(lint) }),
-	run: (t) => t.context.sh("deno test"),
+	run: (r) => r.ctx.sh("deno test"),
 });
 
 const build = job({
 	name: "build",
 	plan: (p) => ({ lint: p.needs(lint) }),
-	run: async (t) => {
-		await t.context.sh("deno task build");
+	run: async (r) => {
+		await r.ctx.sh("deno task build");
 		return "dist";
 	},
 });
@@ -222,15 +223,15 @@ const build = job({
 const deploy = job({
 	name: "deploy",
 	plan: (p) => ({ tested: p.needs(test), site: p.needs(build) }),
-	run: (t, { site }) => t.context.sh(`deploy ${site}`),
+	run: (r, { site }) => r.ctx.sh(`deploy ${site}`),
 });
 
 const cleanup = job({
 	name: "cleanup",
 	plan: (p) => ({ site: p.needs(build), deploy: p.needs(deploy) }),
 	runIf: always(),
-	run: async (t, { site, deploy }) => {
-		await t.context.sh(`rm -rf ${site.value().unwrapOr("dist")}`);
+	run: async (r, { site, deploy }) => {
+		await r.ctx.sh(`rm -rf ${site.value().unwrapOr("dist")}`);
 		return deploy.isSucceeded();
 	},
 });
@@ -243,7 +244,7 @@ const shell: Shell = {
 	},
 };
 const report = unwrap(
-	await runJobs({ jobs: { deploy, cleanup }, context: shell }),
+	await runJobs({ jobs: { deploy, cleanup }, meta: shell }),
 );
 
 assertEquals(report.outcomes.cleanup.value().unwrap(), false);
@@ -273,21 +274,21 @@ interface Shell {
 	readonly sh: (command: string) => Promise<void>;
 }
 
-const { job } = defineJobs<Shell>();
+const { job } = defineJobs((shell: Shell) => shell);
 
-const lint = job({ name: "lint", run: (t) => t.context.sh("deno lint") });
+const lint = job({ name: "lint", run: (r) => r.ctx.sh("deno lint") });
 
 const test = job({
 	name: "test",
 	plan: (p) => ({ lint: p.needs(lint) }),
-	run: (t) => t.context.sh("deno test"),
+	run: (r) => r.ctx.sh("deno test"),
 });
 
 const build = job({
 	name: "build",
 	plan: (p) => ({ lint: p.needs(lint) }),
-	run: async (t) => {
-		await t.context.sh("deno task build");
+	run: async (r) => {
+		await r.ctx.sh("deno task build");
 		return "dist";
 	},
 });
@@ -295,15 +296,15 @@ const build = job({
 const deploy = job({
 	name: "deploy",
 	plan: (p) => ({ tested: p.needs(test), site: p.needs(build) }),
-	run: (t, { site }) => t.context.sh(`deploy ${site}`),
+	run: (r, { site }) => r.ctx.sh(`deploy ${site}`),
 });
 
 const cleanup = job({
 	name: "cleanup",
 	plan: (p) => ({ site: p.needs(build), deploy: p.needs(deploy) }),
 	runIf: always(),
-	run: async (t, { site, deploy }) => {
-		await t.context.sh(`rm -rf ${site.value().unwrapOr("dist")}`);
+	run: async (r, { site, deploy }) => {
+		await r.ctx.sh(`rm -rf ${site.value().unwrapOr("dist")}`);
 		return deploy.isSucceeded();
 	},
 });
@@ -314,7 +315,7 @@ const shell: Shell = {
 	},
 };
 const report = unwrap(
-	await runJobs({ jobs: { deploy, cleanup }, context: shell }),
+	await runJobs({ jobs: { deploy, cleanup }, meta: shell }),
 );
 
 const deployed: JobOutcome<void> = report.outcomes.deploy;

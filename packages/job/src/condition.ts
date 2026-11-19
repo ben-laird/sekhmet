@@ -117,7 +117,7 @@ export function cancelled(): Condition<"any"> {
 }
 
 /**
- * Run whatever happened, even after a cancel (`t.signal` is then already
+ * Run whatever happened, even after a cancel (`r.signal` is then already
  * aborted). For cleanups.
  *
  * @returns The `always()` condition

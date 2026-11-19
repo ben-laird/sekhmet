@@ -39,14 +39,18 @@ import { type CountedOutcome, passed } from "@/src/verdict.ts";
 /**
  * What {@linkcode runJobs} takes.
  *
- * @template C The run's context type
+ * @template M The run's metadata type
  * @template J The roots
  */
-export interface RunOptions<C, J extends Roots<C>> {
+export interface RunOptions<M, J extends Roots<M>> {
 	/** The roots, by key; every job they reach runs once */
 	readonly jobs: J;
-	/** The run's read-only context, shared by every plan and body */
-	readonly context: C;
+	/**
+	 * The run's metadata, shared by every plan, `runIf`, context factory and
+	 * body. It is the caller's: a shared resource in it (a pool) is the
+	 * caller's to dispose once `runJobs` resolves
+	 */
+	readonly meta: M;
 	/** Cancels the whole run when aborted */
 	readonly signal?: AbortSignal | undefined;
 	/**
@@ -93,7 +97,7 @@ export interface RunReport<J> {
 }
 
 /**
- * The cause of the panic for a `t.step` called after its job finished.
+ * The cause of the panic for a `r.step` called after its job finished.
  */
 export interface JobMisuseCause {
 	/** The job whose body misused the step */
@@ -123,16 +127,16 @@ export interface JobMisuseCause {
  *    `AbortError`), which is `Cancelled`.
  *
  * Cancellation (the run's `signal`, or `failFast`) aborts every body's
- * `t.signal`. A job runs after a cancel only if its `runIf` holds with
+ * `r.signal`. A job runs after a cancel only if its `runIf` holds with
  * `cancelled: true` (`always()`, `cancelled()`, `failure()` when a need is
- * unhealthy, or a hand-written one), and then `t.signal` is already
+ * unhealthy, or a hand-written one), and then `r.signal` is already
  * aborted. A guard or `runIf` that throws is a bug: like a throwing
  * `onEvent`, it cancels the run, and `runJobs` rejects with it once every
  * job has settled.
  *
- * @template C The run's context type
+ * @template M The run's metadata type
  * @template J The roots
- * @param options The roots, the context, and how to watch and stop the run
+ * @param options The roots, the metadata, and how to watch and stop the run
  * @returns The report, or why the jobs don't form a graph
  *
  * @example
@@ -141,7 +145,7 @@ export interface JobMisuseCause {
  * import { always, defineJobs, runJobs } from "@sekhmet/job";
  * import { assert, assertEquals } from "@std/assert";
  *
- * const { job } = defineJobs<null>();
+ * const { job } = defineJobs(() => ({}));
  * const lint = job({
  * 	name: "lint",
  * 	run: () => {
@@ -157,27 +161,27 @@ export interface JobMisuseCause {
  * 	name: "cleanup",
  * 	plan: (p) => ({ test: p.needs(test) }),
  * 	runIf: always(),
- * 	run: (_t, { test }) => test.isBlocked(),
+ * 	run: (_r, { test }) => test.isBlocked(),
  * });
  *
  * const report = unwrap(
- * 	await runJobs({ jobs: { test, cleanup }, context: null }),
+ * 	await runJobs({ jobs: { test, cleanup }, meta: null }),
  * );
  * assertEquals(report.passed, false);
  * assert(report.outcomes.test.isBlocked());
  * assertEquals(report.outcomes.cleanup.value().unwrap(), true);
  * ```
  */
-export async function runJobs<C, J extends Roots<C>>({
+export async function runJobs<M, J extends Roots<M>>({
 	jobs,
-	context,
+	meta,
 	signal,
 	failFast = false,
 	onEvent: hook = () => {},
-}: RunOptions<C, J>): Promise<Result<RunReport<J>, GraphError>> {
+}: RunOptions<M, J>): Promise<Result<RunReport<J>, GraphError>> {
 	const keys = Object.keys(jobs);
 	const planned = planGraph(
-		Object.values(jobs).map((job) => getStructParams(job).bind(context)),
+		Object.values(jobs).map((job) => getStructParams(job).bind(meta)),
 	);
 	if (isErr(planned)) return planned;
 	const graph = unwrap(planned);
@@ -361,7 +365,7 @@ export async function runJobs<C, J extends Roots<C>>({
 			if (!running) {
 				panic<JobMisuseCause>({
 					name: "StepAfterFinish",
-					message: `t.step({ name: "${step}" }) was called after job "${name}" finished`,
+					message: `r.step({ name: "${step}" }) was called after job "${name}" finished`,
 					cause: { job: name },
 				});
 			}

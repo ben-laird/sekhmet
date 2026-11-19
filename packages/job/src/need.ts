@@ -16,7 +16,7 @@ import type { JobOutcome } from "@/src/outcome/main/mod.ts";
  * `undefined` stands for one left out.
  *
  * Plain leaf values (a string, a flag) type-check too, but they are a
- * second-class escape hatch, never necessary: a plan sees only the context
+ * second-class escape hatch, never necessary: a plan sees only the metadata
  * and closures, and `run` has both. See {@linkcode Field} for the hatch's
  * papercut.
  */
@@ -43,7 +43,7 @@ export class Need<out T, out Conditional extends boolean> extends Struct<
  * @template Conditional `true` for `needsIf`
  */
 export interface NeedParams<T, Conditional extends boolean> {
-	/** The needed job, bound to the run's context */
+	/** The needed job, bound to the run's metadata */
 	readonly job: BoundJob<T>;
 	/** The guard that pulls the job in, for `needsIf` */
 	readonly guard: Guard | undefined;
@@ -57,20 +57,21 @@ export interface NeedParams<T, Conditional extends boolean> {
 export type AnyNeed = Need<unknown, boolean>;
 
 /**
- * What a plan receives as `p`: the run's context, and the two ways to
+ * What a plan receives as `p`: the run's metadata, and the two ways to
  * declare a need. A plan is pure and synchronous: it only builds the job's
- * dependency list.
+ * dependency list. It sees no context: a context is built per job, only
+ * once that job starts.
  *
- * @template C The run's context type
+ * @template M The run's metadata type
  */
-export interface Planner<C> {
-	/** The run's context, so a plan can decide from config which jobs it needs */
-	readonly context: C;
+export interface Planner<M> {
+	/** The run's metadata, so a plan can decide from config which jobs it needs */
+	readonly meta: M;
 	/**
 	 * Declares that the job needs `job`. Under the default `runIf`,
 	 * `success()`, the job is `Blocked` if `job` fails or is blocked.
 	 */
-	needs<T>(job: Job<T, C>): Need<T, false>;
+	needs<T>(job: Job<T, M>): Need<T, false>;
 	/**
 	 * Declares that the job needs `job` only if `when` holds once the plan's
 	 * unconditional needs have settled. A guard may read only those, as
@@ -80,18 +81,18 @@ export interface Planner<C> {
 	 * pulled in this way counts like any other (a failure blocks, under
 	 * `success()`); one left out is `undefined` where it sits in the plan.
 	 */
-	needsIf<T>(options: NeedsIfOptions<T, C>): Need<T, true>;
+	needsIf<T>(options: NeedsIfOptions<T, M>): Need<T, true>;
 }
 
 /**
  * What `p.needsIf` takes.
  *
  * @template T What the needed job returns
- * @template C The run's context type
+ * @template M The run's metadata type
  */
-export interface NeedsIfOptions<T, C> {
+export interface NeedsIfOptions<T, M> {
 	/** The job to pull in */
-	readonly job: Job<T, C>;
+	readonly job: Job<T, M>;
 	/** When to pull it in, tested once the unconditional needs settle */
 	readonly when: Guard;
 }
@@ -151,7 +152,7 @@ export type ConditionKind = "success" | "any";
  * `Option`, a `Job`) keep their types, but any other class instance is
  * typed structurally, as a mapped copy of its public members, so its
  * `#private` members are lost and it no longer fits its own class. That
- * papercut is accepted: `run` can read such a value from its context or a
+ * papercut is accepted: `run` can read such a value from its metadata or a
  * closure instead.
  *
  * @template F The field's type in the plan

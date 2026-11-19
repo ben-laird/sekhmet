@@ -22,7 +22,7 @@ import type { Guard, Need } from "@/src/need.ts";
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { assertEquals } from "@std/assert";
  *
- * const { job } = defineJobs<null>();
+ * const { job } = defineJobs(() => ({}));
  * const build = job({ name: "build", run: () => "dist" });
  * const deploy = job({ name: "deploy", run: () => {} });
  * const release = job({
@@ -34,7 +34,7 @@ import type { Guard, Need } from "@/src/need.ts";
  * 	run: () => {},
  * });
  *
- * const graph = unwrap(planJobs({ jobs: { release }, context: null }));
+ * const graph = unwrap(planJobs({ jobs: { release }, meta: null }));
  * assertEquals(graph.jobs.get("release")?.needs[1]?.when, "build succeeded");
  * ```
  */
@@ -59,7 +59,7 @@ export function succeeded<T>(need: Need<T, boolean>): Guard {
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { assertEquals } from "@std/assert";
  *
- * const { job } = defineJobs<null>();
+ * const { job } = defineJobs(() => ({}));
  * const build = job({
  * 	name: "build",
  * 	run: (): string => {
@@ -74,10 +74,10 @@ export function succeeded<T>(need: Need<T, boolean>): Guard {
  * 		return { built, logs: p.needsIf({ job: logs, when: failed(built) }) };
  * 	},
  * 	runIf: always(),
- * 	run: (_t, { logs }) => logs?.value().unwrap() ?? "no logs",
+ * 	run: (_r, { logs }) => logs?.value().unwrap() ?? "no logs",
  * });
  *
- * const ran = unwrap(await runJobs({ jobs: { report }, context: null }));
+ * const ran = unwrap(await runJobs({ jobs: { report }, meta: null }));
  * assertEquals(ran.outcomes.report.value().unwrap(), "build.log");
  * ```
  */
@@ -116,7 +116,7 @@ export interface SucceededWithOptions<T> {
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { assertEquals } from "@std/assert";
  *
- * const { job } = defineJobs<null>();
+ * const { job } = defineJobs(() => ({}));
  * const version = job({ name: "version", run: () => "1.2.0" });
  * const sign = job({ name: "sign", run: () => "signature" });
  * const publish = job({
@@ -130,10 +130,10 @@ export interface SucceededWithOptions<T> {
  * 		});
  * 		return { version: v, signature: p.needsIf({ job: sign, when: stable }) };
  * 	},
- * 	run: (_t, { version, signature }) => `${version} ${signature ?? "unsigned"}`,
+ * 	run: (_r, { version, signature }) => `${version} ${signature ?? "unsigned"}`,
  * });
  *
- * const report = unwrap(await runJobs({ jobs: { publish }, context: null }));
+ * const report = unwrap(await runJobs({ jobs: { publish }, meta: null }));
  * assertEquals(report.outcomes.publish.value().unwrap(), "1.2.0 signature");
  * ```
  */

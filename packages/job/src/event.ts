@@ -49,7 +49,7 @@ export type { Variants as JobEventVariants };
  *
  * - `Started`: the body is about to run.
  * - `StepStarted`, then `StepSucceeded` or `StepFailed` (with what it threw):
- *   a `t.step` began and ended, between the job's `Started` and its terminal
+ *   a `r.step` began and ended, between the job's `Started` and its terminal
  *   event.
  * - `Finished`: the body returned (`Succeeded`) or threw (`Failed`).
  * - `Skipped`, `Blocked`: decided before the body, so no `Started`.

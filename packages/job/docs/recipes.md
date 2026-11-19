@@ -27,9 +27,9 @@ import { unwrap } from "@sekhmet/enum/result/mini";
 import { defineJobs, runJobs, Succeeded, succeededWith } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
-const { job } = defineJobs<{ readonly version: string }>();
+const { job } = defineJobs((_meta: { readonly version: string }) => ({}));
 
-const version = job({ name: "version", run: (t) => t.context.version });
+const version = job({ name: "version", run: (r) => r.meta.version });
 const sign = job({ name: "sign", run: () => "signature" });
 
 const publish = job({
@@ -43,16 +43,16 @@ const publish = job({
 		});
 		return { version: v, signature: p.needsIf({ job: sign, when: stable }) };
 	},
-	run: (_t, { version, signature }) => `${version} ${signature ?? "unsigned"}`,
+	run: (_r, { version, signature }) => `${version} ${signature ?? "unsigned"}`,
 });
 
 const stable = unwrap(
-	await runJobs({ jobs: { publish }, context: { version: "1.4.0" } }),
+	await runJobs({ jobs: { publish }, meta: { version: "1.4.0" } }),
 );
 assertEquals(stable.outcomes.publish, Succeeded("1.4.0 signature"));
 
 const early = unwrap(
-	await runJobs({ jobs: { publish }, context: { version: "0.3.0" } }),
+	await runJobs({ jobs: { publish }, meta: { version: "0.3.0" } }),
 );
 assertEquals(early.outcomes.publish, Succeeded("0.3.0 unsigned"));
 assertEquals(early.all.has("sign"), false);
@@ -76,7 +76,7 @@ import {
 } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
-const { job } = defineJobs<null>();
+const { job } = defineJobs(() => ({}));
 
 const version = job({ name: "version", run: () => "1.4.0" });
 const sign = job({ name: "sign", run: () => "signature" });
@@ -91,7 +91,7 @@ const publish = job({
 	run: () => {},
 });
 
-const result = await runJobs({ jobs: { publish }, context: null });
+const result = await runJobs({ jobs: { publish }, meta: null });
 assertEquals(
 	unwrapErr(result),
 	UndeclaredGuardRead({
@@ -128,7 +128,7 @@ import { unwrap } from "@sekhmet/enum/result/mini";
 import { always, defineJobs, failure, runJobs, Succeeded } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
-const { job } = defineJobs<{ readonly log: string[] }>();
+const { job } = defineJobs((_meta: { readonly log: string[] }) => ({}));
 
 const build = job({
 	name: "build",
@@ -141,9 +141,9 @@ const notify = job({
 	name: "notify",
 	plan: (p) => ({ build: p.needs(build) }),
 	runIf: failure(),
-	run: (t, { build }) => {
+	run: (r, { build }) => {
 		const error = build.error().map(String).unwrapOr("blocked");
-		t.context.log.push(`paged: ${error}`);
+		r.meta.log.push(`paged: ${error}`);
 	},
 });
 
@@ -152,12 +152,12 @@ const cleanup = job({
 	plan: (p) => ({ build: p.needs(build) }),
 	runIf: always(),
 	continueOnError: true,
-	run: (t) => t.context.log.push("removed dist"),
+	run: (r) => r.meta.log.push("removed dist"),
 });
 
 const log: string[] = [];
 const report = unwrap(
-	await runJobs({ jobs: { notify, cleanup }, context: { log } }),
+	await runJobs({ jobs: { notify, cleanup }, meta: { log } }),
 );
 
 assertEquals(log, ["paged: Error: compile error", "removed dist"]);
@@ -165,7 +165,7 @@ assertEquals(report.outcomes.notify, Succeeded(undefined));
 ```
 
 Both conditions also decide what happens after a cancel. An `always()` job
-still runs, with `t.signal` already aborted, so keep a cleanup's work short
+still runs, with `r.signal` already aborted, so keep a cleanup's work short
 or independent of the signal. A `failure()` job runs after a cancel only if
 a need is unhealthy.
 
@@ -173,10 +173,11 @@ a need is unhealthy.
 
 This guide shows you how to combine the default rule with a check of your
 own: here, a coverage report that runs only when the needs succeeded and
-the context asks for it.
+the run's metadata asks for it.
 
-1. Pass `runIf` a function of `{ context, cancelled, needs }`. `needs` is
-   your plan with each need replaced by its `JobOutcome`.
+1. Pass `runIf` a function of `{ meta, cancelled, needs }`. `needs` is your
+   plan with each need replaced by its `JobOutcome`. There is no context
+   yet: a job's context is built only once it is known to run.
 2. Rebuild the default rule with `all(needs).isSucceeded()`, and add
    `!cancelled` unless the job should run after a cancel: a hand-written
    `runIf` decides that too.
@@ -188,26 +189,28 @@ import { unwrap } from "@sekhmet/enum/result/mini";
 import { all, defineJobs, runJobs, Skipped, Succeeded } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
-const { job } = defineJobs<{ readonly reportsCoverage: boolean }>();
+const { job } = defineJobs((_meta: { readonly reportsCoverage: boolean }) => {
+	return {};
+});
 
 const test = job({ name: "test", run: () => 0.92 });
 
 const coverage = job({
 	name: "coverage",
 	plan: (p) => ({ test: p.needs(test) }),
-	runIf: ({ context, cancelled, needs }) => {
-		return !cancelled && context.reportsCoverage && all(needs).isSucceeded();
+	runIf: ({ meta, cancelled, needs }) => {
+		return !cancelled && meta.reportsCoverage && all(needs).isSucceeded();
 	},
-	run: (_t, { test }) => `${test.value().unwrapOr(0) * 100}%`,
+	run: (_r, { test }) => `${test.value().unwrapOr(0) * 100}%`,
 });
 
 const ci = unwrap(
-	await runJobs({ jobs: { coverage }, context: { reportsCoverage: true } }),
+	await runJobs({ jobs: { coverage }, meta: { reportsCoverage: true } }),
 );
 assertEquals(ci.outcomes.coverage, Succeeded("92%"));
 
 const local = unwrap(
-	await runJobs({ jobs: { coverage }, context: { reportsCoverage: false } }),
+	await runJobs({ jobs: { coverage }, meta: { reportsCoverage: false } }),
 );
 assertEquals(local.outcomes.coverage, Skipped());
 ```
@@ -246,9 +249,9 @@ const enumPkg: Package = { name: "enum", deps: [primordials] };
 const panic: Package = { name: "panic", deps: [primordials] };
 const schema: Package = { name: "schema", deps: [enumPkg, panic] };
 
-const { job, family } = defineJobs<null>();
+const { job, family } = defineJobs(() => ({}));
 
-const publish: (pkg: Package) => Job<string, null> = family({
+const publish: (pkg: Package) => Job<string, unknown> = family({
 	key: (pkg: Package) => pkg.name,
 	define: (pkg) => {
 		return job({
@@ -260,7 +263,7 @@ const publish: (pkg: Package) => Job<string, null> = family({
 });
 
 const graph = unwrap(
-	planJobs({ jobs: { schema: publish(schema) }, context: null }),
+	planJobs({ jobs: { schema: publish(schema) }, meta: null }),
 );
 assertEquals(
 	[...graph.jobs.keys()],
@@ -281,15 +284,17 @@ import { assertEquals } from "@std/assert";
 const RUNTIMES = ["node", "bun", "deno"] as const;
 type Runtime = (typeof RUNTIMES)[number];
 
-const { job, family } = defineJobs<{ readonly broken: Runtime }>();
+const { job, family } = defineJobs((_meta: { readonly broken: Runtime }) => {
+	return {};
+});
 
 const suite = family({
 	key: (runtime: Runtime) => runtime,
 	define: (runtime) => {
 		return job({
 			name: `test (${runtime})`,
-			run: (t) => {
-				if (t.context.broken === runtime) throw new Error("tests failed");
+			run: (r) => {
+				if (r.meta.broken === runtime) throw new Error("tests failed");
 			},
 		});
 	},
@@ -304,15 +309,15 @@ const summary = job({
 		})),
 	}),
 	runIf: always(),
-	run: (_t, { results }) => {
+	run: (_r, { results }) => {
 		return results.map(({ runtime, outcome }) => {
 			return `${outcome.isSucceeded() ? "pass" : "FAIL"} ${runtime}`;
 		});
 	},
 });
 
-const context: { readonly broken: Runtime } = { broken: "bun" };
-const report = unwrap(await runJobs({ jobs: { summary }, context }));
+const meta: { readonly broken: Runtime } = { broken: "bun" };
+const report = unwrap(await runJobs({ jobs: { summary }, meta }));
 assertEquals(
 	report.outcomes.summary,
 	Succeeded(["pass node", "FAIL bun", "pass deno"]),
@@ -328,8 +333,8 @@ error. Both are reported before anything runs.
 This guide shows you how to see the whole graph without running a job, for
 a `--dry-run` flag or a test of the graph's shape.
 
-1. Call `planJobs({ jobs, context })` with the roots and context you would
-   pass to `runJobs`. It calls every plan and no `run`.
+1. Call `planJobs({ jobs, meta })` with the roots and metadata you would
+   pass to `runJobs`. It calls every plan, and no context factory or `run`.
 2. Read `graph.jobs`, a map from each job's name to its `runIf`, its
    `continueOnError`, and its needs. A conditional need carries its guard's
    description in `when`.
@@ -339,7 +344,7 @@ import { unwrap } from "@sekhmet/enum/result/mini";
 import { always, defineJobs, planJobs, succeeded } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
-const { job } = defineJobs<null>();
+const { job } = defineJobs(() => ({}));
 
 let ran = false;
 const build = job({
@@ -365,7 +370,7 @@ const cleanup = job({
 	run: () => {},
 });
 
-const graph = unwrap(planJobs({ jobs: { cleanup }, context: null }));
+const graph = unwrap(planJobs({ jobs: { cleanup }, meta: null }));
 
 assertEquals([...graph.jobs.keys()], ["cleanup", "deploy", "build", "smoke"]);
 assertEquals(graph.jobs.get("cleanup")?.runIf, "always()");
@@ -385,8 +390,8 @@ A plan must be pure for this to be safe: it runs during the dry run too.
 This guide shows you how to stop a run from outside, stop it at the first
 failure, and keep a failure from stopping it.
 
-1. Pass `signal` to `runJobs`. Aborting it aborts `t.signal` in every job.
-2. In each body, hand `t.signal` to whatever does the work (`fetch`, a
+1. Pass `signal` to `runJobs`. Aborting it aborts `r.signal` in every job.
+2. In each body, hand `r.signal` to whatever does the work (`fetch`, a
    subprocess, a timer). Cancellation is cooperative: a body that ignores
    its signal runs to the end.
 3. A body that rejects with the signal's reason, or with an `AbortError`,
@@ -418,17 +423,17 @@ function sleep({
 	});
 }
 
-const { job } = defineJobs<null>();
+const { job } = defineJobs(() => ({}));
 
 const download = job({
 	name: "download",
-	run: (t) => sleep({ ms: 60_000, signal: t.signal }),
+	run: (r) => sleep({ ms: 60_000, signal: r.signal }),
 });
 const cleanup = job({
 	name: "cleanup",
 	plan: (p) => ({ download: p.needs(download) }),
 	runIf: always(),
-	run: (t, { download }) => [download.isCancelled(), t.signal.aborted],
+	run: (r, { download }) => [download.isCancelled(), r.signal.aborted],
 });
 
 const controller = new AbortController();
@@ -437,7 +442,7 @@ setTimeout(() => controller.abort(new Error("interrupted")), 10);
 const report = unwrap(
 	await runJobs({
 		jobs: { cleanup },
-		context: null,
+		meta: null,
 		signal: controller.signal,
 	}),
 );
@@ -457,16 +462,16 @@ import { unwrap } from "@sekhmet/enum/result/mini";
 import { Cancelled, defineJobs, runJobs, Succeeded } from "@sekhmet/job";
 import { assert, assertEquals } from "@std/assert";
 
-const { job } = defineJobs<null>();
+const { job } = defineJobs(() => ({}));
 
 const slow = job({
 	name: "slow",
-	run: (t) => {
+	run: (r) => {
 		return new Promise<string>((resolve, reject) => {
 			const timer = setTimeout(() => resolve("done"), 50);
-			t.signal.addEventListener("abort", () => {
+			r.signal.addEventListener("abort", () => {
 				clearTimeout(timer);
-				reject(t.signal.reason);
+				reject(r.signal.reason);
 			});
 		});
 	},
@@ -486,12 +491,12 @@ const flaky = job({
 });
 
 const strict = unwrap(
-	await runJobs({ jobs: { lint, slow }, context: null, failFast: true }),
+	await runJobs({ jobs: { lint, slow }, meta: null, failFast: true }),
 );
 assertEquals(strict.outcomes.slow, Cancelled());
 
 const lenient = unwrap(
-	await runJobs({ jobs: { flaky, slow }, context: null, failFast: true }),
+	await runJobs({ jobs: { flaky, slow }, meta: null, failFast: true }),
 );
 assertEquals(lenient.outcomes.slow, Succeeded("done"));
 assert(lenient.outcomes.flaky.isFailed());
@@ -543,7 +548,7 @@ as in `Blocked<string>(["lint"])`, the way enum's `None<T>()` does.
 This guide shows you how to show the parts of a long job as they happen,
 for a CLI that prints a line per step.
 
-1. Wrap each part of the body in `t.step({ name, run })`. It returns what
+1. Wrap each part of the body in `r.step({ name, run })`. It returns what
    `run` returns.
 2. Pass `onEvent` to `runJobs`. It receives a `JobEvent` as each job and
    step starts and ends.
@@ -557,13 +562,13 @@ import { unwrap } from "@sekhmet/enum/result/mini";
 import { defineJobs, type JobEvent, runJobs } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
-const { job } = defineJobs<null>();
+const { job } = defineJobs(() => ({}));
 
 const build = job({
 	name: "build",
-	run: async (t) => {
-		await t.step({ name: "compile", run: () => {} });
-		return await t.step({ name: "bundle", run: () => "dist" });
+	run: async (r) => {
+		await r.step({ name: "compile", run: () => {} });
+		return await r.step({ name: "bundle", run: () => "dist" });
 	},
 });
 
@@ -586,7 +591,7 @@ const render = (event: JobEvent): string => {
 unwrap(
 	await runJobs({
 		jobs: { build },
-		context: null,
+		meta: null,
 		onEvent: (event) => lines.push(render(event)),
 	}),
 );

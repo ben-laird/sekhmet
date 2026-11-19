@@ -3,7 +3,7 @@ import { getStructParams } from "@sekhmet/primordials/struct";
 import { assert, assertEquals } from "@std/assert";
 import { collectNeeds, isPlainRecord, resolveNeeds } from "@/src/plan-data.ts";
 
-const { job } = defineJobs<null>();
+const { job } = defineJobs((_meta: null) => ({}));
 const a = job({ name: "a", run: () => 1 });
 const b = job({ name: "b", run: () => 2 });
 
