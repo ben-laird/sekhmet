@@ -156,9 +156,11 @@ assertEquals(report.passed, true);
   `all` maps every job reached by name, in the order they settled; and
   `passed` holds when every job reached is passing (`Succeeded` or
   `Skipped`) or `Failed` with `continueOnError`.
-  - Every plan is called first, so a duplicate name or a cycle is an `Err`
-    before anything starts, never a throw or a hang. A plan that throws is a
-    bug, rethrown before anything starts.
+  - Every plan is called first, so a `GraphError` is an `Err` before
+    anything starts, never a throw or a hang: `DuplicateName` (two different
+    jobs share a name), `DuplicateKey` (a `family` built two different jobs,
+    by name, for one key, which would otherwise silently run only the first)
+    or `Cycle`. A plan that throws is a bug, rethrown before anything starts.
   - Under `success()`, a job whose needs aren't all successful ends with
     exactly the outcome `all` gives them: `Blocked` (naming the unhealthy
     needs), `Cancelled` or `Skipped`. Any other `runIf` that is false makes

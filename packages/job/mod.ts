@@ -60,6 +60,8 @@ export { JobEvent, type JobEventVariants } from "./src/event.ts";
 export type { NonPlainPlanCause } from "./src/graph.ts";
 export {
 	Cycle,
+	DuplicateKey,
+	type DuplicateKeyCause,
 	DuplicateName,
 	GraphError,
 	type GraphErrorVariants,

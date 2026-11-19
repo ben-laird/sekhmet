@@ -97,7 +97,8 @@ export interface JobMisuseCause {
  * jobs need it.
  *
  * The runner first calls every reachable plan (they are pure), so a
- * duplicate name or a cycle is an `Err` before anything starts, and a plan
+ * duplicate name, a duplicate family key or a cycle is an `Err` before
+ * anything starts, and a plan
  * that throws is rethrown before anything starts. Then each job:
  *
  * 1. waits for its unconditional needs;

@@ -9,7 +9,12 @@
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { panic } from "@sekhmet/panic/mini/core";
 import { getStructParams } from "@sekhmet/primordials/struct";
-import { Cycle, DuplicateName, type GraphError } from "@/src/graph-error.ts";
+import {
+	Cycle,
+	DuplicateKey,
+	DuplicateName,
+	type GraphError,
+} from "@/src/graph-error.ts";
 import type { BoundJob, JobId } from "@/src/job.ts";
 import type { AnyNeed, PlanRecord } from "@/src/need.ts";
 import { collectNeeds, isPlainRecord } from "@/src/plan-data.ts";
@@ -64,7 +69,8 @@ export interface NonPlainPlanCause {
  * A plan that throws is a bug: the throw propagates, before any job runs.
  *
  * @param roots The roots, bound to the run's context
- * @returns The graph, or the first duplicate name or cycle found
+ * @returns The graph, or the first duplicate name, duplicate key or cycle
+ *   found
  */
 export function planGraph(
 	roots: readonly BoundJob<unknown>[],
@@ -78,6 +84,11 @@ export function planGraph(
 	const visit = (job: BoundJob<unknown>): GraphNode | undefined => {
 		const found = known.get(job.id.family)?.get(job.id.key);
 		if (found !== undefined) {
+			if (found.job.name !== job.name) {
+				const names = [found.job.name, job.name] as const;
+				error ??= DuplicateKey({ key: job.id.key, names });
+				return undefined;
+			}
 			const at = path.indexOf(found);
 			if (at !== -1) {
 				const cycle = [...path.slice(at), found].map((node) => node.job.name);

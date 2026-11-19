@@ -13,6 +13,7 @@ import {
 	all,
 	always,
 	Blocked,
+	DuplicateKey,
 	DuplicateName,
 	defineJobs,
 	type Job,
@@ -418,4 +419,34 @@ Deno.test("family: different identities may not share a name", () => {
 
 	// Then: DuplicateName, since the identities differ
 	assertEquals(unwrapErr(result), DuplicateName("same"));
+});
+
+Deno.test("family: two different jobs under one key are a GraphError", async () => {
+	// Given: a family whose key ignores its argument, while its name doesn't
+	let ran = 0;
+	const { family, job } = defineJobs<Shell>();
+	const colliding = family({
+		key: () => "same",
+		define: (n: number) => {
+			return job({
+				name: `job ${n}`,
+				run: () => {
+					ran += 1;
+				},
+			});
+		},
+	});
+
+	// When: two arguments are run together
+	const result = await runJobs({
+		jobs: { one: colliding(1), two: colliding(2) },
+		context: fakeShell(),
+	});
+
+	// Then: DuplicateKey names both jobs, and nothing ran
+	assertEquals(
+		unwrapErr(result),
+		DuplicateKey({ key: "same", names: ["job 1", "job 2"] }),
+	);
+	assertEquals(ran, 0);
 });
