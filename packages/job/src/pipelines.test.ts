@@ -328,11 +328,11 @@ const suite = compat.family({
 	define: (rt: Runtime) => {
 		return compat.job({
 			name: `compat (${label(rt)})`,
-			run: async ({ context, step }) => {
+			run: async (r) => {
 				for (const setup of setupCommands(rt)) {
-					await step({ name: setup, run: () => context.sh(setup) });
+					await r.step({ name: setup, run: () => r.context.sh(setup) });
 				}
-				await context.sh(`deno task compat:test ${rt.runtime}`);
+				await r.context.sh(`deno task compat:test ${rt.runtime}`);
 			},
 		});
 	},
