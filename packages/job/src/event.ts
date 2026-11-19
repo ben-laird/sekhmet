@@ -42,15 +42,18 @@ export type { Variants as JobEventVariants };
  * One thing that happened in a run, passed to `runJobs`'s `onEvent`.
  *
  * Every job ends with exactly one of `Finished`, `Skipped`, `Blocked` or
- * `Cancelled`, after the terminal event of every job it needs.
+ * `Cancelled`, after the terminal event of every job it needs. Events start
+ * only once the whole graph is planned: a plan that throws is a panic
+ * rethrown before any job starts, so it has no event. An `onEvent` that
+ * throws gets no more events.
  *
  * - `Started`: the body is about to run.
  * - `StepStarted`, then `StepSucceeded` or `StepFailed` (with what it threw):
  *   a `t.step` began and ended, between the job's `Started` and its terminal
  *   event.
- * - `Finished`: the body ended (`Succeeded` or `Failed`), or the plan threw
- *   (`Failed`, with no `Started` before it).
+ * - `Finished`: the body returned (`Succeeded`) or threw (`Failed`).
  * - `Skipped`, `Blocked`: decided before the body, so no `Started`.
- * - `Cancelled`: stopped before the body started, or while it ran.
+ * - `Cancelled`: stopped before the body started, or while it ran (the body
+ *   threw the abort itself).
  */
 export class JobEvent extends Enum<Variants> {}
