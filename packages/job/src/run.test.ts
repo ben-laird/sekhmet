@@ -441,6 +441,56 @@ Deno.test("runIf decides whether run is called", async (t) => {
 	);
 });
 
+Deno.test("a hand-written runIf that is false after a cancel ends Skipped", async () => {
+	// Given: a predicate that declines to run in a cancelled run
+	let started = false;
+	const careful = job({
+		name: "careful",
+		runIf: ({ cancelled }) => !cancelled,
+		run: () => {
+			started = true;
+		},
+	});
+
+	// When: the run is cancelled before it starts
+	const report = unwrap(
+		await run({ jobs: { careful }, signal: AbortSignal.abort() }),
+	);
+
+	// Then: a false runIf other than success() is Skipped, not Cancelled
+	assertEquals(report.outcomes.careful, Skipped());
+	assertEquals(started, false);
+});
+
+Deno.test("a guarded field follows its guard, even when its job ran for another need", async () => {
+	// Given: one job needed unconditionally and, in the same plan, guarded by
+	// a guard that is false
+	let ran = 0;
+	const build = job({
+		name: "build",
+		run: () => {
+			ran += 1;
+			return "dist";
+		},
+	});
+	const deploy = job({
+		name: "deploy",
+		plan: (p) => {
+			const built = p.needs(build);
+			return { built, again: p.needsIf({ job: build, when: failed(built) }) };
+		},
+		run: (_t, { built, again }) => [built, again ?? "left out"],
+	});
+
+	// When: it runs
+	const report = unwrap(await run({ jobs: { deploy } }));
+
+	// Then: build ran once for the plain need, and the guarded field is
+	// undefined, since its own guard was false
+	assertEquals(report.outcomes.deploy, Succeeded(["dist", "left out"]));
+	assertEquals(ran, 1);
+});
+
 Deno.test("under success(), a need's outcome propagates as all() folds it", async () => {
 	// Given: a skipped need, and a need on a skipped job
 	const skipped = job({ name: "skipped", runIf: failure(), run: () => 1 });

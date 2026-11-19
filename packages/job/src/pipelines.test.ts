@@ -13,6 +13,7 @@ import {
 	all,
 	always,
 	Blocked,
+	Cycle,
 	DuplicateKey,
 	DuplicateName,
 	defineJobs,
@@ -419,6 +420,30 @@ Deno.test("family: different identities may not share a name", () => {
 
 	// Then: DuplicateName, since the identities differ
 	assertEquals(unwrapErr(result), DuplicateName("same"));
+});
+
+Deno.test("family: a job that needs itself through its family is a Cycle", async () => {
+	// Given: a family whose job for n needs the job for the same n
+	const { family, job } = defineJobs<Shell>();
+	const looping: (n: number) => Job<void, Shell> = family({
+		key: (n: number) => String(n),
+		define: (n) => {
+			return job({
+				name: `loop ${n}`,
+				plan: (p) => ({ self: p.needs(looping(n)) }),
+				run: () => {},
+			});
+		},
+	});
+
+	// When: it runs
+	const result = await runJobs({
+		jobs: { loop: looping(1) },
+		context: fakeShell(),
+	});
+
+	// Then: the cycle is named, starting and ending with the same job
+	assertEquals(unwrapErr(result), Cycle(["loop 1", "loop 1"]));
 });
 
 Deno.test("family: two different jobs under one key are a GraphError", async () => {
