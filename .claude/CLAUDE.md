@@ -97,7 +97,8 @@ Packages (`packages/`):
   `ordering` built on it
 - `@sekhmet/job` (prototype, `"publish": false`; #57): named jobs run as a
   dependency graph on promises and `AbortSignal`: `defineJobs`/`job` (a
-  pure plan as data, a `runIf` condition, a typed run), `runJobs` over a
+  pure plan as data, a `runIf` condition, a typed run), `family` (jobs
+  made on the fly, one per key, deduped by identity), `runJobs` over a
   record of roots, the dry run `planJobs`, and `JobOutcome` with methods
   (`@sekhmet/job/outcome`, a main/mini feature)
 - `@sekhmet/matrix`: `matrix()` builds the Cartesian product of value arrays for

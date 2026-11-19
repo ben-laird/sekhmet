@@ -401,7 +401,9 @@ export class JobOutcome<out T> extends mini.JobOutcome<T> {
 	/**
 	 * Turns a failure into a success holding `Err(error)`, and a success into
 	 * one holding `Ok(value)`. The other outcomes pass through, and `Failed` is
-	 * gone from the type, so a `match` on the result needs no `Failed` arm.
+	 * gone from the variants, so enum's `match` on the result takes four arms,
+	 * with no `Failed`. The result is still a `JobOutcome`, though: `isFailed`
+	 * on it type-checks and returns `false`, but doesn't narrow it to `never`.
 	 *
 	 * @returns The outcome with its failure caught into the value
 	 * @example
