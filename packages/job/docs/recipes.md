@@ -169,6 +169,104 @@ still runs, with `r.signal` already aborted, so keep a cleanup's work short
 or independent of the signal. A `failure()` job runs after a cancel only if
 a need is unhealthy.
 
+## How to clean up resources
+
+This guide shows you how to release what a job opens (a lock, a
+connection, a temporary directory) however the job ends, and where a
+resource the whole run shares belongs.
+
+1. In `run`, register what to release on `r.cleanup`: `defer(fn)` for a
+   callback, `use(resource)` for a value with `Symbol.asyncDispose` or
+   `Symbol.dispose`, and `adopt(value, fn)` for a value that isn't
+   disposable itself. They mean what `AsyncDisposableStack`'s methods of the
+   same names mean.
+2. For a resource every job's context holds, open it in the context
+   factory and register it on the factory's `cleanup`. Each job that starts
+   gets its own, and the factory's registrations are released last.
+3. Put a resource the whole run shares, such as a pool, in `meta`. It is
+   yours, not the runner's: release it around `runJobs`, for example with
+   `await using`.
+4. Return data, never a resource you registered: dependents receive the
+   return value after the job's cleanup has run.
+
+```ts
+import { unwrap } from "@sekhmet/enum/result/mini";
+import { defineJobs, runJobs, Succeeded } from "@sekhmet/job";
+import { assertEquals } from "@std/assert";
+
+interface Connection extends Disposable {
+	readonly query: (sql: string) => string;
+}
+
+interface Pool extends AsyncDisposable {
+	readonly connect: (name: string) => Connection;
+}
+
+const log: string[] = [];
+
+/** A stand-in for a database pool that logs what happens to it. */
+function openPool(): Pool {
+	log.push("pool opened");
+	return {
+		connect: (name) => {
+			log.push(`${name} connected`);
+			return {
+				query: (sql) => `${name} ran ${sql}`,
+				[Symbol.dispose]: () => {
+					log.push(`${name} disconnected`);
+				},
+			};
+		},
+		[Symbol.asyncDispose]: async () => {
+			log.push("pool closed");
+		},
+	};
+}
+
+const { job } = defineJobs(
+	(meta: { readonly pool: Pool }, { job, cleanup }) => {
+		return { db: cleanup.use(meta.pool.connect(job)) };
+	},
+);
+
+const migrate = job({
+	name: "migrate",
+	run: (r) => {
+		log.push("migrate locked");
+		r.cleanup.defer(() => {
+			log.push("migrate unlocked");
+		});
+		return r.ctx.db.query("migrations");
+	},
+});
+
+{
+	await using pool = openPool();
+	const report = unwrap(await runJobs({ jobs: { migrate }, meta: { pool } }));
+	assertEquals(report.outcomes.migrate, Succeeded("migrate ran migrations"));
+}
+
+assertEquals(log, [
+	"pool opened",
+	"migrate connected",
+	"migrate locked",
+	"migrate unlocked",
+	"migrate disconnected",
+	"pool closed",
+]);
+```
+
+The job's cleanup runs once `run` settles, whether it succeeded, failed or
+was cancelled, and it finishes before the job's terminal event and before
+any job that needs it starts. A cleanup that throws makes the job `Failed`.
+If the body threw as well, the outcome's error is a `SuppressedError` whose
+`error` is the cleanup's and whose `suppressed` is the body's, and several
+cleanup throws chain the same way. On a runtime without `SuppressedError`,
+the error is a plain `Error` of the same shape and name.
+
+There is no timeout on cleanup yet: a cleanup that never settles holds its
+job, and the run, open.
+
 ## How to write your own `runIf`
 
 This guide shows you how to combine the default rule with a check of your

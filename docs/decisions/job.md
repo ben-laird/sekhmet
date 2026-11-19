@@ -6,7 +6,7 @@
 > TSDoc in the source, starting at
 > [`packages/job/mod.ts`](../../packages/job/mod.ts).
 
-Status: **Accepted** (2026-11-19). A prototype implements decisions 12–14 in
+Status: **Accepted** (2026-11-19). A prototype implements decisions 12–15 in
 [PR #67](https://github.com/ben-laird/sekhmet/pull/67), unpublished
 (`"publish": false`). [#57](https://github.com/ben-laird/sekhmet/issues/57)
 stays the tracker; this file is the source of truth for the decisions.
@@ -147,6 +147,12 @@ _Superseded by
   can't either. Progress reaches a CLI through `onEvent` and `t.step`.
 
 ### 10. One read-only, typed context per run
+
+_Superseded by
+[decision 15](#15-a-context-factory-and-cleanup-with-three-owned-lifetimes)
+(2026-11-19):_ `defineJobs((meta, { job, cleanup }) => ctx)` replaces
+`defineJobs<C>()`, `runJobs`/`planJobs` take `meta` in place of `context`,
+and each job builds its own context just before its run.
 
 Provisional: the owner will confirm once the prototype exists.
 `defineJobs<C>()` fixes `C`, and `runJobs({ context })` supplies it. It's for
@@ -303,6 +309,71 @@ Prototype review decisions, made on `feat/job-runif`; the work landed on
 - **`JobPlan` is removed.** `planJobs` is synchronous and returns the graph
   as data.
 
+### 15. A context factory, and cleanup with three owned lifetimes
+
+Owner, 2026-11-19; implemented on `feat/job-context-cleanup`, for `feat/job`
+(#67). This supersedes [decision 10](#10-one-read-only-typed-context-per-run).
+
+- **`defineJobs((meta, { job, cleanup }) => ctx)`** replaces the type
+  argument. TypeScript infers the metadata type from the parameter's
+  annotation and the context type from the return, so it reads as plain JS.
+  `runJobs` and `planJobs` take `meta` in place of `context`. The factory is
+  synchronous for now.
+- **`ctx` is built once per job, lazily, just before its `run`,** so one job
+  can't pollute another's context. A dry run never calls the factory, and a
+  job that never starts (blocked, skipped, or cancelled before it starts)
+  never builds one.
+- **Plans get `p.meta` only** (no `p.ctx`), so the factory may do real work,
+  like opening a db connection, without breaking pure plans. `run` gets
+  `r.meta`, `r.ctx`, `r.cleanup`, `r.signal` and `r.step`, and a
+  hand-written `runIf` gets `{ meta, cancelled, needs }`.
+- **The factory gets the job's name,** so a per-job logger prefix comes
+  free.
+- **Three lifetimes, each with one owner:**
+  - `meta` is the caller's: shared resources (a pool) are disposed by the
+    caller, e.g. `await using` around `runJobs`;
+  - each job has a cleanup stack, given to the factory and to `run` as
+    `r.cleanup`;
+  - steps get none for now.
+- **Disposal:**
+  - LIFO, so the factory's resources go last;
+  - always runs once `run` settles: succeeded, failed or cancelled, with
+    `r.signal` possibly already aborted;
+  - finishes before the job's terminal event and before its outcome reaches
+    a dependent, and `runJobs` resolves only once every stack is disposed;
+  - if the factory throws, what it already registered is disposed, and the
+    job is `Failed`.
+- **A job's return value must not hold its own resources,** since dependents
+  receive it after disposal. Data crosses as data
+  ([decision 9](#9-data-crosses-jobs-only-through-return-values)).
+- **`Cleanup` is job's own narrow interface** (`defer`, `use`, `adopt`), with
+  `AsyncDisposableStack`'s names, meaning and positional parameters. The
+  runner owns disposal, so there's no `disposeAsync` in job code. It's not
+  the native stack because Safari/WebKit lacks it and our compat suite runs
+  there; it reads `Symbol.asyncDispose`/`Symbol.dispose` only where the
+  runtime defines them, with no polyfill. Registering once disposal has
+  started is a misuse and panics. It can be swapped for the native one, or
+  moved to #68, later.
+- **A cleanup that throws makes the job `Failed`.** If the body also threw,
+  both errors are kept with `SuppressedError` semantics (`error` is the
+  cleanup's, `suppressed` the earlier one), and several cleanup errors chain
+  the same way. The global `SuppressedError` is used where it exists, and a
+  local error of the same shape (`name: "SuppressedError"`, `error`,
+  `suppressed`) elsewhere, with no global polyfill. The verdict and
+  `continueOnError` apply as for any `Failed`; a cancelled body whose
+  cleanup throws is `Failed` too.
+- **As built:**
+  - `meta` is required, as `context` was. A factory that takes no parameter
+    infers `unknown` metadata, so `defineJobs(() => ({}))` with
+    `meta: null` is the shape of a graph that needs none.
+  - The factory runs inside the job's body, after its `Started` event, so a
+    factory throw reports `Started`, then `Finished` with `Failed`.
+  - Misuse panics are `CleanupAfterDispose` and `NotDisposable` (`use` with
+    a value that has neither dispose method), with a `CleanupMisuseCause`.
+- **Open:** a cleanup that hangs has no timeout yet
+  ([open question 2](#open-questions)); async factories; step-level cleanup;
+  whether the factory should see the run's signal.
+
 ## What sets job apart from effect
 
 |             | effect                                 | job                                                                             |
@@ -319,7 +390,8 @@ Retries and concurrency limits are planned, not built
 
 > **Historical snapshot (2026-11-18).** This is the API of the first
 > prototype on `feat/job`, before decision 12. `observer`, staged plans
-> (`p.result`, `p.outcome`), `skip()`, array roots and `JobPlan` are gone. The
+> (`p.result`, `p.outcome`), `skip()`, array roots, `JobPlan`, and
+> `defineJobs<C>()` with `context` (decision 15) are gone. The
 > current API is in the [user docs](../../packages/job/README.md).
 
 ```ts ignore
@@ -418,7 +490,8 @@ Notes on that shape, as recorded then:
    [decision 13](#13-typed-results-families-and-front-ends): a matrix is a
    `family` over its cases (`RUNTIMES.map(suite)`), with no dedicated API.
 2. **Limits.** A concurrency limit, per-job timeouts (`scripts/ci`'s
-   `StepTimeout`) and retries.
+   `StepTimeout`), retries, and a timeout on a job's cleanup
+   ([decision 15](#15-a-context-factory-and-cleanup-with-three-owned-lifetimes)).
 3. ~~**Plans as try blocks.**~~ Moot since
    [decision 12](#12-runif-replaces-observer-and-plans-become-pure), since
    plans no longer await results. Kept for the record: once `@sekhmet/block`

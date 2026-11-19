@@ -96,8 +96,10 @@ Packages (`packages/`):
 - `@sekhmet/enum`: enum framework plus `option`, `result`, `latch`, `poll` and
   `ordering` built on it
 - `@sekhmet/job` (prototype, `"publish": false`; #57): named jobs run as a
-  dependency graph on promises and `AbortSignal`: `defineJobs`/`job` (a
-  pure plan, the job's dependency list; a `runIf` condition; a typed run),
+  dependency graph on promises and `AbortSignal`: `defineJobs(factory)`
+  (a context factory building each job's `ctx` from the run's `meta`, with
+  a per-job `Cleanup` stack) and `job` (a pure plan, the job's dependency
+  list; a `runIf` condition; a typed run),
   `family` (jobs made on the fly, one per key, deduped by identity),
   `runJobs` over a record of roots, the dry run `planJobs`, and
   `JobOutcome` with methods (`@sekhmet/job/outcome`, a main/mini feature).

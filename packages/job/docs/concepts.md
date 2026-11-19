@@ -34,7 +34,8 @@ does the work, given what those needs returned:
   any depth, with `undefined` for a need left out.
 - `run(r, needs)` receives that list with each need resolved in place,
   typed from the plan with no annotations. `r` carries the run's `meta`, the
-  job's own `ctx`, its `signal`, and `step` for reporting progress.
+  job's own `ctx` and `cleanup` stack, its `signal`, and `step` for
+  reporting progress.
 
 A job that needs nothing omits `plan`.
 
@@ -60,6 +61,42 @@ data flow is therefore an edge you can see in a plan. The value arrives
 `Readonly`, because every dependent shares the one object. Files cross as
 returned paths, as GitHub Actions' artifacts do, and the runner copies
 nothing.
+
+## Three lifetimes, each with one owner
+
+A job may hold resources while it runs, such as a connection or a lock, and
+each resource has exactly one owner, which releases it:
+
+- **The run's `meta` is the caller's.** It lives as long as the caller
+  keeps it, typically around one `runJobs` call, and every plan, `runIf`,
+  context factory and body reads the same value. A resource the whole run
+  shares, such as a connection pool, goes here, and the caller releases it,
+  for example with `await using` around `runJobs`.
+- **A job's context and its cleanup stack are the runner's.** The context
+  factory builds each job's `ctx` just before its `run`, so one job can't
+  change another's. A dry run never calls the factory, and neither does a
+  job that never starts (blocked, skipped, or cancelled first). Plans and
+  `runIf` see only `meta`, which is why the factory may do real work. The
+  factory and `run` share one cleanup stack, which the runner disposes in
+  reverse order once `run` settles, so the factory's resources go last.
+- **Steps have no cleanup of their own** for now; a step registers on its
+  job's stack.
+
+Disposal finishes before the job's terminal event, and before any job that
+needs it starts, and `runJobs` resolves only once every job is disposed. A
+cleanup that throws makes its job `Failed`, keeping a body's earlier error
+as `SuppressedError` does; `continueOnError` and the verdict treat it as
+any other failure.
+
+Because dependents receive a job's return value after its cleanup has run,
+a return value must not hold the job's own resources. Data crosses jobs as
+data: a path, a record, a version string.
+
+`Cleanup` is job's own narrow interface, `defer`, `use` and `adopt`, with
+`AsyncDisposableStack`'s names and meaning, rather than the native stack,
+which Safari and WebKit lack. The runner owns disposal, so job code never
+disposes a stack itself. Two limits are open: a cleanup has no timeout yet,
+and the factory is synchronous.
 
 ## Conditions are data
 

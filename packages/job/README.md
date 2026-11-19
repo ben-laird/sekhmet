@@ -68,11 +68,13 @@ assertEquals(report.passed, false);
   pipeline step by step: jobs that need each other, a failure, a cleanup,
   and the typed report.
 - **How-to guides:** [Recipes](./docs/recipes.md) for needing a job only
-  when another succeeded, cleaning up or notifying after a failure, writing
+  when another succeeded, cleaning up or notifying after a failure, cleaning
+  up resources, writing
   your own `runIf`, generating jobs from data with `family`, previewing a
   run, cancelling a run, handing an outcome to `Result` code, reporting
   progress with `r.step`, and matching on an outcome.
 - **Explanation:** [Concepts](./docs/concepts.md) covers plan and run,
+  the three lifetimes (`meta`, a job's context and cleanup, steps),
   conditions as data and the GitHub Actions mapping, once per run, the
   outcome algebra, planning before running, cancellation, and how job
   differs from `@sekhmet/effect`.
