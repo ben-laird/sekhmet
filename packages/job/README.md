@@ -1,197 +1,97 @@
-# Job
+# @sekhmet/job
 
-> **Prototype, unpublished.** `@sekhmet/job` is marked `"publish": false` while
-> its design is confirmed in
-> [#57](https://github.com/ben-laird/sekhmet/issues/57). Its API may change
-> without notice.
+Named jobs that run as a dependency graph, in the style of GitHub Actions
+and other CI runners, built on the language's own promises and
+`AbortSignal`. A job pairs a pure **plan**, its dependency list, with a
+**run**, which receives that list with each need resolved. A **`runIf`**
+decides, once the needs settle, whether the run is called. Each job runs
+once per run, however many jobs need it, and ends with a `JobOutcome`:
+`Succeeded`, `Failed`, `Skipped`, `Blocked` or `Cancelled`.
 
-Named jobs run as a dependency graph, in the style of GitHub Actions and other
-CI runners, built on the language's own promises and `AbortSignal`. A job pairs
-a pure **plan**, the job's dependency list, with a **run**, which receives that
-list with each need resolved. A **`runIf`** decides, once
-the needs settle, whether the run is called. Each job runs once per run,
-however many jobs need it, and ends with a `JobOutcome`: `Succeeded`, `Failed`,
-`Skipped`, `Blocked` or `Cancelled`.
+## Status
+
+**Prototype, unpublished.** The package's `deno.json` sets
+`"publish": false` while its design is confirmed in
+[#57](https://github.com/ben-laird/sekhmet/issues/57), and its API may change
+without notice. It isn't on JSR, so use it from inside this repository: every
+`packages/*` directory is a workspace member, and any module in the
+repository can import `@sekhmet/job`.
 
 ## Example
 
 ```ts
 import { unwrap } from "@sekhmet/enum/result/mini";
-import {
-	always,
-	defineJobs,
-	failure,
-	type JobEvent,
-	planJobs,
-	runJobs,
-	Skipped,
-	Succeeded,
-	succeededWith,
-} from "@sekhmet/job";
+import { always, Blocked, defineJobs, runJobs } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
-// The context every plan and run can read: config and a logger
-const { job } = defineJobs<{
-	readonly release: boolean;
-	readonly log: string[];
-}>();
+const { job } = defineJobs<{ readonly log: string[] }>();
 
-const version = job({ name: "version", run: () => "1.4.0" });
-
-const build = job({
-	name: "build",
-	plan: (p) => ({ version: p.needs(version) }),
-	run: async (t, { version }) => {
-		await t.step({
-			name: "compile",
-			run: () => t.context.log.push(`compile ${version}`),
-		});
-		return { outDir: "dist", version }; // what dependents receive
+const lint = job({
+	name: "lint",
+	run: (): void => {
+		throw new Error("unused variable");
 	},
 });
 
-const sign = job({ name: "sign", run: () => "signature" });
+const build = job({ name: "build", run: () => "dist" });
 
-const publish = job({
-	name: "publish",
-	// A plan is the dependency list: needs, and a guarded need
-	plan: (p) => {
-		const v = p.needs(version);
-		const stable = succeededWith({
-			need: v,
-			where: (value) => !value.startsWith("0."),
-			describe: "a stable version",
-		});
-		return {
-			version: v,
-			builds: [p.needs(build)], // needs resolve at any depth
-			signature: p.needsIf({ job: sign, when: stable }),
-		};
-	},
-	// Anything else comes from the context (or a closure), not the plan
-	run: (t, { builds, signature }) => {
-		const channel = t.context.release ? "stable" : "dry-run";
-		return `${builds[0]?.outDir} -> ${channel} (${signature ?? "unsigned"})`;
-	},
+const deploy = job({
+	name: "deploy",
+	plan: (p) => ({ linted: p.needs(lint), site: p.needs(build) }),
+	run: (t, { site }) => t.context.log.push(`deployed ${site}`),
 });
 
-// failure(): runs only if a need is unhealthy, and gets the needs' outcomes
-const notify = job({
-	name: "notify",
-	plan: (p) => ({ publish: p.needs(publish) }),
-	runIf: failure(),
-	run: (_t, { publish }) =>
-		`paged: ${String(publish.error().unwrapOr("blocked"))}`,
-});
-
-// always(): runs whatever happened, even after a cancel
 const cleanup = job({
 	name: "cleanup",
-	plan: (p) => ({ build: p.needs(build) }),
+	plan: (p) => ({ deploy: p.needs(deploy) }),
 	runIf: always(),
-	continueOnError: true,
-	run: (t) => t.context.log.push("cleanup"),
+	run: (t, { deploy }) => {
+		t.context.log.push(
+			`cleaned up after ${deploy.isBlocked() ? "a block" : "a deploy"}`,
+		);
+	},
 });
 
-// The dry run: every plan, guards included, and no bodies
-const graph = unwrap(
-	planJobs({
-		jobs: { publish, notify, cleanup },
-		context: { release: true, log: [] },
-	}),
-);
-assertEquals(graph.jobs.get("publish")?.needs[2], {
-	job: "sign",
-	when: "version succeeded with a stable version",
-});
-
-// The run: a record of roots, and a report typed per key
-const events: JobEvent[] = [];
 const log: string[] = [];
 const report = unwrap(
-	await runJobs({
-		jobs: { publish, notify, cleanup },
-		context: { release: true, log },
-		onEvent: (event) => events.push(event),
-	}),
+	await runJobs({ jobs: { deploy, cleanup }, context: { log } }),
 );
 
-assertEquals(report.outcomes.publish, Succeeded("dist -> stable (signature)"));
-assertEquals(report.outcomes.notify, Skipped());
-assertEquals(log, ["compile 1.4.0", "cleanup"]);
-assertEquals(report.passed, true);
+assertEquals(report.outcomes.deploy, Blocked(["lint"]));
+assertEquals(log, ["cleaned up after a block"]);
+assertEquals(report.passed, false);
 ```
 
-## Concepts
+## Learn more
 
-- **`defineJobs<C>()`** fixes the run's context type `C` and returns `job`
-  and `family`.
-- **`family({ key, define })`** makes jobs on the fly: the same key gives
-  the same job, so the runner, which dedupes by identity (`JobId`: the
-  family and the key), runs it once. A family can need itself (a package's
-  publish needs its dependencies') and covers a matrix. A plain `job` is a
-  family of one. Two different identities may not share a display name.
+- **Tutorial:** [Getting started](./docs/getting-started.md) builds a deploy
+  pipeline step by step: jobs that need each other, a failure, a cleanup,
+  and the typed report.
+- **How-to guides:** [Recipes](./docs/recipes.md) for needing a job only
+  when another succeeded, cleaning up or notifying after a failure, writing
+  your own `runIf`, generating jobs from data with `family`, previewing a
+  run, cancelling a run, handing an outcome to `Result` code, reporting
+  progress with `t.step`, and matching on an outcome.
+- **Explanation:** [Concepts](./docs/concepts.md) covers plan and run,
+  conditions as data and the GitHub Actions mapping, once per run, the
+  outcome algebra, planning before running, cancellation, and how job
+  differs from `@sekhmet/effect`.
+- **Reference:** the TSDoc in the source, starting at [`mod.ts`](./mod.ts)
+  and [`@sekhmet/job/outcome`](./src/outcome/main/mod.ts). The package isn't
+  on JSR, so there is no hosted API reference yet; `deno doc
+  packages/job/mod.ts` prints it.
 
-- **`job({ name, plan?, runIf?, run, continueOnError? })`** defines a job.
-  - `plan(p)` is pure and synchronous, and returns the job's dependency list:
-    needs, in plain arrays and records at any depth. `p.needs(job)` declares
-    a need; `p.needsIf({ job, when })` declares one pulled in only if the
-    guard `when` holds, and `undefined` stands for one left out. A job that
-    needs nothing omits `plan`.
-  - Plain leaf values (a string, a flag) still type-check and pass through
-    untouched, but they are a second-class escape hatch, never necessary: a
-    plan sees only the context and closures, and `run` has both. Read config
-    from `t.context` in `run` instead. The hatch's accepted papercut: a class
-    instance that isn't a `Struct` (your own class, a `Date`) is typed
-    structurally in `run`, so its `#private` members are lost; a
-    `Struct`-based value (an `Option`, a `Job`) and a function keep their
-    types.
-  - Guards are data that describe themselves, so a dry run can show them:
-    `succeeded(need)`, `failed(need)` and
-    `succeededWith({ need, where, describe })`. A guard declares the needs
-    it reads (`reads`; the built-ins fill it in), and it may read only the
-    unconditional needs of its own plan, which settle first, as GitHub
-    Actions' `if:` sees only `needs:`. Reading one left out of the plan, or
-    one that is itself guarded, is an `UndeclaredGuardRead` graph error
-    before anything runs, and a hand-written guard whose `test` asks for
-    anything outside its `reads` panics.
-  - `runIf` is `success()` (the default), `failure()` (some need is
-    unhealthy), `cancelled()`, `always()`, or a hand-written
-    `({ context, cancelled, needs }) => boolean`.
-  - `run(t, needs)` receives the plan with each need resolved, typed
-    `Readonly` and inferred from `plan` with no annotations: the need's value
-    under `success()`, its `JobOutcome` under any other `runIf`, and
-    `undefined` for a `needsIf` left out. `t` has `context`, `signal` and
-    `step({ name, run })`.
-- **`runJobs({ jobs, context, signal?, failFast?, onEvent? })`** takes a
-  record of roots and returns `Result<RunReport, GraphError>`. The report's
-  `outcomes` mirrors the roots, each typed by its job, as `Promise.all` does;
-  `all` maps every job reached by name, in the order they settled; and
-  `passed` holds when every job reached is passing (`Succeeded` or
-  `Skipped`) or `Failed` with `continueOnError`.
-  - Every plan is called first, so a `GraphError` is an `Err` before
-    anything starts, never a throw or a hang: `DuplicateName` (two different
-    jobs share a name), `DuplicateKey` (a `family` built two different jobs,
-    by name, for one key, which would otherwise silently run only the first),
-    `UndeclaredGuardRead` (a `needsIf` guard reads a need that isn't an
-    unconditional need of its own plan) or `Cycle`. A plan that throws is a bug, rethrown before anything starts.
-  - Under `success()`, a job whose needs aren't all successful ends with
-    exactly the outcome `all` gives them: `Blocked` (naming the unhealthy
-    needs), `Cancelled` or `Skipped`. Any other `runIf` that is false makes
-    the job `Skipped`. A body's throw is `Failed`, never rethrown.
-- **Cancellation** (the run's `signal`, or `failFast`) aborts every body's
-  `t.signal`. A job runs after a cancel only if its `runIf` holds with
-  `cancelled: true`, and it then starts with `t.signal` already aborted, so
-  a default job that hasn't started ends `Cancelled`, while an `always()`
-  cleanup still runs. A body that throws after the abort ends `Cancelled`
-  only if it threw the abort itself (the signal's `reason`, or an
-  `AbortError`); any other error is `Failed`. `continueOnError` exempts a
-  job's failure from `failFast` and from the verdict.
-- **`planJobs({ jobs, context })`** is the dry run: it calls every plan and
-  returns the whole graph, with each job's needs, guards and `runIf`.
-- **`JobOutcome`** has methods (`@sekhmet/job/outcome`) and tree-shakable
-  functions (`@sekhmet/job/outcome/mini`): the variant predicates, the
-  `isPassing`/`isFailing` and `isHealthy`/`isUnhealthy` complements,
-  `value()`/`error()`/`blockedBy()` as Options, `map`, `toResult` and
-  `catchFailure`, plus `all(record)`, which folds outcomes as `Promise.all`
-  folds promises. Match on it with enum's root `match(outcome)({ … })`.
+The docs site leaves out unpublished packages, so these guides join it once
+the package is published.
+
+## Design record
+
+The
+[decision record](https://github.com/ben-laird/sekhmet/blob/main/docs/decisions/job.md)
+keeps the history of the package's design decisions and the alternatives they
+replaced.
+
+## License
+
+MIT. See
+[LICENSE.md](https://github.com/ben-laird/sekhmet/blob/main/packages/job/LICENSE.md).
