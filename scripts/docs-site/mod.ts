@@ -21,6 +21,7 @@ export {
 	docLinks,
 	LEADING_SLUG,
 	planSite,
+	prototypeBanner,
 	REPOSITORY_BLOB,
 	readmeLinks,
 	rootLinks,

@@ -7,6 +7,11 @@
  * git. A docs page with unreadable frontmatter or an unknown `kind` fails
  * the run, naming the file.
  *
+ * Unpublished packages are left out unless the run is passed
+ * {@linkcode INCLUDE_UNPUBLISHED}, which `deno task docs:dev` does to
+ * preview them locally; `deno task docs:build`, and so the deployed site,
+ * never does.
+ *
  * @module
  */
 
@@ -76,15 +81,29 @@ async function readPackages(): Promise<PackageSource[]> {
 	return packages;
 }
 
+/** The flag that previews unpublished packages, each page under a prototype banner. */
+export const INCLUDE_UNPUBLISHED = "--include-unpublished";
+
 /**
  * Assembles the site content from the repository's markdown.
  *
+ * @param args - The command-line arguments: nothing, or {@linkcode INCLUDE_UNPUBLISHED}
  * @returns The process exit code
  */
-export async function main(): Promise<number> {
+export async function main(args: readonly string[]): Promise<number> {
+	const unknown = args.filter((arg) => arg !== INCLUDE_UNPUBLISHED);
+	if (unknown.length > 0) {
+		console.error(
+			`docs:assemble: unknown argument ${unknown.join(" ")}; the only flag is ${INCLUDE_UNPUBLISHED}`,
+		);
+		return 2;
+	}
+	const includeUnpublished = args.includes(INCLUDE_UNPUBLISHED);
+
 	const planned = planSite({
 		rootReadme: await Deno.readTextFile(join(ROOT, "README.md")),
 		packages: await readPackages(),
+		includeUnpublished,
 	});
 	if (!planned.ok) {
 		for (const error of planned.error) {
@@ -105,10 +124,13 @@ export async function main(): Promise<number> {
 		JSON.stringify({ sidebar: site.sidebar, nav: site.nav }, null, "\t"),
 	);
 
-	console.log(`assembled ${site.pages.length} pages into ${CONTENT_DIR}`);
+	const preview = includeUnpublished ? ", previewing unpublished packages" : "";
+	console.log(
+		`assembled ${site.pages.length} pages into ${CONTENT_DIR}${preview}`,
+	);
 	return 0;
 }
 
 if (import.meta.main) {
-	Deno.exit(await main());
+	Deno.exit(await main(Deno.args));
 }

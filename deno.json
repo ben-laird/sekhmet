@@ -40,8 +40,8 @@
 			"command": "deno run --no-prompt --allow-read --allow-write @sekhmet/docs-site"
 		},
 		"docs:dev": {
-			"description": "Serve the docs site locally with live reload",
-			"command": "deno task docs:assemble && cd scripts/docs-site && deno run --no-prompt -A npm:vitepress@1.6.4 dev"
+			"description": "Serve the docs site locally with live reload, previewing unpublished packages under a prototype banner",
+			"command": "deno task docs:assemble --include-unpublished && cd scripts/docs-site && deno run --no-prompt -A npm:vitepress@1.6.4 dev"
 		},
 		"docs:build": {
 			"description": "Build the static docs site into scripts/docs-site/.vitepress/dist",

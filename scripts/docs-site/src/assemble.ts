@@ -234,23 +234,23 @@ export function docLinks({ text, dir }: { text: string; dir: string }): string {
  * Rewrites the root README's links for the site: links into
  * `packages/<dir>/README.md` or `packages/<dir>/docs/<page>.md` become that
  * package's site pages, and other relative links (such as `LICENSE.md`)
- * point at the file in the repository. So do links into an unpublished
- * package, which has no pages on the site.
+ * point at the file in the repository. So do links into a package the site
+ * leaves out, such as an unpublished one outside a preview.
  *
  * @param options.text - The root README markdown
- * @param options.unpublished - The directory names of unpublished packages
+ * @param options.offSite - The directory names of packages the site leaves out
  * @returns The home page markdown
  */
 export function rootLinks({
 	text,
-	unpublished,
+	offSite,
 }: {
 	text: string;
-	unpublished: ReadonlySet<string>;
+	offSite: ReadonlySet<string>;
 }): string {
 	return rewriteLinks(text, (target) => {
 		const dir = /^(?:\.\/)?packages\/([\w-]+)(?:\/|$)/.exec(target)?.[1];
-		if (dir !== undefined && unpublished.has(dir)) {
+		if (dir !== undefined && offSite.has(dir)) {
 			return `${REPOSITORY_BLOB}${target.replace(/^\.\//, "")}`;
 		}
 		const packagePage = target
@@ -311,15 +311,18 @@ function byReadingOrder(a: DocPage, b: DocPage): number {
 
 /**
  * Plans one package's sidebar group: its overview, then its untagged pages,
- * then a sub-group per Diátaxis kind that has pages. Reference always has
- * pages, since it leads with the package's API on JSR.
+ * then a sub-group per Diátaxis kind that has pages. A published package's
+ * Reference always has pages, since it leads with the package's API on JSR;
+ * an unpublished one has no JSR page, so its Reference lists only its own.
  */
 function packageSidebar({
 	dir,
 	pages,
+	published,
 }: {
 	dir: string;
 	pages: readonly DocPage[];
+	published: boolean;
 }): SidebarGroup {
 	const base = `/${dir}/`;
 	const linksTo = (kind: DocKind | undefined): SidebarLink[] => {
@@ -333,7 +336,7 @@ function packageSidebar({
 	const groups: SidebarGroup[] = [];
 	for (const kind of DOC_KINDS) {
 		const items = linksTo(kind);
-		if (kind === "reference") items.unshift(apiReferenceLink(dir));
+		if (kind === "reference" && published) items.unshift(apiReferenceLink(dir));
 		if (items.length > 0) groups.push({ text: DOC_KIND_HEADINGS[kind], items });
 	}
 
@@ -352,27 +355,66 @@ function overviewOf(pkg: PackageSource): string {
 }
 
 /**
+ * The callout that heads every page of an unpublished package in a preview:
+ * a VitePress `warning` container saying the package is a prototype.
+ *
+ * @param dir - The package directory name, e.g. `job`
+ * @returns The callout markdown, ending in a newline
+ */
+export function prototypeBanner(dir: string): string {
+	return [
+		"::: warning Prototype",
+		`\`@sekhmet/${dir}\` is an unpublished prototype: it isn't on JSR, and its`,
+		"API may change without notice. This page is a local preview from",
+		"`deno task docs:dev`; the published site leaves the package out.",
+		":::",
+		"",
+	].join("\n");
+}
+
+/** Puts `banner` at the top of a page's markdown, after its frontmatter. */
+function withBanner({
+	text,
+	banner,
+}: {
+	text: string;
+	banner: string;
+}): string {
+	const frontmatter =
+		/^---[ \t]*\r?\n(?:.*\r?\n)*?---[ \t]*(?:\r?\n|$)/.exec(text)?.[0] ?? "";
+	return `${frontmatter}${banner}\n${text.slice(frontmatter.length)}`;
+}
+
+/**
  * Plans the site from the root README and every package's markdown.
- * Unpublished packages, which have no JSR page to link, and packages with
- * neither a README nor docs are left out.
+ * Packages with neither a README nor docs are left out, and so are
+ * unpublished packages unless `includeUnpublished` is set; then each of
+ * their pages opens with the {@linkcode prototypeBanner}.
  *
  * @param options.rootReadme - The repository README, the home page
  * @param options.packages - Every package's markdown sources
+ * @param options.includeUnpublished - Whether to preview unpublished
+ *   packages: set by `deno task docs:dev`, never by the deployed build
  * @returns The pages to write and the navigation, or every page whose
  *   frontmatter is invalid or names an unknown kind
  */
 export function planSite({
 	rootReadme,
 	packages,
+	includeUnpublished,
 }: {
 	rootReadme: string;
 	packages: readonly PackageSource[];
+	includeUnpublished: boolean;
 }): Result<Site, readonly PageError[]> {
-	const unpublished = new Set(
-		packages.filter((pkg) => !pkg.published).map((pkg) => pkg.dir),
+	const onSite = (pkg: PackageSource): boolean => {
+		return pkg.published || includeUnpublished;
+	};
+	const offSite = new Set(
+		packages.filter((pkg) => !onSite(pkg)).map((pkg) => pkg.dir),
 	);
 	const pages: Page[] = [
-		{ path: "index.md", text: rootLinks({ text: rootReadme, unpublished }) },
+		{ path: "index.md", text: rootLinks({ text: rootReadme, offSite }) },
 	];
 	const sidebar: Record<string, readonly SidebarGroup[]> = {};
 	const nav: SidebarLink[] = [];
@@ -380,7 +422,7 @@ export function planSite({
 
 	const present = packages
 		.filter((pkg) => {
-			return pkg.published && (pkg.readme !== undefined || pkg.docs.length > 0);
+			return onSite(pkg) && (pkg.readme !== undefined || pkg.docs.length > 0);
 		})
 		.toSorted((a, b) => a.dir.localeCompare(b.dir));
 	// {}
@@ -389,8 +431,15 @@ export function planSite({
 		const base = `/${pkg.dir}/`;
 		const docs = pkg.docs.toSorted((a, b) => a.name.localeCompare(b.name));
 		const docPages: DocPage[] = [];
+		const page = ({ path, text }: Page): Page => {
+			if (pkg.published) return { path, text };
+			return {
+				path,
+				text: withBanner({ text, banner: prototypeBanner(pkg.dir) }),
+			};
+		};
 
-		pages.push({ path: `${pkg.dir}/index.md`, text: overviewOf(pkg) });
+		pages.push(page({ path: `${pkg.dir}/index.md`, text: overviewOf(pkg) }));
 
 		for (const doc of docs) {
 			const docPage = readDocPage({ dir: pkg.dir, doc });
@@ -399,13 +448,21 @@ export function planSite({
 				continue;
 			}
 			docPages.push(docPage.value);
-			pages.push({
-				path: `${pkg.dir}/${doc.name}`,
-				text: docLinks({ text: doc.text, dir: pkg.dir }),
-			});
+			pages.push(
+				page({
+					path: `${pkg.dir}/${doc.name}`,
+					text: docLinks({ text: doc.text, dir: pkg.dir }),
+				}),
+			);
 		}
 
-		sidebar[base] = [packageSidebar({ dir: pkg.dir, pages: docPages })];
+		sidebar[base] = [
+			packageSidebar({
+				dir: pkg.dir,
+				pages: docPages,
+				published: pkg.published,
+			}),
+		];
 		nav.push({ text: pkg.dir, link: base });
 	}
 
