@@ -81,8 +81,9 @@ assertEquals(report.passed, false);
   on JSR, so there is no hosted API reference yet; `deno doc
   packages/job/mod.ts` prints it.
 
-The docs site leaves out unpublished packages, so these guides join it once
-the package is published.
+The published docs site leaves out unpublished packages, so these guides join
+it once the package is published. Until then, `deno task docs:dev` previews
+them locally, each page under a prototype banner.
 
 ## Design record
 
