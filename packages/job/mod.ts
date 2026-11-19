@@ -130,6 +130,7 @@ export {
 } from "./src/outcome/main/mod.ts";
 export {
 	type JobGraph,
+	type OptionalMetaPlanOptions,
 	type PlannedJob,
 	type PlannedNeed,
 	type PlanOptions,
@@ -137,6 +138,7 @@ export {
 } from "./src/plan.ts";
 export {
 	type JobMisuseCause,
+	type OptionalMetaRunOptions,
 	type Outcomes,
 	type RunOptions,
 	type RunReport,

@@ -91,7 +91,7 @@ const publish = job({
 	run: () => {},
 });
 
-const result = await runJobs({ jobs: { publish }, meta: null });
+const result = await runJobs({ jobs: { publish } });
 assertEquals(
 	unwrapErr(result),
 	UndeclaredGuardRead({
@@ -360,9 +360,7 @@ const publish: (pkg: Package) => Job<string, unknown> = family({
 	},
 });
 
-const graph = unwrap(
-	planJobs({ jobs: { schema: publish(schema) }, meta: null }),
-);
+const graph = unwrap(planJobs({ jobs: { schema: publish(schema) } }));
 assertEquals(
 	[...graph.jobs.keys()],
 	["publish schema", "publish enum", "publish primordials", "publish panic"],
@@ -468,7 +466,7 @@ const cleanup = job({
 	run: () => {},
 });
 
-const graph = unwrap(planJobs({ jobs: { cleanup }, meta: null }));
+const graph = unwrap(planJobs({ jobs: { cleanup } }));
 
 assertEquals([...graph.jobs.keys()], ["cleanup", "deploy", "build", "smoke"]);
 assertEquals(graph.jobs.get("cleanup")?.runIf, "always()");
@@ -540,7 +538,6 @@ setTimeout(() => controller.abort(new Error("interrupted")), 10);
 const report = unwrap(
 	await runJobs({
 		jobs: { cleanup },
-		meta: null,
 		signal: controller.signal,
 	}),
 );
@@ -588,13 +585,11 @@ const flaky = job({
 	},
 });
 
-const strict = unwrap(
-	await runJobs({ jobs: { lint, slow }, meta: null, failFast: true }),
-);
+const strict = unwrap(await runJobs({ jobs: { lint, slow }, failFast: true }));
 assertEquals(strict.outcomes.slow, Cancelled());
 
 const lenient = unwrap(
-	await runJobs({ jobs: { flaky, slow }, meta: null, failFast: true }),
+	await runJobs({ jobs: { flaky, slow }, failFast: true }),
 );
 assertEquals(lenient.outcomes.slow, Succeeded("done"));
 assert(lenient.outcomes.flaky.isFailed());
@@ -689,7 +684,6 @@ const render = (event: JobEvent): string => {
 unwrap(
 	await runJobs({
 		jobs: { build },
-		meta: null,
 		onEvent: (event) => lines.push(render(event)),
 	}),
 );

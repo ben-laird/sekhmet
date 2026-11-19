@@ -69,6 +69,22 @@ export interface RunOptions<M, J extends Roots<M>> {
 }
 
 /**
+ * What {@linkcode runJobs} takes when every root's metadata type accepts
+ * `undefined` (a factory that ignores its parameter, or annotates it
+ * `Config | undefined`): `meta` may be omitted.
+ *
+ * @template J The roots
+ */
+export interface OptionalMetaRunOptions<J extends Roots<undefined>>
+	extends Omit<RunOptions<undefined, J>, "meta"> {
+	/**
+	 * The run's metadata: omitted, every plan, `runIf`, context factory and
+	 * body reads `undefined`
+	 */
+	readonly meta?: undefined;
+}
+
+/**
  * The roots' outcomes, keyed as the roots were, each typed by its job, as
  * `Promise.all` types its input.
  *
@@ -143,9 +159,13 @@ export interface JobMisuseCause {
  * `onEvent`, it cancels the run, and `runJobs` rejects with it once every
  * job has settled.
  *
- * @template M The run's metadata type
+ * This overload is for roots whose metadata type accepts `undefined`, as
+ * with a factory that ignores its parameter (`defineJobs(() => ({}))`):
+ * `meta` may be omitted, and every plan, `runIf`, context factory and body
+ * then reads `undefined`. Otherwise `meta` is required (the next overload).
+ *
  * @template J The roots
- * @param options The roots, the metadata, and how to watch and stop the run
+ * @param options The roots, and how to watch and stop the run
  * @returns The report, or why the jobs don't form a graph
  *
  * @example
@@ -174,23 +194,60 @@ export interface JobMisuseCause {
  * });
  *
  * const report = unwrap(
- * 	await runJobs({ jobs: { test, cleanup }, meta: null }),
+ * 	await runJobs({ jobs: { test, cleanup } }),
  * );
  * assertEquals(report.passed, false);
  * assert(report.outcomes.test.isBlocked());
  * assertEquals(report.outcomes.cleanup.value().unwrap(), true);
  * ```
  */
+export function runJobs<J extends Roots<undefined>>(
+	options: OptionalMetaRunOptions<J>,
+): Promise<Result<RunReport<J>, GraphError>>;
+/**
+ * Runs every job reachable from `jobs`, each identity once however many
+ * jobs need it, given the run's metadata `meta`, which every plan, `runIf`,
+ * context factory and body reads. How a run proceeds is as the overload
+ * without `meta` describes.
+ *
+ * @template M The run's metadata type
+ * @template J The roots
+ * @param options The roots, the metadata, and how to watch and stop the run
+ * @returns The report, or why the jobs don't form a graph
+ *
+ * @example
+ * ```ts
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { defineJobs, runJobs } from "@sekhmet/job";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const { job } = defineJobs((meta: { readonly version: string }) => meta);
+ * const tag = job({ name: "tag", run: (r) => `v${r.ctx.version}` });
+ *
+ * const report = unwrap(
+ * 	await runJobs({ jobs: { tag }, meta: { version: "1.2.0" } }),
+ * );
+ * assertEquals(report.outcomes.tag.value().unwrap(), "v1.2.0");
+ * ```
+ */
+export function runJobs<M, J extends Roots<M>>(
+	options: RunOptions<M, J>,
+): Promise<Result<RunReport<J>, GraphError>>;
 export async function runJobs<M, J extends Roots<M>>({
 	jobs,
 	meta,
 	signal,
 	failFast = false,
 	onEvent: hook = () => {},
-}: RunOptions<M, J>): Promise<Result<RunReport<J>, GraphError>> {
+}: Omit<RunOptions<M, J>, "meta"> & { readonly meta?: M }): Promise<
+	Result<RunReport<J>, GraphError>
+> {
 	const keys = Object.keys(jobs);
+	// An omitted meta is undefined, which the overloads admit only for roots
+	// whose metadata accepts it
+	const given = unerased<M>(meta);
 	const planned = planGraph(
-		Object.values(jobs).map((job) => getStructParams(job).bind(meta)),
+		Object.values(jobs).map((job) => getStructParams(job).bind(given)),
 	);
 	if (isErr(planned)) return planned;
 	const graph = unwrap(planned);
