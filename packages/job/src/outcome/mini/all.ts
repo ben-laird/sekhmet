@@ -6,14 +6,8 @@
  */
 
 import { union } from "@sekhmet/enum/core/mini";
-import {
-	Blocked,
-	Cancelled,
-	type JobOutcome,
-	Skipped,
-	Succeeded,
-} from "./core.ts";
-import { isCancelled, isSkipped, isUnhealthy } from "./predicates.ts";
+import { type JobOutcome, Succeeded } from "./core.ts";
+import { unmet } from "./fold.ts";
 
 /**
  * The succeeded values of a record of outcomes, keyed the same.
@@ -61,10 +55,8 @@ export function all<R extends Readonly<Record<string, JobOutcome<unknown>>>>(
 	outcomes: R,
 ): JobOutcome<AllValues<R>> {
 	const entries = Object.entries(outcomes);
-	const unhealthy = entries.filter(([, outcome]) => isUnhealthy(outcome));
-	if (unhealthy.length > 0) return Blocked(unhealthy.map(([name]) => name));
-	if (entries.some(([, outcome]) => isCancelled(outcome))) return Cancelled();
-	if (entries.some(([, outcome]) => isSkipped(outcome))) return Skipped();
+	const forced = unmet(entries.map(([name, outcome]) => ({ name, outcome })));
+	if (forced !== undefined) return forced;
 
 	const values = entries.map(([name, outcome]) => [name, union(outcome)]);
 	return Succeeded(allValuesUnsafely<R>(Object.fromEntries(values)));

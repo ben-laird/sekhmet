@@ -198,6 +198,29 @@ Deno.test("a failed need blocks its dependents, transitively", async () => {
 	assertEquals(report.passed, false);
 });
 
+Deno.test("Blocked keeps plan order for integer-like job names", async () => {
+	// Given: three failing needs named z, 2 and 1, declared in that order
+	const gate = job({
+		name: "gate",
+		plan: (p) => {
+			return {
+				needs: [
+					p.needs(failing("z")),
+					p.needs(failing("2")),
+					p.needs(failing("1")),
+				],
+			};
+		},
+		run: () => {},
+	});
+
+	// When: it runs
+	const report = unwrap(await run({ jobs: { gate } }));
+
+	// Then: Blocked names them as declared, not in a record's key order
+	assertEquals(report.outcomes.gate, Blocked(["z", "2", "1"]));
+});
+
 Deno.test("needs nested in arrays and records resolve in place", async () => {
 	// Given: needs inside arrays of records, beside data and a Map
 	const a = job({ name: "a", run: () => 1 });

@@ -18,13 +18,13 @@ import type { GraphError } from "@/src/graph-error.ts";
 import type { BoundJob, Job, Roots, StepDefinition } from "@/src/job.ts";
 import type { AnyNeed, OutcomeView } from "@/src/need.ts";
 import {
-	all,
 	Cancelled,
 	Failed,
-	type JobOutcome,
+	JobOutcome,
 	Skipped,
 	Succeeded,
 } from "@/src/outcome/main/mod.ts";
+import { unmet } from "@/src/outcome/mini/fold.ts";
 import { resolveNeeds } from "@/src/plan-data.ts";
 import { type CountedOutcome, passed } from "@/src/verdict.ts";
 
@@ -267,16 +267,20 @@ export async function runJobs<C, J extends Roots<C>>({
 			}),
 		);
 
+		// In plan order: a record would put integer-like job names first
+		const pulled = needs.flatMap(({ need, node }) => {
+			const outcome = settled.get(need);
+			return outcome === undefined ? [] : [{ name: node.job.name, outcome }];
+		});
 		const outcomes: NeedOutcomes = Object.fromEntries(
-			needs.flatMap(({ need, node }) => {
-				const outcome = settled.get(need);
-				return outcome === undefined ? [] : [[node.job.name, outcome]];
-			}),
+			pulled.map(({ name, outcome }) => [name, outcome]),
 		);
 		const cancelled = cancel.signal.aborted;
 		if (job.runIf.kind === "success") {
-			const combined = all(outcomes);
-			if (!combined.isSucceeded()) return finish({ job, outcome: combined });
+			const forced = unmet(pulled);
+			if (forced !== undefined) {
+				return finish({ job, outcome: JobOutcome.fromMini(forced) });
+			}
 			if (cancelled) return finish({ job, outcome: Cancelled() });
 		} else {
 			const runs = decide(() => {
