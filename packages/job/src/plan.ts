@@ -10,6 +10,7 @@ import { Ok, type Result } from "@sekhmet/enum/result/mini";
 import { isErr } from "@sekhmet/enum/result/mini/predicates";
 import { unwrap } from "@sekhmet/enum/result/mini/unwrap";
 import { getStructParams } from "@sekhmet/primordials/struct";
+import { unerased } from "@/src/erasure.ts";
 import { planGraph } from "@/src/graph.ts";
 import type { GraphError } from "@/src/graph-error.ts";
 import type { Roots } from "@/src/job.ts";
@@ -61,6 +62,19 @@ export interface PlanOptions<M, J extends Roots<M>> {
 }
 
 /**
+ * What {@linkcode planJobs} takes when every root's metadata type accepts
+ * `undefined` (a factory that ignores its parameter, or annotates it
+ * `Config | undefined`): `meta` may be omitted.
+ *
+ * @template J The roots
+ */
+export interface OptionalMetaPlanOptions<J extends Roots<undefined>>
+	extends Omit<PlanOptions<undefined, J>, "meta"> {
+	/** The metadata a run would get: omitted, every plan reads `undefined` */
+	readonly meta?: undefined;
+}
+
+/**
  * The dry run: calls the plan of every job reachable from `jobs`, the
  * targets of `needsIf` included, runs nothing, and returns the graph.
  * Every `GraphError` (a duplicate name or family key, a guard reading
@@ -68,9 +82,13 @@ export interface PlanOptions<M, J extends Roots<M>> {
  * A plan that throws is a bug, and the throw propagates. No job starts, so
  * no context factory is called.
  *
- * @template M The run's metadata type
+ * This overload is for roots whose metadata type accepts `undefined`, as
+ * with a factory that ignores its parameter (`defineJobs(() => ({}))`):
+ * `meta` may be omitted, and every plan then reads `undefined`. Otherwise
+ * `meta` is required (the next overload).
+ *
  * @template J The roots
- * @param options The roots and the metadata
+ * @param options The roots
  * @returns Each job's plan, or why the jobs don't form a graph
  *
  * @example
@@ -88,17 +106,56 @@ export interface PlanOptions<M, J extends Roots<M>> {
  * 	run: () => {},
  * });
  *
- * const graph = unwrap(planJobs({ jobs: { cleanup }, meta: null }));
+ * const graph = unwrap(planJobs({ jobs: { cleanup } }));
  * assertEquals([...graph.jobs.keys()], ["cleanup", "build"]);
  * assertEquals(graph.jobs.get("cleanup")?.runIf, "always()");
  * ```
  */
+export function planJobs<J extends Roots<undefined>>(
+	options: OptionalMetaPlanOptions<J>,
+): Result<JobGraph, GraphError>;
+/**
+ * The dry run, given the metadata `meta` a run would get, since plans may
+ * read it. What it finds is as the overload without `meta` describes.
+ *
+ * @template M The run's metadata type
+ * @template J The roots
+ * @param options The roots and the metadata
+ * @returns Each job's plan, or why the jobs don't form a graph
+ *
+ * @example
+ * ```ts
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { defineJobs, planJobs } from "@sekhmet/job";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const { job } = defineJobs((_meta: { readonly release: boolean }) => ({}));
+ * const publish = job({ name: "publish", run: () => {} });
+ * const ship = job({
+ * 	name: "ship",
+ * 	plan: (p) => (p.meta.release ? { publish: p.needs(publish) } : {}),
+ * 	run: () => {},
+ * });
+ *
+ * const graph = unwrap(planJobs({ jobs: { ship }, meta: { release: false } }));
+ * assertEquals([...graph.jobs.keys()], ["ship"]);
+ * ```
+ */
+export function planJobs<M, J extends Roots<M>>(
+	options: PlanOptions<M, J>,
+): Result<JobGraph, GraphError>;
 export function planJobs<M, J extends Roots<M>>({
 	jobs,
 	meta,
-}: PlanOptions<M, J>): Result<JobGraph, GraphError> {
+}: Omit<PlanOptions<M, J>, "meta"> & { readonly meta?: M }): Result<
+	JobGraph,
+	GraphError
+> {
+	// An omitted meta is undefined, which the overloads admit only for roots
+	// whose metadata accepts it
+	const given = unerased<M>(meta);
 	const roots = Object.values(jobs).map((job) => {
-		return getStructParams(job).bind(meta);
+		return getStructParams(job).bind(given);
 	});
 	const planned = planGraph(roots);
 	if (isErr(planned)) return planned;

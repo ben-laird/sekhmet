@@ -366,6 +366,12 @@ Owner, 2026-11-19; implemented on `feat/job-context-cleanup`, for `feat/job`
   - `meta` is required, as `context` was. A factory that takes no parameter
     infers `unknown` metadata, so `defineJobs(() => ({}))` with
     `meta: null` is the shape of a graph that needs none.
+  - **Update, 2026-11-19 (0.2.0, #57):** `meta` is optional in `runJobs`
+    and `planJobs` when every root's metadata type accepts `undefined`, so
+    `defineJobs(() => ({}))` runs with `runJobs({ jobs })`, and an omitted
+    `meta` reaches plans, the factory and `run` as `undefined`. It's an
+    overload, so `meta: null` still compiles and `M` is still inferred
+    `unknown`; a metadata type that rejects `undefined` keeps it required.
   - The factory runs inside the job's body, after its `Started` event, so a
     factory throw reports `Started`, then `Finished` with `Failed`.
   - Misuse panics are `CleanupAfterDispose` and `NotDisposable` (`use` with

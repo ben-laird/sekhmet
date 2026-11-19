@@ -34,7 +34,7 @@ import type { Guard, Need } from "@/src/need.ts";
  * 	run: () => {},
  * });
  *
- * const graph = unwrap(planJobs({ jobs: { release }, meta: null }));
+ * const graph = unwrap(planJobs({ jobs: { release } }));
  * assertEquals(graph.jobs.get("release")?.needs[1]?.when, "build succeeded");
  * ```
  */
@@ -77,7 +77,7 @@ export function succeeded<T>(need: Need<T, boolean>): Guard {
  * 	run: (_r, { logs }) => logs?.value().unwrap() ?? "no logs",
  * });
  *
- * const ran = unwrap(await runJobs({ jobs: { report }, meta: null }));
+ * const ran = unwrap(await runJobs({ jobs: { report } }));
  * assertEquals(ran.outcomes.report.value().unwrap(), "build.log");
  * ```
  */
@@ -133,7 +133,7 @@ export interface SucceededWithOptions<T> {
  * 	run: (_r, { version, signature }) => `${version} ${signature ?? "unsigned"}`,
  * });
  *
- * const report = unwrap(await runJobs({ jobs: { publish }, meta: null }));
+ * const report = unwrap(await runJobs({ jobs: { publish } }));
  * assertEquals(report.outcomes.publish.value().unwrap(), "1.2.0 signature");
  * ```
  */

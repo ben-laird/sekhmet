@@ -334,7 +334,8 @@ export type Roots<M> = { readonly [key: string]: Job<unknown, M> };
  * `family` to define them with. The factory's parameter annotation fixes
  * the run's metadata type `M`, which `runJobs` and `planJobs` take as
  * `meta`, and its return fixes the context type `C` each `run` gets as
- * `r.ctx`.
+ * `r.ctx`. When `M` accepts `undefined` (a factory that ignores its
+ * parameter infers `unknown`), `meta` may be omitted.
  *
  * Each job that starts gets its own context, built just before its `run`,
  * so one job can't change another's. A dry run never calls the factory, and
