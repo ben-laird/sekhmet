@@ -12,7 +12,7 @@ import {
 } from "@sekhmet/job";
 import { assert, assertEquals, assertInstanceOf } from "@std/assert";
 
-const { job } = defineJobs<{ readonly release: boolean }>();
+const { job, observer } = defineJobs<{ readonly release: boolean }>();
 
 function planOf({ graph, name }: { graph: JobGraph; name: string }): JobPlan {
 	const plan = graph.jobs.get(name);
@@ -187,4 +187,26 @@ Deno.test("a dry run parks a plan at p.result, so its finally doesn't run", asyn
 	// Then: it is Pending on version, and its finally never ran
 	assert(isolate(planOf({ graph, name: "publish" }), "Pending"));
 	assertEquals(finished, false);
+});
+
+Deno.test("a dry run names the observers", async () => {
+	// Given: a build, and an observer of its outcome
+	const build = job({ name: "build", run: () => "dist" });
+	const notify = observer({
+		name: "notify",
+		plan: async (p) => ({ outcome: await p.outcome(build) }),
+		run: () => {},
+	});
+
+	// When: dry-running both
+	const graph = unwrap(
+		await planJobs({ jobs: [build, notify], context: { release: true } }),
+	);
+
+	// Then: only notify is an observer, and it is Pending on build's outcome
+	assertEquals([...graph.observers], ["notify"]);
+	assertEquals(
+		planOf({ graph, name: "notify" }),
+		new JobPlan("Pending", { on: "build", needs: [] }),
+	);
 });

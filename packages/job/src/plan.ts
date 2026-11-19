@@ -46,11 +46,17 @@ export class JobPlan extends Enum<Variants> {}
 
 /**
  * The graph a dry run found: each reachable job's plan, by name, in the order
- * plans reached them.
+ * plans reached them, and which of those jobs are observers.
  */
 export interface JobGraph {
 	/** Each job's plan, by name */
 	readonly jobs: ReadonlyMap<string, JobPlan>;
+	/**
+	 * The names of the jobs defined with `observer`, which a run never
+	 * cancels. An observer's plan usually awaits `p.outcome`, so it is
+	 * typically `Pending` here.
+	 */
+	readonly observers: ReadonlySet<string>;
 }
 
 /**
@@ -66,8 +72,8 @@ export interface PlanOptions<C> {
 }
 
 /**
- * The dry run: calls the plan of every job reachable from `jobs`, runs no
- * body, and returns the graph. Plans that await nothing settle at once; a
+ * The dry run: calls the plan of every job reachable from `jobs` (observers
+ * included, listed in `observers`), runs no body, and returns the graph. Plans that await nothing settle at once; a
  * plan that awaits a job's result or outcome is reported `Pending` on that
  * job. Duplicate names and cycles are an `Err`, as in `runJobs`.
  *
@@ -116,7 +122,13 @@ export async function planJobs<C>({
 	const found = await Promise.all(
 		[...plans].map(async ([job, plan]) => [nameOf(job), await plan] as const),
 	);
-	return Ok({ jobs: new Map(found) });
+	const observers = [...plans.keys()].filter((job) => {
+		return getStructParams(job).observer;
+	});
+	return Ok({
+		jobs: new Map(found),
+		observers: new Set(observers.map(nameOf)),
+	});
 
 	function visit(job: Job<unknown, C>): void {
 		if (plans.has(job)) return;

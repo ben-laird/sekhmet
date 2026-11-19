@@ -29,7 +29,7 @@ import {
 import { Panic } from "@sekhmet/panic/mini/core";
 import { assert, assertEquals, assertInstanceOf } from "@std/assert";
 
-const { job } = defineJobs<null>();
+const { job, observer } = defineJobs<null>();
 
 /** Runs `jobs` with a null context, failing the test if it takes over 2s. */
 async function run({
@@ -1052,17 +1052,16 @@ Deno.test("a cycle closed after a staged await is an Err", async () => {
 	assertEquals(unwrapErr(result), Cycle(["b", "a", "b"]));
 });
 
-Deno.test("observer jobs survive cancellation, as always() does", async (t) => {
+Deno.test("observers survive cancellation, as always() does", async (t) => {
 	await t.step("failFast still runs a failure() notifier", async () => {
-		// Given: a failing build, an ordinary sibling, and a notifier that only
-		// observes build's outcome
+		// Given: a failing build, an ordinary sibling, and a notifier observer
 		let sawAbort = false;
 		const build = job({
 			name: "build",
 			run: () => Promise.reject(new Error("x")),
 		});
 		const lint = job({ name: "lint", run: (t) => untilAborted(t.signal) });
-		const notify = job({
+		const notify = observer({
 			name: "notify",
 			plan: async (p) => {
 				return isUnhealthy(await p.outcome(build)) ? {} : skip();
@@ -1085,7 +1084,7 @@ Deno.test("observer jobs survive cancellation, as always() does", async (t) => {
 	});
 
 	await t.step("the run's signal still runs an always() cleanup", async () => {
-		// Given: a long job, a cleanup that only observes it, and a signal
+		// Given: a long job, a cleanup observer, an ordinary dependent, a signal
 		const controller = new AbortController();
 		const long = job({
 			name: "long",
@@ -1094,7 +1093,7 @@ Deno.test("observer jobs survive cancellation, as always() does", async (t) => {
 				return untilAborted(t.signal);
 			},
 		});
-		const cleanup = job({
+		const cleanup = observer({
 			name: "cleanup",
 			plan: async (p) => {
 				await p.outcome(long);
@@ -1121,6 +1120,103 @@ Deno.test("observer jobs survive cancellation, as always() does", async (t) => {
 			Succeeded("cleaned after abort"),
 		);
 	});
+
+	await t.step("whatever an observer awaits before p.outcome", async () => {
+		// Given: an observer whose plan awaits something else first, so the run
+		// is cancelled before it ever calls p.outcome (the timing rule's gap)
+		const controller = new AbortController();
+		const long = job({
+			name: "long",
+			run: (t) => {
+				controller.abort("stop");
+				return untilAborted(t.signal);
+			},
+		});
+		const summary = observer({
+			name: "report",
+			plan: async (p) => {
+				await new Promise((resolve) => setTimeout(resolve, 10));
+				return { long: kind(await p.outcome(long)) };
+			},
+			run: (t, { long }) => `${long}, aborted: ${t.signal.aborted}`,
+		});
+
+		// When: the run is cancelled while the observer's plan waits
+		const report = unwrap(
+			await run({ jobs: [long, summary], signal: controller.signal }),
+		);
+
+		// Then: the observer still planned and ran
+		assertEquals(
+			outcomeOf({ report, name: "report" }),
+			Succeeded("Cancelled, aborted: true"),
+		);
+	});
+
+	await t.step(
+		"a job that only awaits p.outcome is still cancelled",
+		async () => {
+			// Given: an ordinary job (not an observer) whose plan only observes
+			const controller = new AbortController();
+			const long = job({
+				name: "long",
+				run: (t) => {
+					controller.abort("stop");
+					return untilAborted(t.signal);
+				},
+			});
+			let ran = false;
+			const watcher = job({
+				name: "watcher",
+				plan: async (p) => ({ long: kind(await p.outcome(long)) }),
+				run: () => {
+					ran = true;
+				},
+			});
+
+			// When: the run is cancelled
+			const report = unwrap(
+				await run({ jobs: [long, watcher], signal: controller.signal }),
+			);
+
+			// Then: only declared observers survive; this job is Cancelled
+			assertEquals(outcomeOf({ report, name: "watcher" }), Cancelled());
+			assertEquals(ran, false);
+		},
+	);
+});
+
+Deno.test("an observer's p refuses needs and result at run time", async (t) => {
+	// Given: a job, and an observer whose plan reaches past its types
+	const other = job({ name: "other", run: () => 1 });
+	const misuse = async (method: "needs" | "result") => {
+		const sneaky = observer({
+			name: `sneaky-${method}`,
+			plan: (p) => {
+				const call = Reflect.get(p, method);
+				call(other);
+				return {};
+			},
+			run: () => {},
+		});
+		return outcomeOf({
+			report: unwrap(await run({ jobs: [sneaky] })),
+			name: `sneaky-${method}`,
+		});
+	};
+
+	for (const method of ["needs", "result"] as const) {
+		await t.step(`p.${method}() panics, failing the observer`, async () => {
+			// When: the observer's plan calls it
+			const outcome = await misuse(method);
+
+			// Then: an ObserverDependency panic failed the observer
+			assert(isolate(outcome, "Failed"));
+			const panic = union(outcome);
+			assertInstanceOf(panic, Panic);
+			assertEquals(panic.name, "Panic (ObserverDependency)");
+		});
+	}
 });
 
 Deno.test("only the abort itself makes a body Cancelled", async (t) => {
@@ -1159,7 +1255,7 @@ Deno.test("only the abort itself makes a body Cancelled", async (t) => {
 					throw t.signal.reason;
 				},
 			});
-			const abortError = job({
+			const abortError = observer({
 				name: "abortError",
 				plan: async (p) => {
 					await p.outcome(reason);

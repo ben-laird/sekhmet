@@ -2,9 +2,11 @@ import { isErr, unwrap } from "@sekhmet/enum/result/mini";
 import {
 	defineJobs,
 	type Handle,
+	isUnhealthy,
 	type Job,
 	type JobRun,
 	type NeedResult,
+	type ObserverPlanner,
 	skip,
 } from "@sekhmet/job";
 import { assertType, type IsExact } from "@std/testing/types";
@@ -13,7 +15,7 @@ interface Ctx {
 	readonly release: boolean;
 }
 
-const { job } = defineJobs<Ctx>();
+const { job, observer } = defineJobs<Ctx>();
 const version = job({ name: "version", run: () => "1.2.0" });
 const build = job({
 	name: "build",
@@ -251,6 +253,43 @@ Deno.test("a plan exits only with skip() or an Err, never an Ok", () => {
 			const versioned = await p.result(version);
 			if (isErr(versioned)) return versioned;
 			return { v: unwrap(versioned) };
+		},
+		run: () => {},
+	});
+});
+
+Deno.test("an observer's plan can only observe, and its run gets plain data", () => {
+	// Given: an observer that reads the context and observes build's outcome
+	observer({
+		name: "notify",
+		plan: async (p) => {
+			assertType<IsExact<typeof p, ObserverPlanner<Ctx>>>(true);
+			const outcome = await p.outcome(build);
+			return p.context.release ? { failed: isUnhealthy(outcome) } : skip();
+		},
+		// When: its run receives the plan
+		// Then: the data arrives Readonly, without Skip
+		run: (_t, plan) => {
+			assertType<IsExact<typeof plan, { readonly failed: boolean }>>(true);
+		},
+	});
+
+	// When / Then: needs and result don't exist on an observer's p
+	observer({
+		name: "needs",
+		plan: (p) => {
+			// @ts-expect-error an observer can't declare a need
+			p.needs(build);
+			return {};
+		},
+		run: () => {},
+	});
+	observer({
+		name: "result",
+		plan: async (p) => {
+			// @ts-expect-error an observer can't await a result
+			await p.result(version);
+			return {};
 		},
 		run: () => {},
 	});

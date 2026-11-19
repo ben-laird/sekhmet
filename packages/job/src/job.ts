@@ -39,6 +39,11 @@ export interface JobParams<T, C> {
 	readonly name: string;
 	/** Whether a failure leaves the run's verdict passing */
 	readonly continueOnError: boolean;
+	/**
+	 * Whether the job was defined with `observer`: it survives the run's
+	 * cancellation, running with `t.signal` already aborted
+	 */
+	readonly observer: boolean;
 	/** Calls the user's plan and pairs its value with the typed run */
 	readonly plan: (p: Planner<C>) => Promise<Stage<T, C>>;
 }
@@ -126,8 +131,8 @@ export interface Planner<C> {
 	/**
 	 * Waits for `job`'s outcome, whatever it is. It never blocks, so a plan
 	 * can run after a failure (`always`) or only after one (`failure`). A
-	 * job whose plan only observes through `p.outcome` survives the run's
-	 * cancellation: its body runs with `t.signal` already aborted.
+	 * `job` that uses it is still cancelled with the run; define an
+	 * `observer` for one that must survive cancellation.
 	 */
 	outcome<T>(job: Job<T, C>): Promise<JobOutcome<Readonly<T>>>;
 }
@@ -166,8 +171,8 @@ export interface JobRun<C> {
 	readonly context: C;
 	/**
 	 * Aborted when the run is cancelled; pass it to `fetch` and friends. An
-	 * observer job (one whose plan only awaited `p.outcome`) can start with
-	 * it already aborted. If the body then throws, the job ends `Cancelled`
+	 * observer (defined with `observer`) can start with it already aborted.
+	 * If the body then throws, the job ends `Cancelled`
 	 * only when the throw is the abort itself (this signal's `reason`, or an
 	 * `AbortError`); any other error is `Failed`.
 	 */
@@ -271,6 +276,51 @@ export interface LeafJobDefinition<C, T> {
 }
 
 /**
+ * What an observer's plan receives as `p`: the run's context and
+ * `outcome`, and no way to depend on a job that blocks (no `needs`, no
+ * `result`).
+ *
+ * @template C The run's context type
+ */
+export interface ObserverPlanner<C> {
+	/** The run's context, so a plan can decide from config */
+	readonly context: C;
+	/** Waits for `job`'s outcome, whatever it is; it never blocks */
+	outcome<T>(job: Job<T, C>): Promise<JobOutcome<Readonly<T>>>;
+}
+
+/**
+ * An observer: a job that watches other jobs' outcomes, as GitHub Actions'
+ * `always()` and `failure()` jobs do. Its plan returns plain data (no
+ * handles) or `skip()`.
+ *
+ * @template C The run's context type
+ * @template P The plan's data
+ * @template T What the run returns
+ */
+export interface ObserverDefinition<C, P extends PlanRecord, T> {
+	/** The job's display name, unique within a run */
+	readonly name: string;
+	/** Observes outcomes and decides, as data; may be async, may `skip()` */
+	readonly plan: (p: ObserverPlanner<C>) => P | Skip | Promise<P | Skip>;
+	/** Does the work, given the plan's data */
+	readonly run: (t: JobRun<C>, plan: Readonly<P>) => T | Promise<T>;
+	/** A failure leaves the run's verdict passing (default `false`) */
+	readonly continueOnError?: boolean | undefined;
+}
+
+/**
+ * The cause of a panic for an observer's plan that asked for `needs` or
+ * `result`, which only an untyped caller can do.
+ */
+export interface ObserverDependencyCause {
+	/** The observer */
+	readonly job: string;
+	/** The method it called */
+	readonly method: "needs" | "result";
+}
+
+/**
  * What {@linkcode defineJobs} returns.
  *
  * @template C The run's context type
@@ -286,6 +336,17 @@ export interface JobKit<C> {
 		): Job<T, C>;
 		<T = void>(definition: LeafJobDefinition<C, T>): Job<T, C>;
 	};
+	/**
+	 * Defines an observer: a job whose plan can only observe other jobs'
+	 * outcomes, so it never depends on anything that blocks. Unlike every
+	 * `job`, an observer is not cancelled with the run (by its `signal`,
+	 * `failFast` or a graph error): it runs with `t.signal` already aborted,
+	 * so it can tell. Use it for `always()` cleanups and `failure()`
+	 * notifiers.
+	 */
+	readonly observer: <P extends PlanRecord, T = void>(
+		definition: ObserverDefinition<C, P, T> & StringKeysOnly<P>,
+	) => Job<T, C>;
 }
 
 /**
@@ -316,7 +377,7 @@ export interface JobKit<C> {
  * ```
  */
 export function defineJobs<C>(): JobKit<C> {
-	return { job: defineJob };
+	return { job: defineJob, observer: observerJob };
 
 	function defineJob<P extends PlanRecord | PlanExit, T>(
 		definition: PlannedJobDefinition<C, P, T> | LeafJobDefinition<C, T>,
@@ -340,6 +401,7 @@ function plannedJob<C, P extends PlanRecord | PlanExit, T>({
 	return new Job<T, C>({
 		name,
 		continueOnError,
+		observer: false,
 		plan: async (p) => {
 			const value = await plan(p);
 			if (value instanceof Skip) return { kind: "skip" };
@@ -354,6 +416,58 @@ function plannedJob<C, P extends PlanRecord | PlanExit, T>({
 			};
 		},
 	});
+}
+
+function observerJob<C, P extends PlanRecord, T>({
+	name,
+	plan,
+	run,
+	continueOnError = false,
+}: ObserverDefinition<C, P, T>): Job<T, C> {
+	return new Job<T, C>({
+		name,
+		continueOnError,
+		observer: true,
+		plan: async (p) => {
+			const value = await plan(observing({ job: name, planner: p }));
+			if (value instanceof Skip) return { kind: "skip" };
+			assertPlainPlan({ job: name, plan: value });
+			return {
+				kind: "planned",
+				plan: value,
+				run: async (t) => await run(t, value),
+			};
+		},
+	});
+}
+
+/**
+ * Narrows a runner's `p` to what an observer may use. Its `needs` and
+ * `result` stay present only to panic, for untyped callers.
+ */
+function observing<C>({
+	job,
+	planner,
+}: {
+	job: string;
+	planner: Planner<C>;
+}): ObserverPlanner<C> {
+	const refuse = (method: ObserverDependencyCause["method"]) => {
+		return (): never => {
+			return panic<ObserverDependencyCause>({
+				name: "ObserverDependency",
+				message: `observer "${job}" called p.${method}(); an observer can only await p.outcome`,
+				cause: { job, method },
+			});
+		};
+	};
+	const narrowed = {
+		context: planner.context,
+		outcome: planner.outcome,
+		needs: refuse("needs"),
+		result: refuse("result"),
+	};
+	return narrowed;
 }
 
 /**

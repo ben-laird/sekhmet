@@ -29,7 +29,7 @@ import {
 import { assertEquals } from "@std/assert";
 
 // The context every plan and run can read: config and a logger, not data
-const { job } = defineJobs<{
+const { job, observer } = defineJobs<{
 	readonly release: boolean;
 	readonly log: string[];
 }>();
@@ -63,8 +63,8 @@ const publish = job({
 	run: (_t, { build, channel }) => `${build.outDir} -> ${channel}`,
 });
 
-// failure(): runs only when build did not succeed
-const notify = job({
+// failure(): an observer, so it runs even when the run is cancelled
+const notify = observer({
 	name: "notify",
 	plan: async (p) => (isolate(await p.outcome(build), "Failed") ? {} : skip()),
 	run: () => "paged",
@@ -98,7 +98,8 @@ assertEquals(report.passed, true);
 
 ## Concepts
 
-- **`defineJobs<C>()`** fixes the run's context type `C` and returns `job`.
+- **`defineJobs<C>()`** fixes the run's context type `C` and returns `job`
+  and `observer`.
 - **`job({ name, plan?, run, continueOnError? })`** defines a job.
   - `plan(p)` may be async, and returns a plain object of handles from
     `p.needs(job)` plus any data, or `skip()`. A job that needs nothing omits
@@ -109,6 +110,10 @@ assertEquals(report.passed, true);
     ends `Blocked` (or `Skipped`/`Cancelled`) before its run. Return the `Err`
     to give up early. `p.outcome(job)` waits for its outcome and never
     blocks, so `always`/`failure` conditions are ordinary code.
+- **`observer({ name, plan, run, continueOnError? })`** defines an observer:
+  a job whose plan's `p` has only `context` and `outcome` (no `needs`, no
+  `result`), and returns plain data or `skip()`. Use it for `always()`
+  cleanups and `failure()` notifiers.
   - `run(t, plan)` receives the plan with its top-level handles resolved and
     typed `Readonly`, inferred from `plan` with no annotations. `t` has
     `context`, `signal` and `step({ name, run })`.
@@ -118,13 +123,14 @@ assertEquals(report.passed, true);
   `Blocked` without starting it; a throw becomes `Failed`; a duplicate name or
   a cycle is an `Err`, never a throw or a hang.
 - **Cancellation** (the run's `signal`, `failFast`, or a graph error) aborts
-  every body's `t.signal`, and ordinary jobs that haven't started end
-  `Cancelled`. An observer job, whose plan only awaits `p.outcome` (an
-  `always()` or `failure()` job), is not cancelled: it runs with `t.signal`
-  already aborted, as GitHub Actions runs `always()` jobs. A body that throws
+  every body's `t.signal`, and jobs that haven't started end `Cancelled`.
+  Observers are never cancelled, whatever their plan awaits and whenever:
+  they run with `t.signal` already aborted, as GitHub Actions runs `always()`
+  jobs. A `job` whose plan happens to await only `p.outcome` is still an
+  ordinary job, and is cancelled. A body that throws
   after the abort ends `Cancelled` only if it threw the abort itself (the
   signal's `reason`, or an `AbortError`); any other error is `Failed`.
 - **`planJobs({ jobs, context })`** is the dry run: it calls every plan and
   returns the graph, with a plan that awaits a result reported `Pending` on
   that job. There `p.result` never settles, so code after it (`finally`
-  included) doesn't run in a dry run.
+  included) doesn't run in a dry run. `graph.observers` names the observers.

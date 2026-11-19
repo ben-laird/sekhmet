@@ -45,9 +45,9 @@ export interface RunOptions<C> {
 	readonly signal?: AbortSignal | undefined;
 	/**
 	 * When a job fails (without `continueOnError`), abort the rest through
-	 * their signals (default `false`). Ordinary jobs not yet started end
-	 * `Cancelled`; observer jobs (plans that only await `p.outcome`) still
-	 * run, with `t.signal` already aborted
+	 * their signals (default `false`). Jobs not yet started end `Cancelled`,
+	 * except observers (defined with `observer`), which still run, with
+	 * `t.signal` already aborted
 	 */
 	readonly failFast?: boolean | undefined;
 	/**
@@ -89,10 +89,10 @@ export interface JobMisuseCause {
  * rethrown. Unrelated jobs keep running after a failure, unless `failFast`.
  *
  * Cancellation (the run's `signal`, `failFast`, or a graph error) aborts
- * every body's `t.signal`, and ordinary jobs that haven't started end
- * `Cancelled`. A job whose plan only observes others through `p.outcome`
- * (an `always()` or `failure()` job) is not cancelled: it runs with
- * `t.signal` already aborted, so it can tell. A body that throws after the
+ * every body's `t.signal`, and jobs that haven't started end `Cancelled`.
+ * An observer (defined with `observer`, for `always()` and `failure()`
+ * jobs) is never cancelled, whatever its plan awaits and whenever: it runs
+ * with `t.signal` already aborted, so it can tell. A body that throws after the
  * abort ends `Cancelled` only if what it threw is the abort itself (the
  * signal's `reason`, or an `AbortError`); any other error is `Failed`.
  *
@@ -232,16 +232,13 @@ export async function runJobs<C>({
 	 * decide, then run the body if nothing forced an outcome. Waiting for all
 	 * of them first is what puts each job's terminal event after theirs.
 	 *
-	 * An observer (a plan that only awaited `p.outcome`, as `always()` and
-	 * `failure()` jobs do) is not cancelled with the run: its body runs with
+	 * An observer (defined with `observer`) is not cancelled with the run:
+	 * the runner keeps waiting for its plan, and its body runs with
 	 * `t.signal` already aborted, so it can tell.
 	 */
 	async function lifecycle<T>(job: Job<T, C>): Promise<JobOutcome<T>> {
-		const { name, plan } = getStructParams(job);
+		const { name, plan, observer } = getStructParams(job);
 		const dependencies = new Map<AnyJob, Dependency>();
-		let observed = false;
-		let ordinary = false;
-		const observesOnly = (): boolean => observed && !ordinary;
 
 		const touch = <U>({
 			need,
@@ -260,20 +257,15 @@ export async function runJobs<C>({
 			job: name,
 			context,
 			needs: (need) => {
-				ordinary = true;
 				void touch({ need, blocks: true });
 				return new Handle({ job: need });
 			},
 			result: async (need) => {
-				if (!settled.has(need)) ordinary = true;
 				const outcome = await touch({ need, blocks: true });
 				if (isolate(outcome, "Succeeded")) return Ok(union(outcome));
 				return Err({ job: nameOf(need), outcome });
 			},
-			outcome: (need) => {
-				observed = true;
-				return touch({ need, blocks: false });
-			},
+			outcome: (need) => touch({ need, blocks: false }),
 		});
 
 		type Planned =
@@ -292,7 +284,7 @@ export async function runJobs<C>({
 				planning,
 				cancelled.then((): Planned => ({ kind: "cancelled" })),
 			]);
-			if (raced.kind !== "cancelled" || !observesOnly()) return raced;
+			if (raced.kind !== "cancelled" || !observer) return raced;
 			return await planning;
 		};
 		const planned = await settlePlan();
@@ -324,7 +316,7 @@ export async function runJobs<C>({
 			return finish({ job, outcome: Skipped() });
 		}
 		if (forced !== undefined) return finish({ job, outcome: forced });
-		if (cancel.signal.aborted && !observesOnly()) {
+		if (cancel.signal.aborted && !observer) {
 			return finish({ job, outcome: Cancelled() });
 		}
 

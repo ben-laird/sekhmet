@@ -30,7 +30,7 @@ interface CiContext {
 	readonly ran: string[];
 }
 
-const { job } = defineJobs<CiContext>();
+const { job, observer } = defineJobs<CiContext>();
 
 /** A stub body: records the step, then fails if the context says so. */
 const stub = (name: string) => {
@@ -64,16 +64,16 @@ const coverage = job({
 });
 
 // A "failure" step (none in main.ts today): runs only if a dependency is
-// unhealthy, else skipped.
-const explainFailure = job({
+// unhealthy, else skipped. An observer, so a cancelled run still runs it.
+const explainFailure = observer({
 	name: "Explain failure",
 	plan: async (p) => (isUnhealthy(await p.outcome(test)) ? {} : skip()),
 	run: stub("Explain failure"),
 });
 
 // "Cleanup coverage data": dependsOn ["Show coverage report"], condition
-// "always", continueOnError.
-const cleanup = job({
+// "always", continueOnError. An observer, as "always" survives cancellation.
+const cleanup = observer({
 	name: "Cleanup coverage data",
 	continueOnError: true,
 	plan: async (p) => {
