@@ -10,6 +10,7 @@ import { isErr } from "@sekhmet/enum/result/mini/predicates";
 import { unwrap } from "@sekhmet/enum/result/mini/unwrap";
 import { panic } from "@sekhmet/panic/mini/core";
 import { getStructParams } from "@sekhmet/primordials/struct";
+import { cleanupStack } from "@/src/cleanup.ts";
 import type { NeedOutcomes } from "@/src/condition.ts";
 import { unerased } from "@/src/erasure.ts";
 import { JobEvent } from "@/src/event.ts";
@@ -122,9 +123,17 @@ export interface JobMisuseCause {
  *      `Skipped`), and one whose needs succeeded ends `Cancelled` if the run
  *      was cancelled;
  *    - any other `runIf` that is false ends the job `Skipped`;
- * 4. runs its body. A throw or rejection is `Failed`, never rethrown, except
- *    the abort itself after a cancel (the signal's `reason`, or an
- *    `AbortError`), which is `Cancelled`.
+ * 4. builds its context with its kit's factory, and runs its body. A throw
+ *    or rejection (from either) is `Failed`, never rethrown, except the
+ *    abort itself after a cancel (the signal's `reason`, or an
+ *    `AbortError`), which is `Cancelled`;
+ * 5. disposes its cleanup stack, LIFO, however the body settled. A cleanup
+ *    that throws makes the job `Failed`; if the body threw too, the error
+ *    is a `SuppressedError` (the cleanup's error over the body's), as are
+ *    several cleanup throws, each over the one before. Disposal ends before
+ *    the job's terminal event and before any dependent starts, and
+ *    `runJobs` resolves only once every job is disposed. A cleanup that
+ *    never settles holds the run open: there is no cleanup timeout yet.
  *
  * Cancellation (the run's `signal`, or `failFast`) aborts every body's
  * `r.signal`. A job runs after a cancel only if its `runIf` holds with
@@ -357,6 +366,7 @@ export async function runJobs<M, J extends Roots<M>>({
 		readonly needs: unknown;
 	}): Promise<JobOutcome<unknown>> {
 		const { name } = job;
+		const { cleanup, dispose } = cleanupStack();
 		let running = true;
 		const step = async <U>({
 			name: step,
@@ -380,14 +390,23 @@ export async function runJobs<M, J extends Roots<M>>({
 			}
 		};
 
-		try {
-			return Succeeded(await job.run({ needs, signal: cancel.signal, step }));
-		} catch (error) {
-			if (isAbort({ error, signal: cancel.signal })) return Cancelled();
-			return Failed(error);
-		} finally {
-			running = false;
+		const ran = await attempt(() => {
+			return job.run({ needs, signal: cancel.signal, step, cleanup });
+		});
+		running = false;
+		if (ran.ok) {
+			const thrown = await dispose(undefined);
+			if (thrown === undefined) return Succeeded(ran.value);
+			return Failed(thrown.error);
 		}
+		const thrown = (await dispose(ran)) ?? ran;
+		if (
+			thrown === ran &&
+			isAbort({ error: ran.error, signal: cancel.signal })
+		) {
+			return Cancelled();
+		}
+		return Failed(thrown.error);
 	}
 
 	function finish({
@@ -405,6 +424,20 @@ export async function runJobs<M, J extends Roots<M>>({
 			cancel.abort(new Error(`failFast: job "${name}" failed`));
 		}
 		return outcome;
+	}
+}
+
+/** How a body settled: what it returned, or what it threw. */
+type Attempt<T> =
+	| { readonly ok: true; readonly value: T }
+	| { readonly ok: false; readonly error: unknown };
+
+/** Runs `work`, keeping a throw or rejection as a value. */
+async function attempt<T>(work: () => Promise<T>): Promise<Attempt<T>> {
+	try {
+		return { ok: true, value: await work() };
+	} catch (error) {
+		return { ok: false, error };
 	}
 }
 

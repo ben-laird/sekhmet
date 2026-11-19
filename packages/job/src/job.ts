@@ -9,6 +9,7 @@
 
 import { block } from "@sekhmet/primordials/scoping";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
+import type { Cleanup } from "@/src/cleanup.ts";
 import { type Condition, type NeedOutcomes, success } from "@/src/condition.ts";
 import { unerased } from "@/src/erasure.ts";
 import {
@@ -113,6 +114,8 @@ export interface BodyInput {
 	readonly signal: AbortSignal;
 	/** Runs a named sub-step */
 	readonly step: <U>(step: StepDefinition<U>) => Promise<U>;
+	/** The job's cleanup stack, which the runner disposes */
+	readonly cleanup: Cleanup;
 }
 
 /**
@@ -126,6 +129,13 @@ export interface JobRun<M, C> {
 	readonly meta: M;
 	/** This job's own context, built by the factory just before `run` */
 	readonly ctx: C;
+	/**
+	 * This job's cleanup stack, shared with the factory: what is registered
+	 * is disposed in reverse order once `run` settles, before the job's
+	 * terminal event. A value `run` returns must not hold a resource
+	 * registered here, since dependents receive it after disposal.
+	 */
+	readonly cleanup: Cleanup;
 	/**
 	 * Aborted when the run is cancelled; pass it to `fetch` and friends. A
 	 * job that runs after a cancel (its `runIf` held with `cancelled: true`)
@@ -176,12 +186,18 @@ export interface RunIfInput<M, P> {
 export interface ContextFactoryInput {
 	/** The display name of the job the context is for */
 	readonly job: string;
+	/**
+	 * The job's cleanup stack, shared with its `run` as `r.cleanup`. What the
+	 * factory registers is disposed last, after everything `run` registers.
+	 */
+	readonly cleanup: Cleanup;
 }
 
 /**
  * Builds a job's context from the run's metadata: called once per job,
  * just before its `run`, and never for a dry run or a job that doesn't
- * start. It is synchronous. A throw makes the job `Failed`.
+ * start. It is synchronous. A throw makes the job `Failed`, after what it
+ * already registered with `cleanup` is disposed.
  *
  * Its two parameters are positional, so `defineJobs` can infer the
  * metadata type from the first one's annotation.
@@ -322,7 +338,8 @@ export type Roots<M> = { readonly [key: string]: Job<unknown, M> };
  *
  * Each job that starts gets its own context, built just before its `run`,
  * so one job can't change another's. A dry run never calls the factory, and
- * plans and `runIf` see only `meta`, so the factory may do real work.
+ * plans and `runIf` see only `meta`, so the factory may do real work (open
+ * a connection, registering its close with `cleanup`).
  *
  * @template M The run's metadata type
  * @template C The job's context type
@@ -397,9 +414,12 @@ export function defineJobs<M, C>(factory: ContextFactory<M, C>): JobKit<M, C> {
 						}
 						return runIf.test({ cancelled, outcomes });
 					},
-					run: async ({ needs, signal, step }) => {
-						const ctx = factory(meta, { job: name });
-						return await run({ meta, ctx, signal, step }, unerased(needs));
+					run: async ({ needs, signal, step, cleanup }) => {
+						const ctx = factory(meta, { job: name, cleanup });
+						return await run(
+							{ meta, ctx, cleanup, signal, step },
+							unerased(needs),
+						);
 					},
 				};
 			},
