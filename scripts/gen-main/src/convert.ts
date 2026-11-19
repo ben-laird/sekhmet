@@ -13,6 +13,10 @@
  * - the one wrap target of a returned intersection with a view
  *   (`Schema<I, O, E> & ObjectView<S>`), through the target's `fromMiniView`,
  *   which keeps the view's own properties
+ * - the one wrap target of a returned intersection that narrows it
+ *   (`Enum<Eliminate<V, "Failed">> & JobOutcome<T>`, the target having no
+ *   views), through `fromMini` with the mini value's own properties
+ *   assigned on; its type arguments keep their mini spelling
  * - the fulfilled value of a `Promise<X>` in any converted position, through
  *   `.then` (`Promise<Result<T, E>>`)
  * - the return value of a non-generic function type in any converted position
@@ -304,6 +308,11 @@ function planIntersection({
 		);
 	}
 	if (!context.views(target)) {
+		const narrows = type.types.every((part) => {
+			return part === member || isEnum(part);
+		});
+		if (narrows) return ok(planNarrowing({ type, member, target, context }));
+
 		return err(
 			`${target} & … needs ${target}.fromMiniView; set \`views\` on ${target}'s feature or wrap target`,
 		);
@@ -336,6 +345,55 @@ function planIntersection({
 		named: false,
 		target,
 	});
+}
+
+/**
+ * Plans a top-level intersection of one wrap target that has no views with
+ * enum `Enum`s only: a narrowing of its variants
+ * (`Enum<Eliminate<V, "Failed">> & JobOutcome<T>`). The target is spelled as its main class with its type arguments as they are
+ * (the narrowing names them in mini, so converting them would break it),
+ * and the value converts through `fromMini`, with the mini value's own
+ * properties assigned on, so the main value is typed as the narrowing too.
+ */
+function planNarrowing({
+	type,
+	member,
+	target,
+	context,
+}: {
+	type: Extract<TypeNode, { kind: "intersection" }>;
+	member: TypeNode;
+	target: string;
+	context: ConvertContext;
+}): Value {
+	const args = member.kind === "ref" ? member.args.map(context.render) : [];
+	const spelled = args.length === 0 ? target : `${target}<${args.join(", ")}>`;
+	const text = type.types
+		.map((part) => {
+			if (part === member) return spelled;
+
+			return context.render(part);
+		})
+		.join(" & ");
+	// {}
+
+	return {
+		text,
+		apply: (expression) => {
+			return `Object.assign(${target}.fromMini(${expression}), ${expression})`;
+		},
+		named: true,
+		target,
+	};
+}
+
+/** Whether a type is enum's `Enum` class, which a narrowing names. */
+function isEnum(type: TypeNode): boolean {
+	if (type.kind !== "ref") return false;
+
+	const { resolution } = type;
+	const name = resolution.kind === "import" ? resolution.name : type.name;
+	return name === "Enum" && resolution.kind !== "typeParam";
 }
 
 /** Plans a top-level return type: an intersection with a view, or a value. */

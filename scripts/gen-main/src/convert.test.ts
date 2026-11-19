@@ -309,6 +309,35 @@ Deno.test("convertReturn converts an intersection's one wrap target through from
 	assertEquals(body, "return Option.fromMiniView(f());");
 });
 
+Deno.test("convertReturn converts a narrowing of a target without views through fromMini", () => {
+	// Given: Enum<Narrowed<Option>> & Result<Option<A>, B>, Result having no views
+	const type: TypeNode = {
+		kind: "intersection",
+		types: [
+			ref("Enum", [ref("Narrowed", [ref("Option")])]),
+			ref("Result", [ref("Option", [ref("A")]), ref("B")]),
+		],
+	};
+
+	// When: planning it and rendering its body
+	const planned = convertReturn({ type, context: CONTEXT });
+	assert(planned.ok);
+	const body = convertedBody({
+		call: "f()",
+		conversion: planned.value.conversion,
+		isVoid: false,
+		indent: "",
+	});
+
+	// Then: the target is spelled main with its arguments as they are, so
+	// the narrowing still names them, and the value keeps its own properties
+	assertEquals(planned.value.text, "mini.Enum & Result<mini.Option, mini.B>");
+	assertEquals(
+		body,
+		"const $converted = f();\nreturn Object.assign(Result.fromMini($converted), $converted);",
+	);
+});
+
 Deno.test("convertReturn leaves an intersection without a wrap target alone", () => {
 	// Given: A & B
 	const type: TypeNode = { kind: "intersection", types: [ref("A"), ref("B")] };
@@ -331,16 +360,16 @@ Deno.test("convertReturn rejects intersections it can't convert", async (t) => {
 				"an intersection may name one wrap target, the class its view is on",
 		},
 		{
-			name: "a target without fromMiniView",
-			types: [ref("Result", [ref("A"), ref("B")]), ref("View")],
-			message:
-				"Result & … needs Result.fromMiniView; set `views` on Result's feature or wrap target",
-		},
-		{
 			name: "a target whose type arguments convert",
 			types: [ref("Option", [ref("Option")]), ref("View")],
 			message:
 				"Option's type arguments name a main class, which an intersection with its view can't convert",
+		},
+		{
+			name: "a target without fromMiniView, beside a view",
+			types: [ref("Result", [ref("A"), ref("B")]), ref("View")],
+			message:
+				"Result & … needs Result.fromMiniView; set `views` on Result's feature or wrap target",
 		},
 	];
 
