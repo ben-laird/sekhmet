@@ -14,6 +14,18 @@ const ref = (name: string, args: TypeNode[] = []): TypeNode => ({
 	resolution: { kind: "local" },
 });
 
+/** Enum's own `Enum`, as a mini module imports it. */
+const enumRef = (args: TypeNode[]): TypeNode => ({
+	kind: "ref",
+	name: "Enum",
+	args,
+	resolution: {
+		kind: "import",
+		specifier: "@sekhmet/enum/core/mini",
+		name: "Enum",
+	},
+});
+
 const CONTEXT: ConvertContext = {
 	render: (type) => (type.kind === "ref" ? `mini.${type.name}` : "?"),
 	wrapTarget: (type) =>
@@ -314,7 +326,7 @@ Deno.test("convertReturn converts a narrowing of a target without views through 
 	const type: TypeNode = {
 		kind: "intersection",
 		types: [
-			ref("Enum", [ref("Narrowed", [ref("Option")])]),
+			enumRef([ref("Narrowed", [ref("Option")])]),
 			ref("Result", [ref("Option", [ref("A")]), ref("B")]),
 		],
 	};
@@ -368,6 +380,12 @@ Deno.test("convertReturn rejects intersections it can't convert", async (t) => {
 		{
 			name: "a target without fromMiniView, beside a view",
 			types: [ref("Result", [ref("A"), ref("B")]), ref("View")],
+			message:
+				"Result & … needs Result.fromMiniView; set `views` on Result's feature or wrap target",
+		},
+		{
+			name: "a target without fromMiniView, beside a foreign Enum",
+			types: [ref("Result", [ref("A"), ref("B")]), ref("Enum", [ref("A")])],
 			message:
 				"Result & … needs Result.fromMiniView; set `views` on Result's feature or wrap target",
 		},

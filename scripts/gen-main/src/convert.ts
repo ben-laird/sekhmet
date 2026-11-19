@@ -387,13 +387,24 @@ function planNarrowing({
 	};
 }
 
-/** Whether a type is enum's `Enum` class, which a narrowing names. */
-function isEnum(type: TypeNode): boolean {
-	if (type.kind !== "ref") return false;
+/**
+ * The entrypoints enum's `Enum` class is imported from: its core feature
+ * and its mini paths (`@sekhmet/enum/core/mini`, `…/core/mini/core`).
+ */
+const ENUM_CORE = "@sekhmet/enum/core";
 
-	const { resolution } = type;
-	const name = resolution.kind === "import" ? resolution.name : type.name;
-	return name === "Enum" && resolution.kind !== "typeParam";
+/**
+ * Whether a type is enum's own `Enum` class, which a narrowing names: an
+ * `Enum` imported from enum's core entrypoints, under any local name. Any
+ * other type named `Enum` is foreign, so its intersection fails generation.
+ */
+function isEnum(type: TypeNode): boolean {
+	if (type.kind !== "ref" || type.resolution.kind !== "import") return false;
+
+	const { specifier, name } = type.resolution;
+	const fromCore =
+		specifier === ENUM_CORE || specifier.startsWith(`${ENUM_CORE}/`);
+	return fromCore && name === "Enum";
 }
 
 /** Plans a top-level return type: an intersection with a view, or a value. */

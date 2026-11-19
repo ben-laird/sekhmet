@@ -447,7 +447,8 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
     render the exact receiver as `Self`. The bound must stay mini: holding
     the main class makes TypeScript's variance measurement circular (#31).
 - **Enum narrowings.** A returned intersection of one wrap target that has
-  no views with enum `Enum`s only (`catchFailure` returns
+  no views with enum's own `Enum`s only (imported from `@sekhmet/enum/core`
+  or one of its subpaths) (`catchFailure` returns
   `Enum<Eliminate<JobOutcomeVariants<Result<T, unknown>>, "Failed">> &
   JobOutcome<Result<T, unknown>>`) is a narrowing of the target's variants.
   Main spells the target as its main class with its type arguments as they
