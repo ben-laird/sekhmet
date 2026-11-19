@@ -50,6 +50,7 @@
  * @module
  */
 
+export type { Cleanup, CleanupMisuseCause } from "./src/cleanup.ts";
 export {
 	always,
 	type Condition,
