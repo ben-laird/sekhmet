@@ -8,14 +8,23 @@ decides, once the needs settle, whether the run is called. Each job runs
 once per run, however many jobs need it, and ends with a `JobOutcome`:
 `Succeeded`, `Failed`, `Skipped`, `Blocked` or `Cancelled`.
 
-## Status
+## Install
 
-**Prototype, unpublished.** The package's `deno.json` sets
-`"publish": false` while its design is confirmed in
-[#57](https://github.com/ben-laird/sekhmet/issues/57), and its API may change
-without notice. It isn't on JSR, so use it from inside this repository: every
-`packages/*` directory is a workspace member, and any module in the
-repository can import `@sekhmet/job`.
+The package is published on [JSR](https://jsr.io/@sekhmet/job).
+
+```sh
+deno add jsr:@sekhmet/job
+```
+
+For Node.js, Bun and other npm-compatible runtimes, install through JSR's npm
+compatibility layer:
+
+```sh
+npx jsr add @sekhmet/job      # npm
+pnpm dlx jsr add @sekhmet/job # pnpm
+yarn dlx jsr add @sekhmet/job # yarn
+bunx jsr add @sekhmet/job     # bun
+```
 
 ## Example
 
@@ -78,14 +87,11 @@ assertEquals(report.passed, false);
   conditions as data and the GitHub Actions mapping, once per run, the
   outcome algebra, planning before running, cancellation, and how job
   differs from `@sekhmet/effect`.
-- **Reference:** the TSDoc in the source, starting at [`mod.ts`](./mod.ts)
-  and [`@sekhmet/job/outcome`](./src/outcome/main/mod.ts). The package isn't
-  on JSR, so there is no hosted API reference yet; `deno doc
-  packages/job/mod.ts` prints it.
+- **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/job/doc)
+  documents every export.
 
-The published docs site leaves out unpublished packages, so these guides join
-it once the package is published. Until then, `deno task docs:dev` previews
-them locally, each page under a prototype banner.
+The guides are also on the
+[docs site](https://ben-laird.github.io/sekhmet/job/).
 
 ## Design record
 

@@ -5,8 +5,9 @@ kind: explanation
 # Concepts
 
 The ideas behind `@sekhmet/job`, and why a job graph behaves the way it does.
-The [recipes](./recipes.md) show how to put them to work, and the TSDoc in
-the source, starting at [`mod.ts`](../mod.ts), documents each export. The
+The [recipes](./recipes.md) show how to put them to work, and the
+[API reference on JSR](https://jsr.io/@sekhmet/job/doc) documents each
+export. The
 [decision record](https://github.com/ben-laird/sekhmet/blob/main/docs/decisions/job.md)
 keeps the history behind each choice.
 

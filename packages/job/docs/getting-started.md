@@ -11,13 +11,15 @@ travel through the graph, add a cleanup that runs whatever happens, and
 finish by reading the typed report. Each step is a complete program you can
 run.
 
-## Use the package
+## Install
 
-`@sekhmet/job` is a prototype and isn't on JSR yet: its `deno.json` sets
-`"publish": false`. To follow along, work inside the Sekhmet repository. The
-root `deno.json` makes every `packages/*` directory a workspace member, so any
-module in the repository can import `@sekhmet/job`, and `@std/assert`, which
-each step uses to check its output, is already in the root import map.
+Add the package, `@sekhmet/enum`, whose `Result` helpers we will use to read
+what a run returns, and `@std/assert`, which each step uses to check its
+output:
+
+```sh
+deno add jsr:@sekhmet/job jsr:@sekhmet/enum jsr:@std/assert
+```
 
 ## Run one job
 
@@ -353,5 +355,5 @@ From here:
   failure, generate jobs from data, preview a run, cancel one, and more.
 - [Concepts](./concepts.md) explain why a plan is separate from its run,
   how outcomes combine, and how job relates to GitHub Actions.
-- The API reference is the TSDoc in the source, starting at
-  [`mod.ts`](../mod.ts).
+- The [API reference on JSR](https://jsr.io/@sekhmet/job/doc) documents every
+  export.

@@ -224,7 +224,7 @@ sekhmet/
 ├── packages/         # Framework packages
 │   ├── effect/       # Effect system (effects, fibers, runtime, scheduler)
 │   ├── enum/         # Enum framework (core, option, result, latch, poll, ordering)
-│   ├── job/          # Prototype, unpublished: a CI-runner-style job graph (#57)
+│   ├── job/          # CI-runner-style job graphs (plans, runIf conditions, typed outcomes)
 │   ├── matrix/       # Cartesian-product test case generation
 │   ├── panic/        # Panic errors and the panic runtime (hook, catchUnwind)
 │   ├── primordials/  # Core primitives (Struct, Subtle, scoping helpers)
@@ -601,7 +601,7 @@ Use package names as scopes:
 
 - `@sekhmet/effect`
 - `@sekhmet/enum`
-- `@sekhmet/job` (prototype, unpublished)
+- `@sekhmet/job`
 - `@sekhmet/matrix`
 - `@sekhmet/panic`
 - `@sekhmet/primordials`

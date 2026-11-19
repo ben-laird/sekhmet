@@ -5,8 +5,8 @@ kind: how-to
 # Recipes
 
 How-to guides for tasks that come up when you write a pipeline as jobs. For
-every export, see the TSDoc in the source, starting at [`mod.ts`](../mod.ts);
-for why job behaves as it does, see the [concepts](./concepts.md).
+every export, see the [API reference](https://jsr.io/@sekhmet/job/doc); for
+why job behaves as it does, see the [concepts](./concepts.md).
 
 ## How to need a job only when another succeeded
 

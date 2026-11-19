@@ -2,12 +2,12 @@
 
 > The decision record for `@sekhmet/job`, kept as project history. The user
 > docs are the package's [README](../../packages/job/README.md) and its
-> [`docs/`](../../packages/job/docs/) pages, and the API reference is the
-> TSDoc in the source, starting at
-> [`packages/job/mod.ts`](../../packages/job/mod.ts).
+> [`docs/`](../../packages/job/docs/) pages, and the API reference is on
+> [JSR](https://jsr.io/@sekhmet/job/doc).
 
-Status: **Accepted** (2026-11-19). A prototype implements decisions 12–15 in
-[PR #67](https://github.com/ben-laird/sekhmet/pull/67), unpublished
+Status: **Accepted** (2026-11-19). [PR #67](https://github.com/ben-laird/sekhmet/pull/67)
+implements decisions 12–15 and releases the package to JSR as `0.1.0` once it
+merges (2026-11-19). Until then the package was an unpublished prototype
 (`"publish": false`). [#57](https://github.com/ben-laird/sekhmet/issues/57)
 stays the tracker; this file is the source of truth for the decisions.
 

@@ -95,7 +95,7 @@ Packages (`packages/`):
   scheduler)
 - `@sekhmet/enum`: enum framework plus `option`, `result`, `latch`, `poll` and
   `ordering` built on it
-- `@sekhmet/job` (prototype, `"publish": false`; #57): named jobs run as a
+- `@sekhmet/job`: named jobs run as a
   dependency graph on promises and `AbortSignal`: `defineJobs(factory)`
   (a context factory building each job's `ctx` from the run's `meta`, with
   a per-job `Cleanup` stack) and `job` (a pure plan, the job's dependency
@@ -293,7 +293,7 @@ fix(@sekhmet/primordials): correct Struct type inference
 **Types**: `feat`, `fix`, `test`, `refactor`, `docs`, `chore`, `perf`
 
 **Scopes**: Use package names: `@sekhmet/effect`, `@sekhmet/enum`,
-`@sekhmet/job` (prototype), `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/schema`,
+`@sekhmet/job`, `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/schema`,
 `@sekhmet/vow`, `@sekhmet/workflow`, and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`,
 `@sekhmet/dv`, `@sekhmet/dv-plugin`, `@sekhmet/gen-main`, `@sekhmet/playground`,
 `@sekhmet/release` for scripts
