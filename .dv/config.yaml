@@ -1,4 +1,8 @@
-# dv configuration. See https://dv.dev/schema/v1.yaml for the schema.
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ben-laird/dv/%40dv-cli/dv%400.11.0/specs/schemas/config.json
+#
+# dv configuration. The schema above is pinned to the dv release in
+# scripts/dv/deno.json (0.11.0); bump both together. dv doesn't publish its
+# schemas at a stable URL yet (ben-laird/dv#47).
 #
 # Every published package lives under packages/. scripts/* (and the
 # scripts/add templates) are workspace tooling marked `"publish": false`;
