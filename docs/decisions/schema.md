@@ -887,6 +887,10 @@ those sections are kept as history.
   panics the composite (the first by key order); a union does not try the
   next option after a panic.
 - **`parseAsync` is dropped** in favour of `wait(parse(…))`.
+- **A `Parser` returns `MaybePromise<Result<O, E>>`, not a `Vow`:** a caller
+  holding a `Vow` builds the schema with `new Schema({ run })`. Rejected:
+  adding `Vow<Result<O, E>>` to `Parser`, which broke type inference for
+  every `new Schema({ parse })` (`Vow` and `Result` share the `Enum` base).
 - **`parseSync(schema, input)` keeps its shape and takes no runtime.**
   While it runs, its boundary catches nothing, so a throw unwinds to its
   caller. An async schema is still `UnexpectedAsyncParse`. Once
