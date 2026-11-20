@@ -297,7 +297,7 @@ export function coalesce<T, U>(self: Option<T>, sentinel: U): T | U {
  * Converts Some([first, second]) into [Some(first), Some(second)].
  * Converts None into [None(), None()].
  *
- * @param opt - An Option containing a tuple of two values
+ * @param self - An Option containing a tuple of two values
  * @returns A tuple of two Options, one for each value
  *
  * @example
@@ -310,9 +310,9 @@ export function coalesce<T, U>(self: Option<T>, sentinel: U): T | U {
  * ```
  */
 export function unzip<T, U>(
-	opt: Option<[first: T, second: U]>,
+	self: Option<[first: T, second: U]>,
 ): [first: Option<T>, second: Option<U>] {
-	return mapOr(opt, [None(), None()], ([first, second]) => {
+	return mapOr(self, [None(), None()], ([first, second]) => {
 		return [Some(first), Some(second)] as const;
 	});
 }
@@ -324,7 +324,7 @@ export function unzip<T, U>(
  * Converts Some(Err(e)) into Err(e).
  * Converts None into Ok(None()).
  *
- * @param opt - An Option containing a Result
+ * @param self - An Option containing a Result
  * @returns A Result containing an Option
  *
  * @example
@@ -338,9 +338,9 @@ export function unzip<T, U>(
  * ```
  */
 export function transpose<T, E>(
-	opt: Option<Result<T, E>>,
+	self: Option<Result<T, E>>,
 ): Result<Option<T>, E> {
-	return mapOr(opt, Ok(None()), (result) =>
+	return mapOr(self, Ok(None()), (result) =>
 		match(result)({
 			Ok: (value): Result<Option<T>, E> => Ok(Some(value)),
 			Err: (err): Result<Option<T>, E> => Err(err),
@@ -354,7 +354,7 @@ export function transpose<T, E>(
  * Converts Some(Some(x)) into Some(x).
  * Converts Some(None) or None into None.
  *
- * @param opt - An Option containing another Option
+ * @param self - An Option containing another Option
  * @returns The flattened Option
  *
  * @example
@@ -367,6 +367,6 @@ export function transpose<T, E>(
  * assertEquals(flatten(None()), None());
  * ```
  */
-export function flatten<T>(opt: Option<Option<T>>): Option<T> {
-	return unwrapOr(opt, None());
+export function flatten<T>(self: Option<Option<T>>): Option<T> {
+	return unwrapOr(self, None());
 }

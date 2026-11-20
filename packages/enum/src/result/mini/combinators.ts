@@ -1,6 +1,6 @@
 /**
  * Combining results: `and`/`or` and their lazy forms, conversion to `Option`
- * (`ok`, `err`) and iteration.
+ * (`ok`, `err`), `transpose` and iteration.
  *
  * @module
  */
@@ -91,6 +91,43 @@ export function err<T, E>(self: Result<T, E>): Option<E> {
  */
 export function* iter<T, E>(self: Result<T, E>): Generator<T, void, undefined> {
 	yield* iterIsolated(self, "Ok");
+}
+
+/**
+ * Transposes a Result of an Option into an Option of a Result: Rust's
+ * `Result<Option<T>, E>::transpose`, the inverse of the Option one.
+ *
+ * Converts `Ok(Some(x))` into `Some(Ok(x))`, `Ok(None)` into `None`, and
+ * `Err(e)` into `Some(Err(e))`.
+ *
+ * @template T The type of the success value inside the Option
+ * @template E The type of the error value
+ * @param self A Result containing an Option
+ * @returns An Option containing a Result
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { None, Some, isNone, unwrap as unwrapOption } from "@sekhmet/enum/option/mini";
+ * import { Err, Ok, transpose, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ *
+ * assertEquals(unwrap(unwrapOption(transpose(Ok(Some(5))))), 5);
+ * assertEquals(isNone(transpose(Ok(None()))), true);
+ * assertEquals(unwrapErr(unwrapOption(transpose(Err("fail")))), "fail");
+ * ```
+ */
+export function transpose<T, E>(
+	self: Result<Option<T>, E>,
+): Option<Result<T, E>> {
+	return match(self)({
+		Ok: (option) => {
+			return match(option)({
+				Some: (value): Option<Result<T, E>> => Some(Ok(value)),
+				None: (): Option<Result<T, E>> => None(),
+			});
+		},
+		Err: (err): Option<Result<T, E>> => Some(Err(err)),
+	});
 }
 
 /**

@@ -1,7 +1,7 @@
 import { assertEquals, assertInstanceOf, unreachable } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import * as coreMini from "@/src/core/mini/mod.ts";
-import { Option } from "@/src/option/main/mod.ts";
+import { None, Option, Some } from "@/src/option/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 import {
 	Err,
@@ -290,4 +290,35 @@ Deno.test("promiseResult resolves to a main Result that chains", async () => {
 	assertEquals(ok.map((n) => n * 2).unwrapOr(0), 42);
 	assertEquals(err.mapErr((e) => e.toUpperCase()).unwrapErr(), "BAD");
 	assertType<IsExact<typeof resolved, Promise<Result<number, string>>>>(true);
+});
+
+Deno.test("Result.transpose returns a main Option holding a main Result", () => {
+	// Given: an Ok holding a Some, an Ok holding a None, and an Err
+	const okSome = Ok<Option<number>, string>(Some(5));
+	const okNone = Ok<Option<number>, string>(None());
+	const err = Err<Option<number>, string>("bad");
+
+	// When: transposing them and chaining through both layers
+	const transposed = okSome.transpose();
+	const inner = transposed.unwrap();
+
+	// Then: the Option and the Result inside it are both main
+	assertInstanceOf(transposed, Option);
+	assertInstanceOf(inner, Result);
+	assertType<IsExact<typeof transposed, Option<Result<number, string>>>>(true);
+	assertEquals(inner.map((n) => n * 2).unwrap(), 10);
+	assertEquals(okNone.transpose().isNone(), true);
+	assertEquals(err.transpose().unwrap().unwrapErr(), "bad");
+});
+
+Deno.test("Result.transpose exists only for a Result of an Option", () => {
+	// Given: a Result of a number
+	const plain = Ok<number, string>(1);
+
+	// When: writing a transpose on it
+	// @ts-expect-error: transpose's this is a Result of an Option
+	const misuse = (): unknown => plain.transpose();
+
+	// Then: it doesn't compile, so it is never called
+	assertEquals(typeof misuse, "function");
 });

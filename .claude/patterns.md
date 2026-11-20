@@ -476,7 +476,7 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   `fromMiniView` panics on a subclass and the receiver's identity is the
   point. Generation fails if such a function returns no converted value.
 - **Constructors and other free functions.** A function without `self` whose
-  return needs converting (`Some`, `None`, `flatten`, `unzip`, `transpose`,
+  return needs converting (`Some`, `None`, `maybe`,
   `compareNumbers`, `fork`, `fallible`, `fallibleAsync`, `promiseResult`) is
   re-declared in main as a wrapper that returns main classes, so
   `Some(1).map(…)` chains. Everything else mini exports is re-exported

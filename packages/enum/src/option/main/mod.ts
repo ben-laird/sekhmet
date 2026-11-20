@@ -292,6 +292,77 @@ export class Option<out T> extends mini.Option<T> {
 	}
 
 	/**
+	 * Splits an Option of a tuple into a tuple of Options.
+	 *
+	 * Converts Some([first, second]) into [Some(first), Some(second)].
+	 * Converts None into [None(), None()].
+	 *
+	 * @returns A tuple of two Options, one for each value
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(Some<[number, string]>([1, "hi"]).unzip(), [Some(1), Some("hi")]);
+	 * assertEquals(None().unzip(), [None(), None()]);
+	 * ```
+	 * @see {@link mini.unzip}
+	 */
+	unzip<T, U>(
+		this: Option<[first: T, second: U]>,
+	): [first: Option<T>, second: Option<U>] {
+		const [$element0, $element1] = mini.unzip(this);
+		return [Option.fromMini($element0), Option.fromMini($element1)];
+	}
+
+	/**
+	 * Transposes an Option of a Result into a Result of an Option.
+	 *
+	 * Converts Some(Ok(x)) into Ok(Some(x)).
+	 * Converts Some(Err(e)) into Err(e).
+	 * Converts None into Ok(None()).
+	 *
+	 * @returns A Result containing an Option
+	 * @example
+	 * ```ts
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 * import { Err, Ok } from "@sekhmet/enum/result/mini";
+	 *
+	 * Some(Ok(5)).transpose();       // Ok(Some(5))
+	 * Some(Err("fail")).transpose(); // Err("fail")
+	 * None().transpose();            // Ok(None())
+	 * ```
+	 * @see {@link mini.transpose}
+	 */
+	transpose<T, E>(this: Option<MiniResult<T, E>>): Result<Option<T>, E> {
+		return Result.fromMini(mini.transpose(this)).map(($value0) => {
+			return Option.fromMini($value0);
+		});
+	}
+
+	/**
+	 * Flattens a nested Option into a single-level Option.
+	 *
+	 * Converts Some(Some(x)) into Some(x).
+	 * Converts Some(None) or None into None.
+	 *
+	 * @returns The flattened Option
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some } from "@sekhmet/enum/option";
+	 *
+	 * assertEquals(Some(Some(6)).flatten(), Some(6));
+	 * assertEquals(Some(None()).flatten(), None());
+	 * assertEquals(None().flatten(), None());
+	 * ```
+	 * @see {@link mini.flatten}
+	 */
+	flatten<T>(this: Option<mini.Option<T>>): Option<T> {
+		return Option.fromMini(mini.flatten(this));
+	}
+
+	/**
 	 * Inserts a value into the Option, making it Some, and returns the inserted value.
 	 *
 	 * This is a mutating operation that changes the Option in place. If the Option was None,
@@ -819,79 +890,6 @@ export class Option<out T> extends mini.Option<T> {
 	unwrapOr(defaultValue: T): T {
 		return mini.unwrapOr(this, defaultValue);
 	}
-}
-
-/**
- * Splits an Option of a tuple into a tuple of Options.
- *
- * Converts Some([first, second]) into [Some(first), Some(second)].
- * Converts None into [None(), None()].
- *
- * @param opt - An Option containing a tuple of two values
- * @returns A tuple of two Options, one for each value
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { None, Some, unzip } from "@sekhmet/enum/option";
- *
- * assertEquals(unzip(Some<[number, string]>([1, "hi"])), [Some(1), Some("hi")]);
- * assertEquals(unzip(None()), [None(), None()]);
- * ```
- */
-export function unzip<T, U>(
-	opt: mini.Option<[first: T, second: U]>,
-): [first: Option<T>, second: Option<U>] {
-	const [$element0, $element1] = mini.unzip(opt);
-	return [Option.fromMini($element0), Option.fromMini($element1)];
-}
-
-/**
- * Transposes an Option of a Result into a Result of an Option.
- *
- * Converts Some(Ok(x)) into Ok(Some(x)).
- * Converts Some(Err(e)) into Err(e).
- * Converts None into Ok(None()).
- *
- * @param opt - An Option containing a Result
- * @returns A Result containing an Option
- * @example
- * ```ts
- * import { None, Some, transpose } from "@sekhmet/enum/option";
- * import { Err, Ok } from "@sekhmet/enum/result/mini";
- *
- * transpose(Some(Ok(5)));       // Ok(Some(5))
- * transpose(Some(Err("fail"))); // Err("fail")
- * transpose(None());            // Ok(None())
- * ```
- */
-export function transpose<T, E>(
-	opt: mini.Option<MiniResult<T, E>>,
-): Result<Option<T>, E> {
-	return Result.fromMini(mini.transpose(opt)).map(($value0) => {
-		return Option.fromMini($value0);
-	});
-}
-
-/**
- * Flattens a nested Option into a single-level Option.
- *
- * Converts Some(Some(x)) into Some(x).
- * Converts Some(None) or None into None.
- *
- * @param opt - An Option containing another Option
- * @returns The flattened Option
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { None, Some, flatten } from "@sekhmet/enum/option";
- *
- * assertEquals(flatten(Some(Some(6))), Some(6));
- * assertEquals(flatten(Some(None())), None());
- * assertEquals(flatten(None()), None());
- * ```
- */
-export function flatten<T>(opt: mini.Option<mini.Option<T>>): Option<T> {
-	return Option.fromMini(mini.flatten(opt));
 }
 
 /**
