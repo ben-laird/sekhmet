@@ -224,7 +224,7 @@ sekhmet/
 ├── packages/         # Framework packages
 │   ├── dispatch/     # Typed one-shot signals (DispatchController, DispatchSignal)
 │   ├── effect/       # Effect system (effects, fibers, runtime, scheduler)
-│   ├── enum/         # Enum framework (core, option, result, latch, poll, ordering)
+│   ├── enum/         # Enum framework (core, option, result, either, latch, poll, ordering, control-flow)
 │   ├── job/          # CI-runner-style job graphs (plans, runIf conditions, typed outcomes)
 │   ├── lifetime/     # RAII: Resource (init/deinit) and Lifetime ownership trees
 │   ├── matrix/       # Cartesian-product test case generation
