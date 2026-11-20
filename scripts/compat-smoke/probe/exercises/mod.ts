@@ -10,6 +10,7 @@ import type { Exercises } from "../probe.ts";
 
 /** Each package's exercise module. */
 export const EXERCISES: Exercises = {
+	"@sekhmet/dispatch": () => import("./dispatch.ts"),
 	"@sekhmet/effect": () => import("./effect.ts"),
 	"@sekhmet/enum": () => import("./enum.ts"),
 	"@sekhmet/job": () => import("./job.ts"),

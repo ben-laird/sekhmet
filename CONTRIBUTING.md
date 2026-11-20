@@ -222,6 +222,7 @@ them with the local source, and works for unpublished packages too:
 ```txt
 sekhmet/
 ├── packages/         # Framework packages
+│   ├── dispatch/     # Typed one-shot signals (DispatchController, DispatchSignal)
 │   ├── effect/       # Effect system (effects, fibers, runtime, scheduler)
 │   ├── enum/         # Enum framework (core, option, result, latch, poll, ordering)
 │   ├── job/          # CI-runner-style job graphs (plans, runIf conditions, typed outcomes)
@@ -599,6 +600,7 @@ type(scope): description
 
 Use package names as scopes:
 
+- `@sekhmet/dispatch`
 - `@sekhmet/effect`
 - `@sekhmet/enum`
 - `@sekhmet/job`

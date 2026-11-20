@@ -9,6 +9,22 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	// Cross-package types (Struct, Enum, Split, Result) in public signatures
 	// that the package does not re-export; how to resolve them is undecided
 	privateTypeRef(
+		"dispatch/src/controller.ts",
+		"DispatchController.prototype.dispatch",
+		"Option",
+	),
+	privateTypeRef("dispatch/src/signal.ts", "CatchUnwind", "PanicRuntime"),
+	privateTypeRef(
+		"dispatch/src/signal.ts",
+		"DispatchSignal.prototype.poll",
+		"Poll",
+	),
+	privateTypeRef(
+		"dispatch/src/signal.ts",
+		"DispatchSignal.prototype.toVow",
+		"Vow",
+	),
+	privateTypeRef(
 		"effect/src/continuation/continuation.ts",
 		"ContinuationVariants",
 		"Split",
