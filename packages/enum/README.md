@@ -1,7 +1,8 @@
 # @sekhmet/enum
 
 Rust-style enums for TypeScript: an `Enum` base class whose variants are tuples,
-plus the types built on it: `Option`, `Result`, `Ordering`, `Latch` and `Poll`.
+plus the types built on it: `Option`, `Result`, `Either`, `Ordering`, `Latch`
+and `Poll`.
 
 Each value is a class instance holding one variant, `[kind]` or `[kind, value]`.
 You narrow it with type guards (`isolate`, `isSome`, `isOk`) or handle every
@@ -32,6 +33,7 @@ The package has no root export: import the feature you need.
 | `@sekhmet/enum/core`     | `Enum`, `Split`, `Isolate`, `Eliminate`      |
 | `@sekhmet/enum/option`   | `Option`: `Some(value)` or `None()`          |
 | `@sekhmet/enum/result`   | `Result`: `Ok(value)` or `Err(error)`        |
+| `@sekhmet/enum/either`   | `Either`: `Left(value)` or `Right(value)`    |
 | `@sekhmet/enum/ordering` | `Ordering`: `Less()`, `Equal()`, `Greater()` |
 | `@sekhmet/enum/latch`    | `Latch`: `Active(a)` or `Inactive(i)`        |
 | `@sekhmet/enum/poll`     | `Poll`: `Ready(value)` or `Pending()`        |
@@ -123,6 +125,30 @@ assertEquals(
 );
 ```
 
+## Either
+
+An `Either` holds a value of one of two types, where neither side is the
+error. Unlike a plain `L | R`, it keeps track of which side the value came
+from. `intoInner()` gives the plain union back.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { type Either, Left, Right } from "@sekhmet/enum/either";
+
+function lookup(key: string): Either<number, string> {
+	return key === "port" ? Left(8080) : Right(`unknown key: ${key}`);
+}
+
+assertEquals(
+	lookup("port").either({
+		onLeft: (port) => `port ${port}`,
+		onRight: (message) => message,
+	}),
+	"port 8080",
+);
+assertEquals(lookup("host").flip().leftOr("none"), "unknown key: host");
+```
+
 ## Ordering
 
 ```ts
@@ -179,7 +205,9 @@ Like Rust's, some methods exist only for one shape of receiver: a `this`
 parameter makes `flatten` a method of an `Option<Option<T>>` or a
 `Result<Result<T, E>, E>` alone, `transpose` of an `Option<Result<T, E>>` or
 a `Result<Option<T>, E>`, `unzip` of an `Option<[T, U]>`, and
-`mapOk`/`mapErr` of a `Poll<Result<T, E>>`.
+`mapOk`/`mapErr` of a `Poll<Result<T, E>>`. `Either` has `map` for an
+`Either<T, T>`, and `factorNone`, `factorErr`, `factorOk`, `factorFirst` and
+`factorSecond` for an `Either` whose sides are `Option`s, `Result`s or pairs.
 Calling one on any other receiver is a type error.
 
 ```ts

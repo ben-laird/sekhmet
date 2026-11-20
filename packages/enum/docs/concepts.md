@@ -34,8 +34,8 @@ type Load = Split<{
 ```
 
 `Enum<T>` is the class that stores one such variant. `Option`, `Result`,
-`Ordering`, `Latch` and `Poll` are subclasses with their own variants and
-constructors (`Some`, `Ok`, `Less`, `Active`, `Ready` and so on). The variant
+`Either`, `Ordering`, `Latch` and `Poll` are subclasses with their own variants
+and constructors (`Some`, `Ok`, `Left`, `Less`, `Active`, `Ready` and so on). The variant
 sits behind a symbol (see `Struct` in `@sekhmet/primordials`), so you read it
 through the functions below rather than through a property.
 
@@ -216,6 +216,7 @@ assertThrows(
 | ------------- | -------------------------- | ----------------------------------- |
 | `Option<T>`   | `Some(T)`, `None`          | a value that may be absent          |
 | `Result<T,E>` | `Ok(T)`, `Err(E)`          | an operation that can fail          |
+| `Either<L,R>` | `Left(L)`, `Right(R)`      | a value of one of two types         |
 | `Ordering`    | `Less`, `Equal`, `Greater` | the outcome of a comparison         |
 | `Latch<A,I>`  | `Active(A)`, `Inactive(I)` | a two-state value switched in place |
 | `Poll<T>`     | `Ready(T)`, `Pending`      | a value that may not be ready yet   |

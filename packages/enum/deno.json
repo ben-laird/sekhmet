@@ -11,6 +11,14 @@
 		"./core/mini/eliminate": "./src/core/mini/eliminate.ts",
 		"./core/mini/isolate": "./src/core/mini/isolate.ts",
 
+		"./either": "./src/either/main/mod.ts",
+		"./either/mini": "./src/either/mini/mod.ts",
+		"./either/mini/combinators": "./src/either/mini/combinators.ts",
+		"./either/mini/core": "./src/either/mini/core.ts",
+		"./either/mini/predicates": "./src/either/mini/predicates.ts",
+		"./either/mini/transform": "./src/either/mini/transform.ts",
+		"./either/mini/unwrap": "./src/either/mini/unwrap.ts",
+
 		"./latch": "./src/latch/main/mod.ts",
 		"./latch/mini": "./src/latch/mini/mod.ts",
 		"./latch/mini/core": "./src/latch/mini/core.ts",
