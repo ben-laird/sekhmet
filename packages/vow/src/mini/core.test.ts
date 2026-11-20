@@ -125,6 +125,34 @@ Deno.test("Vow runs a dependent at once when subscribed after resolving", () => 
 	assertEquals(seen, [7]);
 });
 
+Deno.test("Vow queues a dependent subscribed during resolution after the waiting ones", () => {
+	// Given: a pending vow whose first dependent subscribes a throwing third
+	// through a kept subscribe function, while the second is still waiting
+	let resolve!: Resolver<number>;
+	const vow = new Vow<number>((r) => {
+		resolve = r;
+	});
+	const subscribe = subscribeOf(vow);
+	const order: string[] = [];
+	const late = new Error("late");
+	subscribe(() => {
+		order.push("A");
+		subscribe(() => {
+			order.push("C");
+			throw late;
+		});
+	});
+	subscribe(() => order.push("B"));
+
+	// When: resolving it
+	const thrown = assertThrows(() => resolve(1));
+
+	// Then: the late dependent ran last, and its throw joined the vow's error
+	assertEquals(order, ["A", "B", "C"]);
+	assertInstanceOf(thrown, AggregateError);
+	assertEquals(thrown.errors, [late]);
+});
+
 Deno.test("Vow is covariant in its value type", () => {
 	// Given: vows of narrower value types
 	const done = new Vow<undefined>((resolve) => resolve(undefined));

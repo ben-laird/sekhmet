@@ -43,6 +43,15 @@ type Variants<T> = Split<{
 export type { Variants as VowVariants };
 
 /**
+ * Where a vow's resolution stands, inside its constructor's closure:
+ * `Resolving` while its dependents are being drained.
+ */
+type Phase<T> =
+	| { readonly kind: "Pending" }
+	| { readonly kind: "Resolving" }
+	| { readonly kind: "Settled"; readonly value: T };
+
+/**
  * A synchronous promise-like abstraction built on the Enum framework.
  *
  * Vow is similar to Promise but operates synchronously. When resolved,
@@ -81,7 +90,9 @@ export class Vow<out T> extends Enum<Variants<T>> {
 	 * the vow. If resolve is called synchronously within the executor, the
 	 * vow will be resolved immediately.
 	 *
-	 * Resolving runs every dependent once, in registration order. If any
+	 * Resolving runs every dependent once, in registration order. A
+	 * dependent subscribed while the vow is resolving joins the end of that
+	 * queue; one subscribed after resolution finishes runs at once. If any
 	 * dependents throw, the rest still run, the vow is still resolved, and the
 	 * errors are thrown to the caller of `resolve` as one `AggregateError`.
 	 * Only the first call to `resolve` has any effect.
@@ -90,28 +101,29 @@ export class Vow<out T> extends Enum<Variants<T>> {
 	 */
 	constructor(executor: (resolve: Resolver<T>) => void) {
 		const dependents: ((value: T) => void)[] = [];
-		let settled: { readonly value: T } | undefined;
+		let phase: Phase<T> = { kind: "Pending" };
 
 		super("Pending", (dependent) => {
-			if (settled === undefined) {
+			if (phase.kind !== "Settled") {
 				dependents.push(dependent);
 				return;
 			}
 
-			dependent(settled.value);
+			dependent(phase.value);
 		});
 
 		executor((value) => {
-			if (settled !== undefined) {
+			if (phase.kind !== "Pending") {
 				return;
 			}
 
-			settled = { value };
+			phase = { kind: "Resolving" };
 			getStructParams(this).variant = ["Resolved", value];
 
 			let aggregate: AggregateError | undefined;
 
-			for (const dependent of dependents.splice(0)) {
+			// The array iterator is live, so dependents subscribed meanwhile run too
+			for (const dependent of dependents) {
 				try {
 					dependent(value);
 				} catch (cause: unknown) {
@@ -122,6 +134,9 @@ export class Vow<out T> extends Enum<Variants<T>> {
 					aggregate.errors.push(cause);
 				}
 			}
+
+			dependents.length = 0;
+			phase = { kind: "Settled", value };
 
 			if (aggregate) {
 				throw aggregate;
