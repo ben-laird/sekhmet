@@ -4,6 +4,12 @@ All notable changes to this Package are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this Package adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-20
+
+### Added
+
+- ControlFlow: Rust's std::ops::ControlFlow at @sekhmet/enum/control-flow (main) and @sekhmet/enum/control-flow/mini. Continue(value) and Break(value) constructors, with ControlFlow<B, C = undefined>; isBreak and isContinue type guards; breakValue and continueValue to an Option; breakOk and continueOk to a Result; mapBreak and mapContinue; and intoValue for a ControlFlow<T, T> alone (in main, a method whose this parameter is that shape) (#79)
+
 ## [0.3.0] - 2026-11-20
 
 ### Changed
