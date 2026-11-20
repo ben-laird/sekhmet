@@ -143,6 +143,29 @@ Deno.test("a listener added while dispatching runs after the ones already waitin
 	assertEquals(heard, ["outer x", "second x", "inner x"]);
 });
 
+Deno.test("a listener can unsubscribe a later one mid-dispatch, which then never runs", () => {
+	// Given: a first listener that unsubscribes the second when it runs
+	const { panics } = recordingPanics();
+	const controller = new DispatchController<string>(panics.catchUnwind);
+	const heard: string[] = [];
+	const removed: boolean[] = [];
+	controller.signal.whenDispatched(() => {
+		heard.push("first");
+		removed.push(stopSecond());
+	});
+	const stopSecond = controller.signal.whenDispatched(() => {
+		heard.push("second");
+	});
+	controller.signal.whenDispatched(() => void heard.push("third"));
+
+	// When: it dispatches
+	controller.dispatch("x");
+
+	// Then: the second was removed before its turn, and the rest still ran
+	assertEquals(heard, ["first", "third"]);
+	assertEquals(removed, [true]);
+});
+
 Deno.test("a listener that dispatches again mid-dispatch gets the first value back", () => {
 	// Given: a listener that dispatches a second value while the first drains
 	const { panics } = recordingPanics();

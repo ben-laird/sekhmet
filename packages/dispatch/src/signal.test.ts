@@ -18,21 +18,34 @@ function recordingPanics(): {
 	return { panics, reported };
 }
 
-/** A platform AbortSignal that counts its live abort listeners. */
+/** A platform AbortSignal that counts its live abort listeners, and aborts it. */
 function countingAbortSignal(): {
 	readonly signal: AbortSignal;
+	readonly abort: (reason: unknown) => void;
 	readonly live: () => number;
 } {
-	const { signal } = new AbortController();
+	const controller = new AbortController();
+	const { signal } = controller;
 	const listeners = new Set<unknown>();
+	const once = new Set<unknown>();
 	const add = signal.addEventListener.bind(signal);
 	const remove = signal.removeEventListener.bind(signal);
+	// The platform drops `once` listeners as the abort fires; count that too.
+	add("abort", () => {
+		for (const listener of once) {
+			listeners.delete(listener);
+		}
+		once.clear();
+	});
 	signal.addEventListener = (
 		type: string,
 		listener: EventListenerOrEventListenerObject,
 		options?: boolean | AddEventListenerOptions,
 	): void => {
 		listeners.add(listener);
+		if (typeof options === "object" && options.once === true) {
+			once.add(listener);
+		}
 		add(type, listener, options);
 	};
 	signal.removeEventListener = (
@@ -43,7 +56,13 @@ function countingAbortSignal(): {
 		listeners.delete(listener);
 		remove(type, listener, options);
 	};
-	return { signal, live: () => listeners.size };
+	return {
+		signal,
+		abort: (reason) => {
+			controller.abort(reason);
+		},
+		live: () => listeners.size,
+	};
 }
 
 Deno.test("map and zip derive new signals", () => {
@@ -125,6 +144,49 @@ Deno.test("a derived signal holds a source's subscription only while it has list
 	assertEquals(listening, 2);
 	assertEquals(source.live(), 0);
 	assertEquals(other.live(), 0);
+});
+
+Deno.test("zip holds only its first source until it fires, then only its second", () => {
+	// Given: a zip of two platform sources, with a listener
+	const { panics } = recordingPanics();
+	const source = countingAbortSignal();
+	const other = countingAbortSignal();
+	const zipped = DispatchSignal.fromAbortSignal({
+		signal: source.signal,
+		catchUnwind: panics.catchUnwind,
+	}).zip(
+		DispatchSignal.fromAbortSignal({
+			signal: other.signal,
+			catchUnwind: panics.catchUnwind,
+		}),
+	);
+	const stop = zipped.whenDispatched(() => {});
+	const beforeFirst = [source.live(), other.live()];
+
+	// When: the first source fires, then the listener is let go
+	source.abort("a");
+	const afterFirst = [source.live(), other.live()];
+	const removed = stop();
+
+	// Then: it held A alone, then B alone, then nothing
+	assertEquals(beforeFirst, [1, 0]);
+	assertEquals(afterFirst, [0, 1]);
+	assert(removed);
+	assertEquals([source.live(), other.live()], [0, 0]);
+});
+
+Deno.test("toAbortSignal on a signal that has already dispatched aborts at once", () => {
+	// Given: a signal that has already dispatched
+	const { panics } = recordingPanics();
+	const controller = new DispatchController<string>(panics.catchUnwind);
+	controller.dispatch("gone");
+
+	// When: it's converted
+	const platform = controller.signal.toAbortSignal();
+
+	// Then: the platform signal is already aborted with the value
+	assert(platform.aborted);
+	assertEquals(platform.reason, "gone");
 });
 
 Deno.test("a DispatchSignal can't be built without a controller", () => {
