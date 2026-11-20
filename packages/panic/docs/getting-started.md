@@ -38,8 +38,9 @@ assertEquals(result, Ok(8080));
 ```
 
 The function returned normally, so `catchUnwind` hands its value back wrapped
-in `Ok`. What a boundary returns is an `Outcome`: `Ok`, an expected `Err`, or
-`Panicked` when the work threw.
+in `Ok`. What a boundary returns is an `Outcome`: `Ok` when the work
+returned, or `Panicked` when it threw. A boundary catches only throws, so it
+never returns the `Outcome`'s third variant, an expected `Err`.
 
 ## Panic
 

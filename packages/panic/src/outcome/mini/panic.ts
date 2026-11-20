@@ -230,9 +230,12 @@ export function recover<T, E, P, F>(
  * it throws the payload again, unchanged. Otherwise it returns the `Ok` or
  * `Err` as a `Result`, now that no panic is left in it.
  *
- * The payload is thrown as is, not through a panic runtime, so an outer
- * boundary of the runtime that reported it reports it again. To pass a
- * payload on without a second report, call that runtime's `resumeUnwind`.
+ * The payload is thrown as is, and how an outer boundary reports it is the
+ * runtime's rule. An object payload (a `Panic`, any `Error`) was recorded by
+ * the runtime whose boundary caught it, so an outer boundary of that runtime
+ * does not report it again; another runtime's boundary reports it once. A
+ * primitive payload (a string, `undefined`, …) can't be recorded, so every
+ * boundary that catches it reports it, just as after `resumeUnwind`.
  *
  * @template T The type of the success value
  * @template E The type of the error
