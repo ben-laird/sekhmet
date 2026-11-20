@@ -11,7 +11,7 @@ import { unwrap } from "@sekhmet/enum/result/mini/unwrap";
 import { panic } from "@sekhmet/panic/mini/core";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { cleanupStack } from "@/src/cleanup.ts";
-import type { NeedOutcomes } from "@/src/condition.ts";
+import type { NeedEnds } from "@/src/condition.ts";
 import {
 	Cancelled,
 	Failed,
@@ -33,9 +33,9 @@ import type {
 	UndeclaredGuardReadCause,
 } from "@/src/graph-error.ts";
 import type { BoundJob, Job, Roots, StepDefinition } from "@/src/job.ts";
-import type { AnyNeed, Guard, OutcomeView } from "@/src/need.ts";
+import type { AnyNeed, EndView, Guard } from "@/src/need.ts";
 import { resolveNeeds } from "@/src/plan-data.ts";
-import { type CountedOutcome, passed } from "@/src/verdict.ts";
+import { type CountedEnd, passed } from "@/src/verdict.ts";
 
 /**
  * What {@linkcode runJobs} takes.
@@ -85,12 +85,12 @@ export interface OptionalMetaRunOptions<J extends Roots<undefined>>
 }
 
 /**
- * The roots' outcomes, keyed as the roots were, each typed by its job, as
+ * The roots' {@linkcode JobEnd}s, keyed as the roots were, each typed by its job, as
  * `Promise.all` types its input.
  *
  * @template J The roots
  */
-export type Outcomes<J> = {
+export type JobEnds<J> = {
 	readonly [K in keyof J]: J[K] extends Job<infer T, never>
 		? JobEnd<Readonly<T>>
 		: never;
@@ -103,7 +103,7 @@ export type Outcomes<J> = {
  */
 export interface RunReport<J> {
 	/** Each root's outcome, under its key, typed */
-	readonly outcomes: Outcomes<J>;
+	readonly outcomes: JobEnds<J>;
 	/** Every job the run reached, by name, in the order they settled */
 	readonly all: ReadonlyMap<string, JobEnd<unknown>>;
 	/**
@@ -282,7 +282,7 @@ export async function runJobs<M, J extends Roots<M>>({
 
 	const runs = new Map<GraphNode, Promise<JobEnd<unknown>>>();
 	const reached = new Map<string, JobEnd<unknown>>();
-	const counted: CountedOutcome[] = [];
+	const counted: CountedEnd[] = [];
 
 	const forwardAbort = (): void => cancel.abort(signal?.reason);
 	if (signal?.aborted) forwardAbort();
@@ -305,7 +305,7 @@ export async function runJobs<M, J extends Roots<M>>({
 		keys.map((key, i) => [key, roots[i]] as const),
 	);
 	return Ok({
-		outcomes: unerased<Outcomes<J>>(outcomes),
+		outcomes: unerased<JobEnds<J>>(outcomes),
 		all: reached,
 		passed: passed(counted),
 	});
@@ -338,7 +338,7 @@ export async function runJobs<M, J extends Roots<M>>({
 		const cancelledBeforeGuards = cancel.signal.aborted;
 		// A guard's view answers only its declared reads, which the graph
 		// checked are unconditional needs of this plan, settled by now
-		const viewFor = (guard: Guard): OutcomeView => {
+		const viewFor = (guard: Guard): EndView => {
 			return {
 				cancelled: cancelledBeforeGuards,
 				outcome: (read) => {
@@ -379,7 +379,7 @@ export async function runJobs<M, J extends Roots<M>>({
 			const outcome = settled.get(need);
 			return outcome === undefined ? [] : [{ name: node.job.name, outcome }];
 		});
-		const outcomes: NeedOutcomes = Object.fromEntries(
+		const outcomes: NeedEnds = Object.fromEntries(
 			pulled.map(({ name, outcome }) => [name, outcome]),
 		);
 		const cancelled = cancel.signal.aborted;

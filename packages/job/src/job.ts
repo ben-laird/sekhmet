@@ -10,7 +10,7 @@
 import { block } from "@sekhmet/primordials/scoping";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import type { Cleanup } from "@/src/cleanup.ts";
-import { type Condition, type NeedOutcomes, success } from "@/src/condition.ts";
+import { type Condition, type NeedEnds, success } from "@/src/condition.ts";
 import { unerased } from "@/src/erasure.ts";
 import {
 	type ConditionKind,
@@ -101,7 +101,7 @@ export interface ShouldRunInput {
 	/** The plan, each need replaced by its outcome (or `undefined`) */
 	readonly needs: unknown;
 	/** The settled needs' outcomes, by job name */
-	readonly outcomes: NeedOutcomes;
+	readonly outcomes: NeedEnds;
 }
 
 /**

@@ -61,7 +61,7 @@ export {
 	type ConditionInput,
 	cancelled,
 	failure,
-	type NeedOutcomes,
+	type NeedEnds,
 	success,
 } from "./src/condition.ts";
 export {
@@ -118,12 +118,12 @@ export {
 export {
 	type AnyNeed,
 	type ConditionKind,
+	type EndView,
 	type Field,
 	type Guard,
 	Need,
 	type NeedParams,
 	type NeedsIfOptions,
-	type OutcomeView,
 	type Planner,
 	type PlanRecord,
 	type Resolved,
@@ -137,9 +137,9 @@ export {
 	planJobs,
 } from "./src/plan.ts";
 export {
+	type JobEnds,
 	type JobMisuseCause,
 	type OptionalMetaRunOptions,
-	type Outcomes,
 	type RunOptions,
 	type RunReport,
 	runJobs,

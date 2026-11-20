@@ -99,9 +99,10 @@ export interface NeedsIfOptions<T, M> {
 
 /**
  * What a guard can read once the plan's unconditional needs settle: the
- * outcomes of the needs it declared in its `reads`, and nothing else.
+ * {@linkcode JobEnd}s of the needs it declared in its `reads`, and nothing
+ * else.
  */
-export interface OutcomeView {
+export interface EndView {
 	/** Whether the run has been cancelled */
 	readonly cancelled: boolean;
 	/**
@@ -128,7 +129,7 @@ export interface Guard {
 	 */
 	readonly reads: readonly AnyNeed[];
 	/** Whether to pull the need in */
-	readonly test: (view: OutcomeView) => boolean;
+	readonly test: (view: EndView) => boolean;
 }
 
 /**

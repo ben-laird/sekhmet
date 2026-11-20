@@ -399,6 +399,14 @@ Earlier decisions keep the old name as history.
   feature `@sekhmet/job/outcome` (its `mini` barrel and single-module paths
   included) → `@sekhmet/job/end`. The variants, their constructors and the
   methods are unchanged.
+- **The types named after outcomes follow:** `Outcomes<J>` → `JobEnds<J>`,
+  `NeedOutcomes` → `NeedEnds` and `OutcomeView` → `EndView` (and, inside
+  the package, `CountedOutcome` → `CountedEnd`, `NamedOutcome` → `NamedEnd`),
+  so no exported type reads as a collection of panic's `Outcome`.
+- **The fields keep "outcome",** a plain English word for a `JobEnd` value:
+  `report.outcomes`, a condition's `{ outcomes }`, a guard's
+  `view.outcome(need)` and the `Finished` event's `outcome`. `report.ends`
+  and `view.end(need)` would read badly, `end` looking like a verb.
 - **Out of scope:** changing the variants, such as whether `Failed` should
   become a `Panicked` built on `Outcome`. Job never consumes a panic
   boundary's result, so nothing in it moves to `Outcome`.

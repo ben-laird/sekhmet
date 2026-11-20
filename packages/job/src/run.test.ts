@@ -13,13 +13,13 @@ import {
 	cancelled,
 	DuplicateName,
 	defineJobs,
+	type EndView,
 	failed,
 	failure,
 	type GraphError,
 	type Job,
 	type JobEnd,
 	type JobEvent,
-	type OutcomeView,
 	type PlanRecord,
 	type Roots,
 	type RunReport,
@@ -457,7 +457,7 @@ Deno.test("a guard may read only its own plan's unconditional needs", async (t) 
 				const when = {
 					describe: "sign looks fine",
 					reads: [v],
-					test: (view: OutcomeView) => view.outcome(s).isSucceeded(),
+					test: (view: EndView) => view.outcome(s).isSucceeded(),
 				};
 				return { v, s, extra: p.needsIf({ job: versionJob, when }) };
 			},

@@ -10,10 +10,10 @@ import { all, type JobEnd } from "@/src/end/main/mod.ts";
 import type { ConditionKind } from "@/src/need.ts";
 
 /**
- * The settled needs' outcomes, by job name, in the order the plan declared
+ * The settled needs' {@linkcode JobEnd}s, by job name, in the order the plan declared
  * them. A `needsIf` whose guard was false is absent.
  */
-export type NeedOutcomes = { readonly [job: string]: JobEnd<unknown> };
+export type NeedEnds = { readonly [job: string]: JobEnd<unknown> };
 
 /**
  * What a condition is tested with, once the job's needs have settled.
@@ -22,7 +22,7 @@ export interface ConditionInput {
 	/** Whether the run has been cancelled (its signal, or `failFast`) */
 	readonly cancelled: boolean;
 	/** The settled needs' outcomes, by job name */
-	readonly outcomes: NeedOutcomes;
+	readonly outcomes: NeedEnds;
 }
 
 /**
