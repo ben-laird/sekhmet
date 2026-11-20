@@ -1,15 +1,16 @@
 /**
  * Exercises `@sekhmet/lifetime`: a tree of lifetimes torn down in reverse
  * acquisition order, a cleanup's throw kept in the report, a child with its
- * own cause, and `await using`.
+ * own cause, `await using`, and a resource whose async `init` settles later.
  *
  * @module
  */
 
 import { isolate, union } from "@sekhmet/enum/core/mini";
-import { isErr, unwrapErr } from "@sekhmet/enum/result/mini";
-import { Lifetime } from "@sekhmet/lifetime";
+import { isErr, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { Lifetime, Resource } from "@sekhmet/lifetime";
 import { definePanicRuntime } from "@sekhmet/panic";
+import { wait } from "@sekhmet/vow/mini";
 import { expectEqual } from "../check.ts";
 
 /** Runs the exercise. */
@@ -74,4 +75,25 @@ export async function exercise(): Promise<void> {
 		});
 	}
 	expectEqual({ label: "await using", actual: closed, expected: true });
+
+	const log: string[] = [];
+	const pool = new Resource<number, { readonly size: number }, string>({
+		init: async (size) => {
+			await Promise.resolve();
+			return { size };
+		},
+		deinit: (_pool, cause) => {
+			log.push(`drained: ${cause}`);
+		},
+	});
+	const connections = unwrap(await wait(pool.start({ input: 4, panics })));
+	connections.with((p) => {
+		log.push(`size ${p.size}`);
+	});
+	connections.end("shutdown");
+	expectEqual({
+		label: "Resource",
+		actual: log,
+		expected: ["size 4", "drained: shutdown"],
+	});
 }

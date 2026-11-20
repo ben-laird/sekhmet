@@ -1,6 +1,11 @@
 /**
  * `@sekhmet/lifetime`: RAII for TypeScript, in any JavaScript runtime.
  *
+ * - **A {@linkcode Resource} is the rising edge.** `init` acquires a value
+ *   and `deinit` releases it; `start` returns a vow of a
+ *   {@linkcode Lifetime}, settled at once when `init` is sync. A panic in
+ *   `init` comes back as `Err`, after whatever `init` acquired on its
+ *   `setup` lifetime is released.
  * - **A {@linkcode Lifetime} is the falling edge.** It exists only once its
  *   value does: `Alive(value) → Ending(cause) → Ended(report)`, read from
  *   its `ending` and `ended` signals. `end(cause)` is idempotent, and the
@@ -56,3 +61,4 @@ export {
 	type PhaseVariants,
 } from "./src/phase.ts";
 export { Registration, type RegistrationVariants } from "./src/registration.ts";
+export { Resource, SetupEnd, type SetupEndVariants } from "./src/resource.ts";

@@ -169,6 +169,16 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 		);
 	}),
 	privateTypeRef("lifetime/src/registration.ts", "Registration", "Enum"),
+	privateTypeRef("lifetime/src/resource.ts", "Variants", "Split"),
+	privateTypeRef("lifetime/src/resource.ts", "Variants", "Panic"),
+	privateTypeRef("lifetime/src/resource.ts", "SetupEnd", "Enum"),
+	...["Vow", "Result", "Panic"].map((privateType) => {
+		return privateTypeRef(
+			"lifetime/src/resource.ts",
+			"Resource.prototype.start",
+			privateType,
+		);
+	}),
 	privateTypeRef(
 		"panic/src/mini/runtime.ts",
 		'PanicRuntime["catchUnwind"]',
