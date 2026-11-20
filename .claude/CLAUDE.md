@@ -110,6 +110,14 @@ Packages (`packages/`):
   `runJobs` over a record of roots, the dry run `planJobs`, and
   `JobOutcome` with methods (`@sekhmet/job/outcome`, a main/mini feature).
   Its decision record is `docs/decisions/job.md`
+- `@sekhmet/lifetime`: RAII on `@sekhmet/dispatch` and `@sekhmet/vow`: a
+  `Resource` (the rising edge: `init(input, setup)` and `deinit(value,
+  cause)`; `start` returns a `Vow` of `Result<Lifetime, Panic>`) and a
+  `Lifetime<T, C>` (the falling edge: `Alive → Ending → Ended`, read from
+  its `ending` and `ended` signals; one teardown stack of cleanups and
+  adopted children, released in reverse acquisition order; `using` and
+  `await using`); enums `Registration`, `Adoption`, `Phase` and
+  `SetupEnd`; classes only, no main/mini split
 - `@sekhmet/matrix`: `matrix()` builds the Cartesian product of value arrays for
   parameterized tests
 - `@sekhmet/panic`: `Panic` error, `panic()`/`panicWithoutCause()`, a Rust-style
@@ -299,7 +307,7 @@ fix(@sekhmet/primordials): correct Struct type inference
 **Types**: `feat`, `fix`, `test`, `refactor`, `docs`, `chore`, `perf`
 
 **Scopes**: Use package names: `@sekhmet/dispatch`, `@sekhmet/effect`, `@sekhmet/enum`,
-`@sekhmet/job`, `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/schema`,
+`@sekhmet/job`, `@sekhmet/lifetime`, `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/schema`,
 `@sekhmet/vow`, `@sekhmet/workflow`, and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`,
 `@sekhmet/dv`, `@sekhmet/dv-plugin`, `@sekhmet/gen-main`, `@sekhmet/playground`,
 `@sekhmet/release` for scripts
