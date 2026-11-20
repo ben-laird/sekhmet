@@ -4,7 +4,10 @@
  *
  * - Every exported function whose first parameter is `self: <Primary>`
  *   becomes a method of `class <Primary> extends mini.<Primary>`. A feature
- *   without a primary class has no class and no methods.
+ *   without a primary class has no class and no methods. A receiver whose
+ *   type arguments constrain its shape (`self: Option<Option<T>>`) becomes
+ *   a `this` parameter (`flatten<T>(this: Option<mini.Option<T>>)`), so the
+ *   method only type-checks on a receiver of that shape.
  * - A return type naming the primary or a configured wrap target (at the top
  *   level, in a wrap target's type arguments, in tuple elements, or as a
  *   generator's yielded type) is spelled as the main class, and the result is
@@ -341,13 +344,19 @@ type RefNode = Extract<TypeNode, { kind: "ref" }>;
 
 /**
  * How a signature's first parameter takes the receiver:
- * - `plain`: `self: Primary<A, B, C>`
+ * - `plain`: `self: Primary<A, B, C>`, each argument a distinct type
+ *   parameter of the function, which become the class's
+ * - `constrained`: `self: Primary<…>` with any other arguments
+ *   (`Option<Option<T>>`, `Poll<Result<T, E>>`), like a Rust impl block
+ *   for that shape only: the method keeps every type parameter as its own
+ *   and declares the shape as its `this` parameter
  * - `exact`: `self: S & Primary<A, B, C>` with `S extends Primary<A, B, C>`,
  *   keeping the receiver's exact type `S` (with views)
  * - `any`: `self: S` with `S extends` the views' `any` alias, as `S`
  */
 type ReceiverForm =
 	| { readonly kind: "plain"; readonly type: RefNode }
+	| { readonly kind: "constrained"; readonly type: RefNode }
 	| { readonly kind: "exact"; readonly type: RefNode; readonly param: string }
 	| { readonly kind: "any"; readonly param: string };
 
@@ -392,6 +401,27 @@ function bareArgs(type: RefNode): string[] | undefined {
 }
 
 /**
+ * Whether a receiver's type passes only distinct, bare type parameters of
+ * the signature (`Latch<A, I>`), which can become the class's own.
+ */
+function passesOwnParams({
+	signature,
+	type,
+}: {
+	signature: FunctionDeclaration;
+	type: RefNode;
+}): boolean {
+	const names = bareArgs(type);
+	if (names === undefined || new Set(names).size !== names.length) {
+		return false;
+	}
+
+	return names.every((name) => {
+		return signature.typeParams.some((tp) => tp.name === name);
+	});
+}
+
+/**
  * Whether `typeParam` is constrained to the primary applied to exactly
  * `args` (`S extends Primary<A, B, C>`): it stands for a receiver.
  */
@@ -427,7 +457,11 @@ function receiverFormOf({
 	const [param] = signature.params;
 	if (param?.kind !== "identifier" || param.name !== "self") return undefined;
 	const { type } = param;
-	if (namesClass(type, feature.primary)) return { kind: "plain", type };
+	if (namesClass(type, feature.primary)) {
+		const plain = passesOwnParams({ signature, type });
+
+		return { kind: plain ? "plain" : "constrained", type };
+	}
 	if (feature.views === undefined) return undefined;
 
 	const bare = ownTypeParam({ signature, type });
@@ -690,6 +724,7 @@ function receiverRename({
 	const label = `\`${param?.name ?? "self"}\``;
 	const form = extra ? undefined : receiverFormOf({ feature, signature });
 	if (form?.kind === "any") return ok(new Map([[form.param, selfType]]));
+	if (form?.kind === "constrained") return ok(new Map());
 
 	const type = form === undefined ? param?.type : form.type;
 	if (type?.kind !== "ref") {
@@ -841,6 +876,18 @@ function methodHead({
 		});
 	}
 
+	const form =
+		field === undefined ? receiverFormOf({ feature, signature }) : undefined;
+	const constrained = form?.kind === "constrained" ? form.type : undefined;
+	if (constrained !== undefined && receiver.self !== "this") {
+		return failure({
+			feature,
+			symbol: name,
+			message:
+				"a namespace method can't constrain its receiver's type arguments, which only a `this` parameter of the primary can",
+		});
+	}
+
 	const renamed = receiverRename({
 		module,
 		name,
@@ -895,7 +942,9 @@ function methodHead({
 			? [...ownParams, ...returnType.typeParams]
 			: ownParams;
 
-	const shadowed = new Set(classNames);
+	// A constrained receiver's method uses none of the class's type
+	// parameters, so its own may share their names, as in a Rust impl block.
+	const shadowed = new Set(constrained === undefined ? classNames : []);
 	if (receiver.self === NAMESPACE_SELF) shadowed.add(NAMESPACE_SELF_TYPE);
 	const clash = methodTypeParams.find((tp) => shadowed.has(tp.name));
 	if (clash !== undefined) {
@@ -917,9 +966,14 @@ function methodHead({
 		context,
 		modifiers: modifiersOf(module, signature),
 	});
-	const paramList = methodParams
-		.map((param) => renderParam({ param, context }))
-		.join(", ");
+	const thisParam =
+		constrained === undefined
+			? []
+			: [`this: ${renderWrapped({ module, type: constrained, context })}`];
+	const paramList = [
+		...thisParam,
+		...methodParams.map((param) => renderParam({ param, context })),
+	].join(", ");
 
 	const outerArgs =
 		field === undefined
