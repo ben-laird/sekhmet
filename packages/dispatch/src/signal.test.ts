@@ -409,6 +409,30 @@ Deno.test("dispatched and never are signals with no controller", () => {
 	assert(isPending(polled[1] ?? Ready("")));
 });
 
+Deno.test("an async listener is a compile error", () => {
+	// Given: a signal
+	const { panics } = recordingPanics();
+	const controller = new DispatchController<string>(panics.catchUnwind);
+	const heard: string[] = [];
+
+	// When: a synchronous listener and an async one are added
+	controller.signal.whenDispatched((value) => {
+		heard.push(value);
+	});
+	const stop = controller.signal.whenDispatched(
+		// @ts-expect-error: a listener returns undefined, never a promise
+		async (value: string): Promise<void> => {
+			await Promise.resolve();
+			heard.push(`async ${value}`);
+		},
+	);
+	stop();
+	controller.dispatch("x");
+
+	// Then: only the synchronous one type-checks (the async one was removed before it could run)
+	assertEquals(heard, ["x"]);
+});
+
 Deno.test("DispatchSignal is covariant", () => {
 	// Given: a signal of a narrow type
 	const { panics } = recordingPanics();

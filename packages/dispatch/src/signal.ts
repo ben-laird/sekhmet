@@ -46,6 +46,14 @@ export type Unsubscribe = () => boolean;
 /**
  * A listener for a dispatched value. It runs once, with the value.
  *
+ * A listener is synchronous and returns nothing: its type returns
+ * `undefined`, so an `async` listener (which returns a promise) is a
+ * compile error. A dispatch couldn't await it or see its rejection, so its
+ * failure would be lost; start async work inside a synchronous listener and
+ * handle its outcome there. A block body with no `return`, or a `void`
+ * expression such as `(v) => void log.push(v)`, satisfies the type. A
+ * function typed `(value: T) => void` doesn't: wrap it in a block.
+ *
  * @template T The type of the dispatched value
  *
  * @example
@@ -67,7 +75,7 @@ export type Unsubscribe = () => boolean;
  * assertEquals(heard, [7]);
  * ```
  */
-export type Listener<T> = (value: T) => void;
+export type Listener<T> = (value: T) => undefined;
 
 /**
  * The only part of a panic runtime a dispatch needs: a boundary that
@@ -249,7 +257,9 @@ export class DispatchSignal<out T> {
 	 */
 	wait(): Promise<T> {
 		return new Promise((resolve) => {
-			this.whenDispatched(resolve);
+			this.whenDispatched((value) => {
+				resolve(value);
+			});
 		});
 	}
 
@@ -278,7 +288,9 @@ export class DispatchSignal<out T> {
 	 */
 	toVow(): Vow<T> {
 		const { vow, resolve } = vowWithResolver<T>();
-		this.whenDispatched(resolve);
+		this.whenDispatched((value) => {
+			resolve(value);
+		});
 		return vow;
 	}
 

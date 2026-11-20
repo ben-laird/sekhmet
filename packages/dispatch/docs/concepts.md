@@ -71,6 +71,11 @@ dispatch is running (by another listener, say) joins the end of the queue and
 runs in the same dispatch, after the ones already waiting. A listener that
 dispatches again gets the first value back, as any later call does.
 
+A listener is synchronous. Its type, `Listener<T>`, returns `undefined`, so
+an `async` listener is a compile error: the dispatch couldn't await it, and
+its rejection would be lost rather than reported. To start async work, call
+it from a synchronous listener and handle its outcome there.
+
 ## A throwing listener is a panic
 
 A listener shouldn't throw: one that does has a bug. The controller takes the
