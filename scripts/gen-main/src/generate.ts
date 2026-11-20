@@ -359,6 +359,7 @@ type ReceiverForm =
 	| { readonly kind: "constrained"; readonly type: RefNode }
 	| { readonly kind: "exact"; readonly type: RefNode; readonly param: string }
 	| { readonly kind: "any"; readonly param: string };
+// {}
 
 /** Whether `type` names the class `name` (not a type parameter). */
 function namesClass(type: TypeNode | undefined, name: string): type is RefNode {
