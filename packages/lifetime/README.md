@@ -75,7 +75,7 @@ assertEquals(order, ["close db: shutdown", "close logs"]);
   acquired through a `Resource`, teardown with `await using`, and a request
   ended from outside.
 - **How-to guides:** [Recipes](./docs/recipes.md) for tearing down several
-  database connections at once, cancelling `fetch`, ending on a timeout or
+  database connections together, cancelling `fetch`, ending on a timeout or
   a cancel, giving a child its own causes, building a resource on another,
   reading a failed teardown, and taking a cleanup back.
 - **Explanation:** [Concepts](./docs/concepts.md) covers the RAII split

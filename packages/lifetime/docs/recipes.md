@@ -9,10 +9,12 @@ lifetime. For every export, see the
 [API reference](https://jsr.io/@sekhmet/lifetime/doc); for why a lifetime
 behaves as it does, see the [concepts](./concepts.md).
 
-## How to tear down several database connections at once
+## How to tear down several database connections together
 
 An app that talks to several databases (a primary and a replica through a
 Prisma-style client, say) should disconnect all of them however it exits.
+Teardown is sequential: each connection is awaited before the next, last
+connected first.
 
 1. Wrap the client in a `Resource`: `init` connects, `deinit` disconnects.
 2. Start one lifetime per connection and `adopt` each into a root lifetime.

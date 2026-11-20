@@ -96,6 +96,15 @@ explicit resource management spec chains disposal errors. Where the
 platform has no `SuppressedError` yet, an `Error` of the same shape stands
 in; the package never installs a global.
 
+That boundary throws only the failures of a teardown it started itself. If
+`end` was already called, whoever called it holds the report, so disposing
+the lifetime afterwards throws nothing: `using` does nothing, and
+`await using` only waits for the teardown to finish.
+
+`[Symbol.dispose]` and `[Symbol.asyncDispose]` exist only where the runtime
+defines those symbols; the package never makes up symbols of its own.
+`end(cause)` is the explicit path, with errors as values, everywhere.
+
 ## Double faults
 
 A panic hook that throws while reporting is a double fault: the boundary
@@ -163,11 +172,17 @@ parent's stack. The rules:
   `ChildEnded`: there is nothing left to own.
 - **Born dead.** A parent that is ending or has ended can't own anything
   new, but mustn't leak it either: the child is ended at once, with the
-  parent's cause, and the result is `ParentEnded`.
+  parent's cause, and the result is `ParentEnded`. A parent that is still
+  ending awaits the child's teardown, like a cleanup deferred during its
+  end, and its report holds the child's panics.
 
-A child that ends on its own leaves its owner: its entry comes off the
-parent's stack, so the parent's later end doesn't reach it, and it keeps
-its own cause.
+A child that ends on its own leaves its owner and keeps its own cause:
+the parent's later end won't end it again, and its report belongs to
+whoever ended it. Its place on the parent's stack stays as a waiter until
+its teardown has finished, though, so a parent that ends meanwhile still
+awaits it there, and `await using` never exits with a child still closing.
+Once the child has finished, the waiter is gone, so a long-lived parent
+doesn't collect entries for children that came and went.
 
 ## Causes per child
 
@@ -179,7 +194,12 @@ child that ends first never calls it. It also maps the parent's dispose
 cause for `using`, for a child without one of its own, looked up when the
 child is disposed, so it reaches through owners adopted later.
 
-A `fromParent` that throws is a panic in the parent's report. The child
+A `fromParent` is always run inside the panic boundary: while the
+parent's teardown reaches the child, while adopting into a parent that is
+ending or has ended, and while looking up a dispose cause. A
+`fromParent` that throws is a panic: reported to the hook, kept in the
+parent's report while there is one, and thrown out of `[Symbol.dispose]`
+for a dispose cause. The child
 then has no cause to end with, so the parent releases it instead of
 leaking a link to an owner that has ended: the child stays Alive as a root
 again, which another lifetime can adopt and whoever holds it can end.
