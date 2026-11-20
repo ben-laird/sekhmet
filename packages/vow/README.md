@@ -2,9 +2,9 @@
 
 `Vow` is a promise-like value that resolves **synchronously**. A vow is
 `Pending` until something resolves it, then `Resolved` with its value. Callbacks
-attached with `map` or `zip` run inside the `resolve` call, not on a later
-microtask, so a value flows through a chain of vows in one call stack. `wait`
-and `fromPromise` bridge to promises.
+attached with `map`, `andThen` or `zip` run inside the `resolve` call, not on a
+later microtask, so a value flows through a chain of vows in one call stack.
+`wait` and `fromPromise` bridge to promises.
 
 ## Install
 
@@ -50,15 +50,18 @@ assertEquals(await wait(total), 15);
 
 `@sekhmet/vow` exports free functions; `@sekhmet/vow/mini` exports the same set.
 
-| Export                          | Does                                                           |
-| ------------------------------- | -------------------------------------------------------------- |
-| `new Vow(executor)`             | a vow the executor resolves, now or later                      |
-| `vowWithResolver()`             | a pending vow and the function that resolves it                |
-| `resolved(value)`               | a vow already resolved with `value`                            |
-| `map(vow, f)`                   | a vow of `f(value)`                                            |
-| `zip(a, b)`, `zipWith(a, b, f)` | a vow of both values once both resolve                         |
-| `wait(vow)`                     | a `Promise` of the value                                       |
-| `fromPromise(promise)`          | a vow of `Ok(value)` or `Err(reason)` once the promise settles |
+| Export                              | Does                                                           |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `new Vow(executor)`                 | a vow the executor resolves, now or later                      |
+| `vowWithResolver()`                 | a pending vow and the function that resolves it                |
+| `resolved(value)`                   | a vow already resolved with `value`                            |
+| `map(vow, f)`                       | a vow of `f(value)`                                            |
+| `andThen(vow, f)`                   | a vow of the value of the vow `f(value)` returns               |
+| `zip(a, b)`, `zipWith(a, b, f)`     | a vow of both values once both resolve                         |
+| `wait(vow)`                         | a `Promise` of the value                                       |
+| `value(vow)`                        | `Some(value)` once resolved, `None` while pending, read now    |
+| `isResolved(vow)`, `isPending(vow)` | type guards for the vow's current state                        |
+| `fromPromise({ promise, panics })`  | a vow of `Ok(value)` or `Err(reason)` once the promise settles |
 
 ## Learn more
 
@@ -66,12 +69,12 @@ assertEquals(await wait(total), 15);
   total from values that arrive separately, step by step.
 - **How-to guides:** [Recipes](./docs/recipes.md) for resolving a vow from a
   callback or an executor, starting a chain from a value you already have,
-  combining vows, awaiting a vow, turning a promise into a vow and handling
+  combining vows, chaining a step that returns a vow, reading a resolved vow's
+  value synchronously, awaiting a vow, turning a promise into a vow and handling
   its failure, and catching errors thrown by dependents.
 - **Explanation:** [Concepts](./docs/concepts.md) covers when to use a vow
-  rather than a promise, why resolution is synchronous, how a vow is built as
-  an enum, resolve-once semantics, why a vow cannot fail, and errors in
-  dependents.
+  rather than a promise, why resolution is synchronous, how a vow is built as an
+  enum, resolve-once semantics, why a vow cannot fail, and errors in dependents.
 - **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/vow/doc)
   documents every export.
 

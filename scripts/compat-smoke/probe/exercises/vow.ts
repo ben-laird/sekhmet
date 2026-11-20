@@ -6,6 +6,7 @@
  */
 
 import { unwrap } from "@sekhmet/enum/result/mini/unwrap";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { map, vowWithResolver, wait, zipWith } from "@sekhmet/vow";
 import { fromPromise, wait as miniWait, resolved } from "@sekhmet/vow/mini";
 import { Vow } from "@sekhmet/vow/mini/core";
@@ -31,7 +32,10 @@ export async function exercise(): Promise<void> {
 	});
 	expectEqual({ label: "wait", actual: await wait(total), expected: 15 });
 
-	const bridged = fromPromise(Promise.resolve("ready"));
+	const bridged = fromPromise({
+		promise: Promise.resolve("ready"),
+		panics: definePanicRuntime(),
+	});
 	expectEqual({
 		label: "fromPromise",
 		actual: unwrap(await miniWait(bridged)),

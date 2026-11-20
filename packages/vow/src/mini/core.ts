@@ -5,7 +5,6 @@
  */
 
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
-import { match } from "@sekhmet/enum/core/mini/exit";
 import { getStructParams } from "@sekhmet/primordials/struct";
 
 /**
@@ -16,18 +15,41 @@ import { getStructParams } from "@sekhmet/primordials/struct";
 export type Resolver<T> = (arg: T) => void;
 
 /**
+ * Registers a dependent on a pending Vow: the dependent runs once, with the
+ * value, when the vow resolves.
+ *
+ * Calling it after the vow has resolved runs the dependent at once.
+ *
+ * @template T The type of value the vow resolves with
+ */
+export type Subscribe<T> = (dependent: (value: T) => void) => void;
+
+/**
  * The variant types for a Vow.
  *
  * Represents the two possible states:
- * - `Pending`: Waiting for resolution, with a list of dependent resolvers
+ * - `Pending`: Waiting for resolution, with a {@linkcode Subscribe} function
+ *   that registers a dependent
  * - `Resolved`: Contains the resolved value
+ *
+ * `Pending` holds only a way to subscribe, never the dependents themselves,
+ * so `T` appears only in output positions and a Vow is covariant in `T`.
  */
 type Variants<T> = Split<{
-	Pending: [deps: Resolver<T>[]];
+	Pending: [subscribe: Subscribe<T>];
 	Resolved: [value: T];
 }>;
 
 export type { Variants as VowVariants };
+
+/**
+ * Where a vow's resolution stands, inside its constructor's closure:
+ * `Resolving` while its dependents are being drained.
+ */
+type Phase<T> =
+	| { readonly kind: "Pending" }
+	| { readonly kind: "Resolving" }
+	| { readonly kind: "Settled"; readonly value: T };
 
 /**
  * A synchronous promise-like abstraction built on the Enum framework.
@@ -60,7 +82,7 @@ export type { Variants as VowVariants };
  * assertEquals(await wait(greeting), "Resolved: hello");
  * ```
  */
-export class Vow<T> extends Enum<Variants<T>> {
+export class Vow<out T> extends Enum<Variants<T>> {
 	/**
 	 * Creates a new Vow with an executor function.
 	 *
@@ -68,43 +90,57 @@ export class Vow<T> extends Enum<Variants<T>> {
 	 * the vow. If resolve is called synchronously within the executor, the
 	 * vow will be resolved immediately.
 	 *
+	 * Resolving runs every dependent once, in registration order. A
+	 * dependent subscribed while the vow is resolving joins the end of that
+	 * queue; one subscribed after resolution finishes runs at once. If any
+	 * dependents throw, the rest still run, the vow is still resolved, and the
+	 * errors are thrown to the caller of `resolve` as one `AggregateError`.
+	 * Only the first call to `resolve` has any effect.
+	 *
 	 * @param executor Function that receives the resolve callback
 	 */
 	constructor(executor: (resolve: Resolver<T>) => void) {
-		super("Pending", []);
+		const dependents: ((value: T) => void)[] = [];
+		let phase: Phase<T> = { kind: "Pending" };
 
-		executor((value) => {
-			// (1.1) We can track whether this runs within the executor or not
-			// by tracking when the executor finishes
+		super("Pending", (dependent) => {
+			if (phase.kind !== "Settled") {
+				dependents.push(dependent);
+				return;
+			}
 
-			match(this)({
-				Pending: (dependencies) => {
-					getStructParams(this).variant = ["Resolved", value];
-
-					let aggregate: AggregateError | undefined;
-
-					for (const resolve of dependencies) {
-						try {
-							resolve(value);
-						} catch (cause: unknown) {
-							if (!aggregate) {
-								aggregate = new AggregateError([]);
-							}
-
-							aggregate.errors.push(cause);
-						}
-					}
-
-					if (aggregate) {
-						throw aggregate;
-					}
-				},
-				Resolved: () => {},
-			});
+			dependent(phase.value);
 		});
 
-		// ---
-		// (1.2) If at this point the Vow is resolved, it was resolved
-		// synchronously within the executor
+		executor((value) => {
+			if (phase.kind !== "Pending") {
+				return;
+			}
+
+			phase = { kind: "Resolving" };
+			getStructParams(this).variant = ["Resolved", value];
+
+			let aggregate: AggregateError | undefined;
+
+			// The array iterator is live, so dependents subscribed meanwhile run too
+			for (const dependent of dependents) {
+				try {
+					dependent(value);
+				} catch (cause: unknown) {
+					if (!aggregate) {
+						aggregate = new AggregateError([]);
+					}
+
+					aggregate.errors.push(cause);
+				}
+			}
+
+			dependents.length = 0;
+			phase = { kind: "Settled", value };
+
+			if (aggregate) {
+				throw aggregate;
+			}
+		});
 	}
 }

@@ -1,9 +1,21 @@
 import { union } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { Err, Ok } from "@sekhmet/enum/result/mini/core";
-import { assertEquals, assertThrows } from "@std/assert";
+import {
+	definePanicRuntime,
+	isPanicHookFailure,
+	type PanicHookInfo,
+	type PanicRuntime,
+} from "@sekhmet/panic";
+import {
+	assert,
+	assertEquals,
+	assertInstanceOf,
+	assertThrows,
+} from "@std/assert";
 import type { Vow } from "@/src/mini/core.ts";
 import {
+	andThen,
 	fromPromise,
 	map,
 	resolved,
@@ -20,6 +32,40 @@ function peek<T>(vow: Vow<T>): ["Resolved", T] | ["Pending"] {
 		return ["Resolved", value];
 	}
 	return ["Pending"];
+}
+
+/** A panic runtime whose hook records what it reports, instead of logging. */
+function recordingPanics(): {
+	panics: PanicRuntime;
+	reported: PanicHookInfo[];
+} {
+	const panics = definePanicRuntime();
+	const reported: PanicHookInfo[] = [];
+	panics.setHook((info) => reported.push(info));
+	return { panics, reported };
+}
+
+/**
+ * A promise that keeps every promise its `then` returns, so a test can see
+ * how the callbacks it was given settle.
+ */
+class WatchedPromise<T> extends Promise<T> {
+	readonly derived: Promise<unknown>[] = [];
+
+	// biome-ignore lint/suspicious/noThenProperty: it overrides Promise's own then
+	override then<A = T, B = never>(
+		onFulfilled?: ((value: T) => A | PromiseLike<A>) | null,
+		onRejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
+	): Promise<A | B> {
+		const next = super.then(onFulfilled, onRejected);
+		this.derived.push(next);
+		return next;
+	}
+}
+
+/** Waits a macrotask, so any unhandled rejection has been raised by now. */
+function nextMacrotask(): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 Deno.test("resolved() is already Resolved", () => {
@@ -143,6 +189,158 @@ Deno.test("map() obeys the functor laws", async (t) => {
 	});
 });
 
+Deno.test("andThen() chains a vow-returning step", async (t) => {
+	await t.step("waits for self, then for the step's vow", () => {
+		// Given: a pending source and a pending second step
+		const source = vowWithResolver<number>();
+		const step = vowWithResolver<string>();
+		const calls: number[] = [];
+
+		// When: chaining them and resolving each in turn
+		const chained = andThen(source.vow, (n) => {
+			calls.push(n);
+			return step.vow;
+		});
+		const beforeSource = peek(chained);
+		source.resolve(3);
+		const beforeStep = peek(chained);
+		step.resolve("three");
+
+		// Then: it resolves only after both, calling next once with the value
+		assertEquals(beforeSource, ["Pending"]);
+		assertEquals(beforeStep, ["Pending"]);
+		assertEquals(peek(chained), ["Resolved", "three"]);
+		assertEquals(calls, [3]);
+	});
+
+	await t.step("is synchronous when every step is", () => {
+		// Given: a resolved source and a step returning a resolved vow
+		const source = resolved(2);
+
+		// When: chaining them
+		const chained = andThen(source, (n) => resolved(n * 10));
+
+		// Then: the result is already resolved
+		assertEquals(peek(chained), ["Resolved", 20]);
+	});
+
+	await t.step("propagates a throwing step to the resolver", () => {
+		// Given: a pending source whose step throws
+		const { vow, resolve } = vowWithResolver<number>();
+		const error = new Error("bad step");
+		const chained = andThen(vow, (): Vow<number> => {
+			throw error;
+		});
+
+		// When: resolving the source
+		const thrown = assertThrows(() => resolve(1), AggregateError);
+
+		// Then: the error surfaces and the chained vow stays pending
+		assertEquals(thrown.errors, [error]);
+		assertEquals(peek(chained), ["Pending"]);
+	});
+
+	await t.step("throws a step's error out of andThen on a resolved vow", () => {
+		// Given: a resolved vow and a step that throws
+		const error = new Error("bad step");
+
+		// When: chaining them
+		const thrown = assertThrows(() => {
+			return andThen(resolved(1), (): Vow<number> => {
+				throw error;
+			});
+		});
+
+		// Then: the error comes straight out of andThen, unwrapped, like map
+		assertEquals(thrown, error);
+	});
+
+	await t.step(
+		"nests dependents' errors when the inner vow resolves later",
+		() => {
+			// Given: a chain whose inner vow is pending, with a throwing dependent
+			const inner = vowWithResolver<number>();
+			const chained = andThen(resolved(1), () => inner.vow);
+			const error = new Error("bad dependent");
+			map(chained, () => {
+				throw error;
+			});
+
+			// When: resolving the inner vow
+			const thrown = assertThrows(() => inner.resolve(2), AggregateError);
+
+			// Then: the error is wrapped by the chained vow, then by the inner one
+			assertEquals(thrown.errors.length, 1);
+			const [nested] = thrown.errors;
+			assertInstanceOf(nested, AggregateError);
+			assertEquals(nested.errors, [error]);
+			assertEquals(peek(chained), ["Resolved", 2]);
+		},
+	);
+});
+
+Deno.test("andThen() obeys the monad laws", async (t) => {
+	const inputs = [0, 1, -7, 42];
+	const f = (n: number): Vow<number> => resolved(n + 1);
+	const g = (n: number): Vow<string> => {
+		const { vow, resolve } = vowWithResolver<string>();
+		resolve(`${n}`);
+		return vow;
+	};
+
+	await t.step("left identity: andThen(resolved(a), f) ≡ f(a)", () => {
+		for (const input of inputs) {
+			// Given: an input and a vow-returning step
+			const lifted = resolved(input);
+
+			// When: chaining the lifted input versus applying the step
+			const chained = andThen(lifted, g);
+			const applied = g(input);
+
+			// Then: both hold the same value
+			assertEquals(peek(chained), peek(applied));
+		}
+	});
+
+	await t.step("right identity: andThen(v, resolved) ≡ v", () => {
+		for (const input of inputs) {
+			// Given: a resolved and a deferred vow of the input
+			const eager = resolved(input);
+			const { vow: lazy, resolve } = vowWithResolver<number>();
+
+			// When: chaining each with resolved
+			const chainedEager = andThen(eager, resolved);
+			const chainedLazy = andThen(lazy, resolved);
+			const lazyBefore = peek(chainedLazy);
+			resolve(input);
+
+			// Then: each matches the original, pending and resolved alike
+			assertEquals(peek(chainedEager), peek(eager));
+			assertEquals(lazyBefore, ["Pending"]);
+			assertEquals(peek(chainedLazy), peek(lazy));
+		}
+	});
+
+	await t.step(
+		"associativity: andThen(andThen(v, f), g) ≡ andThen(v, x => andThen(f(x), g))",
+		() => {
+			for (const input of inputs) {
+				// Given: a deferred vow of the input
+				const { vow, resolve } = vowWithResolver<number>();
+
+				// When: nesting the chain to the left versus to the right
+				const left = andThen(andThen(vow, f), g);
+				const right = andThen(vow, (x) => andThen(f(x), g));
+				resolve(input);
+
+				// Then: both resolve to the same value
+				assertEquals(peek(left), peek(right));
+				assertEquals(peek(right), ["Resolved", `${input + 1}`]);
+			}
+		},
+	);
+});
+
 Deno.test("zip() pairs two vows", async (t) => {
 	await t.step("both already resolved", () => {
 		// Given: two resolved vows
@@ -248,7 +446,8 @@ Deno.test("wait() bridges a vow to a promise", async (t) => {
 Deno.test("fromPromise() settles with Ok once the promise fulfils", async () => {
 	// Given: a promise under external control
 	const { promise, resolve } = Promise.withResolvers<number>();
-	const vow = fromPromise(promise);
+	const { panics, reported } = recordingPanics();
+	const vow = fromPromise({ promise, panics });
 	const before = peek(vow);
 
 	// When: fulfilling the promise and letting the vow settle
@@ -259,19 +458,105 @@ Deno.test("fromPromise() settles with Ok once the promise fulfils", async () => 
 	assertEquals(before, ["Pending"]);
 	assertEquals(settled, Ok(7));
 	assertEquals(peek(vow), ["Resolved", Ok(7)]);
+	assertEquals(reported, []);
 });
 
 Deno.test("fromPromise() settles with Err once the promise rejects", async () => {
 	// Given: a promise under external control
 	const { promise, reject } = Promise.withResolvers<number>();
-	const vow = fromPromise(promise);
+	const { panics, reported } = recordingPanics();
+	const vow = fromPromise({ promise, panics });
 
 	// When: rejecting the promise and letting the vow settle
 	const reason = new Error("rejected");
 	reject(reason);
 	const settled = await wait(vow);
 
-	// Then: the vow resolves with Err(reason), and nothing leaks unhandled
+	// Then: the vow resolves with Err(reason), not a panic, and nothing leaks
 	assertEquals(settled, Err(reason));
 	assertEquals(peek(vow), ["Resolved", Err(reason)]);
+	assertEquals(reported, []);
+});
+
+Deno.test("fromPromise() reports a throwing dependent through the panic runtime", async () => {
+	// Given: a fromPromise vow with a throwing dependent between two healthy ones (#59)
+	const { promise, resolve } = Promise.withResolvers<number>();
+	const { panics, reported } = recordingPanics();
+	const vow = fromPromise({ promise, panics });
+	const error = new Error("bad dependent");
+	const seen: string[] = [];
+	map(vow, () => seen.push("before"));
+	map(vow, () => {
+		throw error;
+	});
+	map(vow, () => seen.push("after"));
+
+	// When: the promise fulfils, and a macrotask passes for any unhandled rejection
+	resolve(1);
+	const settled = await wait(vow);
+	await nextMacrotask();
+
+	// Then: the hook reported the AggregateError once, every other dependent
+	// ran once, the vow resolved, and the test runner saw no unhandled rejection
+	assertEquals(reported.length, 1);
+	const payload = reported[0]?.payload;
+	assertInstanceOf(payload, AggregateError);
+	assertEquals(payload.errors, [error]);
+	assertEquals(seen, ["before", "after"]);
+	assertEquals(settled, Ok(1));
+});
+
+Deno.test("fromPromise() reports a throwing dependent of a rejected promise", async () => {
+	// Given: a fromPromise vow whose dependent throws on any outcome
+	const { promise, reject } = Promise.withResolvers<number>();
+	const { panics, reported } = recordingPanics();
+	const vow = fromPromise({ promise, panics });
+	const error = new Error("bad dependent");
+	map(vow, () => {
+		throw error;
+	});
+
+	// When: the promise rejects, and a macrotask passes
+	reject("offline");
+	const settled = await wait(vow);
+	await nextMacrotask();
+
+	// Then: the rejection is still an Err, and the throw was reported, not leaked
+	assertEquals(settled, Err("offline"));
+	assertEquals(reported.length, 1);
+	assertInstanceOf(reported[0]?.payload, AggregateError);
+});
+
+Deno.test("fromPromise() lets a hook that throws escape its then callback", async () => {
+	// Given: a runtime whose hook throws, and a fromPromise vow over a watched
+	// promise, with a throwing dependent
+	const panics = definePanicRuntime();
+	panics.setHook(() => {
+		throw new Error("reporter offline");
+	});
+	let fulfil!: (value: number) => void;
+	const source = new WatchedPromise<number>((resolve) => {
+		fulfil = resolve;
+	});
+	const vow = fromPromise({ promise: source, panics });
+	map(vow, () => {
+		throw new Error("bad dependent");
+	});
+
+	// When: the promise fulfils; the then callback's promise is caught here,
+	// since in a program nothing holds it and it would crash the process
+	const [callback] = source.derived;
+	assert(callback !== undefined);
+	const escaped = callback.then(
+		() => undefined,
+		(reason: unknown) => reason,
+	);
+	fulfil(1);
+	const reason = await escaped;
+
+	// Then: fromPromise attached one then callback, which rejected with the
+	// runtime's Panic (PanicHook), and the vow still resolved
+	assertEquals(source.derived.length, 1);
+	assert(isPanicHookFailure(reason));
+	assertEquals(peek(vow), ["Resolved", Ok(1)]);
 });

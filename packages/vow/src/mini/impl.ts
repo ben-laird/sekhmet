@@ -1,6 +1,6 @@
 /**
  * Creating and combining vows: `vowWithResolver`, `resolved`, `fromPromise`,
- * `map`, `zip`, `zipWith` and `wait`.
+ * `map`, `andThen`, `zip`, `zipWith` and `wait`.
  *
  * @module
  */
@@ -8,6 +8,7 @@
 import { match, union } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini/core";
+import type { PanicRuntime } from "@sekhmet/panic/mini/runtime";
 import { type Resolver, Vow } from "./core.ts";
 
 /**
@@ -84,6 +85,22 @@ export function resolved<T>(value: T): Vow<T> {
 }
 
 /**
+ * What {@linkcode fromPromise} takes: the promise, and the panic runtime that
+ * reports a dependent that throws.
+ *
+ * @template T The type of the fulfilled value
+ */
+export interface FromPromiseOptions<T> {
+	/** The Promise to convert into a Vow */
+	readonly promise: Promise<T>;
+	/**
+	 * The panic runtime whose hook reports a dependent that throws when the
+	 * vow resolves; see {@linkcode fromPromise}
+	 */
+	readonly panics: PanicRuntime;
+}
+
+/**
  * Creates a Vow from a Promise, bridging async and sync worlds.
  *
  * A Promise can fail and a Vow cannot, so the failure is carried in the
@@ -91,28 +108,62 @@ export function resolved<T>(value: T): Vow<T> {
  * resolves with `Ok(value)` on fulfilment or `Err(reason)` on rejection.
  * The rejection is always handled, so it never surfaces as unhandled.
  *
+ * The vow resolves inside the promise's `then` callback, where no caller
+ * could catch what a dependent throws. So it resolves inside
+ * `panics.catchUnwind`: a dependent that throws is a bug, and the runtime's
+ * hook reports the `AggregateError` of everything thrown, instead of it
+ * escaping as an unhandled rejection. Every other dependent still runs, and
+ * the vow still resolves.
+ *
+ * A hook that itself throws is a panic while panicking: the runtime throws
+ * `Panic (PanicHook)`, which escapes the `then` callback as an unhandled
+ * rejection and, under the Deno and Node defaults, crashes the process, like
+ * Rust aborting. That is deliberate. The default hook never throws, so this
+ * happens only with a hook of your own that does.
+ *
  * @template T The type of the fulfilled value
- * @param promise The Promise to convert into a Vow
+ * @param options The promise, and the panic runtime that reports a
+ *   dependent that throws
  * @returns A Vow that resolves with the Promise's outcome as a Result
  *
  * @example
  * ```ts
- * import { fromPromise, wait } from "@sekhmet/vow";
+ * import { fromPromise, map, wait } from "@sekhmet/vow";
  * import { Err, Ok } from "@sekhmet/enum/result/mini";
- * import { assertEquals } from "@std/assert";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { assertEquals, assertInstanceOf } from "@std/assert";
  *
- * const fulfilled = fromPromise(Promise.resolve({ id: 1 }));
+ * const panics = definePanicRuntime();
+ * const reported: unknown[] = [];
+ * panics.setHook(({ payload }) => reported.push(payload));
+ *
+ * const fulfilled = fromPromise({ promise: Promise.resolve({ id: 1 }), panics });
  * assertEquals(await wait(fulfilled), Ok({ id: 1 }));
  *
- * const rejected = fromPromise(Promise.reject("offline"));
+ * const rejected = fromPromise({ promise: Promise.reject("offline"), panics });
  * assertEquals(await wait(rejected), Err("offline"));
+ *
+ * // A dependent that throws is reported, not left as an unhandled rejection
+ * const loaded = fromPromise({ promise: Promise.resolve(1), panics });
+ * map(loaded, () => {
+ *   throw new Error("bad dependent");
+ * });
+ * await wait(loaded);
+ * assertInstanceOf(reported[0], AggregateError);
  * ```
  */
-export function fromPromise<T>(promise: Promise<T>): Vow<Result<T, unknown>> {
+export function fromPromise<T>({
+	promise,
+	panics,
+}: FromPromiseOptions<T>): Vow<Result<T, unknown>> {
 	return new Vow<Result<T, unknown>>((resolve) => {
+		const settle = (outcome: Result<T, unknown>): void => {
+			panics.catchUnwind(() => resolve(outcome));
+		};
+
 		promise.then(
-			(value) => resolve(Ok(value)),
-			(reason: unknown) => resolve(Err(reason)),
+			(value) => settle(Ok(value)),
+			(reason: unknown) => settle(Err(reason)),
 		);
 	});
 }
@@ -144,14 +195,74 @@ export function fromPromise<T>(promise: Promise<T>): Vow<Result<T, unknown>> {
 export function map<T, U>(self: Vow<T>, mapping: (value: T) => U): Vow<U> {
 	return new Vow<U>((resolve) => {
 		match(self)({
-			Pending: (deps) => {
-				deps.push(resolveMap);
-			},
+			Pending: (subscribe) => subscribe(resolveMap),
 			Resolved: resolveMap,
 		});
 
 		function resolveMap(value: T): void {
 			resolve(mapping(value));
+		}
+	});
+}
+
+/**
+ * Chains a step that returns a Vow, flattening the result.
+ *
+ * Creates a new Vow that resolves with the value of the Vow `next` returns
+ * for `self`'s resolved value. This is commonly called "flatMap". When
+ * `self` is resolved and `next` returns a resolved Vow, the result is
+ * resolved before `andThen` returns: the chain stays synchronous as long as
+ * every step is.
+ *
+ * @template T The type of the original resolved value
+ * @template U The type of the chained Vow's resolved value
+ * @param self The Vow to chain from
+ * @param next Function from the resolved value to the next Vow
+ * @returns A Vow that resolves with the value of `next`'s Vow
+ *
+ * @example
+ * ```ts
+ * import { andThen, map, resolved, vowWithResolver } from "@sekhmet/vow";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const { vow: userId, resolve: setUserId } = vowWithResolver<number>();
+ * const { vow: profile, resolve: setProfile } = vowWithResolver<string>();
+ *
+ * // The second step is itself a vow
+ * const greeting = andThen(userId, (id) => {
+ *   return map(profile, (name) => `#${id}: ${name}`);
+ * });
+ * const seen: string[] = [];
+ * map(greeting, (text) => seen.push(text));
+ *
+ * setUserId(7);
+ * assertEquals(seen, []); // waiting for the profile
+ * setProfile("Ada");
+ * assertEquals(seen, ["#7: Ada"]);
+ *
+ * // With every step resolved, the chain resolves synchronously
+ * const sync: number[] = [];
+ * map(andThen(resolved(2), (n) => resolved(n * 10)), (n) => sync.push(n));
+ * assertEquals(sync, [20]);
+ * ```
+ */
+export function andThen<T, U>(
+	self: Vow<T>,
+	next: (value: T) => Vow<U>,
+): Vow<U> {
+	return new Vow<U>((resolve) => {
+		match(self)({
+			Pending: (subscribe) => subscribe(resolveNext),
+			Resolved: resolveNext,
+		});
+
+		function resolveNext(value: T): void {
+			const chained = next(value);
+
+			match(chained)({
+				Pending: (subscribe) => subscribe(resolve),
+				Resolved: resolve,
+			});
 		}
 	});
 }
@@ -195,16 +306,12 @@ export function zip<T, U>(
 		}
 
 		match(self)({
-			Pending: (deps) => {
-				deps.push(tryResolve);
-			},
+			Pending: (subscribe) => subscribe(tryResolve),
 			Resolved: tryResolve,
 		});
 
 		match(otherVow)({
-			Pending: (deps) => {
-				deps.push(tryResolve);
-			},
+			Pending: (subscribe) => subscribe(tryResolve),
 			Resolved: tryResolve,
 		});
 	});
@@ -271,9 +378,7 @@ export function zipWith<T, U, V>(
 export function wait<T>(self: Vow<T>): Promise<T> {
 	return new Promise((resolve) => {
 		match(self)({
-			Pending: (deps) => {
-				deps.push(resolve);
-			},
+			Pending: (subscribe) => subscribe(resolve),
 			Resolved: resolve,
 		});
 	});
