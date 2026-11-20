@@ -12,7 +12,7 @@ with TypeScript's strictest settings, including `isolatedDeclarations`.
 
 | Package                                                  | What it is                                                                                                |
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| [`@sekhmet/enum`](packages/enum/README.md)               | Rust-style enums: `Enum`, `Option`, `Result`, `Ordering`, `Latch` and `Poll`                              |
+| [`@sekhmet/enum`](packages/enum/README.md)               | Rust-style enums: `Enum`, `Option`, `Result`, `Either`, `Ordering`, `Latch`, `Poll` and `ControlFlow`     |
 | [`@sekhmet/effect`](packages/effect/README.md)           | Effects run on fibers: typed errors, schedulers, concurrency, cancellation with cleanup                   |
 | [`@sekhmet/dispatch`](packages/dispatch/README.md)       | A typed one-shot signal: `AbortController`/`AbortSignal` with a typed value instead of `reason: any`      |
 | [`@sekhmet/job`](packages/job/README.md)                 | Named jobs run as a dependency graph, like GitHub Actions: `runIf` conditions and typed outcomes          |

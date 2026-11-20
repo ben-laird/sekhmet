@@ -99,8 +99,8 @@ Packages (`packages/`):
   and `AbortSignal`); classes only, no main/mini split
 - `@sekhmet/effect`: effect system (effects, fibers, continuations, runtime,
   scheduler)
-- `@sekhmet/enum`: enum framework plus `option`, `result`, `latch`, `poll` and
-  `ordering` built on it
+- `@sekhmet/enum`: enum framework plus `option`, `result`, `either`, `latch`,
+  `poll`, `ordering` and `control-flow` built on it
 - `@sekhmet/job`: named jobs run as a
   dependency graph on promises and `AbortSignal`: `defineJobs(factory)`
   (a context factory building each job's `ctx` from the run's `meta`, with
