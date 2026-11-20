@@ -34,6 +34,7 @@ import { assert, assertEquals } from "@std/assert";
 type EndCause =
 	| { readonly kind: "finished" }
 	| { readonly kind: "cancelled"; readonly by: "user" | "timeout" };
+// {}
 
 const runtime = definePanicRuntime();
 const end = new DispatchController<EndCause>(runtime.catchUnwind);
@@ -61,6 +62,7 @@ import { assertEquals } from "@std/assert";
 type EndCause =
 	| { readonly kind: "finished" }
 	| { readonly kind: "cancelled"; readonly by: "user" | "timeout" };
+// {}
 
 function progressBar(ended: DispatchSignal<EndCause>, log: string[]): void {
 	ended.whenDispatched((cause) => {
@@ -94,6 +96,7 @@ import { assert, assertEquals } from "@std/assert";
 type EndCause =
 	| { readonly kind: "finished" }
 	| { readonly kind: "cancelled"; readonly by: "user" | "timeout" };
+// {}
 
 const runtime = definePanicRuntime();
 const end = new DispatchController<EndCause>(runtime.catchUnwind);
@@ -160,6 +163,7 @@ import { assert, assertEquals } from "@std/assert";
 type EndCause =
 	| { readonly kind: "finished" }
 	| { readonly kind: "cancelled"; readonly by: "user" | "timeout" };
+// {}
 
 const runtime = definePanicRuntime();
 const end = new DispatchController<EndCause>(runtime.catchUnwind);

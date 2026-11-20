@@ -36,6 +36,7 @@ import { assert, assertEquals } from "@std/assert";
 type Cause =
 	| { readonly kind: "done" }
 	| { readonly kind: "cancelled"; readonly by: string };
+// {}
 
 const runtime = definePanicRuntime();
 const end = new DispatchController<Cause>(runtime.catchUnwind);

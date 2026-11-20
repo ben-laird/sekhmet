@@ -20,6 +20,7 @@ function recordingPanics(): {
 type Cause =
 	| { readonly kind: "done" }
 	| { readonly kind: "cancelled"; readonly by: string };
+// {}
 
 Deno.test("a dispatch carries a typed value, and the first one wins", () => {
 	// Given: a controller for a typed cause

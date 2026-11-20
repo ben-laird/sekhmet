@@ -446,6 +446,7 @@ export class DispatchSignal<out T> {
 		let decided:
 			| { readonly winner: SignalSource<T>; readonly value: T }
 			| undefined;
+		// {}
 		const decide = ({
 			winner,
 			value,

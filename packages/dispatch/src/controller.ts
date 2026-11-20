@@ -37,6 +37,7 @@ import {
  * type Cause =
  * 	| { readonly kind: "done" }
  * 	| { readonly kind: "cancelled"; readonly by: string };
+ * // {}
  *
  * const controller = new DispatchController<Cause>(
  * 	definePanicRuntime().catchUnwind,
