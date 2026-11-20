@@ -6,8 +6,10 @@
 	"exports": {
 		".": "./mod.ts",
 		"./mini": "./src/mini/mod.ts",
+		"./mini/accessors": "./src/mini/accessors.ts",
 		"./mini/core": "./src/mini/core.ts",
-		"./mini/impl": "./src/mini/impl.ts"
+		"./mini/impl": "./src/mini/impl.ts",
+		"./mini/predicates": "./src/mini/predicates.ts"
 	},
 
 	"imports": {

@@ -4,9 +4,9 @@ kind: how-to
 
 # Recipes
 
-How-to guides for tasks that come up when a vow meets the rest of a program.
-For every export, see the [API reference](https://jsr.io/@sekhmet/vow/doc);
-for why a vow behaves as it does, see the [concepts](./concepts.md).
+How-to guides for tasks that come up when a vow meets the rest of a program. For
+every export, see the [API reference](https://jsr.io/@sekhmet/vow/doc); for why
+a vow behaves as it does, see the [concepts](./concepts.md).
 
 ## How to resolve a vow later from a callback
 
@@ -35,17 +35,17 @@ target.dispatchEvent(new Event("ready"));
 assertEquals(await wait(status), "got ready");
 ```
 
-A vow resolves once, so if the callback can fire more than once, only the
-first call counts.
+A vow resolves once, so if the callback can fire more than once, only the first
+call counts.
 
 ## How to resolve a vow from an executor
 
-This guide shows you how to create a vow whose value is computed where the
-vow is made, as with `new Promise`.
+This guide shows you how to create a vow whose value is computed where the vow
+is made, as with `new Promise`.
 
 1. Construct a `Vow` with an executor; it receives `resolve`.
-2. Compute the value and call `resolve` inside the executor. The vow is
-   resolved by the time the constructor returns.
+2. Compute the value and call `resolve` inside the executor. The vow is resolved
+   by the time the constructor returns.
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -67,8 +67,7 @@ assertEquals(seen, [3]);
 This guide shows you how to feed a known value into code that expects a vow.
 
 1. Wrap the value with `resolved`.
-2. Pass the vow on; dependents attached to it run as soon as they are
-   attached.
+2. Pass the vow on; dependents attached to it run as soon as they are attached.
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -118,8 +117,8 @@ import {
 	andThen,
 	map,
 	resolved,
-	vowWithResolver,
 	type Vow,
+	vowWithResolver,
 } from "@sekhmet/vow";
 
 const { vow: userId, resolve: setUserId } = vowWithResolver<number>();
@@ -136,10 +135,36 @@ assertEquals(seen, ["Ada"]); // ran synchronously inside setUserId
 
 Use `map` instead when the step returns a plain value.
 
+## How to read a resolved vow's value synchronously
+
+This guide shows you how to get a vow's value right now, in synchronous code,
+when it may already have resolved.
+
+1. Call `value` on the vow. It returns `Some(value)` if the vow has resolved and
+   `None` if it is still pending.
+2. Handle `None` there and then: `value` reads the current state and never
+   waits. Use `map` or `andThen` to act on the value whenever it arrives.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { None, Some } from "@sekhmet/enum/option/mini";
+import { andThen, resolved, value, vowWithResolver } from "@sekhmet/vow";
+
+const sync = andThen(resolved(2), (n) => resolved(n * 10));
+assertEquals(value(sync), Some(20)); // every step was resolved
+
+const { vow, resolve } = vowWithResolver<number>();
+assertEquals(value(vow), None()); // still pending
+resolve(1);
+assertEquals(value(vow), Some(1));
+```
+
+To branch on the state without reading the value, use the type guards
+`isResolved` and `isPending`.
+
 ## How to await a vow in async code
 
-This guide shows you how to hand a vow's value to code that works with
-promises.
+This guide shows you how to hand a vow's value to code that works with promises.
 
 1. Call `wait` on the vow to get a `Promise` of its value.
 2. `await` it, or pass it to anything that takes a promise.
@@ -225,10 +250,10 @@ assertEquals(reported.length, 1);
 ```
 
 The vow is resolved and every other dependent has run by the time the error
-reaches you. See [errors in dependents](./concepts.md#errors-in-dependents)
-for why.
+reaches you. See [errors in dependents](./concepts.md#errors-in-dependents) for
+why.
 
 This does not apply to a vow from `fromPromise`. You never call its resolver:
 the promise's `then` callback does, so a dependent that throws becomes an
-unhandled promise rejection, out of reach of any `try`. Keep the dependents
-of such a vow from throwing.
+unhandled promise rejection, out of reach of any `try`. Keep the dependents of
+such a vow from throwing.

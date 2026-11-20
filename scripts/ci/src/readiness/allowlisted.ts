@@ -165,9 +165,16 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("schema/src/core/mini/schema.ts", "ParseSyncError", "Enum"),
 	privateTypeRef("schema/src/core/mini/schema.ts", "parseSync", "Result"),
 	privateTypeRef("schema/src/core/mini/schema.ts", "parseAsync", "Result"),
+	privateTypeRef("vow/src/mini/accessors.ts", "value", "Option"),
 	privateTypeRef("vow/src/mini/core.ts", "Variants", "Split"),
 	privateTypeRef("vow/src/mini/core.ts", "Vow", "Enum"),
 	privateTypeRef("vow/src/mini/impl.ts", "fromPromise", "Result"),
+	...["isResolved", "isPending"].flatMap((predicate) => {
+		return [
+			privateTypeRef("vow/src/mini/predicates.ts", predicate, "Enum"),
+			privateTypeRef("vow/src/mini/predicates.ts", predicate, "Isolate"),
+		];
+	}),
 	// The workflow guards narrow to @sekhmet/panic's Panic<Cause> (#38)
 	privateTypeRef(
 		"workflow/src/invariant/invariant.ts",
