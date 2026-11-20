@@ -376,6 +376,38 @@ Deno.test("a fromParent that throws is a Panic in the parent's report", () => {
 	assertEquals(unwrapErr(report).panics[0]?.name, "Panic (CauseMappingFailed)");
 });
 
+Deno.test("a fromParent that throws releases the child: Alive, a root again, adoptable and endable", () => {
+	// Given: a child whose cause mapping throws, under a root with a dispose cause
+	const { panics } = recordingPanics();
+	const root = app();
+	const orphan = root.child({
+		value: 1,
+		fromParent: (): string => {
+			throw new Error("no mapping");
+		},
+	});
+	const closed: string[] = [];
+	orphan.defer((cause) => void closed.push(cause));
+
+	// When: the root ends, then another lifetime adopts the child and ends
+	root.end("done");
+	const aliveAfterRoot = isolate(orphan.phase(), "Alive");
+	const disposeThrown = assertThrows(() => orphan[Symbol.dispose]());
+	const next = new Lifetime<undefined, string>({ value: undefined, panics });
+	const adoption = next.adopt({ child: orphan });
+	next.end("adopted, then ended");
+
+	// Then: it outlived the root with no owner left, so it had no dispose
+	// cause and was adoptable; its new owner ended it
+	assert(aliveAfterRoot);
+	assert(
+		disposeThrown instanceof Panic &&
+			disposeThrown.name === "Panic (NoDisposeCause)",
+	);
+	assert(isolate(adoption, "Adopted"));
+	assertEquals(closed, ["adopted, then ended"]);
+});
+
 Deno.test("you can build lifetimes yourself: a new Lifetime is a root until adopted", () => {
 	// Given: hand-built lifetimes
 	const { panics } = recordingPanics();

@@ -422,6 +422,11 @@ export class Lifetime<T, C> {
 	 * child and not before. It also maps this lifetime's dispose cause, for
 	 * a child that has none of its own.
 	 *
+	 * A `fromParent` that panics is a panic in this lifetime's report. The
+	 * child then has no cause to end with, so it is released instead: it
+	 * stays Alive as a root again, which another lifetime can adopt and
+	 * whoever holds it can end.
+	 *
 	 * @template U The type of the child's value
 	 * @template D The type of the child's cause
 	 * @param options The child, and how to map this lifetime's cause into its
@@ -521,7 +526,14 @@ export class Lifetime<T, C> {
 		return match(this.phase())({
 			Alive: () => {
 				const remove = this.#push(
-					childEntry({ child, fromParent, panics: this.#panics }),
+					childEntry({
+						child,
+						fromParent,
+						panics: this.#panics,
+						release: () => {
+							child.#owner = undefined;
+						},
+					}),
 				);
 				child.#owner = {
 					owner: this,
@@ -575,7 +587,8 @@ export class Lifetime<T, C> {
 
 	/**
 	 * A new child holding `value`, with its own cause type: `fromParent`
-	 * produces it when this lifetime's teardown reaches the child.
+	 * produces it when this lifetime's teardown reaches the child. If it
+	 * panics, the child is released as a root, as with `adopt`.
 	 *
 	 * @template U The type of the child's value
 	 * @template D The type of the child's cause
@@ -909,17 +922,21 @@ export class Lifetime<T, C> {
 
 /**
  * The teardown entry of an adopted child: it maps the parent's cause into
- * the child's, ends the child, and collects the panics of its report. It
- * never throws.
+ * the child's, ends the child, and collects the panics of its report. If
+ * the mapping panics, there is no cause to end the child with, so it is
+ * released to be a root again. It never throws.
  */
 function childEntry<C, U, D>({
 	child,
 	fromParent,
 	panics,
+	release,
 }: {
 	readonly child: Lifetime<U, D>;
 	readonly fromParent: (cause: C) => D;
 	readonly panics: LifetimePanics;
+	/** Unlinks the child from its owner, making it a root */
+	readonly release: () => void;
 }): Entry<C> {
 	return {
 		run: ({ cause, onDoubleFault }) => {
@@ -927,10 +944,12 @@ function childEntry<C, U, D>({
 			try {
 				mapped = panics.catchUnwind(() => ({ cause: fromParent(cause) }));
 			} catch (thrown: unknown) {
+				release();
 				onDoubleFault(thrown);
 				return resolved([causeMappingFailed(thrown)]);
 			}
 			if (isErr(mapped)) {
+				release();
 				return resolved([causeMappingFailed(unwrapErr(mapped))]);
 			}
 			try {

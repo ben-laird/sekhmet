@@ -174,7 +174,9 @@ cause for `using`, for a child without one of its own, looked up when the
 child is disposed, so it reaches through owners adopted later.
 
 A `fromParent` that throws is a panic in the parent's report. The child
-then has no cause to end with, and stays alive.
+then has no cause to end with, so the parent releases it instead of
+leaking a link to an owner that has ended: the child stays Alive as a root
+again, which another lifetime can adopt and whoever holds it can end.
 
 ## Why Lifetime is invariant in C
 
