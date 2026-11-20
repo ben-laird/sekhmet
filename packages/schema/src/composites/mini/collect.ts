@@ -23,7 +23,7 @@ import {
 } from "@sekhmet/panic/outcome/mini/core";
 import { map as mapOutcome } from "@sekhmet/panic/outcome/mini/transform";
 import type { Vow } from "@sekhmet/vow/mini/core";
-import { all, map } from "@sekhmet/vow/mini/impl";
+import { all, andThen, map, resolved } from "@sekhmet/vow/mini/impl";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import {
 	concat,
@@ -32,7 +32,7 @@ import {
 	locate,
 } from "@/src/core/mini/issues.ts";
 import { nodeOf, SchemaNode } from "@/src/core/mini/node.ts";
-import { type Parsing, settled } from "@/src/core/mini/parsing.ts";
+import { type Parsing, settled, step } from "@/src/core/mini/parsing.ts";
 import {
 	type PanicBoundary,
 	type ParseOptions,
@@ -173,19 +173,25 @@ export function gather({
 
 /**
  * Runs the children, settles them, and builds the composite's output from
- * theirs, or fails with every issue.
+ * theirs, or fails with every issue. Gathering and `build` run under
+ * `panics`, since they read user values (an extra key's getter, an error).
  */
 export function compose({
 	pending,
 	extra,
 	build,
+	panics,
 }: {
 	pending: readonly Pending[];
 	extra: Issues<unknown> | undefined;
 	build: (outputs: [PropertyKey, unknown][]) => unknown;
+	panics: PanicBoundary;
 }): Parsed {
-	return map(settle(pending), (settled) => {
-		return mapOutcome(gather({ settled, extra }), build);
+	return andThen(settle(pending), (settled) => {
+		return step({
+			panics,
+			work: () => resolved(mapOutcome(gather({ settled, extra }), build)),
+		});
 	});
 }
 

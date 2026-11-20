@@ -1,7 +1,7 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
-import { resume } from "@sekhmet/panic/outcome/mini";
+import { Panicked, resume } from "@sekhmet/panic/outcome/mini";
 import { wait } from "@sekhmet/vow";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
@@ -187,4 +187,42 @@ Deno.test('a discriminatedUnion keyed "optional" is a required key of an object'
 	assertEquals(unwrap(parseSync(holder, { value: { optional: "yes" } })), {
 		value: { optional: "yes" },
 	});
+});
+
+Deno.test("discriminatedUnion panics when its option's output can't be copied", async (t) => {
+	const bug = new Error("ownKeys");
+	const trap = new Proxy(
+		{},
+		{
+			ownKeys: () => {
+				throw bug;
+			},
+		},
+	);
+	const now = new Schema({ parse: (_input: unknown) => Ok(trap) });
+	const later = new Schema({
+		parse: (_input: unknown) => Promise.resolve(Ok(trap)),
+	});
+
+	for (const [timing, option] of [
+		["synchronous", now],
+		["asynchronous", later],
+	] as const) {
+		await t.step(`${timing} option`, async () => {
+			// Given: an option whose output throws when spread
+			const recording = definePanicRuntime();
+			const reported: unknown[] = [];
+			recording.setHook(({ payload }) => reported.push(payload));
+			const tagged = discriminatedUnion({ key: "k", options: { x: option } });
+
+			// When: parsing
+			const outcome = await wait(
+				parse(tagged, { input: { k: "x" }, panics: recording }),
+			);
+
+			// Then: the parse settles as the raw payload, reported once
+			assertEquals(outcome, Panicked(bug));
+			assertEquals(reported, [bug]);
+		});
+	}
 });

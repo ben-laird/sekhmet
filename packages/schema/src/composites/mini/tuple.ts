@@ -185,6 +185,7 @@ export function tuple(
 						return run({ key: index, child, value: input[index], panics });
 					}),
 					extra: tooLong({ input, maximum: items.length }),
+					panics,
 					build: (outputs) => outputs.map(([, output]) => output),
 				});
 			},

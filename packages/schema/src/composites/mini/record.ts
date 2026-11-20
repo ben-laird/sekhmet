@@ -199,6 +199,7 @@ export function record(options: {
 				return compose({
 					pending,
 					extra: undefined,
+					panics,
 					build: (outputs) => {
 						return Object.fromEntries(
 							outputs.flatMap(([, outputKey], index) => {

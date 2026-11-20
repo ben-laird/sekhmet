@@ -1,7 +1,7 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, isOk, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
-import { resume } from "@sekhmet/panic/outcome/mini";
+import { Panicked, resume } from "@sekhmet/panic/outcome/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { wait } from "@sekhmet/vow";
 import {
@@ -510,4 +510,45 @@ Deno.test("a view can't be forged, nor survive a transform in its type", () => {
 	// @ts-expect-error map's result is a transform: its own view is inner
 	assertEquals(mapped.shape, undefined);
 	assertStrictEquals(user.shape.name, text);
+});
+
+Deno.test("object panics when building its output reads a throwing value", async (t) => {
+	const bug = new Error("getter");
+	const later = new Schema({
+		parse: (input: unknown) => Promise.resolve(Ok(input)),
+	});
+	const now = new Schema({ parse: (input: unknown) => Ok(input) });
+	/** An input whose undeclared key `b` throws when read. */
+	const trap = (): Record<string, unknown> => {
+		const input: Record<string, unknown> = { a: 1 };
+		Object.defineProperty(input, "b", {
+			enumerable: true,
+			get: () => {
+				throw bug;
+			},
+		});
+		return input;
+	};
+
+	for (const [timing, field] of [
+		["synchronous", now],
+		["asynchronous", later],
+	] as const) {
+		await t.step(`${timing} field`, async () => {
+			// Given: a passthrough object, under a recording runtime
+			const recording = definePanicRuntime();
+			const reported: unknown[] = [];
+			recording.setHook(({ payload }) => reported.push(payload));
+			const loose = object({ shape: { a: field }, unknownKeys: "passthrough" });
+
+			// When: parsing an input whose kept key throws when read
+			const outcome = await wait(
+				parse(loose, { input: trap(), panics: recording }),
+			);
+
+			// Then: the parse settles as the raw payload, reported once
+			assertEquals(outcome, Panicked(bug));
+			assertEquals(reported, [bug]);
+		});
+	}
 });

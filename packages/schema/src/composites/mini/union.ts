@@ -137,6 +137,7 @@ export function union(
 					}
 
 					return proceed(parse(option, { input, panics }), {
+						panics,
 						Ok: (output) => settled(Ok(output)),
 						Err: (error) => {
 							return attempt({

@@ -5,9 +5,11 @@
  * {@linkcode proceed}, which passes a panic through. Internal: not exported
  * from the mini barrel.
  *
- * Every callback a parse hands to a vow continuation goes through `guard`
- * or `parse`, so none throws inside a vow's `resolve`, where the throw would
- * be lost and the parse would never settle.
+ * Every callback a parse hands to a vow continuation runs under the
+ * boundary ({@linkcode step}, through `proceed`, `guard` or `parse`), so
+ * none throws inside a vow's `resolve`, where the throw would be lost and the
+ * parse would never settle. That covers internal code too, which can throw
+ * when it reads a user value (a getter, a Proxy trap).
  *
  * @module
  */
@@ -109,8 +111,32 @@ function later<O, E>({
 	return vow;
 }
 
+/**
+ * Runs the work that builds a parse under `panics`: a throw, from user code
+ * it calls or a user value it reads, settles the parse as `Panicked` with
+ * the payload unchanged.
+ */
+export function step<O, E>({
+	panics,
+	work,
+}: {
+	readonly panics: PanicBoundary;
+	readonly work: () => Parsing<O, E>;
+}): Parsing<O, E> {
+	// Boxed, so catchUnwind's promise guard sees an object, not a maybe-promise.
+	const caught = panics.catchUnwind(() => ({ parsing: work() }));
+
+	return match(caught)<Parsing<O, E>>({
+		Ok: ({ parsing }) => parsing,
+		Err: (impossible) => impossible,
+		Panicked: (payload) => panicked(payload),
+	});
+}
+
 /** What {@linkcode proceed} does with a parse's output, or its error. */
 export interface Continuation<O, E, P, F> {
+	/** The boundary each continuation runs under. */
+	readonly panics: PanicBoundary;
 	/** Continues from the output. */
 	readonly Ok: (output: O) => Parsing<P, F>;
 	/** Continues from the expected error. */
@@ -119,17 +145,24 @@ export interface Continuation<O, E, P, F> {
 
 /**
  * Continues a parse once it settles: its output or its error goes to `next`,
- * and a panic passes through untouched.
+ * under `next.panics`, and a panic passes through untouched.
  */
 export function proceed<O, E, P, F>(
 	self: Parsing<O, E>,
 	next: Continuation<O, E, P, F>,
 ): Parsing<P, F> {
+	const { panics } = next;
+
 	return andThen(self, (outcome) => {
-		return match(outcome)<Parsing<P, F>>({
-			Ok: (output) => next.Ok(output),
-			Err: (error) => next.Err(error),
-			Panicked: (payload) => panicked(payload),
+		return step({
+			panics,
+			work: () => {
+				return match(outcome)<Parsing<P, F>>({
+					Ok: (output) => next.Ok(output),
+					Err: (error) => next.Err(error),
+					Panicked: (payload) => panicked(payload),
+				});
+			},
 		});
 	});
 }

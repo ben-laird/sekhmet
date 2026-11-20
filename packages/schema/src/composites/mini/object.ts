@@ -488,6 +488,7 @@ export function object(options: {
 		return compose({
 			pending,
 			extra: unknownKeyIssues({ input, keys: reported }),
+			panics,
 			build: (outputs) => {
 				return Object.fromEntries([
 					...outputs,

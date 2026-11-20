@@ -208,6 +208,7 @@ export function array(options: {
 				return run({ key: index, child: item, value, panics });
 			}),
 			extra: lengthIssue({ input, minItems, maxItems }),
+			panics,
 			build: (outputs) => outputs.map(([, output]) => output),
 		});
 	};

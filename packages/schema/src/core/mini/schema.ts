@@ -30,14 +30,7 @@ import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import type { Vow } from "@sekhmet/vow/mini/core";
 import type { Annotation } from "./annotation.ts";
 import { Opaque, SchemaNode, type TransformStep } from "./node.ts";
-import {
-	guard,
-	isPromiseLike,
-	type Parsing,
-	panicked,
-	proceed,
-	settled,
-} from "./parsing.ts";
+import { guard, isPromiseLike, proceed, settled, step } from "./parsing.ts";
 import { type PipeView, type TransformView, viewed } from "./view.ts";
 
 /**
@@ -473,14 +466,8 @@ export function parse<I, O, E>(
 	options: ParseOptions<I>,
 ): Vow<Outcome<O, E, unknown>> {
 	const { run } = getStructParams(self);
-	// Boxed, so catchUnwind's promise guard sees an object, not a maybe-promise.
-	const caught = options.panics.catchUnwind(() => ({ parsing: run(options) }));
 
-	return match(caught)<Parsing<O, E>>({
-		Ok: ({ parsing }) => parsing,
-		Err: (impossible) => impossible,
-		Panicked: (payload) => panicked(payload),
-	});
+	return step({ panics: options.panics, work: () => run(options) });
 }
 
 /**
@@ -765,6 +752,7 @@ export function pipe<
 		init: {
 			run: (options: ParseOptions<I>) => {
 				return proceed(parse(self, options), {
+					panics: options.panics,
 					Ok: (output) => {
 						return parse(nextSchema, { input: output, panics: options.panics });
 					},
@@ -889,6 +877,7 @@ function continueWith<I, O, E, P, F, S extends Schema<I, O, E>>(
 				const { panics } = options;
 
 				return proceed(parse(schema, options), {
+					panics,
 					Ok: (output) => guard({ panics, work: () => next(Ok(output)) }),
 					Err: (error) => guard({ panics, work: () => next(Err(error)) }),
 				});
@@ -1167,6 +1156,7 @@ export function preprocess<J, I, O, E, S extends Schema<I, O, E>>(
 				});
 
 				return proceed(prepared, {
+					panics,
 					Ok: (value) => parse(self, { input: value, panics }),
 					Err: (impossible) => impossible,
 				});

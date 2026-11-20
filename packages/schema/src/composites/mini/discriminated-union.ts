@@ -260,6 +260,7 @@ export function discriminatedUnion(declaration: {
 				}
 
 				return proceed(parse(option, { input, panics }), {
+					panics,
 					Ok: (output): Parsed => {
 						if (!isRecord(output)) return settled(Ok(output));
 
