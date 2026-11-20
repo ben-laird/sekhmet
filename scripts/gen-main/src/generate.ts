@@ -252,12 +252,16 @@ function contextFor({
 }
 
 /** The wrap target a top-level type names, if it names one. */
-function wrapTargetOf(
-	wrapNames: ReadonlySet<string>,
-	type: TypeNode | undefined,
-): string | undefined {
-	if (type?.kind !== "ref" || type.resolution.kind === "typeParam")
+function wrapTargetOf({
+	wrapNames,
+	type,
+}: {
+	wrapNames: ReadonlySet<string>;
+	type: TypeNode | undefined;
+}): string | undefined {
+	if (type?.kind !== "ref" || type.resolution.kind === "typeParam") {
 		return undefined;
+	}
 
 	const name = originalName({ name: type.name, resolution: type.resolution });
 
@@ -302,7 +306,7 @@ function renderWrapped({
 			.join(" & ");
 	}
 
-	const target = wrapTargetOf(module.wrapNames, type);
+	const target = wrapTargetOf({ wrapNames: module.wrapNames, type });
 	if (target === undefined || type.kind !== "ref") {
 		return renderType({ type, context });
 	}
@@ -328,7 +332,7 @@ function needsConversion({
 		type,
 		context: {
 			render: () => "",
-			wrapTarget: (inner) => wrapTargetOf(wrapNames, inner),
+			wrapTarget: (inner) => wrapTargetOf({ wrapNames, type: inner }),
 			mappers: () => [],
 			views: () => true,
 			carrier: (inner) => carrierOf(carriers, inner),
@@ -709,7 +713,7 @@ function convertContextFor({
 }): ConvertContext {
 	return {
 		render: (type) => renderType({ type, context }),
-		wrapTarget: (type) => wrapTargetOf(module.wrapNames, type),
+		wrapTarget: (type) => wrapTargetOf({ wrapNames: module.wrapNames, type }),
 		mappers: (target) => module.mappers.get(target) ?? [],
 		views: (target) => module.views.has(target),
 		carrier: (type) => carrierOf(module.carriers, type),
