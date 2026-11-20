@@ -34,10 +34,11 @@ type Load = Split<{
 ```
 
 `Enum<T>` is the class that stores one such variant. `Option`, `Result`,
-`Ordering`, `Latch` and `Poll` are subclasses with their own variants and
-constructors (`Some`, `Ok`, `Less`, `Active`, `Ready` and so on). The variant
-sits behind a symbol (see `Struct` in `@sekhmet/primordials`), so you read it
-through the functions below rather than through a property.
+`Ordering`, `Latch`, `Poll` and `ControlFlow` are subclasses with their own
+variants and constructors (`Some`, `Ok`, `Less`, `Active`, `Ready`, `Break` and
+so on). The variant sits behind a symbol (see `Struct` in
+`@sekhmet/primordials`), so you read it through the functions below rather than
+through a property.
 
 ## Narrowing
 
@@ -69,15 +70,15 @@ assertEquals(double(Some(4)), 8);
 ```
 
 Each feature also has named guards: `isSome`/`isNone`, `isOk`/`isErr`,
-`isActive`/`isInactive`, `isReady`/`isPending`, and `isLt`/`isEq`/`isGt` and
-friends for `Ordering`.
+`isActive`/`isInactive`, `isReady`/`isPending`, `isBreak`/`isContinue`, and
+`isLt`/`isEq`/`isGt` and friends for `Ordering`.
 
-The guards of `Option`, `Result`, `Latch` and `Poll` (with their `…And` forms)
-narrow two things at once. They narrow the **variant**, so a later `match`
-needs only the remaining arms. They also narrow the **type parameters**, so the
-value stays an `Option` (or `Result`, …) whose emptied slot is `never`: after
-`isNone`, an `Option<number>` is an `Option<never>`, which fits any
-`Option<U>`.
+The guards of `Option`, `Result`, `Latch`, `Poll` and `ControlFlow` (with their
+`…And` forms, where they have them) narrow two things at once. They narrow the
+**variant**, so a later `match` needs only the remaining arms. They also narrow
+the **type parameters**, so the value stays an `Option` (or `Result`, …) whose
+emptied slot is `never`: after `isNone`, an `Option<number>` is an
+`Option<never>`, which fits any `Option<U>`.
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -212,11 +213,12 @@ assertThrows(
 
 ## The types at a glance
 
-| Type          | Variants                   | Use it for                          |
-| ------------- | -------------------------- | ----------------------------------- |
-| `Option<T>`   | `Some(T)`, `None`          | a value that may be absent          |
-| `Result<T,E>` | `Ok(T)`, `Err(E)`          | an operation that can fail          |
-| `Ordering`    | `Less`, `Equal`, `Greater` | the outcome of a comparison         |
-| `Latch<A,I>`  | `Active(A)`, `Inactive(I)` | a two-state value switched in place |
-| `Poll<T>`     | `Ready(T)`, `Pending`      | a value that may not be ready yet   |
-| `Enum<T>`     | any `Split<{ ... }>`       | your own sum types                  |
+| Type               | Variants                   | Use it for                          |
+| ------------------ | -------------------------- | ----------------------------------- |
+| `Option<T>`        | `Some(T)`, `None`          | a value that may be absent          |
+| `Result<T,E>`      | `Ok(T)`, `Err(E)`          | an operation that can fail          |
+| `Ordering`         | `Less`, `Equal`, `Greater` | the outcome of a comparison         |
+| `Latch<A,I>`       | `Active(A)`, `Inactive(I)` | a two-state value switched in place |
+| `Poll<T>`          | `Ready(T)`, `Pending`      | a value that may not be ready yet   |
+| `ControlFlow<B,C>` | `Continue(C)`, `Break(B)`  | going on or exiting early           |
+| `Enum<T>`          | any `Split<{ ... }>`       | your own sum types                  |

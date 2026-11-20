@@ -1,7 +1,8 @@
 # @sekhmet/enum
 
 Rust-style enums for TypeScript: an `Enum` base class whose variants are tuples,
-plus the types built on it: `Option`, `Result`, `Ordering`, `Latch` and `Poll`.
+plus the types built on it: `Option`, `Result`, `Ordering`, `Latch`, `Poll` and
+`ControlFlow`.
 
 Each value is a class instance holding one variant, `[kind]` or `[kind, value]`.
 You narrow it with type guards (`isolate`, `isSome`, `isOk`) or handle every
@@ -27,14 +28,15 @@ bunx jsr add @sekhmet/enum     # bun
 
 The package has no root export: import the feature you need.
 
-| Entrypoint               | What it holds                                |
-| ------------------------ | -------------------------------------------- |
-| `@sekhmet/enum/core`     | `Enum`, `Split`, `Isolate`, `Eliminate`      |
-| `@sekhmet/enum/option`   | `Option`: `Some(value)` or `None()`          |
-| `@sekhmet/enum/result`   | `Result`: `Ok(value)` or `Err(error)`        |
-| `@sekhmet/enum/ordering` | `Ordering`: `Less()`, `Equal()`, `Greater()` |
-| `@sekhmet/enum/latch`    | `Latch`: `Active(a)` or `Inactive(i)`        |
-| `@sekhmet/enum/poll`     | `Poll`: `Ready(value)` or `Pending()`        |
+| Entrypoint                   | What it holds                                      |
+| ---------------------------- | -------------------------------------------------- |
+| `@sekhmet/enum/core`         | `Enum`, `Split`, `Isolate`, `Eliminate`            |
+| `@sekhmet/enum/option`       | `Option`: `Some(value)` or `None()`                |
+| `@sekhmet/enum/result`       | `Result`: `Ok(value)` or `Err(error)`              |
+| `@sekhmet/enum/ordering`     | `Ordering`: `Less()`, `Equal()`, `Greater()`       |
+| `@sekhmet/enum/latch`        | `Latch`: `Active(a)` or `Inactive(i)`              |
+| `@sekhmet/enum/poll`         | `Poll`: `Ready(value)` or `Pending()`              |
+| `@sekhmet/enum/control-flow` | `ControlFlow`: `Continue(value)` or `Break(value)` |
 
 ## Main and mini
 
@@ -123,6 +125,31 @@ assertEquals(
 );
 ```
 
+## ControlFlow
+
+A `ControlFlow` tells the caller whether to go on or exit early, like Rust's
+`std::ops::ControlFlow`: a middleware layer, a visitor or a loop step returns
+`Continue(value)` to go deeper or `Break(value)` to turn back.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { Break, Continue, type ControlFlow } from "@sekhmet/enum/control-flow";
+
+function guard(token: string): ControlFlow<string, { user: string }> {
+	if (token === "") return Break("401 Unauthorized");
+	return Continue({ user: token });
+}
+
+assertEquals(
+	guard("ada")
+		.continueValue()
+		.map((ctx) => ctx.user)
+		.unwrap(),
+	"ada",
+);
+assertEquals(guard("").breakValue().unwrap(), "401 Unauthorized");
+```
+
 ## Ordering
 
 ```ts
@@ -178,8 +205,9 @@ assertEquals(Pending<number>().isPending(), true);
 Like Rust's, some methods exist only for one shape of receiver: a `this`
 parameter makes `flatten` a method of an `Option<Option<T>>` or a
 `Result<Result<T, E>, E>` alone, `transpose` of an `Option<Result<T, E>>` or
-a `Result<Option<T>, E>`, `unzip` of an `Option<[T, U]>`, and
-`mapOk`/`mapErr` of a `Poll<Result<T, E>>`.
+a `Result<Option<T>, E>`, `unzip` of an `Option<[T, U]>`,
+`mapOk`/`mapErr` of a `Poll<Result<T, E>>`, and `intoValue` of a
+`ControlFlow<T, T>`.
 Calling one on any other receiver is a type error.
 
 ```ts
