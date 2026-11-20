@@ -307,11 +307,11 @@ Deno.test("parseSync wraps parse errors", () => {
 	);
 });
 
-Deno.test("parseAsync handles synchronous schemas", async () => {
+Deno.test("wait(parse(…)) gives a Promise of a synchronous schema's outcome", async () => {
 	// Given: a synchronous schema
 	const schema = new Schema({ parse: (input: number) => Ok(input * 2) });
 
-	// When: parsing asynchronously
+	// When: waiting for its parse
 	const result = resume(await wait(parse(schema, { input: 10, panics })));
 
 	// Then: the result should be Ok
@@ -324,13 +324,13 @@ Deno.test("parseAsync handles synchronous schemas", async () => {
 	);
 });
 
-Deno.test("parseAsync handles asynchronous schemas", async () => {
+Deno.test("wait(parse(…)) gives a Promise of an asynchronous schema's outcome", async () => {
 	// Given: an asynchronous schema
 	const schema = new Schema({
 		parse: (input: number) => Promise.resolve(Ok(input * 2)),
 	});
 
-	// When: parsing asynchronously
+	// When: waiting for its parse
 	const result = resume(await wait(parse(schema, { input: 10, panics })));
 
 	// Then: the result should be Ok
@@ -668,7 +668,7 @@ Deno.test("andThen with a promise is async, and parseSync reports it", async () 
 
 	// When: parsing each
 	// Then: both parses are pending, parseSync reports UnexpectedAsyncParse, and
-	// parseAsync resolves the chained result
+	// waiting for the parse gives the chained result
 	assertEquals(unionKinds(parse(fetched, { input: "1", panics })), "Pending");
 	assertEquals(
 		unionKinds(parse(afterAsync, { input: "1", panics })),
