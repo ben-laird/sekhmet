@@ -14,7 +14,12 @@ import {
 	wait,
 } from "@sekhmet/vow/mini";
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import { isSetupTeardownPanic, Resource, type SetupEnd } from "@/mod.ts";
+import {
+	isSetupTeardownPanic,
+	Lifetime,
+	Resource,
+	type SetupEnd,
+} from "@/mod.ts";
 
 type Cause = "done" | "cancelled" | "shutdown";
 
@@ -218,6 +223,30 @@ Deno.test("an init panic whose setup teardown fails too returns both in one Err,
 	]);
 	assertEquals(reported.length, 6);
 	assert(!reported.some((payload) => isSetupTeardownPanic(payload)));
+});
+
+Deno.test("a setup that init adopted elsewhere still ends right after deinit", () => {
+	// Given: an init that wrongly gives setup another owner
+	const { panics } = recordingPanics();
+	const order: string[] = [];
+	const elsewhere = new Lifetime<undefined, SetupEnd<Cause>>({
+		value: undefined,
+		panics,
+	});
+	const misused = new Resource<undefined, number, Cause>({
+		init: (_input, setup) => {
+			elsewhere.adopt({ child: setup });
+			setup.defer((end) => void order.push(`setup released: ${show(end)}`));
+			return 1;
+		},
+		deinit: () => void order.push("deinit"),
+	});
+
+	// When: it's started and ended
+	unwrap(settled(misused.start({ input: undefined, panics }))).end("done");
+
+	// Then: setup was released after deinit, synchronously, all the same
+	assertEquals(order, ["deinit", "setup released: ended: done"]);
 });
 
 Deno.test("stacking resources: an inner resource started in init outlives the outer deinit", () => {

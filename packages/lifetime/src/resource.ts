@@ -6,7 +6,7 @@
  * @module
  */
 
-import { Enum, type Split } from "@sekhmet/enum/core/mini";
+import { Enum, isolate, type Split } from "@sekhmet/enum/core/mini";
 import {
 	Err,
 	isErr,
@@ -78,6 +78,11 @@ export class SetupEnd<out C> extends Enum<Variants<C>> {}
  * or adopts there is released after `deinit`, so a resource built on
  * others (a repository on a connection) tears down in the right order. If
  * `init` panics, `setup` is torn down at once.
+ *
+ * `setup` belongs to the resource: `init` shouldn't adopt it into another
+ * lifetime. If it does, `setup` still ends right after `deinit`, as its
+ * last cleanup; its failures then go to the panic hook only, not into the
+ * lifetime's report, since another owner holds it.
  *
  * @template I The type of the input `init` acquires from
  * @template T The type of the acquired value
@@ -223,10 +228,14 @@ export class Resource<I, T, C> {
 				...(disposeCause === undefined ? {} : { disposeCause }),
 			});
 			// Adopted first, so it sits beneath deinit and outlives it.
-			lifetime.adopt({
+			const adoption = lifetime.adopt({
 				child: setup,
 				fromParent: (cause) => new SetupEnd<C>("Ended", cause),
 			});
+			if (isolate(adoption, "AlreadyOwned")) {
+				// init gave setup another owner: it still ends after deinit.
+				lifetime.defer((cause) => endSetup({ setup, cause }));
+			}
 			lifetime.defer((cause) => this.#deinit(value, cause));
 			return Ok(lifetime);
 		};
@@ -414,4 +423,22 @@ function withSetupFailures<C>({
 		return init;
 	}
 	return new SetupTeardownPanic({ init, teardown: unwrapErr(report).panics });
+}
+
+/**
+ * Ends a `setup` that `init` gave another owner, with `Ended(cause)`. It
+ * settles synchronously when setup's teardown does, so `using` still works.
+ */
+function endSetup<C>({
+	setup,
+	cause,
+}: {
+	readonly setup: Lifetime<undefined, SetupEnd<C>>;
+	readonly cause: C;
+}): void | Promise<void> {
+	const ended = setup.end(new SetupEnd<C>("Ended", cause));
+	if (isolate(ended.poll(), "Ready")) {
+		return;
+	}
+	return ended.wait().then(() => {});
 }
