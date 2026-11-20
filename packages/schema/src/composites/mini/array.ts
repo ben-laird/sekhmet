@@ -14,7 +14,7 @@ import {
 	type Issues,
 } from "@/src/core/mini/issues.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";
-import type { Schema } from "@/src/core/mini/schema.ts";
+import type { ParseOptions, Schema } from "@/src/core/mini/schema.ts";
 import { viewed } from "@/src/core/mini/view.ts";
 import {
 	type Child,
@@ -152,16 +152,21 @@ function lengthIssue({
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Err, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { Err, Ok } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { array } from "@sekhmet/schema/composites/mini";
- * import { entries, parseAsync, Schema } from "@sekhmet/schema/core/mini";
+ * import { entries, parse, Schema } from "@sekhmet/schema/core/mini";
+ * import { wait } from "@sekhmet/vow";
  *
  * const positive = new Schema({
  * 	parse: (input: unknown) => {
  * 		return typeof input === "number" && input > 0 ? Ok(input) : Err("not positive");
  * 	},
  * });
- * const found = unwrapErr(await parseAsync(array({ item: positive }), [1, -2, 3, 0]));
+ * const panics = definePanicRuntime();
+ * const rows = array({ item: positive });
+ * const found = unwrapErr(await wait(parse(rows, { input: [1, -2, 3, 0], panics })));
  *
  * assertEquals(entries(found).map(({ path }) => path), [[1], [3]]);
  * ```
@@ -169,13 +174,19 @@ function lengthIssue({
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { array } from "@sekhmet/schema/composites/mini";
- * import { entries, formatIssue, parseAsync, Schema } from "@sekhmet/schema/core/mini";
+ * import { entries, formatIssue, parse, Schema } from "@sekhmet/schema/core/mini";
+ * import { wait } from "@sekhmet/vow";
  *
  * const anything = new Schema({ parse: (input: unknown) => Ok(input) });
  * const pair = array({ item: anything, minItems: 1, maxItems: 2 });
- * const [{ error }] = entries(unwrapErr(await parseAsync(pair, [1, 2, 3])));
+ * const panics = definePanicRuntime();
+ * const [{ error }] = entries(
+ * 	unwrapErr(await wait(parse(pair, { input: [1, 2, 3], panics }))),
+ * );
  *
  * assertEquals(formatIssue(error), "Too big: expected array to have <= 2 items");
  * ```
@@ -189,12 +200,12 @@ export function array(options: {
 	readonly maxItems?: number;
 }): Schema<unknown, unknown, Issues<unknown>> & ArrayView<Child> {
 	const { item, minItems, maxItems } = options;
-	const parse = (input: unknown): Parsed => {
+	const parse = ({ input, panics }: ParseOptions<unknown>): Parsed => {
 		if (!isArray(input)) return invalidType({ input, expected: "array" });
 
 		return compose({
 			pending: input.map((value, index) => {
-				return run({ key: index, child: item, value });
+				return run({ key: index, child: item, value, panics });
 			}),
 			extra: lengthIssue({ input, minItems, maxItems }),
 			build: (outputs) => outputs.map(([, output]) => output),
@@ -203,7 +214,7 @@ export function array(options: {
 
 	return viewed({
 		init: {
-			parse,
+			run: parse,
 			node: new SchemaNode("Array", { item, minItems, maxItems }),
 		},
 		view: { item },

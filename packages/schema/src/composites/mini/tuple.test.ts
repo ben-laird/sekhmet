@@ -1,5 +1,8 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { resume } from "@sekhmet/panic/outcome/mini";
+import { wait } from "@sekhmet/vow";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
@@ -13,12 +16,13 @@ import {
 	type Input,
 	type Output,
 	parse,
-	parseAsync,
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { optional } from "./modifiers.ts";
 import { tuple } from "./tuple.ts";
+
+const panics = definePanicRuntime();
 
 const text: Schema<unknown, string, "not text"> = new Schema({
 	parse: (input) => {
@@ -54,7 +58,9 @@ Deno.test("tuple reports every failing element at its index", async () => {
 	const pair = tuple([text, count]);
 
 	// When: parsing an array where both elements are wrong
-	const issues = unwrapErr(await parseAsync(pair, [1, "x"]));
+	const issues = unwrapErr(
+		resume(await wait(parse(pair, { input: [1, "x"], panics }))),
+	);
 
 	// Then: each issue is at its index
 	assertEquals(entries(issues), [
@@ -69,7 +75,9 @@ Deno.test("tuple parses missing elements as undefined", async () => {
 
 	// When: parsing a one-element array, and an empty one
 	const parsed = unwrap(parseSync(pair, ["apples"]));
-	const issues = unwrapErr(await parseAsync(pair, []));
+	const issues = unwrapErr(
+		resume(await wait(parse(pair, { input: [], panics }))),
+	);
 
 	// Then: the optional element is undefined; the required one fails
 	assertEquals(parsed, ["apples", undefined]);
@@ -82,7 +90,9 @@ Deno.test("tuple rejects extra elements with TooBig, after element issues", asyn
 
 	// When: parsing a wrong first element plus an extra one
 	const input = [1, 2];
-	const issues = unwrapErr(await parseAsync(single, input));
+	const issues = unwrapErr(
+		resume(await wait(parse(single, { input, panics }))),
+	);
 
 	// Then: the element issue comes first, then TooBig at the root
 	assertEquals(entries(issues), [
@@ -99,7 +109,9 @@ Deno.test("tuple rejects non-arrays with InvalidType at the root", async () => {
 	const single = tuple([text]);
 
 	// When: parsing a string
-	const issues = unwrapErr(await parseAsync(single, "apples"));
+	const issues = unwrapErr(
+		resume(await wait(parse(single, { input: "apples", panics }))),
+	);
 
 	// Then: one InvalidType issue is reported at the root
 	assertEquals(entries(issues), [
@@ -107,16 +119,19 @@ Deno.test("tuple rejects non-arrays with InvalidType at the root", async () => {
 	]);
 });
 
-Deno.test("tuple is Async when any element is", async () => {
+Deno.test("tuple is pending when any element is", async () => {
 	// Given: a tuple with an async element
 	const pair = tuple([text, laterCount]);
 
 	// When: parsing it
-	const kind = unionKinds(parse(pair, ["a", 1]));
+	const kind = unionKinds(parse(pair, { input: ["a", 1], panics }));
 
-	// Then: the parse is Async and still succeeds
-	assertEquals(kind, "Async");
-	assertEquals(unwrap(await parseAsync(pair, ["a", 1])), ["a", 1]);
+	// Then: the parse is pending and still succeeds
+	assertEquals(kind, "Pending");
+	assertEquals(
+		unwrap(resume(await wait(parse(pair, { input: ["a", 1], panics })))),
+		["a", 1],
+	);
 });
 
 Deno.test("tuple infers its input, output and error types", () => {

@@ -9,19 +9,24 @@ The ideas behind `@sekhmet/schema`, and why it is built the way it is. The
 [decision record](https://github.com/ben-laird/sekhmet/blob/main/docs/decisions/schema.md)
 keeps the history of each decision, including the alternatives it replaced.
 
-## A schema is a parser to a `Result`
+## A schema is a parser to an `Outcome`
 
-A `Schema<I, O, E>` turns an input `I` into either an output `O` or an error
-`E`, returned as a `Result<O, E>`. All three are typed. Most validation
-libraries type only the output: they take `unknown` and throw, or return a
-failure whose shape is fixed by the library.
+A `Schema<I, O, E>` turns an input `I` into an output `O` or an error `E`.
+`parse` runs it under a panic runtime from `@sekhmet/panic` and returns a
+`Vow` of an `Outcome<O, E>`: `Ok(output)`, `Err(error)`, or `Panicked` with
+what your code threw. The input, the output and the error are all typed.
+Most validation libraries type only the output: they take `unknown` and
+throw, or return a failure whose shape is fixed by the library.
 
 Typing the error follows from treating failure as an ordinary outcome. Bad
 input is the normal case for a schema, not an exceptional one, so it belongs
 in the return type, where the compiler makes the caller deal with it, rather
 than in a `throw` that nothing in the signature mentions. In this package a
-throw means a bug: a callback that throws, or an async schema used where only
-a synchronous answer will do, panics.
+throw means a bug: a parser, refinement or transform that throws, or an async
+one whose promise rejects, panics. `parse` catches the panic at its boundary,
+reports it to the runtime's hook, and settles as `Panicked`, a channel of its
+own: handling the expected `Err` (with `mapErr` or `orElse`) can never
+swallow a bug.
 
 Typing the input lets schemas chain. A schema need not start from `unknown`:
 one can parse JSON text into `unknown`, and `pipe` hands its output to the
@@ -30,8 +35,13 @@ produces.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrap } from "@sekhmet/panic/outcome/mini";
 import { Schema } from "@sekhmet/schema/core";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 // A Schema<string, number, string>, written by hand.
 const digits = new Schema({
@@ -40,7 +50,7 @@ const digits = new Schema({
 	},
 });
 
-assertEquals(unwrap(await digits.parseAsync("42")), 42);
+assertEquals(unwrap(await wait(digits.parse({ input: "42", panics }))), 42);
 ```
 
 Because the input and the error are typed, a sekhmet schema says more than a
@@ -138,30 +148,37 @@ doesn't take on the Standard Schema interface.
 
 ## Sync and async
 
-A schema's parser may return a `Result` or a promise of one. `parse` reports
-which as a `Potential`: `Sync` when the parse finished at once, `Async` when
-it returned a promise. A composite is `Sync` when every child's parse is, so
-an object of built-in schemas never pays for a promise.
+A schema's parser may return a `Result` or a promise of one. Either way,
+`parse` returns a `Vow`, a promise-like value from `@sekhmet/vow` that
+resolves synchronously when it can: it is already `Resolved` when every step
+of the parse finished at once, and `Pending` until the last promise settles
+otherwise. A composite settles synchronously when every child's parse does,
+so an object of built-in schemas never pays for a promise.
 
 ```ts
 import { assertEquals } from "@std/assert";
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Ok } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { parse, Schema } from "@sekhmet/schema/core/mini";
+
+const panics = definePanicRuntime();
 
 const now = new Schema({ parse: (input: string) => Ok(input) });
 const later = new Schema({
 	parse: (input: string) => Promise.resolve(Ok(input)),
 });
 
-assertEquals(unionKinds(parse(now, "a")), "Sync");
-assertEquals(unionKinds(parse(later, "a")), "Async");
+assertEquals(unionKinds(parse(now, { input: "a", panics })), "Resolved");
+assertEquals(unionKinds(parse(later, { input: "a", panics })), "Pending");
 ```
 
 Most libraries choose for you: everything is a promise, or async schemas
-throw when parsed synchronously. Here the caller chooses. `parseAsync` works
-for every schema. `parseSync` answers at once, and reports an async schema as
-an `UnexpectedAsyncParse` error rather than blocking or guessing. A type guard
+throw when parsed synchronously. Here the caller chooses. `parse` works for
+every schema: read a settled vow at once with `value`, or `wait` for a
+`Promise`. `parseSync` answers at once, and reports an async schema as an
+`UnexpectedAsyncParse` error rather than blocking or guessing; it takes no
+panic runtime, so a throw in your code unwinds to its caller. A type guard
 can't return an error, so `is` panics on an async schema instead.
 
 ## Schemas describe themselves

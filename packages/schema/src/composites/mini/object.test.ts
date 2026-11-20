@@ -1,6 +1,9 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, isOk, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { resume } from "@sekhmet/panic/outcome/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
+import { wait } from "@sekhmet/vow";
 import {
 	assert,
 	assertEquals,
@@ -20,13 +23,14 @@ import {
 	map,
 	type Output,
 	parse,
-	parseAsync,
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { viewed } from "@/src/core/mini/view.ts";
 import { nullable, optional } from "./modifiers.ts";
 import { object, type UnknownKeys } from "./object.ts";
+
+const panics = definePanicRuntime();
 
 const text: Schema<unknown, string, "not text"> = new Schema({
 	parse: (input) => {
@@ -62,7 +66,9 @@ Deno.test("object reports every failing field at its path", async () => {
 	const user = object({ shape: { name: text, age: count } });
 
 	// When: parsing an object where both fields are wrong
-	const found = unwrapErr(await parseAsync(user, { name: 1, age: "x" }));
+	const found = unwrapErr(
+		resume(await wait(parse(user, { input: { name: 1, age: "x" }, panics }))),
+	);
 
 	// Then: each failure is located under its key, in shape order
 	assertEquals(entries(found), [
@@ -78,7 +84,9 @@ Deno.test("object flattens nested composites' issues into one path", async () =>
 	});
 
 	// When: parsing a user whose nested zip is wrong
-	const found = unwrapErr(await parseAsync(user, { address: { zip: 1 } }));
+	const found = unwrapErr(
+		resume(await wait(parse(user, { input: { address: { zip: 1 } }, panics }))),
+	);
 
 	// Then: the nested issue's path runs from the root
 	assertEquals(entries(found), [
@@ -93,7 +101,9 @@ Deno.test("object rejects non-objects with InvalidType at the root", async (t) =
 	for (const input of [null, [], "Ada", 1, undefined]) {
 		await t.step(`${JSON.stringify(input) ?? "undefined"}`, async () => {
 			// When: parsing a value that isn't a plain object
-			const found = unwrapErr(await parseAsync(user, input));
+			const found = unwrapErr(
+				resume(await wait(parse(user, { input, panics }))),
+			);
 
 			// Then: one InvalidType issue is reported at the root
 			assertEquals(entries(found), [
@@ -126,9 +136,15 @@ Deno.test("each field kind handles a missing key and a key present as undefined"
 			async () => {
 				// When: the required key is missing, and when it is undefined
 				const { name: _, ...withoutName } = full;
-				const missing = unwrapErr(await parseAsync(person, withoutName));
+				const missing = unwrapErr(
+					resume(await wait(parse(person, { input: withoutName, panics }))),
+				);
 				const blank = unwrapErr(
-					await parseAsync(person, { ...full, name: undefined }),
+					resume(
+						await wait(
+							parse(person, { input: { ...full, name: undefined }, panics }),
+						),
+					),
 				);
 
 				// Then: both fail with the schema's issue at the key
@@ -142,7 +158,9 @@ Deno.test("each field kind handles a missing key and a key present as undefined"
 			async () => {
 				// When: the .optional() field's key is missing, and when it is undefined
 				const { middle: _, ...withoutMiddle } = full;
-				const missing = unwrapErr(await parseAsync(person, withoutMiddle));
+				const missing = unwrapErr(
+					resume(await wait(parse(person, { input: withoutMiddle, panics }))),
+				);
 				const blank = unwrap(parseSync(person, { ...full, middle: undefined }));
 
 				// Then: missing fails with the inner schema's issue; undefined is kept
@@ -161,7 +179,14 @@ Deno.test("each field kind handles a missing key and a key present as undefined"
 				const { nickname: _, ...withoutNickname } = full;
 				const missing = unwrap(parseSync(person, withoutNickname));
 				const blank = unwrapErr(
-					await parseAsync(person, { ...full, nickname: undefined }),
+					resume(
+						await wait(
+							parse(person, {
+								input: { ...full, nickname: undefined },
+								panics,
+							}),
+						),
+					),
 				);
 
 				// Then: missing is left out of the output; undefined fails at the key
@@ -201,8 +226,8 @@ Deno.test('an explicit key: "required" entry is the same as a bare schema', asyn
 		parseSync(bare, { name: "Ada" }),
 	);
 	assertEquals(
-		entries(unwrapErr(await parseAsync(entry, {}))),
-		entries(unwrapErr(await parseAsync(bare, {}))),
+		entries(unwrapErr(resume(await wait(parse(entry, { input: {}, panics }))))),
+		entries(unwrapErr(resume(await wait(parse(bare, { input: {}, panics }))))),
 	);
 	assertType<IsExact<Output<typeof entry>, Output<typeof bare>>>(true);
 });
@@ -212,7 +237,9 @@ Deno.test("a missing required key is checked without its .optional(), through .n
 	const user = object({ shape: { middle: nullable(optional(text)) } });
 
 	// When: the key is missing, and when it is null
-	const missing = unwrapErr(await parseAsync(user, {}));
+	const missing = unwrapErr(
+		resume(await wait(parse(user, { input: {}, panics }))),
+	);
 	const nulled = unwrap(parseSync(user, { middle: null }));
 
 	// Then: the missing key reports the inner issue, and null still passes
@@ -243,7 +270,11 @@ Deno.test('unknownKeys: "strict" reports each undeclared key as UnknownKey after
 
 	// When: parsing an object with a bad field and two extra keys
 	const found = unwrapErr(
-		await parseAsync(user, { name: 1, admin: true, role: "root" }),
+		resume(
+			await wait(
+				parse(user, { input: { name: 1, admin: true, role: "root" }, panics }),
+			),
+		),
 	);
 
 	// Then: the field issue comes first, then one UnknownKey per extra key
@@ -281,22 +312,33 @@ Deno.test("passthrough can't set the output's prototype through __proto__", () =
 	assertEquals(Object.hasOwn(parsed, "__proto__"), true);
 });
 
-Deno.test("object stays Sync when every field is Sync, and is Async otherwise", async () => {
+Deno.test("object stays resolved when every field is resolved, and is pending otherwise", async () => {
 	// Given: a sync object and one mixing sync and async fields
 	const now = object({ shape: { name: text, age: count } });
 	const mixed = object({ shape: { name: text, age: laterCount } });
 
 	// When: parsing with each
-	const nowKind = unionKinds(parse(now, { name: "Ada", age: 36 }));
-	const mixedKind = unionKinds(parse(mixed, { name: "Ada", age: 36 }));
+	const nowKind = unionKinds(
+		parse(now, { input: { name: "Ada", age: 36 }, panics }),
+	);
+	const mixedKind = unionKinds(
+		parse(mixed, { input: { name: "Ada", age: 36 }, panics }),
+	);
 
-	// Then: only the mixed object is Async, and it still parses
-	assertEquals(nowKind, "Sync");
-	assertEquals(mixedKind, "Async");
-	assertEquals(unwrap(await parseAsync(mixed, { name: "Ada", age: 36 })), {
-		name: "Ada",
-		age: 36,
-	});
+	// Then: only the mixed object is pending, and it still parses
+	assertEquals(nowKind, "Resolved");
+	assertEquals(mixedKind, "Pending");
+	assertEquals(
+		unwrap(
+			resume(
+				await wait(parse(mixed, { input: { name: "Ada", age: 36 }, panics })),
+			),
+		),
+		{
+			name: "Ada",
+			age: 36,
+		},
+	);
 });
 
 Deno.test("an async object still collects every issue", async () => {
@@ -304,7 +346,9 @@ Deno.test("an async object still collects every issue", async () => {
 	const mixed = object({ shape: { name: text, age: laterCount } });
 
 	// When: parsing an input where both fields fail
-	const found = unwrapErr(await parseAsync(mixed, { name: 1, age: "x" }));
+	const found = unwrapErr(
+		resume(await wait(parse(mixed, { input: { name: 1, age: "x" }, panics }))),
+	);
 
 	// Then: both issues are reported, in shape order
 	assertEquals(entries(found), [
@@ -401,7 +445,7 @@ Deno.test("a viewed schema with a `key` of its own is a required key, not a fiel
 	// Given: a schema whose view has `key: "optional"`, as a
 	// discriminatedUnion keyed "optional" has
 	const keyed = viewed({
-		init: { parse: getStructParams(text).parse },
+		init: { run: getStructParams(text).run },
 		view: { key: "optional" },
 	});
 

@@ -19,6 +19,7 @@ import type {
 	ErrorOf,
 	Input,
 	Output,
+	ParseOptions,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { viewed } from "@/src/core/mini/view.ts";
@@ -176,12 +177,12 @@ export function tuple(
 ): Schema<unknown, unknown, Issues<unknown>> & TupleView<readonly Child[]> {
 	return viewed({
 		init: {
-			parse: (input: unknown): Parsed => {
+			run: ({ input, panics }: ParseOptions<unknown>): Parsed => {
 				if (!isArray(input)) return invalidType({ input, expected: "array" });
 
 				return compose({
 					pending: items.map((child, index) => {
-						return run({ key: index, child, value: input[index] });
+						return run({ key: index, child, value: input[index], panics });
 					}),
 					extra: tooLong({ input, maximum: items.length }),
 					build: (outputs) => outputs.map(([, output]) => output),

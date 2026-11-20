@@ -1,5 +1,8 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { resume } from "@sekhmet/panic/outcome/mini";
+import { wait } from "@sekhmet/vow";
 import {
 	assertEquals,
 	assertNotStrictEquals,
@@ -12,11 +15,12 @@ import {
 	type Input,
 	type Output,
 	parse,
-	parseAsync,
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { type ReadonlyOutput, readonly } from "./readonly.ts";
+
+const panics = definePanicRuntime();
 
 /** Passes its input through, typed as `T`: the caller's value is the output. */
 function identity<T>(): Schema<T, T, never> {
@@ -106,7 +110,7 @@ Deno.test("readonly passes primitives, Maps, Dates and class instances through",
 	assertEquals(Object.isFrozen(map), false);
 });
 
-Deno.test("readonly keeps failures and the parse's Potential", async () => {
+Deno.test("readonly keeps failures and the parse's timing", async () => {
 	// Given: a readonly sync schema that fails, and a readonly async one
 	const failing = readonly(new Schema({ parse: (_: unknown) => Err("nope") }));
 	const later = readonly(
@@ -114,13 +118,17 @@ Deno.test("readonly keeps failures and the parse's Potential", async () => {
 	);
 
 	// When: parsing with each
-	const found = unwrapErr(await parseAsync(failing, 1));
-	const parsed = unwrap(await parseAsync(later, [1]));
+	const found = unwrapErr(
+		resume(await wait(parse(failing, { input: 1, panics }))),
+	);
+	const parsed = unwrap(
+		resume(await wait(parse(later, { input: [1], panics }))),
+	);
 
 	// Then: the failure is unchanged, and the async output is frozen too
 	assertEquals(found, "nope");
-	assertEquals(unionKinds(parse(failing, 1)), "Sync");
-	assertEquals(unionKinds(parse(later, [1])), "Async");
+	assertEquals(unionKinds(parse(failing, { input: 1, panics })), "Resolved");
+	assertEquals(unionKinds(parse(later, { input: [1], panics })), "Pending");
 	assertEquals(Object.isFrozen(parsed), true);
 });
 

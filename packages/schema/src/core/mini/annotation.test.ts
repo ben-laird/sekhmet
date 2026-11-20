@@ -29,10 +29,7 @@ Deno.test("annotate keeps the parser and node and adds the annotations", () => {
 
 	// Then: it parses as before, with the same node, and has the annotations
 	assertEquals(unwrapResult(parseSync(labelled, "Ada")), "Ada");
-	assertStrictEquals(
-		getStructParams(labelled).parse,
-		getStructParams(text).parse,
-	);
+	assertStrictEquals(getStructParams(labelled).run, getStructParams(text).run);
 	assertStrictEquals(nodeOf(labelled), nodeOf(text));
 	assertEquals(unwrap(annotation({ schema: labelled, key: label })), "Name");
 	assertEquals(unwrap(annotation({ schema: labelled, key: order })), 1);
@@ -191,10 +188,10 @@ Deno.test("annotate panics on a subclass that adds prototype members", async (t)
 		}
 	}
 	class WithOverride extends MainSchema<string, string, never> {
-		override parseAsync(
+		override parseSync(
 			input: string,
-		): ReturnType<MainSchema<string, string, never>["parseAsync"]> {
-			return super.parseAsync(input);
+		): ReturnType<MainSchema<string, string, never>["parseSync"]> {
+			return super.parseSync(input);
 		}
 	}
 	const parse = (input: string) => Ok(input);

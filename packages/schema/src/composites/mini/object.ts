@@ -17,6 +17,7 @@ import {
 	type ErrorOf,
 	type Input,
 	type Output,
+	type ParseOptions,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { viewed } from "@/src/core/mini/view.ts";
@@ -383,9 +384,12 @@ function planOf([key, entry]: [string, Entry]): Plan {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Err, Ok, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { Err, Ok } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { object } from "@sekhmet/schema/composites/mini";
- * import { entries, parseAsync, Schema } from "@sekhmet/schema/core/mini";
+ * import { entries, parse, Schema } from "@sekhmet/schema/core/mini";
+ * import { wait } from "@sekhmet/vow";
  *
  * const text = new Schema({
  * 	parse: (input: unknown) => {
@@ -396,7 +400,9 @@ function planOf([key, entry]: [string, Entry]): Plan {
  * 	shape: { name: text, address: object({ shape: { zip: text } }) },
  * });
  *
- * const found = unwrapErr(await parseAsync(user, { name: 1, address: { zip: 2 } }));
+ * const panics = definePanicRuntime();
+ * const input = { name: 1, address: { zip: 2 } };
+ * const found = unwrapErr(await wait(parse(user, { input, panics })));
  * assertEquals(
  * 	entries(found).map(({ path }) => path),
  * 	[["name"], ["address", "zip"]],
@@ -430,10 +436,13 @@ function planOf([key, entry]: [string, Entry]): Plan {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { object } from "@sekhmet/schema/composites/mini";
- * import { entries, parseAsync, parseSync } from "@sekhmet/schema/core/mini";
+ * import { entries, parse, parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { wait } from "@sekhmet/vow";
  *
  * const shape = { name: string() };
  * const strict = object({ shape, unknownKeys: "strict" });
@@ -442,7 +451,8 @@ function planOf([key, entry]: [string, Entry]): Plan {
  *
  * assertEquals(unwrap(parseSync(object({ shape }), input)), { name: "Ada" });
  * assertEquals(unwrap(parseSync(loose, input)), input);
- * const [issue] = entries(unwrapErr(await parseAsync(strict, input)));
+ * const panics = definePanicRuntime();
+ * const [issue] = entries(unwrapErr(await wait(parse(strict, { input, panics }))));
  * assertEquals(issue.path, ["admin"]);
  * ```
  */
@@ -456,7 +466,7 @@ export function object(options: {
 	const { shape } = options;
 	const unknownKeys = options.unknownKeys ?? "strip";
 	const plans = Object.entries(shape).map(planOf);
-	const parse = (input: unknown): Parsed => {
+	const parse = ({ input, panics }: ParseOptions<unknown>): Parsed => {
 		if (!isRecord(input)) return invalidType({ input, expected: "object" });
 
 		const undeclared = Object.keys(input).filter(
@@ -464,12 +474,12 @@ export function object(options: {
 		);
 		const pending = plans.flatMap(({ key, schema, missing }): Pending[] => {
 			if (Object.hasOwn(input, key)) {
-				return [run({ key, child: schema, value: input[key] })];
+				return [run({ key, child: schema, value: input[key], panics })];
 			}
 
 			if (missing === undefined) return [];
 
-			return [run({ key, child: missing, value: undefined })];
+			return [run({ key, child: missing, value: undefined, panics })];
 		});
 
 		const reported = unknownKeys === "strict" ? undeclared : [];
@@ -489,7 +499,7 @@ export function object(options: {
 
 	return viewed({
 		init: {
-			parse,
+			run: parse,
 			node: new SchemaNode("Object", {
 				shape,
 				unknownKeys: options.unknownKeys,

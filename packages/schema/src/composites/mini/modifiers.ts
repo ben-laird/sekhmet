@@ -9,7 +9,12 @@
 import { Ok } from "@sekhmet/enum/result/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { SchemaNode } from "@/src/core/mini/node.ts";
-import type { Schema } from "@/src/core/mini/schema.ts";
+import { settled } from "@/src/core/mini/parsing.ts";
+import {
+	type ParseOptions,
+	parse,
+	type Schema,
+} from "@/src/core/mini/schema.ts";
 import { viewed, type WrapperView } from "@/src/core/mini/view.ts";
 import { acceptNull, type Child, type ChildParsed } from "./collect.ts";
 
@@ -70,14 +75,12 @@ export function optional<I, O, E, S extends Schema<I, O, E>>(
 	self: S & Schema<I, O, E>,
 ): Schema<I | undefined, O | undefined, E> & WrapperView<S>;
 export function optional(self: Child): Child & WrapperView<Child> {
-	const parser = getStructParams(self).parse;
-
 	return viewed({
 		init: {
-			parse: (input: unknown): ChildParsed => {
-				if (input === undefined) return Ok(undefined);
+			run: (options: ParseOptions<unknown>): ChildParsed => {
+				if (options.input === undefined) return settled(Ok(undefined));
 
-				return parser(input);
+				return parse(self, options);
 			},
 			node: new SchemaNode("Optional", { inner: self }),
 		},
@@ -156,7 +159,7 @@ export function lazy<I, O, E, S extends Schema<I, O, E>>(
 export function lazy(getter: () => Child): Child & LazyView<Child> {
 	return viewed({
 		init: {
-			parse: (input: unknown) => getStructParams(getter()).parse(input),
+			run: (options: ParseOptions<unknown>) => parse(getter(), options),
 			node: new SchemaNode("Lazy", { getter }),
 		},
 		view: { getter },

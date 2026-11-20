@@ -251,14 +251,16 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 			privateType,
 		);
 	}),
+	...["Outcome", "Vow"].map((privateType) => {
+		return privateTypeRef(
+			"schema/src/core/main/mod.ts",
+			"Schema.prototype.parse",
+			privateType,
+		);
+	}),
 	privateTypeRef(
 		"schema/src/core/main/mod.ts",
-		"Schema.prototype.parse",
-		"Result",
-	),
-	privateTypeRef(
-		"schema/src/core/main/mod.ts",
-		"Schema.prototype.parseAsync",
+		"Schema.prototype.parseSync",
 		"Result",
 	),
 	privateTypeRef(
@@ -271,15 +273,29 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("schema/src/core/mini/issues.ts", "Issues", "Struct"),
 	privateTypeRef("schema/src/core/mini/node.ts", "SchemaNode", "Enum"),
 	privateTypeRef("schema/src/core/mini/node.ts", "customData", "Option"),
-	privateTypeRef(
-		"schema/src/core/mini/potential.ts",
-		"PotentialVariants",
-		"Split",
-	),
-	privateTypeRef("schema/src/core/mini/potential.ts", "Potential", "Enum"),
 	privateTypeRef("schema/src/core/mini/schema.ts", "Parser", "Result"),
 	privateTypeRef("schema/src/core/mini/schema.ts", "Schema", "Struct"),
-	privateTypeRef("schema/src/core/mini/schema.ts", "parse", "Result"),
+	privateTypeRef(
+		"schema/src/core/mini/schema.ts",
+		"PanicBoundary",
+		"PanicRuntime",
+	),
+	...["parse", "Runner"].flatMap((publicType) => {
+		return ["Outcome", "Vow"].map((privateType) => {
+			return privateTypeRef(
+				"schema/src/core/mini/schema.ts",
+				publicType,
+				privateType,
+			);
+		});
+	}),
+	...["ToStandardSchema", "ToStandardOptions"].map((options) => {
+		return privateTypeRef(
+			"schema/src/standard/mini/to-standard.ts",
+			`${options}["panics"]`,
+			"PanicRuntime",
+		);
+	}),
 	privateTypeRef(
 		"schema/src/core/mini/schema.ts",
 		"ParseSyncErrorVariants",
@@ -287,7 +303,6 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	),
 	privateTypeRef("schema/src/core/mini/schema.ts", "ParseSyncError", "Enum"),
 	privateTypeRef("schema/src/core/mini/schema.ts", "parseSync", "Result"),
-	privateTypeRef("schema/src/core/mini/schema.ts", "parseAsync", "Result"),
 	privateTypeRef("vow/src/mini/accessors.ts", "value", "Option"),
 	privateTypeRef("vow/src/mini/core.ts", "Variants", "Split"),
 	privateTypeRef("vow/src/mini/core.ts", "Vow", "Enum"),

@@ -7,7 +7,9 @@
  */
 
 import { match } from "@sekhmet/enum/core/mini/exit";
-import type { Result } from "@sekhmet/enum/result/mini";
+import type { PanicRuntime } from "@sekhmet/panic/mini/runtime";
+import type { Outcome } from "@sekhmet/panic/outcome/mini/core";
+import { wait } from "@sekhmet/vow/mini/impl";
 import {
 	formatIssue,
 	isSchemaIssue,
@@ -28,13 +30,20 @@ import type {
 
 /**
  * What {@linkcode toStandard} exposes: a schema whose input is `unknown`,
- * and whose errors are all `SchemaIssue`s.
+ * and whose errors are all `SchemaIssue`s, with the panic runtime its
+ * parses run under.
  *
  * @template O The schema's output type
  */
 export interface ToStandardSchema<O> {
 	/** The schema to expose. */
 	readonly schema: Schema<unknown, O, SchemaIssue | Issues<SchemaIssue>>;
+	/**
+	 * The panic runtime each parse runs under. A panic is reported to its
+	 * hook, then resumed: `validate` throws (or its promise rejects with)
+	 * the payload.
+	 */
+	readonly panics: PanicRuntime;
 }
 
 /**
@@ -48,6 +57,12 @@ export interface ToStandardOptions<O, E> {
 	/** The schema to expose. */
 	readonly schema: Schema<unknown, O, E>;
 	/**
+	 * The panic runtime each parse runs under. A panic is reported to its
+	 * hook, then resumed: `validate` throws (or its promise rejects with)
+	 * the payload.
+	 */
+	readonly panics: PanicRuntime;
+	/**
 	 * Turns one error into a Standard issue: a message, or a message and a
 	 * path. An `Issues` error is converted entry by entry, and each entry's
 	 * path is prepended to the path `toIssue` returns.
@@ -59,20 +74,24 @@ export interface ToStandardOptions<O, E> {
  * Exposes a schema as a Standard Schema v1, for tools that accept one.
  *
  * The schema's input must be `unknown`, as Standard Schema's `validate` takes
- * any value. `validate` returns its result synchronously when the parse is
- * `Sync`, and a `Promise` when it is `Async`. A `SchemaIssue` error becomes
+ * any value. `validate` returns its result synchronously when the parse
+ * settled synchronously, and a `Promise` (through `wait`) otherwise. A
+ * panic in the parse is reported to `panics`' hook and resumed: `validate`
+ * throws the payload, or its promise rejects with it. A `SchemaIssue` error becomes
  * one Standard issue with `formatIssue`'s message, and an
  * `Issues<SchemaIssue>` one issue per entry, with the entry's path. Any other
  * error needs a `toIssue` option, and the types require it.
  *
  * @template O The schema's output type
- * @param options The schema to expose
+ * @param options The schema to expose, and the panic runtime it parses
+ *   under
  * @returns A Standard Schema that validates with the schema
  *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { Err, Ok } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  * import { InvalidType, Schema } from "@sekhmet/schema/core/mini";
  * import { toStandard } from "@sekhmet/schema/standard/mini";
  *
@@ -81,7 +100,7 @@ export interface ToStandardOptions<O, E> {
  * 		return typeof input === "string" ? Ok(input) : Err(InvalidType({ input, expected: "string" }));
  * 	},
  * });
- * const standard = toStandard({ schema: text });
+ * const standard = toStandard({ schema: text, panics: definePanicRuntime() });
  *
  * assertEquals(standard["~standard"].validate("a"), { value: "a" });
  * assertEquals(standard["~standard"].validate(1), {
@@ -98,14 +117,15 @@ export function toStandard<O>(
  *
  * @template O The schema's output type
  * @template E The schema's error type
- * @param options The schema to expose, and how to turn each error into a
- *   Standard issue
+ * @param options The schema to expose, the panic runtime it parses under,
+ *   and how to turn each error into a Standard issue
  * @returns A Standard Schema that validates with the schema
  *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { Err, Ok } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  * import { Schema } from "@sekhmet/schema/core/mini";
  * import { toStandard } from "@sekhmet/schema/standard/mini";
  *
@@ -116,6 +136,7 @@ export function toStandard<O>(
  * });
  * const standard = toStandard({
  * 	schema: even,
+ * 	panics: definePanicRuntime(),
  * 	toIssue: ({ code }) => `Rejected: ${code}`,
  * });
  *
@@ -129,31 +150,37 @@ export function toStandard<O, E>(
 ): StandardSchemaV1<unknown, O>;
 export function toStandard<O, E>(options: {
 	readonly schema: Schema<unknown, O, E>;
+	readonly panics: PanicRuntime;
 	readonly toIssue?: (error: Flatten<E>) => string | StandardIssue;
 }): StandardSchemaV1<unknown, O> {
-	const { schema } = options;
+	const { schema, panics } = options;
 	const toIssue = options.toIssue ?? formatSchemaIssue;
-	const toStandardResult = (result: Result<O, E>): StandardResult<O> =>
-		match(result)<StandardResult<O>>({
+	const toStandardResult = (
+		outcome: Outcome<O, E, unknown>,
+	): StandardResult<O> => {
+		return match(outcome)<StandardResult<O>>({
 			Ok: (value) => ({ value }),
 			Err: (error) => ({
-				issues: entries(toIssues(error)).map(({ path, error }) =>
-					locateIssue({ path, issue: toIssue(error) }),
-				),
+				issues: entries(toIssues(error)).map(({ path, error }) => {
+					return locateIssue({ path, issue: toIssue(error) });
+				}),
 			}),
+			Panicked: (payload) => panics.resumeUnwind(payload),
 		});
+	};
 
 	return {
 		"~standard": {
 			version: 1,
 			vendor: "sekhmet",
-			validate: (value) =>
-				match(parse(schema, value))<
-					StandardResult<O> | Promise<StandardResult<O>>
-				>({
-					Sync: toStandardResult,
-					Async: (promisedResult) => promisedResult.then(toStandardResult),
-				}),
+			validate: (value) => {
+				const parsing = parse(schema, { input: value, panics });
+
+				return match(parsing)<StandardResult<O> | Promise<StandardResult<O>>>({
+					Pending: () => wait(parsing).then(toStandardResult),
+					Resolved: toStandardResult,
+				});
+			},
 		},
 	};
 }

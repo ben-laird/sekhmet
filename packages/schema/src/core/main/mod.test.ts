@@ -1,5 +1,12 @@
-import { Err as MainErr, Ok as MainOk, Result } from "@sekhmet/enum/result";
+import { Ok as MainOk, Result } from "@sekhmet/enum/result";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import {
+	Err as OutcomeErr,
+	Ok as OutcomeOk,
+	resume,
+} from "@sekhmet/panic/outcome/mini";
+import { wait } from "@sekhmet/vow";
 import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { type Branded, brand as brandSchema } from "@/src/algebra/main/mod.ts";
@@ -22,6 +29,8 @@ import {
 	SchemaWith,
 	TooSmall,
 } from "./mod.ts";
+
+const panics = definePanicRuntime();
 
 Deno.test("variance holds with views, checked narrowing-first (#31 was order-dependent)", () => {
 	// Given: schemas and namespaces with narrow and wide outputs, some with views
@@ -237,7 +246,6 @@ Deno.test("Schema has exactly the modifier, transform and parsing methods", () =
 		"optional",
 		"orElse",
 		"parse",
-		"parseAsync",
 		"parseSync",
 		"pipe",
 		"preprocess",
@@ -263,11 +271,16 @@ Deno.test("union([a, b]).with.or(c) is union([a, b, c])", async () => {
 	const flat = union([a, b, c]);
 
 	// When: both reject a value
-	const found = unwrapErr(await extended.parseAsync(null));
+	const found = unwrapErr(
+		resume(await wait(extended.parse({ input: null, panics }))),
+	);
 
 	// Then: they fail alike (one InvalidUnion of three branches) and record
 	// the same node
-	assertEquals(found, unwrapErr(await flat.parseAsync(null)));
+	assertEquals(
+		found,
+		unwrapErr(resume(await wait(flat.parse({ input: null, panics })))),
+	);
 	assertEquals(nodeOf(extended), nodeOf(flat));
 });
 
@@ -284,7 +297,9 @@ Deno.test(".with's methods return main Schemas that keep chaining", async () => 
 
 	// When: parsing a valid list and an invalid one
 	const parsed = unwrap(id.parseSync(["a", 1, true]));
-	const found = unwrapErr(await id.parseAsync([null]));
+	const found = unwrapErr(
+		resume(await wait(id.parse({ input: [null], panics }))),
+	);
 
 	// Then: each step returned a main Schema, the output is a frozen array of
 	// branded ids, and a failing element is reported at its index
@@ -343,7 +358,9 @@ Deno.test(".array() parses every element with the receiver, and chains", async (
 
 	// When: parsing a valid array and one with a failing element
 	const parsed = unwrap(all.parseSync(["1", "22"]));
-	const found = unwrapErr(await all.parseAsync(["1", "x"]));
+	const found = unwrapErr(
+		resume(await wait(all.parse({ input: ["1", "x"], panics }))),
+	);
 
 	// Then: it is a main Schema of arrays, reporting each element at its index
 	assertInstanceOf(all, Schema);
@@ -429,14 +446,18 @@ Deno.test("the Result-style transforms chain as methods and take main Results", 
 
 	// When: parsing an even, an odd and a non-digit input, in order
 	const results = [
-		await halved.parseAsync(" 42 "),
-		await halved.parseAsync("7"),
-		await halved.parseAsync("x"),
+		await wait(halved.parse({ input: " 42 ", panics })),
+		await wait(halved.parse({ input: "7", panics })),
+		await wait(halved.parse({ input: "x", panics })),
 	];
 
 	// Then: each method ran in the chain's order and returned a main Schema
 	// with the chain's types
-	assertEquals(results, [MainOk(21), MainOk(-1), MainErr("not digits")]);
+	assertEquals(results, [
+		OutcomeOk(21),
+		OutcomeOk(-1),
+		OutcomeErr("not digits"),
+	]);
 	assertEquals(seen, [21, 0, 0]);
 	assertType<IsExact<Input<typeof halved>, string>>(true);
 	assertType<IsExact<Output<typeof halved>, number>>(true);

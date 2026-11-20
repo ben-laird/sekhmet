@@ -108,7 +108,7 @@ export function readonly<I, O, E, S extends Schema<I, O, E>>(
 export function readonly(self: Child): Child & WrapperView<Child> {
 	return viewed({
 		init: {
-			parse: getStructParams(map(self, frozenCopy)).parse,
+			run: getStructParams(map(self, frozenCopy)).run,
 			node: new SchemaNode("Readonly", { inner: self }),
 		},
 		view: { inner: self },

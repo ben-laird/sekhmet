@@ -1,5 +1,11 @@
-import { Err, Ok } from "@sekhmet/enum/result/mini";
-import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime, type PanicRuntime } from "@sekhmet/panic";
+import {
+	assertEquals,
+	assertInstanceOf,
+	assertRejects,
+	assertThrows,
+} from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
 	InvalidType,
@@ -10,6 +16,8 @@ import { type Issues, issues } from "@/src/core/mini/issues.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 import type { InferStandardInput, InferStandardOutput } from "./spec.ts";
 import { toStandard } from "./to-standard.ts";
+
+const panics = definePanicRuntime();
 
 const text = new Schema({
 	parse: (input: unknown) => {
@@ -22,7 +30,7 @@ const text = new Schema({
 Deno.test("toStandard declares Standard Schema v1 from the sekhmet vendor", () => {
 	// Given: a schema whose input is unknown
 	// When: exposing it as a Standard Schema
-	const standard = toStandard({ schema: text });
+	const standard = toStandard({ panics, schema: text });
 
 	// Then: its props name version 1 and the sekhmet vendor
 	assertEquals(standard["~standard"].version, 1);
@@ -32,16 +40,16 @@ Deno.test("toStandard declares Standard Schema v1 from the sekhmet vendor", () =
 Deno.test("toStandard types infer the schema's output", () => {
 	// Given: a schema of unknown to string
 	// When: exposing it as a Standard Schema
-	const standard = toStandard({ schema: text });
+	const standard = toStandard({ panics, schema: text });
 
 	// Then: Standard inference sees unknown in and string out
 	assertType<IsExact<InferStandardInput<typeof standard>, unknown>>(true);
 	assertType<IsExact<InferStandardOutput<typeof standard>, string>>(true);
 });
 
-Deno.test("toStandard validates synchronously when the parse is Sync", () => {
+Deno.test("toStandard validates synchronously when the parse is resolved", () => {
 	// Given: a synchronous schema exposed as a Standard Schema
-	const standard = toStandard({ schema: text });
+	const standard = toStandard({ panics, schema: text });
 
 	// When: validating a valid and an invalid value
 	const valid = standard["~standard"].validate("a");
@@ -54,9 +62,10 @@ Deno.test("toStandard validates synchronously when the parse is Sync", () => {
 	});
 });
 
-Deno.test("toStandard returns a Promise when the parse is Async", async () => {
+Deno.test("toStandard returns a Promise when the parse is pending", async () => {
 	// Given: an asynchronous schema exposed as a Standard Schema
 	const standard = toStandard({
+		panics,
 		schema: new Schema({
 			parse: (input: unknown) => {
 				return Promise.resolve(
@@ -96,6 +105,7 @@ Deno.test("toStandard reports one issue per Issues entry, with its path", () => 
 		},
 	]);
 	const standard = toStandard({
+		panics,
 		schema: new Schema({ parse: (_: unknown) => Err(found) }),
 	});
 
@@ -118,6 +128,7 @@ Deno.test("toStandard keeps symbol path segments", () => {
 	// Given: an Issues entry under a symbol key
 	const key = Symbol("key");
 	const standard = toStandard({
+		panics,
 		schema: new Schema({
 			parse: (input: unknown) => {
 				return Err(
@@ -149,6 +160,7 @@ Deno.test("toStandard converts other errors with toIssue", async (t) => {
 			},
 		});
 		const standard = toStandard({
+			panics,
 			schema: even,
 			toIssue: ({ code }) => `Rejected: ${code}`,
 		});
@@ -163,6 +175,7 @@ Deno.test("toStandard converts other errors with toIssue", async (t) => {
 	await t.step("an issue's own path follows the entry's path", () => {
 		// Given: Issues of custom errors, and a toIssue that adds a path
 		const standard = toStandard({
+			panics,
 			schema: new Schema({
 				parse: (_: unknown) => {
 					return Err(
@@ -193,7 +206,11 @@ Deno.test("toStandard converts other errors with toIssue", async (t) => {
 
 	await t.step("toIssue may also format SchemaIssues", () => {
 		// Given: a SchemaIssue schema with a custom toIssue
-		const standard = toStandard({ schema: text, toIssue: () => "nope" });
+		const standard = toStandard({
+			panics,
+			schema: text,
+			toIssue: () => "nope",
+		});
 
 		// When: validating an invalid value
 		const result = standard["~standard"].validate(1);
@@ -220,9 +237,9 @@ Deno.test("toStandard's types enforce its contract", async (t) => {
 
 		// When: exposing each without options
 		const results = [
-			toStandard({ schema: issue }),
-			toStandard({ schema: issues }),
-			toStandard({ schema: infallible }),
+			toStandard({ panics, schema: issue }),
+			toStandard({ panics, schema: issues }),
+			toStandard({ panics, schema: infallible }),
 		];
 
 		// Then: each compiles and validates
@@ -239,9 +256,9 @@ Deno.test("toStandard's types enforce its contract", async (t) => {
 		// When: exposing it as a Standard Schema
 		// Then: it does not compile
 		// @ts-expect-error: Standard Schema validates unknown input
-		toStandard({ schema: length });
+		toStandard({ panics, schema: length });
 		// @ts-expect-error: even with a toIssue option
-		toStandard({ schema: length, toIssue: () => "" });
+		toStandard({ panics, schema: length, toIssue: () => "" });
 	});
 
 	await t.step("other errors require toIssue", () => {
@@ -254,9 +271,9 @@ Deno.test("toStandard's types enforce its contract", async (t) => {
 		// When: exposing them without options
 		// Then: neither compiles
 		// @ts-expect-error: a string error needs toIssue
-		toStandard({ schema: plain });
+		toStandard({ panics, schema: plain });
 		// @ts-expect-error: Issues<string> needs toIssue
-		toStandard({ schema: located });
+		toStandard({ panics, schema: located });
 	});
 
 	await t.step("toIssue receives each flattened error", () => {
@@ -270,6 +287,7 @@ Deno.test("toStandard's types enforce its contract", async (t) => {
 		// When: exposing it with a toIssue
 		// Then: toIssue's parameter is the flattened error, string | number
 		toStandard({
+			panics,
 			schema: mixed,
 			toIssue: (error) => {
 				assertType<IsExact<typeof error, string | number>>(true);
@@ -282,6 +300,7 @@ Deno.test("toStandard's types enforce its contract", async (t) => {
 		// Given: a string-error schema exposed without toIssue, against the types
 		// @ts-expect-error: deliberately bypasses the overloads
 		const standard = toStandard({
+			panics,
 			schema: new Schema({ parse: (_: unknown) => Err("bad") }),
 		});
 
@@ -292,5 +311,56 @@ Deno.test("toStandard's types enforce its contract", async (t) => {
 			TypeError,
 			"needs a toIssue option",
 		);
+	});
+});
+
+/** A panic runtime whose hook records each payload it reports. */
+function recordingPanics(): { panics: PanicRuntime; reported: unknown[] } {
+	const recording = definePanicRuntime();
+	const reported: unknown[] = [];
+	recording.setHook(({ payload }) => reported.push(payload));
+
+	return { panics: recording, reported };
+}
+
+Deno.test("toStandard reports a panic, then resumes it out of validate", async (t) => {
+	const bug = new Error("bug");
+
+	await t.step("a synchronous panic throws from validate", () => {
+		// Given: a throwing schema, exposed under a recording runtime
+		const { panics, reported } = recordingPanics();
+		const standard = toStandard({
+			panics,
+			schema: new Schema({
+				parse: (_input: unknown): Result<string, SchemaIssue> => {
+					throw bug;
+				},
+			}),
+		});
+
+		// When / Then: validate throws the payload, reported once
+		assertThrows(() => standard["~standard"].validate("a"), Error, "bug");
+		assertEquals(reported, [bug]);
+	});
+
+	await t.step("an asynchronous panic rejects validate's promise", async () => {
+		// Given: a rejecting schema, exposed under a recording runtime
+		const { panics, reported } = recordingPanics();
+		const standard = toStandard({
+			panics,
+			schema: new Schema({
+				parse: (_input: unknown): Promise<Result<string, SchemaIssue>> => {
+					return Promise.reject(bug);
+				},
+			}),
+		});
+
+		// When: validating
+		const validated = standard["~standard"].validate("a");
+
+		// Then: the promise rejects with the payload, reported once
+		assertInstanceOf(validated, Promise);
+		await assertRejects(() => Promise.resolve(validated), Error, "bug");
+		assertEquals(reported, [bug]);
 	});
 });

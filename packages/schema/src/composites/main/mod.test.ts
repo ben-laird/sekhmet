@@ -1,4 +1,7 @@
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { resume } from "@sekhmet/panic/outcome/mini";
+import { wait } from "@sekhmet/vow";
 import {
 	assertEquals,
 	assertInstanceOf,
@@ -13,6 +16,8 @@ import { string } from "@/src/primitives/main/mod.ts";
 import { string as miniString } from "@/src/primitives/mini/mod.ts";
 import { array, object, optional } from "./mod.ts";
 
+const panics = definePanicRuntime();
+
 const text = new Schema({
 	parse: (input: unknown) => {
 		return typeof input === "string" ? Ok(input) : Err("not text");
@@ -24,7 +29,11 @@ Deno.test("object returns a main Schema, so core methods chain", async () => {
 	const user = object({ shape: { name: text }, unknownKeys: "strict" });
 
 	// When: parsing an object with an extra key through the chained method
-	const found = unwrapErr(await user.parseAsync({ name: "Ada", admin: true }));
+	const found = unwrapErr(
+		resume(
+			await wait(user.parse({ input: { name: "Ada", admin: true }, panics })),
+		),
+	);
 
 	// Then: object returned a main Schema that honours its unknownKeys
 	assertInstanceOf(user, Schema);

@@ -1,5 +1,15 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
-import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { Some } from "@sekhmet/enum/option/mini";
+import {
+	Err,
+	Ok,
+	type Result,
+	unwrap,
+	unwrapErr,
+} from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { Panicked, resume } from "@sekhmet/panic/outcome/mini";
+import { value, wait } from "@sekhmet/vow";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { InvalidUnion, type SchemaIssue } from "@/src/core/mini/issue.ts";
@@ -14,12 +24,13 @@ import {
 	type Input,
 	type Output,
 	parse,
-	parseAsync,
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { object } from "./object.ts";
 import { union } from "./union.ts";
+
+const panics = definePanicRuntime();
 
 const text: Schema<unknown, string, "not text"> = new Schema({
 	parse: (input) => {
@@ -74,7 +85,7 @@ Deno.test("union fails with InvalidUnion carrying each option's issues", async (
 
 	// When: parsing a value neither accepts
 	const input = { n: "x" };
-	const found = unwrapErr(await parseAsync(either, input));
+	const found = unwrapErr(resume(await wait(parse(either, { input, panics }))));
 
 	// Then: one InvalidUnion at the root holds each option's issues in order
 	assertEquals(entries(found), [
@@ -91,16 +102,49 @@ Deno.test("union fails with InvalidUnion carrying each option's issues", async (
 	]);
 });
 
-Deno.test("union is Async when an option it runs is", async () => {
+Deno.test("union is pending when an option it runs is", async () => {
 	// Given: a union whose first option is async
 	const either = union([laterCount, text]);
 
 	// When: parsing a value the async option rejects
-	const kind = unionKinds(parse(either, "a"));
+	const kind = unionKinds(parse(either, { input: "a", panics }));
 
-	// Then: the parse is Async and falls through to the next option
-	assertEquals(kind, "Async");
-	assertEquals(unwrap(await parseAsync(either, "a")), "a");
+	// Then: the parse is pending and falls through to the next option
+	assertEquals(kind, "Pending");
+	assertEquals(
+		unwrap(resume(await wait(parse(either, { input: "a", panics })))),
+		"a",
+	);
+});
+
+Deno.test("union panics on an option's panic, without trying the next", () => {
+	// Given: a union whose first option throws, under a recording runtime
+	const recording = definePanicRuntime();
+	const reported: unknown[] = [];
+	recording.setHook(({ payload }) => reported.push(payload));
+	const bug = new Error("bug");
+	let tried = 0;
+	const throwing = new Schema({
+		parse: (_input: unknown): Result<string, "never"> => {
+			throw bug;
+		},
+	});
+	const counted = new Schema({
+		parse: (input: unknown) => {
+			tried += 1;
+			return Ok(input);
+		},
+	});
+
+	// When: parsing
+	const outcome = value(
+		parse(union([throwing, counted]), { input: "a", panics: recording }),
+	);
+
+	// Then: the union panics, reported once, and the next option never ran
+	assertEquals(outcome, Some(Panicked(bug)));
+	assertEquals(reported, [bug]);
+	assertEquals(tried, 0);
 });
 
 Deno.test("union infers its input, output and error types", () => {

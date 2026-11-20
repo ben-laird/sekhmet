@@ -1,6 +1,9 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { resume } from "@sekhmet/panic/outcome/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
+import { wait } from "@sekhmet/vow";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { nodeOf } from "@/src/core/mini/node.ts";
@@ -9,12 +12,13 @@ import {
 	type Input,
 	type Output,
 	parse,
-	parseAsync,
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { viewed } from "@/src/core/mini/view.ts";
 import { BRAND, type Branded, brand } from "./brand.ts";
+
+const panics = definePanicRuntime();
 
 /** Whether a `From` is assignable to a `To`. */
 type Assignable<From, To> = [From] extends [To] ? true : false;
@@ -44,13 +48,15 @@ Deno.test("brand keeps the schema's failures", async () => {
 	const name = brand(text, "Name");
 
 	// When: parsing a non-string
-	const found = unwrapErr(await parseAsync(name, 1));
+	const found = unwrapErr(
+		resume(await wait(parse(name, { input: 1, panics }))),
+	);
 
 	// Then: it fails as the unbranded schema does
 	assertEquals(found, "not text");
 });
 
-Deno.test("brand keeps the parse's Potential", () => {
+Deno.test("brand keeps the parse's timing", () => {
 	// Given: a branded async schema
 	const later = brand(
 		new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) }),
@@ -58,9 +64,12 @@ Deno.test("brand keeps the parse's Potential", () => {
 	);
 
 	// When: parsing
-	// Then: it is still Async, and a branded sync schema still Sync
-	assertEquals(unionKinds(parse(later, "a")), "Async");
-	assertEquals(unionKinds(parse(brand(text, "Now"), "a")), "Sync");
+	// Then: it is still pending, and a branded sync schema still resolved
+	assertEquals(unionKinds(parse(later, { input: "a", panics })), "Pending");
+	assertEquals(
+		unionKinds(parse(brand(text, "Now"), { input: "a", panics })),
+		"Resolved",
+	);
 });
 
 Deno.test("brand is type-only: the schema is returned as is", () => {

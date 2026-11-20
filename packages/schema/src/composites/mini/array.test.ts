@@ -1,5 +1,14 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
-import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import {
+	Err,
+	Ok,
+	type Result,
+	unwrap,
+	unwrapErr,
+} from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { Panicked, resume } from "@sekhmet/panic/outcome/mini";
+import { wait } from "@sekhmet/vow";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
@@ -14,12 +23,13 @@ import {
 	type Input,
 	type Output,
 	parse,
-	parseAsync,
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { array } from "./array.ts";
 import { object } from "./object.ts";
+
+const panics = definePanicRuntime();
 
 const count: Schema<unknown, number, "not a number"> = new Schema({
 	parse: (input) => {
@@ -51,7 +61,11 @@ Deno.test("array reports every failing element at its index", async () => {
 
 	// When: parsing an array whose first and third rows are wrong
 	const issues = unwrapErr(
-		await parseAsync(rows, [{ n: "a" }, { n: 2 }, { n: "c" }]),
+		resume(
+			await wait(
+				parse(rows, { input: [{ n: "a" }, { n: 2 }, { n: "c" }], panics }),
+			),
+		),
 	);
 
 	// Then: each issue's path starts at its index
@@ -67,7 +81,9 @@ Deno.test("array rejects non-arrays with InvalidType at the root", async () => {
 
 	// When: parsing an array-like object
 	const input = { 0: 1, length: 1 };
-	const issues = unwrapErr(await parseAsync(counts, input));
+	const issues = unwrapErr(
+		resume(await wait(parse(counts, { input, panics }))),
+	);
 
 	// Then: one InvalidType issue is reported at the root
 	assertEquals(entries(issues), [
@@ -75,19 +91,21 @@ Deno.test("array rejects non-arrays with InvalidType at the root", async () => {
 	]);
 });
 
-Deno.test("array is Sync for sync elements and Async otherwise, collecting every issue", async () => {
+Deno.test("array is resolved for sync elements and pending otherwise, collecting every issue", async () => {
 	// Given: arrays of a sync and an async element schema
 	const now = array({ item: count });
 	const later = array({ item: laterCount });
 
 	// When: parsing with each
-	const nowKind = unionKinds(parse(now, [1]));
-	const laterKind = unionKinds(parse(later, [1]));
-	const issues = unwrapErr(await parseAsync(later, ["a", 2, "c"]));
+	const nowKind = unionKinds(parse(now, { input: [1], panics }));
+	const laterKind = unionKinds(parse(later, { input: [1], panics }));
+	const issues = unwrapErr(
+		resume(await wait(parse(later, { input: ["a", 2, "c"], panics }))),
+	);
 
-	// Then: the async array is Async and still reports every element
-	assertEquals(nowKind, "Sync");
-	assertEquals(laterKind, "Async");
+	// Then: the async array is pending and still reports every element
+	assertEquals(nowKind, "Resolved");
+	assertEquals(laterKind, "Pending");
 	assertEquals(
 		entries(issues).map(({ path }) => path),
 		[[0], [2]],
@@ -107,7 +125,9 @@ Deno.test("minItems and maxItems bound the array's length, inclusively", async (
 
 	await t.step("too short fails with TooSmall at the root", async () => {
 		// When: parsing an empty array
-		const issues = unwrapErr(await parseAsync(bounded, []));
+		const issues = unwrapErr(
+			resume(await wait(parse(bounded, { input: [], panics }))),
+		);
 
 		// Then: one TooSmall issue is reported at the root
 		assertEquals(entries(issues), [
@@ -126,7 +146,9 @@ Deno.test("minItems and maxItems bound the array's length, inclusively", async (
 	await t.step("too long fails with TooBig at the root", async () => {
 		// When: parsing three numbers
 		const input = [1, 2, 3];
-		const issues = unwrapErr(await parseAsync(bounded, input));
+		const issues = unwrapErr(
+			resume(await wait(parse(bounded, { input, panics }))),
+		);
 
 		// Then: one TooBig issue is reported at the root
 		assertEquals(entries(issues), [
@@ -143,13 +165,40 @@ Deno.test("a length check also reports alongside failing elements", async () => 
 	const single = array({ item: count, maxItems: 1 });
 
 	// When: parsing two wrong elements
-	const issues = unwrapErr(await parseAsync(single, ["a", "b"]));
+	const issues = unwrapErr(
+		resume(await wait(parse(single, { input: ["a", "b"], panics }))),
+	);
 
 	// Then: both element issues and the length issue are reported
 	assertEquals(
 		entries(issues).map(({ path }) => path),
 		[[0], [1], []],
 	);
+});
+
+Deno.test("array panics when an element panics, once every element settles", async () => {
+	// Given: an element schema that rejects for one value, beside async siblings
+	const recording = definePanicRuntime();
+	const reported: unknown[] = [];
+	recording.setHook(({ payload }) => reported.push(payload));
+	const bug = new Error("bug");
+	const element = new Schema({
+		parse: (input: unknown): Promise<Result<unknown, "never">> => {
+			return input === "bad" ? Promise.reject(bug) : Promise.resolve(Ok(input));
+		},
+	});
+
+	// When: parsing an array holding the bad value
+	const outcome = await wait(
+		parse(array({ item: element }), {
+			input: [1, "bad", 3],
+			panics: recording,
+		}),
+	);
+
+	// Then: the array settles as the element's panic, reported once
+	assertEquals(outcome, Panicked(bug));
+	assertEquals(reported, [bug]);
 });
 
 Deno.test("array infers its input, output and error types", () => {

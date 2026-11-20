@@ -3,8 +3,9 @@
  * entrypoint chaining methods, each mini barrel, and each single-module
  * path. Primitives, composites and the algebra parse good and bad values;
  * a schema reads back its node and annotations; Standard Schema round-trips
- * both ways, synchronously and asynchronously. Every async parse resolves to
- * a Result, so the exercise never leaves a promise rejection behind.
+ * both ways, synchronously and asynchronously. Every parse runs under a
+ * panic runtime and resolves to an Outcome, so the exercise never leaves a
+ * promise rejection behind.
  *
  * @module
  */
@@ -20,6 +21,8 @@ import {
 	unwrap,
 	unwrapErr,
 } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { resume } from "@sekhmet/panic/outcome/mini";
 import { object as rootObject, string as rootString } from "@sekhmet/schema";
 import { type Branded, partial as mainPartial } from "@sekhmet/schema/algebra";
 import { or, pick, readonly } from "@sekhmet/schema/algebra/mini";
@@ -63,11 +66,9 @@ import { is as guard } from "@sekhmet/schema/core/mini/guard";
 import { isSchemaIssue } from "@sekhmet/schema/core/mini/issue";
 import { entries, isIssues } from "@sekhmet/schema/core/mini/issues";
 import { children, custom, nodeKind } from "@sekhmet/schema/core/mini/node";
-import { Async, from, Sync } from "@sekhmet/schema/core/mini/potential";
 import {
 	Schema as MiniSchema,
 	parse as miniParse,
-	parseAsync,
 } from "@sekhmet/schema/core/mini/schema";
 import { viewed } from "@sekhmet/schema/core/mini/view";
 import { number, string } from "@sekhmet/schema/primitives";
@@ -90,6 +91,7 @@ import { toStandard as miniToStandard } from "@sekhmet/schema/standard/mini";
 import { fromStandard as miniFromStandard } from "@sekhmet/schema/standard/mini/from-standard";
 import type { StandardSchemaV1 } from "@sekhmet/schema/standard/mini/spec";
 import { toStandard as toStandardOf } from "@sekhmet/schema/standard/mini/to-standard";
+import { isPending, isResolved, wait } from "@sekhmet/vow";
 import { expectEqual } from "../check.ts";
 
 /** The error a synchronous parse failed with; throws on an async parse. */
@@ -334,17 +336,15 @@ async function exerciseAsync(): Promise<void> {
 	});
 	const pair = miniObject({ shape: { a: later, b: miniNumber() } });
 	const doubled = map(miniNumber(), (n) => n * 2);
-	const potentials = [
-		isolate(miniParse(doubled, 2), "Sync"),
-		isolate(miniParse(later, "a"), "Async"),
-		isolate(Sync(1), "Sync"),
-		isolate(Async(Promise.resolve(1)), "Async"),
-		isolate(from(1), "Sync"),
+	const panics = definePanicRuntime();
+	const timings = [
+		isResolved(miniParse(doubled, { input: 2, panics })),
+		isPending(miniParse(later, { input: "a", panics })),
 	];
 	expectEqual({
-		label: "a parse is Sync when it finished and Async when it awaits",
-		actual: potentials,
-		expected: [true, true, true, true, true],
+		label: "a parse resolves now when it finished, and later when it awaits",
+		actual: timings,
+		expected: [true, true],
 	});
 	expectEqual({
 		label: "parseSync reports an async parse instead of awaiting it",
@@ -352,30 +352,33 @@ async function exerciseAsync(): Promise<void> {
 		expected: true,
 	});
 
-	const good = await parseAsync(pair, { a: "x", b: 1 });
-	const bad = await parseAsync(pair, { a: 1, b: 1 });
+	const good = await wait(miniParse(pair, { input: { a: "x", b: 1 }, panics }));
+	const bad = await wait(miniParse(pair, { input: { a: 1, b: 1 }, panics }));
 	const mainLater = Schema.fromMini(later).map((text) => text.length);
+	const counted = await wait(mainLater.parse({ input: "four", panics }));
 	expectEqual({
-		label: "parseAsync awaits an async child, as a Result",
+		label: "parse waits for an async child, as an Outcome",
 		actual: [
-			unwrap(good),
-			entries(unwrapErr(bad)).map(({ path }) => path),
-			unwrap(await mainLater.parseAsync("four")),
+			unwrap(resume(good)),
+			entries(unwrapErr(resume(bad))).map(({ path }) => path),
+			unwrap(resume(counted)),
 		],
 		expected: [{ a: "x", b: 1 }, [["a"]], 4],
 	});
 }
 
 async function exerciseStandard(): Promise<void> {
+	const panics = definePanicRuntime();
 	const standard: StandardSchemaV1<unknown, string> = toStandard({
 		schema: string(),
+		panics,
 	});
-	const viaMini = miniToStandard({ schema: miniNumber() });
-	const viaPath = toStandardOf({ schema: miniString() });
+	const viaMini = miniToStandard({ schema: miniNumber(), panics });
+	const viaPath = toStandardOf({ schema: miniString(), panics });
 	const valid = standard["~standard"].validate("a");
 	const invalid = viaMini["~standard"].validate("x");
 	expectEqual({
-		label: "toStandard validates synchronously for a Sync parse",
+		label: "toStandard validates synchronously for a synchronous parse",
 		actual: [
 			valid instanceof Promise ? "async" : valid,
 			invalid instanceof Promise ? "async" : "issues" in invalid,
@@ -399,7 +402,9 @@ async function exerciseStandard(): Promise<void> {
 			},
 		},
 	};
-	const fromAsync = await parseAsync(fromStandard(asyncStandard), "x");
+	const fromAsync = resume(
+		await wait(miniParse(fromStandard(asyncStandard), { input: "x", panics })),
+	);
 	expectEqual({
 		label: "fromStandard wraps a Standard Schema, sync or async",
 		actual: [

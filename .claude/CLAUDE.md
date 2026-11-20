@@ -128,9 +128,10 @@ Packages (`packages/`):
 - `@sekhmet/primordials`: foundation primitives (`Struct`, `Subtle`, `block`,
   `define`)
 - `@sekhmet/schema`: typed validation and transformation (`Schema<I, O, E>`
-  parses to a `Result`), with primitives, composites, an algebra (`or`,
-  `brand`, `readonly`, shape reshapers), a Standard Schema bridge, and its
-  structure and annotations carried as data
+  parses under a panic runtime to a `Vow<Outcome<O, E, unknown>>`;
+  `parseSync` for a sync `Result`), with primitives, composites, an algebra
+  (`or`, `brand`, `readonly`, shape reshapers), a Standard Schema bridge, and
+  its structure and annotations carried as data
 - `@sekhmet/vow`: `Vow`, a synchronous promise-like value built on `Enum`
 - `@sekhmet/workflow`: workflow helpers that panic through `@sekhmet/panic`:
   `todo`/`unimplemented`, `unreachable` (compile-time exhaustiveness) and
