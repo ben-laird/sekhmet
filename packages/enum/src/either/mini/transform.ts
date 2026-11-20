@@ -1,12 +1,14 @@
 /**
  * Transforming an either: `mapLeft`, `mapRight`, `mapEither` and `map`,
- * collapsing it with `either` or `intoInner`, and swapping its sides with
- * `flip`.
+ * mapping one side with a fallback (`mapLeftOr`, `mapRightOr`), collapsing
+ * it with `either` or `intoInner`, swapping its sides with `flip`, and
+ * looking at one side (`inspectLeft`, `inspectRight`).
  *
  * @module
  */
 
 import { match, union } from "@/src/core/mini/exit.ts";
+import { inspectIsolated } from "@/src/core/mini/isolate.ts";
 import { type Either, Left, Right } from "./core.ts";
 
 /**
@@ -68,6 +70,74 @@ export function mapRight<L, R, S>(
 	return match(self)({
 		Left,
 		Right: (value) => Right(mapping(value)),
+	});
+}
+
+/**
+ * Maps the left value of an Either, or returns a fallback if it is Right:
+ * Rust's `map_left_or`.
+ *
+ * @template L The type of the left value
+ * @template R The type of the right value
+ * @template T The type of the mapped value and the fallback
+ * @param self The Either to map
+ * @param options `mapping` transforms a left value; `fallback` is returned for a Right
+ * @returns `mapping(value)` if Left, otherwise `fallback`
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { type Either, Left, Right, mapLeftOr } from "@sekhmet/enum/either/mini";
+ *
+ * const left: Either<number, string> = Left(2);
+ * const right: Either<number, string> = Right("a");
+ * const options = { fallback: 0, mapping: (n: number) => n * 10 };
+ *
+ * assertEquals(mapLeftOr(left, options), 20);
+ * assertEquals(mapLeftOr(right, options), 0);
+ * ```
+ */
+export function mapLeftOr<L, R, T>(
+	self: Either<L, R>,
+	options: { readonly fallback: T; readonly mapping: (value: L) => T },
+): T {
+	return match(self)({
+		Left: options.mapping,
+		Right: () => options.fallback,
+	});
+}
+
+/**
+ * Maps the right value of an Either, or returns a fallback if it is Left:
+ * Rust's `map_right_or`.
+ *
+ * @template L The type of the left value
+ * @template R The type of the right value
+ * @template T The type of the mapped value and the fallback
+ * @param self The Either to map
+ * @param options `mapping` transforms a right value; `fallback` is returned for a Left
+ * @returns `mapping(value)` if Right, otherwise `fallback`
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { type Either, Left, Right, mapRightOr } from "@sekhmet/enum/either/mini";
+ *
+ * const left: Either<number, string> = Left(2);
+ * const right: Either<number, string> = Right("abc");
+ * const options = { fallback: 0, mapping: (s: string) => s.length };
+ *
+ * assertEquals(mapRightOr(right, options), 3);
+ * assertEquals(mapRightOr(left, options), 0);
+ * ```
+ */
+export function mapRightOr<L, R, T>(
+	self: Either<L, R>,
+	options: { readonly fallback: T; readonly mapping: (value: R) => T },
+): T {
+	return match(self)({
+		Left: () => options.fallback,
+		Right: options.mapping,
 	});
 }
 
@@ -208,6 +278,72 @@ export function flip<L, R>(self: Either<L, R>): Either<R, L> {
 		Left: (value): Either<R, L> => Right(value),
 		Right: (value): Either<R, L> => Left(value),
 	});
+}
+
+/**
+ * Calls a function with the left value, if Left, and returns the Either
+ * itself, so calls chain: Rust's `inspect_left`.
+ *
+ * @template L The type of the left value
+ * @template R The type of the right value
+ * @param self The Either to inspect
+ * @param inspector A function that receives the left value
+ * @returns `self`, unchanged
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { type Either, Left, Right, inspectLeft } from "@sekhmet/enum/either/mini";
+ *
+ * const seen: number[] = [];
+ * const left: Either<number, string> = Left(1);
+ * const right: Either<number, string> = Right("a");
+ *
+ * assertEquals(inspectLeft(left, (n) => seen.push(n)), left);
+ * assertEquals(inspectLeft(right, (n) => seen.push(n)), right);
+ * assertEquals(seen, [1]);
+ * ```
+ */
+export function inspectLeft<L, R>(
+	self: Either<L, R>,
+	inspector: (value: L) => void,
+): Either<L, R> {
+	inspectIsolated(self, "Left", inspector);
+
+	return self;
+}
+
+/**
+ * Calls a function with the right value, if Right, and returns the Either
+ * itself, so calls chain: Rust's `inspect_right`.
+ *
+ * @template L The type of the left value
+ * @template R The type of the right value
+ * @param self The Either to inspect
+ * @param inspector A function that receives the right value
+ * @returns `self`, unchanged
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { type Either, Left, Right, inspectRight } from "@sekhmet/enum/either/mini";
+ *
+ * const seen: string[] = [];
+ * const left: Either<number, string> = Left(1);
+ * const right: Either<number, string> = Right("a");
+ *
+ * assertEquals(inspectRight(right, (s) => seen.push(s)), right);
+ * assertEquals(inspectRight(left, (s) => seen.push(s)), left);
+ * assertEquals(seen, ["a"]);
+ * ```
+ */
+export function inspectRight<L, R>(
+	self: Either<L, R>,
+	inspector: (value: R) => void,
+): Either<L, R> {
+	inspectIsolated(self, "Right", inspector);
+
+	return self;
 }
 
 /**

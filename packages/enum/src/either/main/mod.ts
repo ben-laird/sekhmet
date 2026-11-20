@@ -622,6 +622,62 @@ export class Either<out L, out R> extends mini.Either<L, R> {
 	}
 
 	/**
+	 * Maps the left value of an Either, or returns a fallback if it is Right:
+	 * Rust's `map_left_or`.
+	 *
+	 * @template T - The type of the mapped value and the fallback
+	 * @param options - `mapping` transforms a left value; `fallback` is returned for a Right
+	 * @returns `mapping(value)` if Left, otherwise `fallback`
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { type Either, Left, Right } from "@sekhmet/enum/either";
+	 *
+	 * const left: Either<number, string> = Left(2);
+	 * const right: Either<number, string> = Right("a");
+	 * const options = { fallback: 0, mapping: (n: number) => n * 10 };
+	 *
+	 * assertEquals(left.mapLeftOr(options), 20);
+	 * assertEquals(right.mapLeftOr(options), 0);
+	 * ```
+	 * @see {@link mini.mapLeftOr}
+	 */
+	mapLeftOr<T>(options: {
+		readonly fallback: T;
+		readonly mapping: (value: L) => T;
+	}): T {
+		return mini.mapLeftOr(this, options);
+	}
+
+	/**
+	 * Maps the right value of an Either, or returns a fallback if it is Left:
+	 * Rust's `map_right_or`.
+	 *
+	 * @template T - The type of the mapped value and the fallback
+	 * @param options - `mapping` transforms a right value; `fallback` is returned for a Left
+	 * @returns `mapping(value)` if Right, otherwise `fallback`
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { type Either, Left, Right } from "@sekhmet/enum/either";
+	 *
+	 * const left: Either<number, string> = Left(2);
+	 * const right: Either<number, string> = Right("abc");
+	 * const options = { fallback: 0, mapping: (s: string) => s.length };
+	 *
+	 * assertEquals(right.mapRightOr(options), 3);
+	 * assertEquals(left.mapRightOr(options), 0);
+	 * ```
+	 * @see {@link mini.mapRightOr}
+	 */
+	mapRightOr<T>(options: {
+		readonly fallback: T;
+		readonly mapping: (value: R) => T;
+	}): T {
+		return mini.mapRightOr(this, options);
+	}
+
+	/**
 	 * Maps each side of an Either with its own function, keeping the variant.
 	 *
 	 * @template M - The type of the mapped left value
@@ -727,6 +783,56 @@ export class Either<out L, out R> extends mini.Either<L, R> {
 	 */
 	flip(): Either<R, L> {
 		return Either.fromMini(mini.flip(this));
+	}
+
+	/**
+	 * Calls a function with the left value, if Left, and returns the Either
+	 * itself, so calls chain: Rust's `inspect_left`.
+	 *
+	 * @param inspector - A function that receives the left value
+	 * @returns `self`, unchanged
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { type Either, Left, Right } from "@sekhmet/enum/either";
+	 *
+	 * const seen: number[] = [];
+	 * const left: Either<number, string> = Left(1);
+	 * const right: Either<number, string> = Right("a");
+	 *
+	 * assertEquals(left.inspectLeft((n) => seen.push(n)), left);
+	 * assertEquals(right.inspectLeft((n) => seen.push(n)), right);
+	 * assertEquals(seen, [1]);
+	 * ```
+	 * @see {@link mini.inspectLeft}
+	 */
+	inspectLeft(inspector: (value: L) => void): Either<L, R> {
+		return Either.fromMini(mini.inspectLeft(this, inspector));
+	}
+
+	/**
+	 * Calls a function with the right value, if Right, and returns the Either
+	 * itself, so calls chain: Rust's `inspect_right`.
+	 *
+	 * @param inspector - A function that receives the right value
+	 * @returns `self`, unchanged
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { type Either, Left, Right } from "@sekhmet/enum/either";
+	 *
+	 * const seen: string[] = [];
+	 * const left: Either<number, string> = Left(1);
+	 * const right: Either<number, string> = Right("a");
+	 *
+	 * assertEquals(right.inspectRight((s) => seen.push(s)), right);
+	 * assertEquals(left.inspectRight((s) => seen.push(s)), left);
+	 * assertEquals(seen, ["a"]);
+	 * ```
+	 * @see {@link mini.inspectRight}
+	 */
+	inspectRight(inspector: (value: R) => void): Either<L, R> {
+		return Either.fromMini(mini.inspectRight(this, inspector));
 	}
 
 	/**

@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { type Either, Left, Right } from "@/src/either/mini/core.ts";
 import * as TestSubject from "@/src/either/mini/transform.ts";
@@ -103,4 +103,60 @@ Deno.test("intoInner() returns either side's value as a union", () => {
 	// Then: each value comes out, typed as the union of the sides
 	assertEquals(values, [2, "abc"]);
 	assertType<IsExact<(typeof values)[number], number | string>>(true);
+});
+
+Deno.test("mapLeftOr() maps a Left and falls back on a Right", () => {
+	// Given: a mapping of the left side and a fallback
+	const options = { fallback: -1, mapping: (n: number) => n * 10 };
+
+	// When: applying it to a Left and a Right
+	const values = [
+		TestSubject.mapLeftOr(left, options),
+		TestSubject.mapLeftOr(right, options),
+	];
+
+	// Then: the Left is mapped; the Right gives the fallback
+	assertEquals(values, [20, -1]);
+});
+
+Deno.test("mapRightOr() maps a Right and falls back on a Left", () => {
+	// Given: a mapping of the right side and a fallback
+	const options = { fallback: -1, mapping: (s: string) => s.length };
+
+	// When: applying it to a Left and a Right
+	const values = [
+		TestSubject.mapRightOr(left, options),
+		TestSubject.mapRightOr(right, options),
+	];
+
+	// Then: the Right is mapped; the Left gives the fallback
+	assertEquals(values, [-1, 3]);
+});
+
+Deno.test("inspectLeft() sees a Left only and returns the Either itself", () => {
+	// Given: a call log
+	const seen: number[] = [];
+
+	// When: inspecting the left side of a Left and a Right
+	const fromLeft = TestSubject.inspectLeft(left, (n) => seen.push(n));
+	const fromRight = TestSubject.inspectLeft(right, (n) => seen.push(n));
+
+	// Then: only the Left's value was seen, and each call returned its receiver
+	assertEquals(seen, [2]);
+	assertStrictEquals(fromLeft, left);
+	assertStrictEquals(fromRight, right);
+});
+
+Deno.test("inspectRight() sees a Right only and returns the Either itself", () => {
+	// Given: a call log
+	const seen: string[] = [];
+
+	// When: inspecting the right side of a Left and a Right
+	const fromLeft = TestSubject.inspectRight(left, (s) => seen.push(s));
+	const fromRight = TestSubject.inspectRight(right, (s) => seen.push(s));
+
+	// Then: only the Right's value was seen, and each call returned its receiver
+	assertEquals(seen, ["abc"]);
+	assertStrictEquals(fromLeft, left);
+	assertStrictEquals(fromRight, right);
 });

@@ -2,6 +2,7 @@ import {
 	assert,
 	assertEquals,
 	assertInstanceOf,
+	assertStrictEquals,
 	unreachable,
 } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
@@ -214,4 +215,34 @@ Deno.test("a failed boolean-predicate Either.isLeftAnd keeps both sides", () => 
 	// Then: the else branch is still the whole main Either, not never
 	assertType<IsExact<typeof value, Either<number, string>>>(true);
 	assertEquals(value.unwrapLeft(), 1);
+});
+
+Deno.test("Either.inspectLeft and inspectRight chain on the same main Either", () => {
+	// Given: a main Left and a call log
+	const value = Left<number, string>(2);
+	const seen: string[] = [];
+
+	// When: inspecting both sides in a chain
+	const chained = value
+		.inspectLeft((n) => seen.push(`left ${n}`))
+		.inspectRight((s) => seen.push(`right ${s}`));
+	// {}
+
+	// Then: only the Left was seen, and the chain returned the same instance
+	assertEquals(seen, ["left 2"]);
+	assertStrictEquals(chained, value);
+});
+
+Deno.test("Either.mapLeftOr and mapRightOr fall back on the other side", () => {
+	// Given: a main Left
+	const value = Left<number, string>(2);
+
+	// When: mapping each side with a fallback
+	const values = [
+		value.mapLeftOr({ fallback: 0, mapping: (n) => n * 10 }),
+		value.mapRightOr({ fallback: 0, mapping: (s) => s.length }),
+	];
+
+	// Then: its own side is mapped; the other side gives the fallback
+	assertEquals(values, [20, 0]);
 });
