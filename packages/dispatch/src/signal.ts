@@ -483,12 +483,13 @@ export class DispatchSignal<out T> {
 						listener(value);
 					});
 				}
-				let fired = false;
+				// Whether the listener still waits: `any([])` holds nothing to remove.
+				let waiting = sources.length > 0;
 				const stops: Unsubscribe[] = [];
 				for (const source of sources) {
 					stops.push(
 						source.listen((value) => {
-							fired = true;
+							waiting = false;
 							for (const stop of stops) {
 								stop();
 							}
@@ -497,10 +498,12 @@ export class DispatchSignal<out T> {
 					);
 				}
 				return () => {
+					const was = waiting;
+					waiting = false;
 					for (const stop of stops) {
 						stop();
 					}
-					return !fired && stops.length > 0;
+					return was;
 				};
 			},
 		});

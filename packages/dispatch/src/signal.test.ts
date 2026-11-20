@@ -168,6 +168,51 @@ Deno.test("any dispatches with the first source and lets go of the rest", () => 
 	assert(isPending(DispatchSignal.any<string>([]).poll()));
 });
 
+Deno.test("an Unsubscribe reports true only the first time it removes a waiting listener", () => {
+	// Given: a waiting listener on any and on zip, and listeners on dispatched and never
+	const { panics } = recordingPanics();
+	const a = new DispatchController<string>(panics.catchUnwind);
+	const b = new DispatchController<number>(panics.catchUnwind);
+	const heard: string[] = [];
+	const stops = {
+		any: DispatchSignal.any([a.signal]).whenDispatched(() => {
+			heard.push("any");
+		}),
+		zip: a.signal.zip(b.signal).whenDispatched(() => {
+			heard.push("zip");
+		}),
+		dispatched: DispatchSignal.dispatched({
+			value: "done",
+			catchUnwind: panics.catchUnwind,
+		}).whenDispatched(() => {}),
+		never: DispatchSignal.never<string>().whenDispatched(() => {}),
+	};
+
+	// When: each is unsubscribed twice, then the sources dispatch
+	const first = Object.values(stops).map((stop) => stop());
+	const second = Object.values(stops).map((stop) => stop());
+	a.dispatch("a");
+	b.dispatch(1);
+
+	// Then: only the waiting ones were removed, once, and neither ran
+	assertEquals(first, [true, true, false, false]);
+	assertEquals(second, [false, false, false, false]);
+	assertEquals(heard, []);
+});
+
+Deno.test("any's Unsubscribe reports false once its listener has run", () => {
+	// Given: a listener on any
+	const { panics } = recordingPanics();
+	const a = new DispatchController<string>(panics.catchUnwind);
+	const stop = DispatchSignal.any([a.signal]).whenDispatched(() => {});
+
+	// When: its source dispatches
+	a.dispatch("a");
+
+	// Then: there's nothing left to remove
+	assertEquals(stop(), false);
+});
+
 Deno.test("any, read after its sources dispatched, picks the earliest in order", () => {
 	// Given: two sources that have both dispatched, the later one first
 	const { panics } = recordingPanics();
