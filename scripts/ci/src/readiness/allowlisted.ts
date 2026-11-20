@@ -172,6 +172,12 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("lifetime/src/resource.ts", "Variants", "Split"),
 	privateTypeRef("lifetime/src/resource.ts", "Variants", "Panic"),
 	privateTypeRef("lifetime/src/resource.ts", "SetupEnd", "Enum"),
+	privateTypeRef(
+		"lifetime/src/resource.ts",
+		'SetupTeardownFailure["init"]',
+		"Panic",
+	),
+	privateTypeRef("lifetime/src/resource.ts", "isSetupTeardownPanic", "Panic"),
 	...["Vow", "Result", "Panic"].map((privateType) => {
 		return privateTypeRef(
 			"lifetime/src/resource.ts",

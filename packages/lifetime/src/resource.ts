@@ -15,9 +15,10 @@ import {
 	unwrap,
 	unwrapErr,
 } from "@sekhmet/enum/result/mini";
-import type { Panic } from "@sekhmet/panic";
+import { Panic } from "@sekhmet/panic";
 import { map, resolved, type Vow, vowWithResolver } from "@sekhmet/vow/mini";
 import { Lifetime, type LifetimePanics } from "./lifetime.ts";
+import type { EndReport } from "./phase.ts";
 import { asPanic, deliver, isThenable } from "./teardown.ts";
 
 /**
@@ -151,6 +152,11 @@ export class Resource<I, T, C> {
 	 * `InitPanicked(panic)`. An expected failure is `init` returning a
 	 * `Result` of its own.
 	 *
+	 * If tearing `setup` down fails too, the `Err` carries both: a
+	 * `Panic (SetupTeardownFailed)` whose cause, a
+	 * {@linkcode SetupTeardownFailure}, holds `init`'s panic and each of
+	 * setup's cleanup panics. Read it with {@linkcode isSetupTeardownPanic}.
+	 *
 	 * A double fault in `init` (the hook throwing while it reports `init`'s
 	 * throw) follows `Lifetime.end`'s rule: in a synchronous `init`, setup
 	 * is torn down and `start` rethrows the `Panic (PanicHook)`; in an async
@@ -224,12 +230,20 @@ export class Resource<I, T, C> {
 			lifetime.defer((cause) => this.#deinit(value, cause));
 			return Ok(lifetime);
 		};
+		// Settles with Err once setup is torn down, carrying its failures too.
+		const afterSetup = (
+			failure: Panic<unknown>,
+		): Vow<Result<Lifetime<T, C>, Panic<unknown>>> => {
+			return map(setup.ended.toVow(), (report) => {
+				return Err(withSetupFailures({ init: failure, report }));
+			});
+		};
 		// Tears setup down; throws only on a synchronous double fault in it.
 		const fail = (
 			failure: Panic<unknown>,
 		): Vow<Result<Lifetime<T, C>, Panic<unknown>>> => {
-			const torn = setup.end(new SetupEnd<C>("InitPanicked", failure));
-			return map(torn.toVow(), () => Err(failure));
+			setup.end(new SetupEnd<C>("InitPanicked", failure));
+			return afterSetup(failure);
 		};
 
 		let caught: Result<{ readonly returned: T | PromiseLike<T> }, unknown>;
@@ -264,14 +278,15 @@ export class Resource<I, T, C> {
 			});
 		};
 		// In a promise continuation, a double fault from setup's teardown can't
-		// be thrown; it is in setup's report, and init's panic is the Err.
+		// be thrown; it is in setup's report, which the Err carries.
 		const failInContinuation = (payload: unknown): void => {
 			const failure = initFailed(payload);
 			try {
-				settle(fail(failure));
+				setup.end(new SetupEnd<C>("InitPanicked", failure));
 			} catch {
-				settle(resolved(Err(failure)));
+				// Recorded in setup's report; see above.
 			}
+			settle(afterSetup(failure));
 		};
 		const settling = panics.catchUnwindAsync(() => returned);
 		void settling.then(
@@ -292,4 +307,111 @@ export class Resource<I, T, C> {
 
 function initFailed(payload: unknown): Panic<unknown> {
 	return asPanic({ payload, name: "InitFailed" });
+}
+
+/**
+ * The cause of the panic `start` returns when `init` panicked and tearing
+ * its `setup` down failed too: `init`'s panic, and each of setup's cleanup
+ * panics, in the order they ran. Each was reported to the panic hook once,
+ * when it happened; the panic that carries them is not reported again.
+ *
+ * @example
+ * ```ts
+ * import { isolate, union } from "@sekhmet/enum/core/mini";
+ * import { isErr, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { value } from "@sekhmet/vow/mini";
+ * import { isSetupTeardownPanic, Resource } from "@sekhmet/lifetime";
+ * import { assert, assertEquals } from "@std/assert";
+ *
+ * const panics = definePanicRuntime();
+ * panics.setHook(() => {}); // keep the example quiet
+ * const flaky = new Resource<undefined, never, string>({
+ * 	init: (_input, setup) => {
+ * 		setup.defer(() => {
+ * 			throw new Error("temp dir already gone");
+ * 		});
+ * 		throw new Error("handshake failed");
+ * 	},
+ * 	deinit: () => {},
+ * });
+ *
+ * const started = value(flaky.start({ input: undefined, panics }));
+ * assert(isolate(started, "Some"));
+ * const result = union(started);
+ * assert(isErr(result));
+ * const failure = unwrapErr(result);
+ * assert(isSetupTeardownPanic(failure));
+ * assertEquals(failure.cause.init.message, "handshake failed");
+ * assertEquals(
+ * 	failure.cause.teardown.map((panic) => panic.message),
+ * 	["temp dir already gone"],
+ * );
+ * ```
+ */
+export interface SetupTeardownFailure {
+	/** The panic `init` threw or rejected with */
+	readonly init: Panic<unknown>;
+	/** Each of setup's cleanup panics, in the order they ran */
+	readonly teardown: readonly Panic<unknown>[];
+}
+
+/** The `Panic (SetupTeardownFailed)`; the private brand runs no Proxy trap. */
+class SetupTeardownPanic extends Panic<SetupTeardownFailure> {
+	constructor(cause: SetupTeardownFailure) {
+		super({
+			name: "SetupTeardownFailed",
+			message: `init panicked (${cause.init.message}), and tearing its setup down failed too`,
+			cause,
+		});
+	}
+
+	#brand = true;
+
+	static is(value: unknown): value is SetupTeardownPanic {
+		return typeof value === "object" && value !== null && #brand in value;
+	}
+}
+
+/**
+ * Whether `value` is the panic `start` returns when `init` panicked and
+ * tearing its `setup` down failed too. It narrows the panic, so its cause,
+ * a {@linkcode SetupTeardownFailure}, can be read without a cast.
+ *
+ * @param value Any value, usually the panic in `start`'s `Err`
+ * @returns True if `start` built `value` for an init and setup failure
+ *
+ * @example
+ * ```ts
+ * import { Panic } from "@sekhmet/panic";
+ * import { isSetupTeardownPanic } from "@sekhmet/lifetime";
+ * import { assert } from "@std/assert";
+ *
+ * // A hand-built panic with the same name is not one.
+ * const lookalike = new Panic({
+ * 	name: "SetupTeardownFailed",
+ * 	message: "",
+ * 	cause: null,
+ * });
+ * assert(!isSetupTeardownPanic(lookalike));
+ * ```
+ */
+export function isSetupTeardownPanic(
+	value: unknown,
+): value is Panic<SetupTeardownFailure> {
+	return SetupTeardownPanic.is(value);
+}
+
+/** `init`'s panic, or one carrying setup's teardown failures with it. */
+function withSetupFailures<C>({
+	init,
+	report,
+}: {
+	readonly init: Panic<unknown>;
+	readonly report: EndReport<SetupEnd<C>>;
+}): Panic<unknown> {
+	if (!isErr(report)) {
+		return init;
+	}
+	return new SetupTeardownPanic({ init, teardown: unwrapErr(report).panics });
 }

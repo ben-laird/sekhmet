@@ -14,7 +14,7 @@ import {
 	wait,
 } from "@sekhmet/vow/mini";
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import { Resource, type SetupEnd } from "@/mod.ts";
+import { isSetupTeardownPanic, Resource, type SetupEnd } from "@/mod.ts";
 
 type Cause = "done" | "cancelled" | "shutdown";
 
@@ -165,6 +165,59 @@ Deno.test("an init's async setup teardown is awaited before start settles with E
 	// Then: Err only once setup was released
 	assert(pendingAtFirst);
 	assert(isErr(result) && released);
+});
+
+Deno.test("an init panic whose setup teardown fails too returns both in one Err, each reported once", async () => {
+	// Given: a resource whose init acquires something that fails to release, then throws (sync) or rejects (async)
+	const { panics, reported } = recordingPanics();
+	const flaky = new Resource<"sync" | "async", never, Cause>({
+		init: (mode, setup) => {
+			setup.defer(() => {
+				return Promise.reject(new Error(`${mode}: temp dir already gone`));
+			});
+			setup.defer(() => {
+				throw new Error(`${mode}: lock already released`);
+			});
+			if (mode === "sync") {
+				throw new Error("handshake failed");
+			}
+			return Promise.reject(new Error("timed out"));
+		},
+		deinit: () => {},
+	});
+
+	// When: both are started
+	const results = [
+		await wait(flaky.start({ input: "sync", panics })),
+		await wait(flaky.start({ input: "async", panics })),
+	];
+
+	// Then: each Err carries init's panic and setup's failures, in run order;
+	// the hook saw each original panic once, and never the carrier
+	const carried = results.map((result) => {
+		assert(isErr(result));
+		const failure = unwrapErr(result);
+		assert(isSetupTeardownPanic(failure));
+		assertEquals(failure.name, "Panic (SetupTeardownFailed)");
+		return [
+			failure.cause.init.message,
+			...failure.cause.teardown.map((panic) => panic.message),
+		];
+	});
+	assertEquals(carried, [
+		[
+			"handshake failed",
+			"sync: lock already released",
+			"sync: temp dir already gone",
+		],
+		[
+			"timed out",
+			"async: lock already released",
+			"async: temp dir already gone",
+		],
+	]);
+	assertEquals(reported.length, 6);
+	assert(!reported.some((payload) => isSetupTeardownPanic(payload)));
 });
 
 Deno.test("stacking resources: an inner resource started in init outlives the outer deinit", () => {

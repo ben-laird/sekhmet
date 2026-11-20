@@ -135,7 +135,13 @@ opened.
 - `InitPanicked(panic)`: `init` panicked before the resource existed. There
   is no lifetime and no `deinit`; `setup` is torn down at once, and `start`
   settles with `Err(panic)` once it has been, so nothing `init` acquired
-  leaks.
+  leaks. If setup's teardown fails too, the `Err` carries everything in one
+  place: a `Panic (SetupTeardownFailed)` whose cause holds `init`'s panic
+  and each of setup's cleanup panics (`isSetupTeardownPanic` narrows it).
+  This keeps failures as data, as an `EndReport` does, rather than a
+  `SuppressedError` chain, which only the `using` boundary builds. Each
+  panic was reported to the hook once, when it happened; the one that
+  carries them is not reported again.
 
 A cleanup on `setup` reads the variant to know which happened, and a child
 adopted on it maps the variant into its own cause with `fromParent`.

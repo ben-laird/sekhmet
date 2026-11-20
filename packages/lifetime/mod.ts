@@ -61,4 +61,10 @@ export {
 	type PhaseVariants,
 } from "./src/phase.ts";
 export { Registration, type RegistrationVariants } from "./src/registration.ts";
-export { Resource, SetupEnd, type SetupEndVariants } from "./src/resource.ts";
+export {
+	isSetupTeardownPanic,
+	Resource,
+	SetupEnd,
+	type SetupEndVariants,
+	type SetupTeardownFailure,
+} from "./src/resource.ts";
