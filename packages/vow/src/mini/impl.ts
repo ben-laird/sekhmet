@@ -113,8 +113,13 @@ export interface FromPromiseOptions<T> {
  * `panics.catchUnwind`: a dependent that throws is a bug, and the runtime's
  * hook reports the `AggregateError` of everything thrown, instead of it
  * escaping as an unhandled rejection. Every other dependent still runs, and
- * the vow still resolves. Only a hook that itself throws escapes, as the
- * runtime's `Panic (PanicHook)`.
+ * the vow still resolves.
+ *
+ * A hook that itself throws is a panic while panicking: the runtime throws
+ * `Panic (PanicHook)`, which escapes the `then` callback as an unhandled
+ * rejection and, under the Deno and Node defaults, crashes the process, like
+ * Rust aborting. That is deliberate. The default hook never throws, so this
+ * happens only with a hook of your own that does.
  *
  * @template T The type of the fulfilled value
  * @param options The promise, and the panic runtime that reports a

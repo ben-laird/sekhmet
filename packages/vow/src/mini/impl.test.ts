@@ -3,10 +3,16 @@ import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { Err, Ok } from "@sekhmet/enum/result/mini/core";
 import {
 	definePanicRuntime,
+	isPanicHookFailure,
 	type PanicHookInfo,
 	type PanicRuntime,
 } from "@sekhmet/panic";
-import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
+import {
+	assert,
+	assertEquals,
+	assertInstanceOf,
+	assertThrows,
+} from "@std/assert";
 import type { Vow } from "@/src/mini/core.ts";
 import {
 	andThen,
@@ -37,6 +43,24 @@ function recordingPanics(): {
 	const reported: PanicHookInfo[] = [];
 	panics.setHook((info) => reported.push(info));
 	return { panics, reported };
+}
+
+/**
+ * A promise that keeps every promise its `then` returns, so a test can see
+ * how the callbacks it was given settle.
+ */
+class WatchedPromise<T> extends Promise<T> {
+	readonly derived: Promise<unknown>[] = [];
+
+	// biome-ignore lint/suspicious/noThenProperty: it overrides Promise's own then
+	override then<A = T, B = never>(
+		onFulfilled?: ((value: T) => A | PromiseLike<A>) | null,
+		onRejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
+	): Promise<A | B> {
+		const next = super.then(onFulfilled, onRejected);
+		this.derived.push(next);
+		return next;
+	}
 }
 
 /** Waits a macrotask, so any unhandled rejection has been raised by now. */
@@ -463,4 +487,38 @@ Deno.test("fromPromise() reports a throwing dependent of a rejected promise", as
 	assertEquals(settled, Err("offline"));
 	assertEquals(reported.length, 1);
 	assertInstanceOf(reported[0]?.payload, AggregateError);
+});
+
+Deno.test("fromPromise() lets a hook that throws escape its then callback", async () => {
+	// Given: a runtime whose hook throws, and a fromPromise vow over a watched
+	// promise, with a throwing dependent
+	const panics = definePanicRuntime();
+	panics.setHook(() => {
+		throw new Error("reporter offline");
+	});
+	let fulfil!: (value: number) => void;
+	const source = new WatchedPromise<number>((resolve) => {
+		fulfil = resolve;
+	});
+	const vow = fromPromise({ promise: source, panics });
+	map(vow, () => {
+		throw new Error("bad dependent");
+	});
+
+	// When: the promise fulfils; the then callback's promise is caught here,
+	// since in a program nothing holds it and it would crash the process
+	const [callback] = source.derived;
+	assert(callback !== undefined);
+	const escaped = callback.then(
+		() => undefined,
+		(reason: unknown) => reason,
+	);
+	fulfil(1);
+	const reason = await escaped;
+
+	// Then: fromPromise attached one then callback, which rejected with the
+	// runtime's Panic (PanicHook), and the vow still resolved
+	assertEquals(source.derived.length, 1);
+	assert(isPanicHookFailure(reason));
+	assertEquals(peek(vow), ["Resolved", Ok(1)]);
 });

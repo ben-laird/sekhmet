@@ -143,8 +143,13 @@ would become an unhandled promise rejection. That is why `fromPromise` takes a
 panic runtime from `@sekhmet/panic`: it resolves the vow inside the runtime's
 `catchUnwind`, so the runtime's hook reports the `AggregateError` instead. A
 dependent that throws is a bug, which is what a panic means. Every other
-dependent still runs and the vow still resolves, just as with `resolve`. Only a
-hook that itself throws escapes, as a `Panic (PanicHook)`.
+dependent still runs and the vow still resolves, just as with `resolve`.
+
+The one exception is a hook that itself throws. That is a panic while panicking,
+so the runtime throws a `Panic (PanicHook)`, which escapes the `then` callback
+as an unhandled rejection and, under the Deno and Node defaults, crashes the
+process, the way Rust aborts. The default hook never throws, so this can only
+happen with a hook of your own that does.
 
 A few consequences follow from where the mapping runs:
 
