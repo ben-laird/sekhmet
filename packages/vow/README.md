@@ -56,6 +56,7 @@ assertEquals(await wait(total), 15);
 | `vowWithResolver()`             | a pending vow and the function that resolves it                |
 | `resolved(value)`               | a vow already resolved with `value`                            |
 | `map(vow, f)`                   | a vow of `f(value)`                                            |
+| `andThen(vow, f)`               | a vow of the value of the vow `f(value)` returns               |
 | `zip(a, b)`, `zipWith(a, b, f)` | a vow of both values once both resolve                         |
 | `wait(vow)`                     | a `Promise` of the value                                       |
 | `fromPromise(promise)`          | a vow of `Ok(value)` or `Err(reason)` once the promise settles |
@@ -66,7 +67,7 @@ assertEquals(await wait(total), 15);
   total from values that arrive separately, step by step.
 - **How-to guides:** [Recipes](./docs/recipes.md) for resolving a vow from a
   callback or an executor, starting a chain from a value you already have,
-  combining vows, awaiting a vow, turning a promise into a vow and handling
+  combining vows, chaining a step that returns a vow, awaiting a vow, turning a promise into a vow and handling
   its failure, and catching errors thrown by dependents.
 - **Explanation:** [Concepts](./docs/concepts.md) covers when to use a vow
   rather than a promise, why resolution is synchronous, how a vow is built as

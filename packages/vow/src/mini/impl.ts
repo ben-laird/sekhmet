@@ -1,6 +1,6 @@
 /**
  * Creating and combining vows: `vowWithResolver`, `resolved`, `fromPromise`,
- * `map`, `zip`, `zipWith` and `wait`.
+ * `map`, `andThen`, `zip`, `zipWith` and `wait`.
  *
  * @module
  */
@@ -150,6 +150,68 @@ export function map<T, U>(self: Vow<T>, mapping: (value: T) => U): Vow<U> {
 
 		function resolveMap(value: T): void {
 			resolve(mapping(value));
+		}
+	});
+}
+
+/**
+ * Chains a step that returns a Vow, flattening the result.
+ *
+ * Creates a new Vow that resolves with the value of the Vow `next` returns
+ * for `self`'s resolved value. This is commonly called "flatMap". When
+ * `self` is resolved and `next` returns a resolved Vow, the result is
+ * resolved before `andThen` returns: the chain stays synchronous as long as
+ * every step is.
+ *
+ * @template T The type of the original resolved value
+ * @template U The type of the chained Vow's resolved value
+ * @param self The Vow to chain from
+ * @param next Function from the resolved value to the next Vow
+ * @returns A Vow that resolves with the value of `next`'s Vow
+ *
+ * @example
+ * ```ts
+ * import { andThen, map, resolved, vowWithResolver } from "@sekhmet/vow";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const { vow: userId, resolve: setUserId } = vowWithResolver<number>();
+ * const { vow: profile, resolve: setProfile } = vowWithResolver<string>();
+ *
+ * // The second step is itself a vow
+ * const greeting = andThen(userId, (id) => {
+ *   return map(profile, (name) => `#${id}: ${name}`);
+ * });
+ * const seen: string[] = [];
+ * map(greeting, (text) => seen.push(text));
+ *
+ * setUserId(7);
+ * assertEquals(seen, []); // waiting for the profile
+ * setProfile("Ada");
+ * assertEquals(seen, ["#7: Ada"]);
+ *
+ * // With every step resolved, the chain resolves synchronously
+ * const sync: number[] = [];
+ * map(andThen(resolved(2), (n) => resolved(n * 10)), (n) => sync.push(n));
+ * assertEquals(sync, [20]);
+ * ```
+ */
+export function andThen<T, U>(
+	self: Vow<T>,
+	next: (value: T) => Vow<U>,
+): Vow<U> {
+	return new Vow<U>((resolve) => {
+		match(self)({
+			Pending: (subscribe) => subscribe(resolveNext),
+			Resolved: resolveNext,
+		});
+
+		function resolveNext(value: T): void {
+			const chained = next(value);
+
+			match(chained)({
+				Pending: (subscribe) => subscribe(resolve),
+				Resolved: resolve,
+			});
 		}
 	});
 }

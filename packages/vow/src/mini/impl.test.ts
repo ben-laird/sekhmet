@@ -4,6 +4,7 @@ import { Err, Ok } from "@sekhmet/enum/result/mini/core";
 import { assertEquals, assertThrows } from "@std/assert";
 import type { Vow } from "@/src/mini/core.ts";
 import {
+	andThen,
 	fromPromise,
 	map,
 	resolved,
@@ -141,6 +142,120 @@ Deno.test("map() obeys the functor laws", async (t) => {
 			assertEquals(peek(oneStep), ["Resolved", `${input + 1}`]);
 		}
 	});
+});
+
+Deno.test("andThen() chains a vow-returning step", async (t) => {
+	await t.step("waits for self, then for the step's vow", () => {
+		// Given: a pending source and a pending second step
+		const source = vowWithResolver<number>();
+		const step = vowWithResolver<string>();
+		const calls: number[] = [];
+
+		// When: chaining them and resolving each in turn
+		const chained = andThen(source.vow, (n) => {
+			calls.push(n);
+			return step.vow;
+		});
+		const beforeSource = peek(chained);
+		source.resolve(3);
+		const beforeStep = peek(chained);
+		step.resolve("three");
+
+		// Then: it resolves only after both, calling next once with the value
+		assertEquals(beforeSource, ["Pending"]);
+		assertEquals(beforeStep, ["Pending"]);
+		assertEquals(peek(chained), ["Resolved", "three"]);
+		assertEquals(calls, [3]);
+	});
+
+	await t.step("is synchronous when every step is", () => {
+		// Given: a resolved source and a step returning a resolved vow
+		const source = resolved(2);
+
+		// When: chaining them
+		const chained = andThen(source, (n) => resolved(n * 10));
+
+		// Then: the result is already resolved
+		assertEquals(peek(chained), ["Resolved", 20]);
+	});
+
+	await t.step("propagates a throwing step to the resolver", () => {
+		// Given: a pending source whose step throws
+		const { vow, resolve } = vowWithResolver<number>();
+		const error = new Error("bad step");
+		const chained = andThen(vow, (): Vow<number> => {
+			throw error;
+		});
+
+		// When: resolving the source
+		const thrown = assertThrows(() => resolve(1), AggregateError);
+
+		// Then: the error surfaces and the chained vow stays pending
+		assertEquals(thrown.errors, [error]);
+		assertEquals(peek(chained), ["Pending"]);
+	});
+});
+
+Deno.test("andThen() obeys the monad laws", async (t) => {
+	const inputs = [0, 1, -7, 42];
+	const f = (n: number): Vow<number> => resolved(n + 1);
+	const g = (n: number): Vow<string> => {
+		const { vow, resolve } = vowWithResolver<string>();
+		resolve(`${n}`);
+		return vow;
+	};
+
+	await t.step("left identity: andThen(resolved(a), f) ≡ f(a)", () => {
+		for (const input of inputs) {
+			// Given: an input and a vow-returning step
+			const lifted = resolved(input);
+
+			// When: chaining the lifted input versus applying the step
+			const chained = andThen(lifted, g);
+			const applied = g(input);
+
+			// Then: both hold the same value
+			assertEquals(peek(chained), peek(applied));
+		}
+	});
+
+	await t.step("right identity: andThen(v, resolved) ≡ v", () => {
+		for (const input of inputs) {
+			// Given: a resolved and a deferred vow of the input
+			const eager = resolved(input);
+			const { vow: lazy, resolve } = vowWithResolver<number>();
+
+			// When: chaining each with resolved
+			const chainedEager = andThen(eager, resolved);
+			const chainedLazy = andThen(lazy, resolved);
+			const lazyBefore = peek(chainedLazy);
+			resolve(input);
+
+			// Then: each matches the original, pending and resolved alike
+			assertEquals(peek(chainedEager), peek(eager));
+			assertEquals(lazyBefore, ["Pending"]);
+			assertEquals(peek(chainedLazy), peek(lazy));
+		}
+	});
+
+	await t.step(
+		"associativity: andThen(andThen(v, f), g) ≡ andThen(v, x => andThen(f(x), g))",
+		() => {
+			for (const input of inputs) {
+				// Given: a deferred vow of the input
+				const { vow, resolve } = vowWithResolver<number>();
+
+				// When: nesting the chain to the left versus to the right
+				const left = andThen(andThen(vow, f), g);
+				const right = andThen(vow, (x) => andThen(f(x), g));
+				resolve(input);
+
+				// Then: both resolve to the same value
+				assertEquals(peek(left), peek(right));
+				assertEquals(peek(right), ["Resolved", `${input + 1}`]);
+			}
+		},
+	);
 });
 
 Deno.test("zip() pairs two vows", async (t) => {

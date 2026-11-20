@@ -103,6 +103,39 @@ assertEquals(await wait(total), 300);
 assertEquals(await wait(pair), ["widget", 3]);
 ```
 
+## How to chain vows
+
+This guide shows you how to run a step that needs one vow's value and itself
+returns a vow, without ending up with a vow of a vow.
+
+1. Use `andThen` with a function from the value to the next vow.
+2. The chained vow resolves with the next vow's value, once both have resolved.
+   When every step is already resolved, it resolves before `andThen` returns.
+
+```ts
+import { assertEquals } from "@std/assert";
+import {
+	andThen,
+	map,
+	resolved,
+	vowWithResolver,
+	type Vow,
+} from "@sekhmet/vow";
+
+const { vow: userId, resolve: setUserId } = vowWithResolver<number>();
+const names = new Map<number, Vow<string>>([[7, resolved("Ada")]]);
+
+const name = andThen(userId, (id) => names.get(id) ?? resolved("unknown"));
+const seen: string[] = [];
+map(name, (value) => seen.push(value));
+
+setUserId(7);
+
+assertEquals(seen, ["Ada"]); // ran synchronously inside setUserId
+```
+
+Use `map` instead when the step returns a plain value.
+
 ## How to await a vow in async code
 
 This guide shows you how to hand a vow's value to code that works with
