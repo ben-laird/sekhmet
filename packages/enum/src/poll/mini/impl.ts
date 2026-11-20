@@ -1,6 +1,11 @@
 import type { Enum, Isolate } from "@/src/core/mini/core.ts";
 import { match } from "@/src/core/mini/exit.ts";
 import { isolate } from "@/src/core/mini/isolate.ts";
+import type { Result } from "@/src/result/mini/core.ts";
+import {
+	map as mapResult,
+	mapErr as mapResultErr,
+} from "@/src/result/mini/transform.ts";
 import { Pending, type Poll, type PollVariants, Ready } from "./core.ts";
 
 /**
@@ -27,6 +32,78 @@ import { Pending, type Poll, type PollVariants, Ready } from "./core.ts";
  */
 export function map<T, U>(self: Poll<T>, mapping: (value: T) => U): Poll<U> {
 	return match(self)({ Pending, Ready: (value) => Ready(mapping(value)) });
+}
+
+/**
+ * Maps the success value of a ready Result: Rust's
+ * `Poll<Result<T, E>>::map_ok`.
+ *
+ * `Ready(Ok(value))` becomes `Ready(Ok(mapping(value)))`; `Ready(Err(e))`
+ * and `Pending` pass through without calling `mapping`.
+ *
+ * @template T - The success type of the Result in the source Poll
+ * @template E - The error type of the Result
+ * @template U - The success type of the Result in the resulting Poll
+ * @param self - The Poll of a Result to map over
+ * @param mapping - The function to apply to the success value
+ * @returns A Poll of the Result with its success value mapped
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Pending, type Poll, Ready, map, mapOk } from "@sekhmet/enum/poll/mini";
+ * import { Err, Ok, type Result, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ *
+ * const done: Poll<Result<number, string>> = Ready(Ok(5));
+ * const failed: Poll<Result<number, string>> = Ready(Err("boom"));
+ * const waiting: Poll<Result<number, string>> = Pending();
+ *
+ * assertEquals(map(mapOk(done, (n) => n * 2), unwrap), Ready(10));
+ * assertEquals(map(mapOk(failed, (n) => n * 2), unwrapErr), Ready("boom"));
+ * assertEquals(mapOk(waiting, (n) => n * 2), Pending());
+ * ```
+ */
+export function mapOk<T, E, U>(
+	self: Poll<Result<T, E>>,
+	mapping: (value: T) => U,
+): Poll<Result<U, E>> {
+	return map(self, (result) => mapResult(result, mapping));
+}
+
+/**
+ * Maps the error value of a ready Result: Rust's
+ * `Poll<Result<T, E>>::map_err`.
+ *
+ * `Ready(Err(error))` becomes `Ready(Err(mapping(error)))`; `Ready(Ok(v))`
+ * and `Pending` pass through without calling `mapping`.
+ *
+ * @template T - The success type of the Result
+ * @template E - The error type of the Result in the source Poll
+ * @template F - The error type of the Result in the resulting Poll
+ * @param self - The Poll of a Result to map over
+ * @param mapping - The function to apply to the error value
+ * @returns A Poll of the Result with its error value mapped
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Pending, type Poll, Ready, map, mapErr } from "@sekhmet/enum/poll/mini";
+ * import { Err, Ok, type Result, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ *
+ * const failed: Poll<Result<number, string>> = Ready(Err("boom"));
+ * const done: Poll<Result<number, string>> = Ready(Ok(5));
+ * const waiting: Poll<Result<number, string>> = Pending();
+ *
+ * assertEquals(map(mapErr(failed, (e) => e.length), unwrapErr), Ready(4));
+ * assertEquals(map(mapErr(done, (e) => e.length), unwrap), Ready(5));
+ * assertEquals(mapErr(waiting, (e) => e.length), Pending());
+ * ```
+ */
+export function mapErr<T, E, F>(
+	self: Poll<Result<T, E>>,
+	mapping: (error: E) => F,
+): Poll<Result<T, F>> {
+	return map(self, (result) => mapResultErr(result, mapping));
 }
 
 /**

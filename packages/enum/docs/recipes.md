@@ -122,21 +122,26 @@ assertEquals(width.zipWith(None<number>(), (w, h) => w * h).unwrapOr(0), 0);
 ## Turn an `Option` of a `Result` inside out
 
 `transpose` swaps the layers: `Some(Ok(x))` becomes `Ok(Some(x))`, `None`
-becomes `Ok(None)`, and `Some(Err(e))` becomes `Err(e)`. It is a function, not a
-method, because its input is an option of a result.
+becomes `Ok(None)`, and `Some(Err(e))` becomes `Err(e)`. Like Rust's, it is a
+method only of an option of a result: its `this` parameter is
+`Option<Result<T, E>>`, so calling it on any other option is a type error.
+`Result`'s `transpose` turns the layers back.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { None, Some, transpose } from "@sekhmet/enum/option";
+import { None, Some } from "@sekhmet/enum/option";
 import { Err, Ok, type Result } from "@sekhmet/enum/result";
 
 const parse = (text: string): Result<number, string> =>
 	Number.isNaN(Number(text)) ? Err(`bad number: ${text}`) : Ok(Number(text));
 
 // An optional field that must be valid when present
-assertEquals(transpose(Some("5").map(parse)).unwrap().unwrap(), 5);
-assertEquals(transpose(None<string>().map(parse)).unwrap().isNone(), true);
-assertEquals(transpose(Some("x").map(parse)).unwrapErr(), "bad number: x");
+assertEquals(Some("5").map(parse).transpose().unwrap().unwrap(), 5);
+assertEquals(None<string>().map(parse).transpose().unwrap().isNone(), true);
+assertEquals(Some("x").map(parse).transpose().unwrapErr(), "bad number: x");
+
+// And back again
+assertEquals(Some("5").map(parse).transpose().transpose().unwrap().unwrap(), 5);
 ```
 
 ## Lazily fill a cache slot

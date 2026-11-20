@@ -359,6 +359,18 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   class's; the rest stay on the method (`filter<T, U extends T>` becomes
   `filter<U extends T>`). JSDoc is copied without `@param self`, and
   `@see {@link mini.fn}` is added.
+- **Receiver-constrained methods.** When `self`'s type arguments are not
+  distinct type parameters of the function (`self: Option<Option<T>>`,
+  `self: Poll<Result<T, E>>`, `self: Pair<A, A>`), the function is Rust's
+  method on a constrained impl block (`impl<T> Option<Option<T>>`). Its
+  method declares that shape as a `this` parameter and keeps every type
+  parameter as its own: `flatten<T>(this: Option<mini.Option<T>>): Option<T>`.
+  The outer class is spelled main, the arguments mini (like any parameter).
+  A call on a receiver of another shape fails to type-check, though
+  autocomplete still lists the method on every receiver. The method's type
+  parameters may share the class's names, since it uses none of the
+  class's. A namespace method can't constrain its receiver; generation
+  rejects one.
 - **Examples.** Every example copied into main (methods, constructors, the
   class) is rewritten for main: calls of any function that became a method
   move to method form, and imports from `<entrypoint>/mini` (or a mini
@@ -464,7 +476,7 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   `fromMiniView` panics on a subclass and the receiver's identity is the
   point. Generation fails if such a function returns no converted value.
 - **Constructors and other free functions.** A function without `self` whose
-  return needs converting (`Some`, `None`, `flatten`, `unzip`, `transpose`,
+  return needs converting (`Some`, `None`, `maybe`,
   `compareNumbers`, `fork`, `fallible`, `fallibleAsync`, `promiseResult`) is
   re-declared in main as a wrapper that returns main classes, so
   `Some(1).map(…)` chains. Everything else mini exports is re-exported
@@ -497,7 +509,7 @@ export function Some<T>(value: T): Option<T> {
 ```
 
 Functions whose first parameter is not `self` of the primary type (e.g.
-`fork(self: Runtime, …)`, `flatten(opt: Option<Option<T>>)`) never become
+`fork(self: Runtime, …)` in fiber, whose primary is `Fiber`) never become
 methods.
 
 ### Writing mini so main generates cleanly
@@ -505,7 +517,9 @@ methods.
 - Name the receiver `self` and type it as the primary class with each of the
   class's type parameters passed as a distinct function type parameter
   (`self: Latch<A, I>`). Don't name another type parameter after one of the
-  class's, nor `Self` on a namespace method.
+  class's, nor `Self` on a namespace method. For a method that exists only
+  for one shape of receiver, type `self` as that shape
+  (`self: Option<Option<T>>`); it becomes a `this` parameter.
 - To return a view of the receiver, capture it exactly:
   `self: S & Schema<I, O, E>` with `S extends Schema<I, O, E>` (TypeScript
   infers both), never a generic `S extends AnySchema` with `Input<S>` in the

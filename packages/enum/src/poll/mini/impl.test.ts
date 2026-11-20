@@ -3,6 +3,91 @@ import { assertType, type IsExact } from "@std/testing/types";
 import { match, union } from "@/src/core/mini/exit.ts";
 import { Pending, type Poll, Ready } from "@/src/poll/mini/core.ts";
 import * as TestSubject from "@/src/poll/mini/impl.ts";
+import { Err, Ok, type Result } from "@/src/result/mini/core.ts";
+
+/** A small table of Polls of Results used for mapOk/mapErr tests. */
+const RESULT_SAMPLES: Poll<Result<number, string>>[] = [
+	Ready(Ok(3)),
+	Ready(Err("bad")),
+	Pending(),
+];
+
+Deno.test("mapOk() maps only a ready Ok", () => {
+	// Given: a ready Ok, a ready Err and a Pending
+	const seen: number[] = [];
+	const double = (n: number): number => {
+		seen.push(n);
+		return n * 2;
+	};
+
+	// When: mapping each one's success value
+	const mapped = RESULT_SAMPLES.map((poll) => {
+		return TestSubject.mapOk(poll, double);
+	});
+
+	// Then: only the Ok changed, and the mapping ran once, on its value
+	assertEquals(mapped, [Ready(Ok(6)), Ready(Err("bad")), Pending()]);
+	assertEquals(seen, [3]);
+});
+
+Deno.test("mapErr() maps only a ready Err", () => {
+	// Given: a ready Ok, a ready Err and a Pending
+	const seen: string[] = [];
+	const length = (e: string): number => {
+		seen.push(e);
+		return e.length;
+	};
+
+	// When: mapping each one's error value
+	const mapped = RESULT_SAMPLES.map((poll) => {
+		return TestSubject.mapErr(poll, length);
+	});
+
+	// Then: only the Err changed, and the mapping ran once, on its error
+	assertEquals(mapped, [Ready(Ok(3)), Ready(Err(3)), Pending()]);
+	assertEquals(seen, ["bad"]);
+});
+
+Deno.test("mapOk() and mapErr() type their results", () => {
+	// Given: a Poll of a Result
+	const poll: Poll<Result<number, string>> = Ready(Ok(1));
+
+	// When: mapping the success and the error types
+	const okMapped = TestSubject.mapOk(poll, String);
+	const errMapped = TestSubject.mapErr(poll, (e) => e.length);
+
+	// Then: each changes only its own side of the Result
+	assertType<IsExact<typeof okMapped, Poll<Result<string, string>>>>(true);
+	assertType<IsExact<typeof errMapped, Poll<Result<number, number>>>>(true);
+	assertEquals(okMapped, Ready(Ok("1")));
+});
+
+Deno.test("mapOk() obeys the functor laws", async (t) => {
+	await t.step("identity: mapOk(p, id) ≡ p", () => {
+		for (const p of RESULT_SAMPLES) {
+			// Given: a Poll of a Result
+			// When: mapping with the identity
+			const subject = TestSubject.mapOk(p, (n) => n);
+
+			// Then: it is unchanged
+			assertEquals(subject, p);
+		}
+	});
+
+	await t.step("composition: mapOk(mapOk(p, f), g) ≡ mapOk(p, g ∘ f)", () => {
+		const f = (n: number): number => n + 1;
+		const g = (n: number): string => `${n}`;
+		for (const p of RESULT_SAMPLES) {
+			// Given: a Poll of a Result and two mappings
+			// When: mapping in two steps versus one
+			const twoSteps = TestSubject.mapOk(TestSubject.mapOk(p, f), g);
+			const oneStep = TestSubject.mapOk(p, (n) => g(f(n)));
+
+			// Then: both agree
+			assertEquals(twoSteps, oneStep);
+		}
+	});
+});
 
 const SAMPLES: Poll<number>[] = [Ready(0), Ready(4), Ready(-1), Pending()];
 

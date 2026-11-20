@@ -28,6 +28,7 @@
 
 import { getStructParams, struct } from "@sekhmet/primordials/struct";
 import type { Enum, Isolate } from "@/src/core/mini/core.ts";
+import type { Option as MiniOption } from "@/src/option/mini/core.ts";
 import { Option } from "../../option/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
@@ -157,6 +158,59 @@ export class Result<out T, out E> extends mini.Result<T, E> {
 	 */
 	iter(): Generator<T, void, undefined> {
 		return mini.iter(this);
+	}
+
+	/**
+	 * Transposes a Result of an Option into an Option of a Result: Rust's
+	 * `Result<Option<T>, E>::transpose`, the inverse of the Option one.
+	 *
+	 * Converts `Ok(Some(x))` into `Some(Ok(x))`, `Ok(None)` into `None`, and
+	 * `Err(e)` into `Some(Err(e))`.
+	 *
+	 * @template T - The type of the success value inside the Option
+	 * @template E - The type of the error value
+	 * @returns An Option containing a Result
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { None, Some, isNone, unwrap as unwrapOption } from "@sekhmet/enum/option/mini";
+	 * import { Err, Ok } from "@sekhmet/enum/result";
+	 *
+	 * assertEquals(unwrapOption(Ok(Some(5)).transpose()).unwrap(), 5);
+	 * assertEquals(isNone(Ok(None()).transpose()), true);
+	 * assertEquals(unwrapOption(Err("fail").transpose()).unwrapErr(), "fail");
+	 * ```
+	 * @see {@link mini.transpose}
+	 */
+	transpose<T, E>(this: Result<MiniOption<T>, E>): Option<Result<T, E>> {
+		return Option.fromMini(mini.transpose(this)).map(($value0) => {
+			return Result.fromMini($value0);
+		});
+	}
+
+	/**
+	 * Flattens a nested Result into a single-level Result: Rust's
+	 * `Result<Result<T, E>, E>::flatten`.
+	 *
+	 * Converts `Ok(Ok(x))` into `Ok(x)`, and both `Ok(Err(e))` and `Err(e)` into
+	 * `Err(e)`. Both layers share the error type.
+	 *
+	 * @template T - The type of the inner success value
+	 * @template E - The type of the error value, shared by both layers
+	 * @returns The inner Result if Ok, otherwise the outer Err
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err, Ok } from "@sekhmet/enum/result";
+	 *
+	 * assertEquals(Ok(Ok(6)).flatten(), Ok(6));
+	 * assertEquals(Ok(Err("inner")).flatten(), Err("inner"));
+	 * assertEquals(Err("outer").flatten(), Err("outer"));
+	 * ```
+	 * @see {@link mini.flatten}
+	 */
+	flatten<T, E>(this: Result<mini.Result<T, E>, E>): Result<T, E> {
+		return Result.fromMini(mini.flatten(this));
 	}
 
 	/**
