@@ -1,6 +1,12 @@
 import { Panic } from "@sekhmet/panic";
 import { assert, assertEquals } from "@std/assert";
-import { asPanic, isThenable, suppressedError } from "./teardown.ts";
+import { Lifetime } from "./lifetime.ts";
+import {
+	asPanic,
+	installDisposers,
+	isThenable,
+	suppressedError,
+} from "./teardown.ts";
 
 Deno.test("suppressedError uses the platform's SuppressedError where there is one", () => {
 	// Given: a runtime with SuppressedError, or without it
@@ -75,4 +81,56 @@ Deno.test("isThenable tells promises and thenables from plain values", () => {
 	assert(isThenable(thenable));
 	assert(!isThenable<unknown>(undefined));
 	assert(!isThenable<unknown>(notCallable));
+});
+
+Deno.test("installDisposers installs each disposer only under a symbol the runtime defines", () => {
+	// Given: symbol tables with both, one, or neither of the well-known symbols
+	const dispose = Symbol("dispose");
+	const asyncDispose = Symbol("asyncDispose");
+	const tables = [
+		{ dispose, asyncDispose },
+		{ dispose },
+		{ asyncDispose: undefined },
+	];
+	const disposer = (): void => {};
+	const asyncDisposer = (): Promise<void> => Promise.resolve();
+
+	// When: each table installs on a fresh target
+	const targets = tables.map((symbols) => {
+		const target = {};
+		installDisposers({
+			target,
+			symbols,
+			dispose: disposer,
+			asyncDispose: asyncDisposer,
+		});
+		return target;
+	});
+
+	// Then: only defined symbols got a disposer, and no string key appeared
+	const [both, syncOnly, neither] = targets;
+	assert(Reflect.get(both ?? {}, dispose) === disposer);
+	assert(Reflect.get(both ?? {}, asyncDispose) === asyncDisposer);
+	assert(Reflect.get(syncOnly ?? {}, dispose) === disposer);
+	assertEquals(Reflect.ownKeys(syncOnly ?? {}).length, 1);
+	assertEquals(Reflect.ownKeys(neither ?? {}), []);
+});
+
+Deno.test("Lifetime's disposers are installed under the runtime's own symbols", () => {
+	// Given: the runtime's well-known symbols
+	const symbols = [
+		Reflect.get(Symbol, "dispose"),
+		Reflect.get(Symbol, "asyncDispose"),
+	];
+
+	// When: Lifetime's prototype is inspected
+	const keys = Reflect.ownKeys(Lifetime.prototype);
+
+	// Then: each defined symbol has a disposer; no "undefined" key exists
+	for (const symbol of symbols) {
+		if (typeof symbol === "symbol") {
+			assert(keys.includes(symbol));
+		}
+	}
+	assert(!keys.includes("undefined"));
 });

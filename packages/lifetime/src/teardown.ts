@@ -198,3 +198,45 @@ class SuppressedErrorPonyfill extends Error {
 		this.suppressed = suppressed;
 	}
 }
+
+/**
+ * The well-known symbols `using` and `await using` call, as a runtime may
+ * or may not define them: pass the global `Symbol`.
+ *
+ * @internal
+ */
+export interface DisposalSymbols {
+	readonly dispose?: unknown;
+	readonly asyncDispose?: unknown;
+}
+
+/**
+ * Installs `dispose` and `asyncDispose` on `target` under the runtime's
+ * `Symbol.dispose` and `Symbol.asyncDispose`, each only where the runtime
+ * defines that symbol. It never installs a symbol of its own.
+ *
+ * @internal
+ */
+export function installDisposers({
+	target,
+	symbols,
+	dispose,
+	asyncDispose,
+}: {
+	readonly target: object;
+	readonly symbols: DisposalSymbols;
+	readonly dispose: unknown;
+	readonly asyncDispose: unknown;
+}): void {
+	const install = ({ key, value }: { key: unknown; value: unknown }): void => {
+		if (typeof key === "symbol") {
+			Object.defineProperty(target, key, {
+				value,
+				writable: true,
+				configurable: true,
+			});
+		}
+	};
+	install({ key: symbols.dispose, value: dispose });
+	install({ key: symbols.asyncDispose, value: asyncDispose });
+}

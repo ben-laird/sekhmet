@@ -27,7 +27,12 @@ import { invariant } from "@sekhmet/workflow/invariant";
 import { Adoption } from "./adoption.ts";
 import { causeOf, type EndReport, Phase } from "./phase.ts";
 import { Registration } from "./registration.ts";
-import { asPanic, runCleanup, throwIfFailed } from "./teardown.ts";
+import {
+	asPanic,
+	installDisposers,
+	runCleanup,
+	throwIfFailed,
+} from "./teardown.ts";
 
 /**
  * The only parts of a panic runtime a lifetime needs: the boundaries that
@@ -96,10 +101,16 @@ interface OwnerLink<out C> {
 	readonly owner: object;
 	/** The owner's own owner */
 	readonly up: () => OwnerLink<unknown> | undefined;
-	/** Takes the child's entry off the owner's stack */
-	readonly detach: () => void;
-	/** The owner's dispose cause, mapped into the child's, read when needed */
-	readonly disposeCause: () => Option<C>;
+	/**
+	 * The child leaves its owner as it starts ending on its own. The owner's
+	 * stack keeps a waiter until the child's teardown has finished.
+	 */
+	readonly leave: () => void;
+	/**
+	 * The owner's dispose cause, mapped into the child's, read when needed;
+	 * `Err` when a `fromParent` on the way panics
+	 */
+	readonly disposeCause: () => Result<Option<C>, Panic<unknown>>;
 }
 
 /**
@@ -460,8 +471,16 @@ export class Lifetime<T, C> {
 	/**
 	 * Adopts a root lifetime with the same cause type: it joins this
 	 * lifetime's teardown stack, and ends with this lifetime's cause when the
-	 * teardown reaches it. A child that ends on its own first leaves the
-	 * stack.
+	 * teardown reaches it. A child that ends on its own first leaves its
+	 * owner and keeps its own cause, but its place on the stack holds a
+	 * waiter until its teardown finishes, so this lifetime's end still
+	 * awaits it there (its report belongs to whoever ended it).
+	 *
+	 * Adopting into a lifetime that is ending ends the child at once, and
+	 * the teardown that is running awaits it, its panics joining the
+	 * report. A `fromParent` that panics on any of these paths is reported
+	 * (and kept in the report, while there is one), and leaves the child an
+	 * Alive root.
 	 *
 	 * @template U The type of the child's value
 	 * @param options The child to adopt
@@ -523,38 +542,81 @@ export class Lifetime<T, C> {
 		if (!isolate(child.phase(), "Alive")) {
 			return new Adoption("ChildEnded");
 		}
+		const panics = this.#panics;
 		return match(this.phase())({
 			Alive: () => {
-				const remove = this.#push(
-					childEntry({
-						child,
-						fromParent,
-						panics: this.#panics,
-						release: () => {
-							child.#owner = undefined;
-						},
-					}),
-				);
+				let remove: Unsubscribe = () => false;
+				// A fromParent panic leaves the child a root: no owner, no entry.
+				const release = (): void => {
+					child.#owner = undefined;
+					remove();
+				};
+				remove = this.#push(childEntry({ child, fromParent, panics, release }));
 				child.#owner = {
 					owner: this,
 					up: () => this.#owner,
-					detach: () => void remove(),
-					disposeCause: () => {
-						return match(this.#disposeCause())({
-							Some: (cause) => Some(fromParent(cause)),
-							None: () => None(),
+					leave: () => {
+						child.ended.whenDispatched(() => {
+							remove();
 						});
+					},
+					disposeCause: () => {
+						const own = this.#disposeCause();
+						if (isErr(own)) {
+							return Err(unwrapErr(own));
+						}
+						const option = unwrap(own);
+						if (!isolate(option, "Some")) {
+							return Ok(None());
+						}
+						const mapped = mapCause({
+							fromParent,
+							cause: union(option),
+							panics,
+						});
+						if (isErr(mapped)) {
+							release();
+							return Err(unwrapErr(mapped));
+						}
+						return Ok(Some(unwrap(mapped)));
 					},
 				};
 				return new Adoption("Adopted");
 			},
 			Ending: (cause) => {
-				// Born dead: an ending parent can't own it, and mustn't leak it.
-				child.end(fromParent(cause));
+				// Born dead: ended at once, and the teardown running waits for it.
+				let doubleFault: { readonly thrown: unknown } | undefined;
+				const ran = endChild({
+					child,
+					fromParent,
+					cause,
+					panics,
+					release: () => {},
+					onDoubleFault: (thrown) => {
+						doubleFault ??= { thrown };
+					},
+				});
+				this.#stack.push({ run: () => ran });
+				if (doubleFault !== undefined) {
+					throw doubleFault.thrown;
+				}
 				return new Adoption("ParentEnded");
 			},
 			Ended: (report) => {
-				child.end(fromParent(causeOf(report)));
+				let doubleFault: { readonly thrown: unknown } | undefined;
+				endChild({
+					child,
+					fromParent,
+					cause: causeOf(report),
+					panics,
+					release: () => {},
+					onDoubleFault: (thrown) => {
+						doubleFault ??= { thrown };
+					},
+				});
+				if (doubleFault !== undefined) {
+					throw doubleFault.thrown;
+				}
 				return new Adoption("ParentEnded");
 			},
 		});
@@ -578,11 +640,15 @@ export class Lifetime<T, C> {
 	}
 
 	/** Its own dispose cause, or its owner's mapped into it. */
-	#disposeCause(): Option<C> {
+	#disposeCause(): Result<Option<C>, Panic<unknown>> {
 		if (isolate(this.#ownDisposeCause, "Some")) {
-			return this.#ownDisposeCause;
+			return Ok(this.#ownDisposeCause);
 		}
-		return this.#owner?.disposeCause() ?? None();
+		const link = this.#owner;
+		if (link === undefined) {
+			return Ok(None());
+		}
+		return link.disposeCause();
 	}
 
 	/**
@@ -768,7 +834,7 @@ export class Lifetime<T, C> {
 			return this.ended;
 		}
 		this.#value = None();
-		this.#owner?.detach();
+		this.#owner?.leave();
 		this.#owner = undefined;
 
 		const failures: Panic<unknown>[] = [];
@@ -829,12 +895,18 @@ export class Lifetime<T, C> {
 	 * For `using`: ends the lifetime with its dispose cause, and throws its
 	 * cleanups' panics, chained as `SuppressedError`s when there are several.
 	 * The dispose cause is the lifetime's own, or its owner's mapped through
-	 * `fromParent`. A lifetime that has already started ending needs none.
+	 * `fromParent`.
 	 *
-	 * @throws `Panic (NoDisposeCause)` when it has no dispose cause;
-	 *   `Panic (AsyncCleanupUnderUsing)` when a cleanup is async (its
-	 *   teardown still runs to the end), which needs `await using`; and the
-	 *   cleanups' panics, when any failed
+	 * It throws only the failures of a teardown it started itself: if `end`
+	 * was already called, it does nothing, and whoever called `end` reads
+	 * the report. It is installed only where the runtime defines
+	 * `Symbol.dispose`; `end(cause)` is the explicit path everywhere.
+	 *
+	 * @throws `Panic (NoDisposeCause)` when it has no dispose cause; the
+	 *   panic of a `fromParent` that panicked while mapping one (the child
+	 *   is then released as a root); `Panic (AsyncCleanupUnderUsing)` when a
+	 *   cleanup is async (its teardown still runs to the end), which needs
+	 *   `await using`; and the cleanups' panics, when any failed
 	 *
 	 * @example
 	 * ```ts
@@ -856,26 +928,20 @@ export class Lifetime<T, C> {
 	 * assert(released);
 	 * ```
 	 */
-	[Symbol.dispose](): void {
-		const polled = this.#endForDisposal().poll();
-		if (!isolate(polled, "Ready")) {
-			panic({
-				name: "AsyncCleanupUnderUsing",
-				message:
-					"a cleanup is async, so this lifetime needs `await using`, not `using`",
-				cause: undefined,
-			});
-		}
-		throwIfFailed(union(polled));
-	}
+	declare readonly [Symbol.dispose]: () => void;
 
 	/**
 	 * For `await using`: ends the lifetime with its dispose cause, awaits its
 	 * teardown, and rejects with its cleanups' panics, chained as
 	 * `SuppressedError`s when there are several.
 	 *
+	 * If `end` was already called, it only awaits the teardown, and never
+	 * rejects with its failures: whoever called `end` reads the report. It
+	 * is installed only where the runtime defines `Symbol.asyncDispose`.
+	 *
 	 * @returns A promise that settles once the teardown has finished
-	 * @throws `Panic (NoDisposeCause)` when it has no dispose cause; and the
+	 * @throws `Panic (NoDisposeCause)` when it has no dispose cause; the
+	 *   panic of a `fromParent` that panicked while mapping one; and the
 	 *   cleanups' panics, when any failed
 	 *
 	 * @example
@@ -899,16 +965,52 @@ export class Lifetime<T, C> {
 	 * assert(closed);
 	 * ```
 	 */
-	async [Symbol.asyncDispose](): Promise<void> {
-		throwIfFailed(await this.#endForDisposal().wait());
+	declare readonly [Symbol.asyncDispose]: () => Promise<void>;
+
+	static {
+		installDisposers({
+			target: Lifetime.prototype,
+			symbols: Symbol,
+			dispose: function (this: Lifetime<unknown, unknown>): void {
+				this.#dispose();
+			},
+			asyncDispose: function (this: Lifetime<unknown, unknown>): Promise<void> {
+				return this.#asyncDispose();
+			},
+		});
 	}
 
-	#endForDisposal(): DispatchSignal<EndReport<C>> {
+	#dispose(): void {
 		if (!isolate(this.phase(), "Alive")) {
-			return this.ended;
+			return;
 		}
+		const polled = this.end(this.#requireDisposeCause()).poll();
+		if (!isolate(polled, "Ready")) {
+			panic({
+				name: "AsyncCleanupUnderUsing",
+				message:
+					"a cleanup is async, so this lifetime needs `await using`, not `using`",
+				cause: undefined,
+			});
+		}
+		throwIfFailed(union(polled));
+	}
+
+	async #asyncDispose(): Promise<void> {
+		if (!isolate(this.phase(), "Alive")) {
+			await this.ended.wait();
+			return;
+		}
+		throwIfFailed(await this.end(this.#requireDisposeCause()).wait());
+	}
+
+	#requireDisposeCause(): C {
 		const disposeCause = this.#disposeCause();
-		if (!isolate(disposeCause, "Some")) {
+		if (isErr(disposeCause)) {
+			throw unwrapErr(disposeCause);
+		}
+		const option = unwrap(disposeCause);
+		if (!isolate(option, "Some")) {
 			return panic({
 				name: "NoDisposeCause",
 				message:
@@ -916,15 +1018,15 @@ export class Lifetime<T, C> {
 				cause: undefined,
 			});
 		}
-		return this.end(union(disposeCause));
+		return union(option);
 	}
 }
 
 /**
- * The teardown entry of an adopted child: it maps the parent's cause into
- * the child's, ends the child, and collects the panics of its report. If
- * the mapping panics, there is no cause to end the child with, so it is
- * released to be a root again. It never throws.
+ * The teardown entry of an adopted child. A child still Alive is ended with
+ * the parent's cause, mapped into its own, and its report's panics are
+ * collected. A child that ended on its own is only waited for: its report
+ * belongs to whoever ended it. It never throws.
  */
 function childEntry<C, U, D>({
 	child,
@@ -940,27 +1042,83 @@ function childEntry<C, U, D>({
 }): Entry<C> {
 	return {
 		run: ({ cause, onDoubleFault }) => {
-			let mapped: Result<{ readonly cause: D }, unknown>;
-			try {
-				mapped = panics.catchUnwind(() => ({ cause: fromParent(cause) }));
-			} catch (thrown: unknown) {
-				release();
-				onDoubleFault(thrown);
-				return resolved([causeMappingFailed(thrown)]);
+			if (!isolate(child.phase(), "Alive")) {
+				return map(child.ended.toVow(), () => []);
 			}
-			if (isErr(mapped)) {
-				release();
-				return resolved([causeMappingFailed(unwrapErr(mapped))]);
-			}
-			try {
-				child.end(unwrap(mapped).cause);
-			} catch (thrown: unknown) {
-				// The child's report holds its panic; only the rethrow is ours.
-				onDoubleFault(thrown);
-			}
-			return map(child.ended.toVow(), panicsOfReport);
+			return endChild({
+				child,
+				fromParent,
+				cause,
+				panics,
+				release,
+				onDoubleFault,
+			});
 		},
 	};
+}
+
+/**
+ * Ends `child` with `fromParent(cause)`, and collects the panics of its
+ * report. If the mapping panics, there is no cause to end the child with,
+ * so it is released as a root, and the mapping's panic is the result. A
+ * synchronous double fault goes to `onDoubleFault`; it never throws.
+ */
+function endChild<C, U, D>({
+	child,
+	fromParent,
+	cause,
+	panics,
+	release,
+	onDoubleFault,
+}: {
+	readonly child: Lifetime<U, D>;
+	readonly fromParent: (cause: C) => D;
+	readonly cause: C;
+	readonly panics: LifetimePanics;
+	readonly release: () => void;
+	readonly onDoubleFault: (thrown: unknown) => void;
+}): Vow<readonly Panic<unknown>[]> {
+	let mapped: Result<D, Panic<unknown>>;
+	try {
+		mapped = mapCause({ fromParent, cause, panics });
+	} catch (thrown: unknown) {
+		release();
+		onDoubleFault(thrown);
+		return resolved([causeMappingFailed(thrown)]);
+	}
+	if (isErr(mapped)) {
+		release();
+		return resolved([unwrapErr(mapped)]);
+	}
+	try {
+		child.end(unwrap(mapped));
+	} catch (thrown: unknown) {
+		// The child's report holds its panic; only the rethrow is ours.
+		onDoubleFault(thrown);
+	}
+	return map(child.ended.toVow(), panicsOfReport);
+}
+
+/**
+ * Runs `fromParent` inside the panic boundary: a throw is reported to the
+ * hook and comes back as a `Panic (CauseMappingFailed)`. It throws only on
+ * a synchronous double fault.
+ */
+function mapCause<C, D>({
+	fromParent,
+	cause,
+	panics,
+}: {
+	readonly fromParent: (cause: C) => D;
+	readonly cause: C;
+	readonly panics: LifetimePanics;
+}): Result<D, Panic<unknown>> {
+	// Boxed, so catchUnwind's promise guard sees an object, not a maybe-promise.
+	const caught = panics.catchUnwind(() => ({ mapped: fromParent(cause) }));
+	if (isErr(caught)) {
+		return Err(causeMappingFailed(unwrapErr(caught)));
+	}
+	return Ok(unwrap(caught).mapped);
 }
 
 function causeMappingFailed(payload: unknown): Panic<unknown> {

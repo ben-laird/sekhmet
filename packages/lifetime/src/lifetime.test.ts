@@ -662,6 +662,182 @@ Deno.test("a long synchronous teardown doesn't grow the stack", () => {
 	assert(isOk(report));
 });
 
+Deno.test("a child that ends on its own still holds up its parent's end until its async teardown finishes", async () => {
+	// Given: a child that ends on its own, with an async cleanup
+	const root = app();
+	const order: string[] = [];
+	root.defer(() => void order.push("parent cleanup"));
+	const db = root.child({ value: "db" });
+	db.defer(async () => {
+		await Promise.resolve();
+		await Promise.resolve();
+		order.push("db closed");
+	});
+
+	// When: the child ends, then the parent ends while the child is still closing
+	db.end("done");
+	await root.end("shutdown").wait();
+	order.push("parent ended");
+
+	// Then: the parent waited for the child, in its stack position
+	assertEquals(order, ["db closed", "parent cleanup", "parent ended"]);
+});
+
+Deno.test("a child that has finished ending on its own leaves no entry behind", () => {
+	// Given: many children that each end on their own, synchronously
+	const root = app();
+	for (let i = 0; i < 1_000; i++) {
+		root.child({ value: i }).end("done");
+	}
+
+	// When: the parent ends
+	const polled = root.end("shutdown").poll();
+
+	// Then: it ended at once and cleanly, with nothing to wait for
+	assertEquals(polled, Ready(Ok("shutdown")));
+});
+
+Deno.test("a child adopted while its parent is ending is ended at once, and awaited", async () => {
+	// Given: a parent whose teardown adopts a child with an async cleanup
+	const { panics } = recordingPanics();
+	const root = app();
+	const order: string[] = [];
+	root.defer(() => void order.push("first acquired, last released"));
+	const late = new Lifetime<undefined, Cause>({ value: undefined, panics });
+	late.defer(async () => {
+		await Promise.resolve();
+		order.push("late child released");
+	});
+	root.defer(() => {
+		root.adopt({ child: late });
+	});
+
+	// When: the parent ends
+	const ended = root.end("shutdown");
+	const lateEnding = late.ending.poll();
+	await ended.wait();
+
+	// Then: the child started ending at once; the parent waited for it
+	assertEquals(lateEnding, Ready("shutdown"));
+	assertEquals(order, ["late child released", "first acquired, last released"]);
+});
+
+Deno.test("a fromParent that throws while adopting into an ending parent is in its report; the child stays a root", () => {
+	// Given: a parent whose teardown adopts a child with a throwing mapping
+	const { panics, reported } = recordingPanics();
+	const root = new Lifetime<undefined, Cause>({ value: undefined, panics });
+	const child = new Lifetime<number, string>({ value: 1, panics });
+	root.defer(() => {
+		root.adopt({
+			child,
+			fromParent: (): string => {
+				throw new Error("no mapping");
+			},
+		});
+	});
+
+	// When: the parent ends
+	root.end("done");
+
+	// Then: the panic was reported and is in the report; the child is an Alive root
+	const report = reportOf(root);
+	assert(isErr(report));
+	assertEquals(unwrapErr(report).panics[0]?.name, "Panic (CauseMappingFailed)");
+	assertEquals(reported.length, 1);
+	assert(isolate(child.phase(), "Alive"));
+	const next = new Lifetime<undefined, string>({ value: undefined, panics });
+	assert(isolate(next.adopt({ child }), "Adopted"));
+});
+
+Deno.test("a fromParent that throws while adopting into an ended parent is reported, never thrown raw", () => {
+	// Given: an ended parent and a live child
+	const { panics, reported } = recordingPanics();
+	const root = new Lifetime<undefined, Cause>({ value: undefined, panics });
+	root.end("done");
+	const child = new Lifetime<number, string>({ value: 1, panics });
+
+	// When: the child is adopted with a throwing mapping
+	const adoption = root.adopt({
+		child,
+		fromParent: (): string => {
+			throw new Error("no mapping");
+		},
+	});
+
+	// Then: no throw; the hook saw it; the child is still an Alive root
+	assert(isolate(adoption, "ParentEnded"));
+	assertEquals(reported.length, 1);
+	assert(isolate(child.phase(), "Alive"));
+});
+
+Deno.test("a fromParent that throws while mapping a dispose cause surfaces a Panic and releases the child", () => {
+	// Given: a child of a root with a dispose cause, mapped by a throwing fromParent
+	const { panics } = recordingPanics();
+	const root = app();
+	const child = root.child({
+		value: 1,
+		fromParent: (): string => {
+			throw new Error("no mapping");
+		},
+	});
+
+	// When: the child is disposed, then the root ends
+	const thrown = assertThrows(() => child[Symbol.dispose]());
+	root.end("shutdown");
+
+	// Then: a Panic, not a raw Error; the child is a root the root's end didn't reach
+	assert(
+		thrown instanceof Panic && thrown.name === "Panic (CauseMappingFailed)",
+	);
+	assert(isolate(child.phase(), "Alive"));
+	assertEquals(reportOf(root), Ok("shutdown"));
+	const next = new Lifetime<undefined, string>({ value: undefined, panics });
+	assert(isolate(next.adopt({ child }), "Adopted"));
+});
+
+Deno.test("disposing a lifetime that `end` already ended does nothing, even after failures", async () => {
+	// Given: lifetimes whose teardown failed, ended by hand and handled there
+	const sync = app();
+	sync.defer(() => {
+		throw new Error("handled by the caller of end");
+	});
+	sync.end("done");
+	const handled = reportOf(sync);
+	const async = app();
+	async.defer(() => Promise.reject(new Error("handled too")));
+	async.end("done");
+
+	// When: each is disposed, twice
+	sync[Symbol.dispose]();
+	sync[Symbol.dispose]();
+	await async[Symbol.asyncDispose]();
+	await async[Symbol.asyncDispose]();
+
+	// Then: nothing was thrown again; the reports are as end left them
+	assert(isErr(handled));
+	assert(isErr(reportOf(async)));
+});
+
+Deno.test("disposing a lifetime whose async teardown is running does nothing under using, and awaits it under await using", async () => {
+	// Given: a lifetime already ending, with an async cleanup
+	const root = app();
+	let closed = false;
+	root.defer(async () => {
+		await Promise.resolve();
+		closed = true;
+	});
+	root.end("done");
+
+	// When: it's disposed synchronously, then asynchronously
+	root[Symbol.dispose]();
+	const before = closed;
+	await root[Symbol.asyncDispose]();
+
+	// Then: the sync dispose didn't panic; the async one waited for the teardown
+	assert(!before);
+	assert(closed);
+});
+
 // --- Double faults: the panic hook throws while reporting ---
 
 Deno.test("a double fault in a sync teardown drains the stack, then end rethrows it", () => {

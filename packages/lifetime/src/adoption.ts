@@ -16,7 +16,10 @@ type Variants = Split<{
 	WouldCycle: [];
 	/** The child had already started ending: there is nothing to own. */
 	ChildEnded: [];
-	/** This lifetime is ending or has ended, so the child was ended at once. */
+	/**
+	 * This lifetime is ending or has ended, so the child was ended at once
+	 * (or, if `fromParent` panicked, left an Alive root).
+	 */
 	ParentEnded: [];
 }>;
 
