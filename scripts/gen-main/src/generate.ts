@@ -269,10 +269,13 @@ function wrapTargetOf({
 }
 
 /** The local map function of the carrier a top-level type names, if any. */
-function carrierOf(
-	carriers: ReadonlyMap<string, string>,
-	type: TypeNode,
-): string | undefined {
+function carrierOf({
+	carriers,
+	type,
+}: {
+	carriers: ReadonlyMap<string, string>;
+	type: TypeNode;
+}): string | undefined {
 	if (type.kind !== "ref" || type.resolution.kind === "typeParam") {
 		return undefined;
 	}
@@ -335,7 +338,7 @@ function needsConversion({
 			wrapTarget: (inner) => wrapTargetOf({ wrapNames, type: inner }),
 			mappers: () => [],
 			views: () => true,
-			carrier: (inner) => carrierOf(carriers, inner),
+			carrier: (inner) => carrierOf({ carriers, type: inner }),
 		},
 	});
 
@@ -716,7 +719,7 @@ function convertContextFor({
 		wrapTarget: (type) => wrapTargetOf({ wrapNames: module.wrapNames, type }),
 		mappers: (target) => module.mappers.get(target) ?? [],
 		views: (target) => module.views.has(target),
-		carrier: (type) => carrierOf(module.carriers, type),
+		carrier: (type) => carrierOf({ carriers: module.carriers, type }),
 	};
 }
 
