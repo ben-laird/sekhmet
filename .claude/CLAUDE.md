@@ -108,7 +108,7 @@ Packages (`packages/`):
   list; a `runIf` condition; a typed run),
   `family` (jobs made on the fly, one per key, deduped by identity),
   `runJobs` over a record of roots, the dry run `planJobs`, and
-  `JobOutcome` with methods (`@sekhmet/job/outcome`, a main/mini feature).
+  `JobEnd` with methods (`@sekhmet/job/end`, a main/mini feature).
   Its decision record is `docs/decisions/job.md`
 - `@sekhmet/lifetime`: RAII on `@sekhmet/dispatch` and `@sekhmet/vow`: a
   `Resource` (the rising edge: `init(input, setup)` and `deinit(value,

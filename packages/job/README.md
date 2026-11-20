@@ -5,7 +5,7 @@ and other CI runners, built on the language's own promises and
 `AbortSignal`. A job pairs a pure **plan**, its dependency list, with a
 **run**, which receives that list with each need resolved. A **`runIf`**
 decides, once the needs settle, whether the run is called. Each job runs
-once per run, however many jobs need it, and ends with a `JobOutcome`:
+once per run, however many jobs need it, and ends with a `JobEnd`:
 `Succeeded`, `Failed`, `Skipped`, `Blocked` or `Cancelled`.
 
 ## Install

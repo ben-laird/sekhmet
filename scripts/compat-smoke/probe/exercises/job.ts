@@ -4,7 +4,7 @@
  * cleanup; a cleanup that throws over a throwing body, which must compose a
  * `SuppressedError` (the runtime's, or job's own where the runtime lacks one,
  * as WebKit does); a run cancelled before it starts; the dry run; and
- * `JobOutcome` through `@sekhmet/job/outcome`, its mini barrel and each
+ * `JobEnd` through `@sekhmet/job/end`, its mini barrel and each
  * single-module path.
  *
  * @module
@@ -22,16 +22,13 @@ import {
 	runJobs,
 	Succeeded,
 } from "@sekhmet/job";
-import { Failed, Skipped } from "@sekhmet/job/outcome";
-import { all, isUnhealthy } from "@sekhmet/job/outcome/mini";
-import { blockedBy } from "@sekhmet/job/outcome/mini/accessors";
-import { all as allOf } from "@sekhmet/job/outcome/mini/all";
-import {
-	JobOutcome,
-	Succeeded as miniSucceeded,
-} from "@sekhmet/job/outcome/mini/core";
-import { isPassing } from "@sekhmet/job/outcome/mini/predicates";
-import { map, toResult } from "@sekhmet/job/outcome/mini/transform";
+import { Failed, Skipped } from "@sekhmet/job/end";
+import { all, isUnhealthy } from "@sekhmet/job/end/mini";
+import { blockedBy } from "@sekhmet/job/end/mini/accessors";
+import { all as allOf } from "@sekhmet/job/end/mini/all";
+import { JobEnd, Succeeded as miniSucceeded } from "@sekhmet/job/end/mini/core";
+import { isPassing } from "@sekhmet/job/end/mini/predicates";
+import { map, toResult } from "@sekhmet/job/end/mini/transform";
 import { expectEqual } from "../check.ts";
 
 function property(value: unknown, key: string): unknown {
@@ -154,9 +151,9 @@ async function exerciseCancel(): Promise<void> {
 	});
 }
 
-function exerciseOutcome(): void {
+function exerciseJobEnd(): void {
 	expectEqual({
-		label: "main JobOutcome chains",
+		label: "main JobEnd chains",
 		actual: [
 			Succeeded(2)
 				.map((n) => n * 10)
@@ -170,9 +167,9 @@ function exerciseOutcome(): void {
 
 	const doubled = map(miniSucceeded(21), (n) => n * 2);
 	expectEqual({
-		label: "mini JobOutcome functions",
+		label: "mini JobEnd functions",
 		actual: [
-			doubled instanceof JobOutcome,
+			doubled instanceof JobEnd,
 			isOk(toResult(doubled)),
 			isPassing(doubled),
 			isUnhealthy(all({ a: doubled, b: Failed(new Error("b")) })),
@@ -187,5 +184,5 @@ export async function exercise(): Promise<void> {
 	await exerciseRun();
 	await exerciseCleanupError();
 	await exerciseCancel();
-	exerciseOutcome();
+	exerciseJobEnd();
 }

@@ -1,5 +1,5 @@
 /**
- * The {@linkcode JobOutcome} class and its constructors.
+ * The {@linkcode JobEnd} class and its constructors.
  *
  * @module
  */
@@ -7,7 +7,7 @@
 import { Enum } from "@sekhmet/enum/core/mini";
 
 /**
- * The variants of a {@linkcode JobOutcome}, for type-level work on them.
+ * The variants of a {@linkcode JobEnd}, for type-level work on them.
  *
  * @template T What a succeeded job returned
  */
@@ -18,7 +18,7 @@ type Variants<T> =
 	| [kind: "Blocked", blockedBy: readonly string[]]
 	| [kind: "Cancelled"];
 
-export type { Variants as JobOutcomeVariants };
+export type { Variants as JobEndVariants };
 
 /**
  * How a job ended in one run. Outcomes are values: a body's throw or
@@ -41,10 +41,10 @@ export type { Variants as JobOutcomeVariants };
  * @example
  * ```ts
  * import { match } from "@sekhmet/enum/core/mini";
- * import { Blocked, type JobOutcome } from "@sekhmet/job/outcome/mini";
+ * import { Blocked, type JobEnd } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
- * const outcome: JobOutcome<number> = Blocked(["build"]);
+ * const outcome: JobEnd<number> = Blocked(["build"]);
  * const line = match(outcome)({
  * 	Succeeded: (value) => `ok: ${value}`,
  * 	Failed: (error) => `failed: ${String(error)}`,
@@ -55,7 +55,7 @@ export type { Variants as JobOutcomeVariants };
  * assertEquals(line, "blocked by build");
  * ```
  */
-export class JobOutcome<out T> extends Enum<Variants<T>> {}
+export class JobEnd<out T> extends Enum<Variants<T>> {}
 
 /**
  * A job whose body returned `value`.
@@ -66,14 +66,14 @@ export class JobOutcome<out T> extends Enum<Variants<T>> {}
  *
  * @example
  * ```ts
- * import { isSucceeded, Succeeded } from "@sekhmet/job/outcome/mini";
+ * import { isSucceeded, Succeeded } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isSucceeded(Succeeded("dist")), true);
  * ```
  */
-export function Succeeded<T>(value: T): JobOutcome<T> {
-	return new JobOutcome<T>("Succeeded", value);
+export function Succeeded<T>(value: T): JobEnd<T> {
+	return new JobEnd<T>("Succeeded", value);
 }
 
 /**
@@ -85,15 +85,15 @@ export function Succeeded<T>(value: T): JobOutcome<T> {
  *
  * @example
  * ```ts
- * import { Failed, isFailed, type JobOutcome } from "@sekhmet/job/outcome/mini";
+ * import { Failed, isFailed, type JobEnd } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
- * const outcome: JobOutcome<number> = Failed<number>(new Error("boom"));
+ * const outcome: JobEnd<number> = Failed<number>(new Error("boom"));
  * assertEquals(isFailed(outcome), true);
  * ```
  */
-export function Failed<T = never>(error: unknown): JobOutcome<T> {
-	return new JobOutcome<T>("Failed", error);
+export function Failed<T = never>(error: unknown): JobEnd<T> {
+	return new JobEnd<T>("Failed", error);
 }
 
 /**
@@ -104,15 +104,15 @@ export function Failed<T = never>(error: unknown): JobOutcome<T> {
  *
  * @example
  * ```ts
- * import { isSkipped, type JobOutcome, Skipped } from "@sekhmet/job/outcome/mini";
+ * import { isSkipped, type JobEnd, Skipped } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
- * const outcome: JobOutcome<number> = Skipped<number>();
+ * const outcome: JobEnd<number> = Skipped<number>();
  * assertEquals(isSkipped(outcome), true);
  * ```
  */
-export function Skipped<T = never>(): JobOutcome<T> {
-	return new JobOutcome<T>("Skipped");
+export function Skipped<T = never>(): JobEnd<T> {
+	return new JobEnd<T>("Skipped");
 }
 
 /**
@@ -124,16 +124,14 @@ export function Skipped<T = never>(): JobOutcome<T> {
  *
  * @example
  * ```ts
- * import { Blocked, isBlocked } from "@sekhmet/job/outcome/mini";
+ * import { Blocked, isBlocked } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isBlocked(Blocked(["lint"])), true);
  * ```
  */
-export function Blocked<T = never>(
-	blockedBy: readonly string[],
-): JobOutcome<T> {
-	return new JobOutcome<T>("Blocked", blockedBy);
+export function Blocked<T = never>(blockedBy: readonly string[]): JobEnd<T> {
+	return new JobEnd<T>("Blocked", blockedBy);
 }
 
 /**
@@ -144,12 +142,12 @@ export function Blocked<T = never>(
  *
  * @example
  * ```ts
- * import { Cancelled, isCancelled } from "@sekhmet/job/outcome/mini";
+ * import { Cancelled, isCancelled } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isCancelled(Cancelled()), true);
  * ```
  */
-export function Cancelled<T = never>(): JobOutcome<T> {
-	return new JobOutcome<T>("Cancelled");
+export function Cancelled<T = never>(): JobEnd<T> {
+	return new JobEnd<T>("Cancelled");
 }

@@ -6,7 +6,7 @@
  */
 
 import { union } from "@sekhmet/enum/core/mini";
-import { type JobOutcome, Succeeded } from "./core.ts";
+import { type JobEnd, Succeeded } from "./core.ts";
 import { unmet } from "./fold.ts";
 
 /**
@@ -15,7 +15,7 @@ import { unmet } from "./fold.ts";
  * @template R The record of outcomes
  */
 export type AllValues<R> = {
-	readonly [K in keyof R]: R[K] extends JobOutcome<infer T> ? T : never;
+	readonly [K in keyof R]: R[K] extends JobEnd<infer T> ? T : never;
 };
 
 /**
@@ -38,7 +38,7 @@ export type AllValues<R> = {
  *
  * @example
  * ```ts
- * import { all, Blocked, Failed, Succeeded } from "@sekhmet/job/outcome/mini";
+ * import { all, Blocked, Failed, Succeeded } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(
@@ -51,9 +51,9 @@ export type AllValues<R> = {
  * );
  * ```
  */
-export function all<R extends Readonly<Record<string, JobOutcome<unknown>>>>(
+export function all<R extends Readonly<Record<string, JobEnd<unknown>>>>(
 	outcomes: R,
-): JobOutcome<AllValues<R>> {
+): JobEnd<AllValues<R>> {
 	const entries = Object.entries(outcomes);
 	const forced = unmet(entries.map(([name, outcome]) => ({ name, outcome })));
 	if (forced !== undefined) return forced;

@@ -16,8 +16,8 @@ import {
 	Blocked,
 	Cancelled,
 	Failed,
-	type JobOutcome,
-	type JobOutcomeVariants,
+	type JobEnd,
+	type JobEndVariants,
 	Skipped,
 	Succeeded,
 } from "./core.ts";
@@ -33,7 +33,7 @@ import {
  *
  * @example
  * ```ts
- * import { map, Skipped, Succeeded } from "@sekhmet/job/outcome/mini";
+ * import { map, Skipped, Succeeded } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(map(Succeeded(2), (n) => n * 10), Succeeded(20));
@@ -41,10 +41,10 @@ import {
  * ```
  */
 export function map<T, U>(
-	self: JobOutcome<T>,
+	self: JobEnd<T>,
 	mapping: (value: T) => U,
-): JobOutcome<U> {
-	return match(self)<JobOutcome<U>>({
+): JobEnd<U> {
+	return match(self)<JobEnd<U>>({
 		Succeeded: (value) => Succeeded(mapping(value)),
 		Failed: (error) => Failed(error),
 		Skipped: () => Skipped(),
@@ -64,14 +64,14 @@ export function map<T, U>(
  * @example
  * ```ts
  * import { isErr } from "@sekhmet/enum/result/mini";
- * import { Blocked, toResult } from "@sekhmet/job/outcome/mini";
+ * import { Blocked, toResult } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isErr(toResult(Blocked(["build"]))), true);
  * ```
  */
-export function toResult<T>(self: JobOutcome<T>): Result<T, JobOutcome<never>> {
-	return match(self)<Result<T, JobOutcome<never>>>({
+export function toResult<T>(self: JobEnd<T>): Result<T, JobEnd<never>> {
+	return match(self)<Result<T, JobEnd<never>>>({
 		Succeeded: (value) => Ok(value),
 		Failed: (error) => Err(Failed(error)),
 		Skipped: () => Err(Skipped()),
@@ -84,7 +84,7 @@ export function toResult<T>(self: JobOutcome<T>): Result<T, JobOutcome<never>> {
  * Turns a failure into a success holding `Err(error)`, and a success into
  * one holding `Ok(value)`. The other outcomes pass through, and `Failed` is
  * gone from the variants, so enum's `match` on the result takes four arms,
- * with no `Failed`. The result is still a `JobOutcome`, though: `isFailed`
+ * with no `Failed`. The result is still a `JobEnd`, though: `isFailed`
  * on it type-checks and returns `false`, but doesn't narrow it to `never`.
  *
  * @template T What a succeeded job returned
@@ -95,7 +95,7 @@ export function toResult<T>(self: JobOutcome<T>): Result<T, JobOutcome<never>> {
  * ```ts
  * import { match } from "@sekhmet/enum/core/mini";
  * import { isErr } from "@sekhmet/enum/result/mini";
- * import { catchFailure, Failed } from "@sekhmet/job/outcome/mini";
+ * import { catchFailure, Failed } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * const line = match(catchFailure(Failed<number>(new Error("boom"))))({
@@ -108,10 +108,10 @@ export function toResult<T>(self: JobOutcome<T>): Result<T, JobOutcome<never>> {
  * ```
  */
 export function catchFailure<T>(
-	self: JobOutcome<T>,
-): Enum<Eliminate<JobOutcomeVariants<Result<T, unknown>>, "Failed">> &
-	JobOutcome<Result<T, unknown>> {
-	const caught = match(self)<JobOutcome<Result<T, unknown>>>({
+	self: JobEnd<T>,
+): Enum<Eliminate<JobEndVariants<Result<T, unknown>>, "Failed">> &
+	JobEnd<Result<T, unknown>> {
+	const caught = match(self)<JobEnd<Result<T, unknown>>>({
 		Succeeded: (value) => Succeeded(Ok(value)),
 		Failed: (error) => Succeeded(Err(error)),
 		Skipped: () => Skipped(),

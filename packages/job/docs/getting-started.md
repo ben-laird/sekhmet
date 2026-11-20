@@ -269,7 +269,7 @@ typed by its job, and enum's `match` makes us handle every way a job can end:
 ```ts
 import { match } from "@sekhmet/enum/core/mini";
 import { unwrap } from "@sekhmet/enum/result/mini";
-import { always, defineJobs, type JobOutcome, runJobs } from "@sekhmet/job";
+import { always, defineJobs, type JobEnd, runJobs } from "@sekhmet/job";
 import { assertEquals } from "@std/assert";
 
 interface Shell {
@@ -320,8 +320,8 @@ const report = unwrap(
 	await runJobs({ jobs: { deploy, cleanup }, meta: shell }),
 );
 
-const deployed: JobOutcome<void> = report.outcomes.deploy;
-const cleanedUp: JobOutcome<boolean> = report.outcomes.cleanup;
+const deployed: JobEnd<void> = report.outcomes.deploy;
+const cleanedUp: JobEnd<boolean> = report.outcomes.cleanup;
 
 const summary = match(deployed)({
 	Succeeded: () => "deployed",
@@ -336,8 +336,8 @@ assertEquals(cleanedUp.isSucceeded(), true);
 assertEquals(report.all.size, 5);
 ```
 
-`report.outcomes.deploy` is a `JobOutcome<void>` and
-`report.outcomes.cleanup` a `JobOutcome<boolean>`, as `Promise.all` types
+`report.outcomes.deploy` is a `JobEnd<void>` and
+`report.outcomes.cleanup` a `JobEnd<boolean>`, as `Promise.all` types
 each promise it's given. A job ends in one of five ways: `Succeeded`,
 `Failed`, `Skipped`, `Blocked` or `Cancelled`. `match` takes one arm per
 way, so the compiler tells us if we forget one.

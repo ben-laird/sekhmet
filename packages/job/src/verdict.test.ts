@@ -5,7 +5,7 @@ import {
 	Failed,
 	Skipped,
 	Succeeded,
-} from "@/src/outcome/main/mod.ts";
+} from "@/src/end/main/mod.ts";
 import { passed } from "@/src/verdict.ts";
 
 Deno.test("passed: every job is passing, or failed with continueOnError", () => {

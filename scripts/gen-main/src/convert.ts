@@ -14,7 +14,7 @@
  *   (`Schema<I, O, E> & ObjectView<S>`), through the target's `fromMiniView`,
  *   which keeps the view's own properties
  * - the one wrap target of a returned intersection that narrows it
- *   (`Enum<Eliminate<V, "Failed">> & JobOutcome<T>`, the target having no
+ *   (`Enum<Eliminate<V, "Failed">> & JobEnd<T>`, the target having no
  *   views), through `fromMini` with the mini value's own properties
  *   assigned on; its type arguments keep their mini spelling
  * - the fulfilled value of a `Promise<X>` in any converted position, through
@@ -350,7 +350,7 @@ function planIntersection({
 /**
  * Plans a top-level intersection of one wrap target that has no views with
  * enum `Enum`s only: a narrowing of its variants
- * (`Enum<Eliminate<V, "Failed">> & JobOutcome<T>`). The target is spelled as its main class with its type arguments as they are
+ * (`Enum<Eliminate<V, "Failed">> & JobEnd<T>`). The target is spelled as its main class with its type arguments as they are
  * (the narrowing names them in mini, so converting them would break it),
  * and the value converts through `fromMini`, with the mini value's own
  * properties assigned on, so the main value is typed as the narrowing too.

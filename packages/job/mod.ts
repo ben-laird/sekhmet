@@ -15,7 +15,7 @@
  *   {@linkcode success} (the default), {@linkcode failure},
  *   {@linkcode cancelled}, {@linkcode always}, or a predicate.
  * - {@linkcode runJobs} runs every job reachable from a record of roots
- *   once, and reports each root's {@linkcode JobOutcome}, typed per key.
+ *   once, and reports each root's {@linkcode JobEnd}, typed per key.
  * - {@linkcode planJobs} is the dry run: it calls the plans only and
  *   returns the whole graph, guards included.
  *
@@ -61,9 +61,20 @@ export {
 	type ConditionInput,
 	cancelled,
 	failure,
-	type NeedOutcomes,
+	type NeedEnds,
 	success,
 } from "./src/condition.ts";
+export {
+	type AllValues,
+	all,
+	Blocked,
+	Cancelled,
+	Failed,
+	JobEnd,
+	type JobEndVariants,
+	Skipped,
+	Succeeded,
+} from "./src/end/main/mod.ts";
 export { JobEvent, type JobEventVariants } from "./src/event.ts";
 export type { NonPlainPlanCause } from "./src/graph.ts";
 export {
@@ -107,27 +118,16 @@ export {
 export {
 	type AnyNeed,
 	type ConditionKind,
+	type EndView,
 	type Field,
 	type Guard,
 	Need,
 	type NeedParams,
 	type NeedsIfOptions,
-	type OutcomeView,
 	type Planner,
 	type PlanRecord,
 	type Resolved,
 } from "./src/need.ts";
-export {
-	type AllValues,
-	all,
-	Blocked,
-	Cancelled,
-	Failed,
-	JobOutcome,
-	type JobOutcomeVariants,
-	Skipped,
-	Succeeded,
-} from "./src/outcome/main/mod.ts";
 export {
 	type JobGraph,
 	type OptionalMetaPlanOptions,
@@ -137,9 +137,9 @@ export {
 	planJobs,
 } from "./src/plan.ts";
 export {
+	type JobEnds,
 	type JobMisuseCause,
 	type OptionalMetaRunOptions,
-	type Outcomes,
 	type RunOptions,
 	type RunReport,
 	runJobs,

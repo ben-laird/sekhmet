@@ -19,7 +19,7 @@ import {
 	DuplicateName,
 	defineJobs,
 	type Job,
-	type JobOutcome,
+	type JobEnd,
 	planJobs,
 	runJobs,
 	Skipped,
@@ -125,8 +125,8 @@ Deno.test("ci: the report is typed like Promise.all", async () => {
 	);
 
 	// Then: each root comes back under its own key, with its own type
-	assertType<IsExact<typeof report.outcomes.gate, JobOutcome<string>>>(true);
-	assertType<IsExact<typeof report.outcomes.cleanup, JobOutcome<void>>>(true);
+	assertType<IsExact<typeof report.outcomes.gate, JobEnd<string>>>(true);
+	assertType<IsExact<typeof report.outcomes.cleanup, JobEnd<void>>>(true);
 	assertEquals(report.outcomes.gate, Succeeded("green"));
 	assertEquals(report.outcomes.cleanup, Succeeded(undefined));
 	assert(report.passed);

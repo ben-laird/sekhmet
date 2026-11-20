@@ -5,13 +5,13 @@
 
 	"exports": {
 		".": "./mod.ts",
-		"./outcome": "./src/outcome/main/mod.ts",
-		"./outcome/mini": "./src/outcome/mini/mod.ts",
-		"./outcome/mini/accessors": "./src/outcome/mini/accessors.ts",
-		"./outcome/mini/all": "./src/outcome/mini/all.ts",
-		"./outcome/mini/core": "./src/outcome/mini/core.ts",
-		"./outcome/mini/predicates": "./src/outcome/mini/predicates.ts",
-		"./outcome/mini/transform": "./src/outcome/mini/transform.ts"
+		"./end": "./src/end/main/mod.ts",
+		"./end/mini": "./src/end/mini/mod.ts",
+		"./end/mini/accessors": "./src/end/mini/accessors.ts",
+		"./end/mini/all": "./src/end/mini/all.ts",
+		"./end/mini/core": "./src/end/mini/core.ts",
+		"./end/mini/predicates": "./src/end/mini/predicates.ts",
+		"./end/mini/transform": "./src/end/mini/transform.ts"
 	},
 
 	"imports": {

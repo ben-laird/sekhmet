@@ -9,12 +9,12 @@ import {
 	Blocked,
 	Cancelled,
 	Failed,
-	JobOutcome,
+	JobEnd,
 	Skipped,
 	Succeeded,
 } from "./mod.ts";
 
-const EVERY_VARIANT: readonly JobOutcome<number>[] = [
+const EVERY_VARIANT: readonly JobEnd<number>[] = [
 	Succeeded(1),
 	Failed(new Error("boom")),
 	Skipped(),
@@ -22,15 +22,15 @@ const EVERY_VARIANT: readonly JobOutcome<number>[] = [
 	Cancelled(),
 ];
 
-Deno.test("main JobOutcome is a mini one, and fromMini views a mini one", () => {
+Deno.test("main JobEnd is a mini one, and fromMini views a mini one", () => {
 	// Given: a mini outcome and a main one
-	const fromMini = JobOutcome.fromMini(mini.Succeeded(1));
+	const fromMini = JobEnd.fromMini(mini.Succeeded(1));
 	const main = Succeeded(1);
 
 	// When: each is checked against both classes
 	// Then: both are main and mini, so either API accepts them
-	assertInstanceOf(fromMini, JobOutcome);
-	assertInstanceOf(main, mini.JobOutcome);
+	assertInstanceOf(fromMini, JobEnd);
+	assertInstanceOf(main, mini.JobEnd);
 	assertEquals(mini.isSucceeded(main), true);
 	assertEquals(fromMini.isSucceeded(), true);
 });
@@ -81,7 +81,7 @@ Deno.test("toResult keeps the reason a job didn't succeed", () => {
 
 Deno.test("predicates narrow, as Result's isOk does", () => {
 	// Given: an outcome whose variant is unknown statically
-	const outcome: JobOutcome<string | number> = Succeeded("dist");
+	const outcome: JobEnd<string | number> = Succeeded("dist");
 
 	// When: it's checked with a refining predicate
 	if (outcome.isSucceededAnd((v): v is string => typeof v === "string")) {
@@ -91,7 +91,7 @@ Deno.test("predicates narrow, as Result's isOk does", () => {
 	}
 
 	// Then: a non-success narrows to the outcome's own payload
-	const blocked: JobOutcome<number> = Blocked(["build"]);
+	const blocked: JobEnd<number> = Blocked(["build"]);
 	if (blocked.isBlocked()) {
 		const by: readonly string[] = union(blocked);
 		assertEquals(by, ["build"]);
@@ -144,7 +144,7 @@ Deno.test("constructors take the success type, as None<T>() does", () => {
 	// When: it's reassigned once the job succeeds
 	outcome = Succeeded(42);
 
-	// Then: the binding was a JobOutcome<number> from the start
-	const typed: JobOutcome<number> = outcome;
+	// Then: the binding was a JobEnd<number> from the start
+	const typed: JobEnd<number> = outcome;
 	assertEquals(typed, Succeeded(42));
 });
