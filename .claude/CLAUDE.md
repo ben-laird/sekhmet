@@ -91,6 +91,12 @@ collection. The workspace is defined in the root `deno.json` with packages under
 
 Packages (`packages/`):
 
+- `@sekhmet/dispatch`: a typed one-shot signal, `AbortController`/
+  `AbortSignal` with a typed value: `DispatchController<T>` (built with a
+  panic runtime's `catchUnwind`; `dispatch` returns the value already
+  there as an `Option`) and its `DispatchSignal<T>` (`poll`,
+  `whenDispatched`, `map`, `zip`, `any`, and bridges to promises, `Vow`
+  and `AbortSignal`); classes only, no main/mini split
 - `@sekhmet/effect`: effect system (effects, fibers, continuations, runtime,
   scheduler)
 - `@sekhmet/enum`: enum framework plus `option`, `result`, `latch`, `poll` and
@@ -292,7 +298,7 @@ fix(@sekhmet/primordials): correct Struct type inference
 
 **Types**: `feat`, `fix`, `test`, `refactor`, `docs`, `chore`, `perf`
 
-**Scopes**: Use package names: `@sekhmet/effect`, `@sekhmet/enum`,
+**Scopes**: Use package names: `@sekhmet/dispatch`, `@sekhmet/effect`, `@sekhmet/enum`,
 `@sekhmet/job`, `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/schema`,
 `@sekhmet/vow`, `@sekhmet/workflow`, and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`,
 `@sekhmet/dv`, `@sekhmet/dv-plugin`, `@sekhmet/gen-main`, `@sekhmet/playground`,
