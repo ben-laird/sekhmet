@@ -226,6 +226,7 @@ sekhmet/
 │   ├── effect/       # Effect system (effects, fibers, runtime, scheduler)
 │   ├── enum/         # Enum framework (core, option, result, latch, poll, ordering)
 │   ├── job/          # CI-runner-style job graphs (plans, runIf conditions, typed outcomes)
+│   ├── lifetime/     # RAII: Resource (init/deinit) and Lifetime ownership trees
 │   ├── matrix/       # Cartesian-product test case generation
 │   ├── panic/        # Panic errors and the panic runtime (hook, catchUnwind)
 │   ├── primordials/  # Core primitives (Struct, Subtle, scoping helpers)
@@ -604,6 +605,7 @@ Use package names as scopes:
 - `@sekhmet/effect`
 - `@sekhmet/enum`
 - `@sekhmet/job`
+- `@sekhmet/lifetime`
 - `@sekhmet/matrix`
 - `@sekhmet/panic`
 - `@sekhmet/primordials`
