@@ -1,4 +1,9 @@
-import { assertEquals, assertInstanceOf } from "@std/assert";
+import {
+	assert,
+	assertEquals,
+	assertInstanceOf,
+	unreachable,
+} from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import * as coreMini from "@/src/core/mini/mod.ts";
 import { Option } from "@/src/option/main/mod.ts";
@@ -164,11 +169,49 @@ Deno.test("Either.isLeftAnd narrows a main Either", () => {
 	const value: Either<unknown, number> = Left("hello");
 
 	// When: guarding with a string predicate
-	if (!value.isLeftAnd((v): v is string => typeof v === "string")) {
-		throw new Error("expected a Left string");
-	}
+	assert(value.isLeftAnd((v): v is string => typeof v === "string"));
 
 	// Then: only a Left arm is needed
 	const shout = coreMini.match(value)({ Left: (v) => v.toUpperCase() });
 	assertEquals(shout, "HELLO");
+});
+
+Deno.test("Either.isLeftOr and Either.isRightOr don't narrow", async (t) => {
+	await t.step("isLeftOr", () => {
+		// Given: a main Right whose value passes the predicate
+		const value: Either<number, string> = Right("ab");
+
+		// When: isLeftOr holds
+		if (!value.isLeftOr((s) => s.length < 3)) unreachable();
+
+		// Then: the value may still be Right, so it isn't a Left-only Either
+		// @ts-expect-error: isLeftOr is not a type guard
+		const narrowed: Either<number, never> = value;
+		assertEquals(narrowed.unwrapRight(), "ab");
+	});
+
+	await t.step("isRightOr", () => {
+		// Given: a main Left whose value passes the predicate
+		const value: Either<number, string> = Left(1);
+
+		// When: isRightOr holds
+		if (!value.isRightOr((n) => n > 0)) unreachable();
+
+		// Then: the value may still be Left, so it isn't a Right-only Either
+		// @ts-expect-error: isRightOr is not a type guard
+		const narrowed: Either<never, string> = value;
+		assertEquals(narrowed.unwrapLeft(), 1);
+	});
+});
+
+Deno.test("a failed boolean-predicate Either.isLeftAnd keeps both sides", () => {
+	// Given: a main Left whose value fails the predicate
+	const value: Either<number, string> = Left(1);
+
+	// When: isLeftAnd fails
+	if (value.isLeftAnd((n) => n > 40)) unreachable();
+
+	// Then: the else branch is still the whole main Either, not never
+	assertType<IsExact<typeof value, Either<number, string>>>(true);
+	assertEquals(value.unwrapLeft(), 1);
 });

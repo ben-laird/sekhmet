@@ -4,4 +4,4 @@ packages:
   - "@sekhmet/enum"
 ---
 
-Add Either<L, R> (Left/Right) at @sekhmet/enum/either, ported from Rust's either crate
+Add Either<L, R> (Left/Right) at @sekhmet/enum/either, ported from Rust's either crate (#85)

@@ -35,9 +35,9 @@ type Load = Split<{
 
 `Enum<T>` is the class that stores one such variant. `Option`, `Result`,
 `Either`, `Ordering`, `Latch` and `Poll` are subclasses with their own variants
-and constructors (`Some`, `Ok`, `Left`, `Less`, `Active`, `Ready` and so on). The variant
-sits behind a symbol (see `Struct` in `@sekhmet/primordials`), so you read it
-through the functions below rather than through a property.
+and constructors (`Some`, `Ok`, `Left`, `Less`, `Active`, `Ready` and so on).
+The variant sits behind a symbol (see `Struct` in `@sekhmet/primordials`), so
+you read it through the functions below rather than through a property.
 
 ## Narrowing
 

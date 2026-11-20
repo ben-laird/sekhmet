@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertFalse } from "@std/assert";
+import { assert, assertEquals, assertFalse, unreachable } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { match, union } from "@/src/core/mini/exit.ts";
 import { type Either, Left, Right } from "@/src/either/mini/core.ts";
@@ -30,7 +30,7 @@ Deno.test("isLeft() and isRight() narrow variant and type parameters", async (t)
 		const value: Either<number, string> = Left(1);
 
 		// When: guarding on isLeft
-		if (!TestSubject.isLeft(value)) throw new Error("expected Left");
+		assert(TestSubject.isLeft(value));
 
 		// Then: the value reads directly and the right side is never
 		const inner = union(value);
@@ -44,7 +44,7 @@ Deno.test("isLeft() and isRight() narrow variant and type parameters", async (t)
 		const value: Either<number, string> = Right("a");
 
 		// When: guarding on isRight
-		if (!TestSubject.isRight(value)) throw new Error("expected Right");
+		assert(TestSubject.isRight(value));
 
 		// Then: the value reads directly and the left side is never
 		const inner = union(value);
@@ -98,11 +98,9 @@ Deno.test("isLeftAnd() requires Left and a passing predicate", async (t) => {
 		const value: Either<unknown, number> = Left("hello");
 
 		// When: checking with a string guard
-		if (
-			!TestSubject.isLeftAnd(value, (v): v is string => typeof v === "string")
-		) {
-			throw new Error("expected a Left string");
-		}
+		assert(
+			TestSubject.isLeftAnd(value, (v): v is string => typeof v === "string"),
+		);
 
 		// Then: only a Left arm is needed, and it holds a string
 		const shout = match(value)({ Left: (v) => v.toUpperCase() });
@@ -144,9 +142,7 @@ Deno.test("isRightAnd() requires Right and a passing predicate", async (t) => {
 		const value: Either<number, Error | Timeout> = Right({ ms: 5 });
 
 		// When: checking with a Timeout guard
-		if (!TestSubject.isRightAnd(value, (e): e is Timeout => "ms" in e)) {
-			throw new Error("expected a Right Timeout");
-		}
+		assert(TestSubject.isRightAnd(value, (e): e is Timeout => "ms" in e));
 
 		// Then: only a Right arm is needed, and it holds a Timeout
 		const ms = match(value)({ Right: (e) => e.ms });
@@ -177,4 +173,58 @@ Deno.test("isLeftOr() and isRightOr() pass their own side", async (t) => {
 			assertEquals(subjects, [leftOr, rightOr]);
 		});
 	}
+});
+
+Deno.test("isLeftOr() and isRightOr() don't narrow", async (t) => {
+	await t.step("isLeftOr", () => {
+		// Given: a Right whose value passes the predicate
+		const value: Either<number, string> = Right("ab");
+
+		// When: isLeftOr holds
+		if (!TestSubject.isLeftOr(value, (s) => s.length < 3)) unreachable();
+
+		// Then: the value may still be Right, so it isn't a Left-only Either
+		// @ts-expect-error: isLeftOr is not a type guard
+		const narrowed: Either<number, never> = value;
+		assertEquals(narrowed, Right("ab"));
+	});
+
+	await t.step("isRightOr", () => {
+		// Given: a Left whose value passes the predicate
+		const value: Either<number, string> = Left(1);
+
+		// When: isRightOr holds
+		if (!TestSubject.isRightOr(value, (n) => n > 0)) unreachable();
+
+		// Then: the value may still be Left, so it isn't a Right-only Either
+		// @ts-expect-error: isRightOr is not a type guard
+		const narrowed: Either<never, string> = value;
+		assertEquals(narrowed, Left(1));
+	});
+});
+
+Deno.test("a failed boolean-predicate isLeftAnd()/isRightAnd() keeps both sides", async (t) => {
+	await t.step("isLeftAnd", () => {
+		// Given: a Left whose value fails the predicate
+		const value: Either<number, string> = Left(1);
+
+		// When: isLeftAnd fails
+		if (TestSubject.isLeftAnd(value, (n) => n > 40)) unreachable();
+
+		// Then: the else branch is still the whole Either, not never
+		assertType<IsExact<typeof value, Either<number, string>>>(true);
+		assertEquals(union(value), 1);
+	});
+
+	await t.step("isRightAnd", () => {
+		// Given: a Right whose value fails the predicate
+		const value: Either<number, string> = Right("abc");
+
+		// When: isRightAnd fails
+		if (TestSubject.isRightAnd(value, (s) => s.length < 3)) unreachable();
+
+		// Then: the else branch is still the whole Either, not never
+		assertType<IsExact<typeof value, Either<number, string>>>(true);
+		assertEquals(union(value), "abc");
+	});
 });
