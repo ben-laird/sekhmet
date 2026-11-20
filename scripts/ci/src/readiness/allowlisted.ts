@@ -169,6 +169,11 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("vow/src/mini/core.ts", "Variants", "Split"),
 	privateTypeRef("vow/src/mini/core.ts", "Vow", "Enum"),
 	privateTypeRef("vow/src/mini/impl.ts", "fromPromise", "Result"),
+	privateTypeRef(
+		"vow/src/mini/impl.ts",
+		'FromPromiseOptions["panics"]',
+		"PanicRuntime",
+	),
 	...["isResolved", "isPending"].flatMap((predicate) => {
 		return [
 			privateTypeRef("vow/src/mini/predicates.ts", predicate, "Enum"),

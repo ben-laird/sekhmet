@@ -61,7 +61,7 @@ assertEquals(await wait(total), 15);
 | `wait(vow)`                         | a `Promise` of the value                                       |
 | `value(vow)`                        | `Some(value)` once resolved, `None` while pending, read now    |
 | `isResolved(vow)`, `isPending(vow)` | type guards for the vow's current state                        |
-| `fromPromise(promise)`              | a vow of `Ok(value)` or `Err(reason)` once the promise settles |
+| `fromPromise({ promise, panics })`  | a vow of `Ok(value)` or `Err(reason)` once the promise settles |
 
 ## Learn more
 

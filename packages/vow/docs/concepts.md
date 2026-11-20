@@ -46,8 +46,8 @@ assertEquals(order, ["before resolve", "mapped x", "after resolve"]);
 
 The same holds for `zip` and `zipWith`, which resolve inside the call that
 resolves the last of their two inputs, and for chains: a value flows through
-every vow that depends on it, directly or not, in one call stack. Dependents
-run in the order they were attached.
+every vow that depends on it, directly or not, in one call stack. Dependents run
+in the order they were attached.
 
 This is why a vow suits a dependency graph. Once `resolve` returns, everything
 downstream of it has settled, so code that runs next sees a consistent state
@@ -55,9 +55,9 @@ with nothing left in flight.
 
 `wait` and `fromPromise` are the two places a vow meets the microtask queue.
 `wait` returns a `Promise`, and a promise never settles synchronously, so even
-an already-resolved vow's promise resolves on the next microtask.
-`fromPromise` resolves its vow from the promise's `then` callback, so its
-dependents run on a microtask too, after the promise settles.
+an already-resolved vow's promise resolves on the next microtask. `fromPromise`
+resolves its vow from the promise's `then` callback, so its dependents run on a
+microtask too, after the promise settles.
 
 ## A vow is an enum
 
@@ -74,9 +74,8 @@ a `Vow<string>`, and a `Vow<undefined>` is a `Vow<void>`. The type is declared
 
 ## A vow resolves once
 
-The first call to a vow's resolver wins. Once the vow is `Resolved`, later
-calls do nothing: the value does not change and dependents are not called
-again.
+The first call to a vow's resolver wins. Once the vow is `Resolved`, later calls
+do nothing: the value does not change and dependents are not called again.
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -99,14 +98,14 @@ that changes over time, make a new vow per change or use a different tool.
 ## A vow cannot fail
 
 Since a vow has no rejected state, a failure that a vow carries has to live in
-its value. `fromPromise` does exactly that: a promise can reject, so the vow
-it returns resolves with a `Result` from `@sekhmet/enum/result`, `Ok(value)`
-when the promise fulfils and `Err(reason)` when it rejects. The promise's
-own rejection is always handled, so it never surfaces as an unhandled
-rejection. A dependent that throws is another matter; see
-[errors in dependents](#errors-in-dependents). Keeping the
-failure in the value means the type says the vow can carry one, and every
-dependent decides what to do with it.
+its value. `fromPromise` does exactly that: a promise can reject, so the vow it
+returns resolves with a `Result` from `@sekhmet/enum/result`, `Ok(value)` when
+the promise fulfils and `Err(reason)` when it rejects. The promise's own
+rejection is always handled, so it never surfaces as an unhandled rejection. A
+dependent that throws is another matter; see
+[errors in dependents](#errors-in-dependents). Keeping the failure in the value
+means the type says the vow can carry one, and every dependent decides what to
+do with it.
 
 ## Errors in dependents
 
@@ -133,25 +132,28 @@ assertEquals(seen, [1]);
 assertEquals(await wait(vow), 1);
 ```
 
-Running every dependent keeps one faulty callback from starving the rest of
-the graph, and throwing at the end keeps the fault from passing silently. The
-error surfaces in whoever called `resolve`, since that is the call stack the
+Running every dependent keeps one faulty callback from starving the rest of the
+graph, and throwing at the end keeps the fault from passing silently. The error
+surfaces in whoever called `resolve`, since that is the call stack the
 dependents ran in.
 
 For a vow from `fromPromise`, whoever called `resolve` is the promise's `then`
-callback, not your code. A dependent that throws there makes that callback
-throw, so the `AggregateError` becomes an unhandled promise rejection that no
-caller can catch with `try`. Keep dependents of a `fromPromise` vow from
-throwing, or handle the runtime's unhandled-rejection event.
+callback, not your code, so no caller could catch the `AggregateError`, and it
+would become an unhandled promise rejection. That is why `fromPromise` takes a
+panic runtime from `@sekhmet/panic`: it resolves the vow inside the runtime's
+`catchUnwind`, so the runtime's hook reports the `AggregateError` instead. A
+dependent that throws is a bug, which is what a panic means. Every other
+dependent still runs and the vow still resolves, just as with `resolve`. Only a
+hook that itself throws escapes, as a `Panic (PanicHook)`.
 
 A few consequences follow from where the mapping runs:
 
-- The vow `map` returned for a throwing mapping has no value to resolve with,
-  so it stays `Pending`, and so does everything derived from it.
+- The vow `map` returned for a throwing mapping has no value to resolve with, so
+  it stays `Pending`, and so does everything derived from it.
 - Mapping an already-resolved vow runs the mapping inside `map`, so a throw
   comes straight out of the `map` call, not wrapped in an `AggregateError`.
 - A throw further down a chain is wrapped once per vow it passes through: the
-  `resolve` call throws an `AggregateError` whose error is the
-  `AggregateError` thrown by the intermediate vow's resolution. `zipWith` is
-  `map` over `zip`, so a throw in its mapping passes through two vows and is
-  wrapped one level deeper than a throw in a `map` would be.
+  `resolve` call throws an `AggregateError` whose error is the `AggregateError`
+  thrown by the intermediate vow's resolution. `zipWith` is `map` over `zip`, so
+  a throw in its mapping passes through two vows and is wrapped one level deeper
+  than a throw in a `map` would be.

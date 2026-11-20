@@ -1,7 +1,12 @@
 import { union } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { Err, Ok } from "@sekhmet/enum/result/mini/core";
-import { assertEquals, assertThrows } from "@std/assert";
+import {
+	definePanicRuntime,
+	type PanicHookInfo,
+	type PanicRuntime,
+} from "@sekhmet/panic";
+import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
 import type { Vow } from "@/src/mini/core.ts";
 import {
 	andThen,
@@ -21,6 +26,22 @@ function peek<T>(vow: Vow<T>): ["Resolved", T] | ["Pending"] {
 		return ["Resolved", value];
 	}
 	return ["Pending"];
+}
+
+/** A panic runtime whose hook records what it reports, instead of logging. */
+function recordingPanics(): {
+	panics: PanicRuntime;
+	reported: PanicHookInfo[];
+} {
+	const panics = definePanicRuntime();
+	const reported: PanicHookInfo[] = [];
+	panics.setHook((info) => reported.push(info));
+	return { panics, reported };
+}
+
+/** Waits a macrotask, so any unhandled rejection has been raised by now. */
+function nextMacrotask(): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 Deno.test("resolved() is already Resolved", () => {
@@ -363,7 +384,8 @@ Deno.test("wait() bridges a vow to a promise", async (t) => {
 Deno.test("fromPromise() settles with Ok once the promise fulfils", async () => {
 	// Given: a promise under external control
 	const { promise, resolve } = Promise.withResolvers<number>();
-	const vow = fromPromise(promise);
+	const { panics, reported } = recordingPanics();
+	const vow = fromPromise({ promise, panics });
 	const before = peek(vow);
 
 	// When: fulfilling the promise and letting the vow settle
@@ -374,19 +396,71 @@ Deno.test("fromPromise() settles with Ok once the promise fulfils", async () => 
 	assertEquals(before, ["Pending"]);
 	assertEquals(settled, Ok(7));
 	assertEquals(peek(vow), ["Resolved", Ok(7)]);
+	assertEquals(reported, []);
 });
 
 Deno.test("fromPromise() settles with Err once the promise rejects", async () => {
 	// Given: a promise under external control
 	const { promise, reject } = Promise.withResolvers<number>();
-	const vow = fromPromise(promise);
+	const { panics, reported } = recordingPanics();
+	const vow = fromPromise({ promise, panics });
 
 	// When: rejecting the promise and letting the vow settle
 	const reason = new Error("rejected");
 	reject(reason);
 	const settled = await wait(vow);
 
-	// Then: the vow resolves with Err(reason), and nothing leaks unhandled
+	// Then: the vow resolves with Err(reason), not a panic, and nothing leaks
 	assertEquals(settled, Err(reason));
 	assertEquals(peek(vow), ["Resolved", Err(reason)]);
+	assertEquals(reported, []);
+});
+
+Deno.test("fromPromise() reports a throwing dependent through the panic runtime", async () => {
+	// Given: a fromPromise vow with a throwing dependent between two healthy ones (#59)
+	const { promise, resolve } = Promise.withResolvers<number>();
+	const { panics, reported } = recordingPanics();
+	const vow = fromPromise({ promise, panics });
+	const error = new Error("bad dependent");
+	const seen: string[] = [];
+	map(vow, () => seen.push("before"));
+	map(vow, () => {
+		throw error;
+	});
+	map(vow, () => seen.push("after"));
+
+	// When: the promise fulfils, and a macrotask passes for any unhandled rejection
+	resolve(1);
+	const settled = await wait(vow);
+	await nextMacrotask();
+
+	// Then: the hook reported the AggregateError once, every other dependent
+	// ran once, the vow resolved, and the test runner saw no unhandled rejection
+	assertEquals(reported.length, 1);
+	const payload = reported[0]?.payload;
+	assertInstanceOf(payload, AggregateError);
+	assertEquals(payload.errors, [error]);
+	assertEquals(seen, ["before", "after"]);
+	assertEquals(settled, Ok(1));
+});
+
+Deno.test("fromPromise() reports a throwing dependent of a rejected promise", async () => {
+	// Given: a fromPromise vow whose dependent throws on any outcome
+	const { promise, reject } = Promise.withResolvers<number>();
+	const { panics, reported } = recordingPanics();
+	const vow = fromPromise({ promise, panics });
+	const error = new Error("bad dependent");
+	map(vow, () => {
+		throw error;
+	});
+
+	// When: the promise rejects, and a macrotask passes
+	reject("offline");
+	const settled = await wait(vow);
+	await nextMacrotask();
+
+	// Then: the rejection is still an Err, and the throw was reported, not leaked
+	assertEquals(settled, Err("offline"));
+	assertEquals(reported.length, 1);
+	assertInstanceOf(reported[0]?.payload, AggregateError);
 });

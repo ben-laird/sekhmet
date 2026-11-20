@@ -8,6 +8,7 @@
 import { match, union } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini/core";
+import type { PanicRuntime } from "@sekhmet/panic/mini/runtime";
 import { type Resolver, Vow } from "./core.ts";
 
 /**
@@ -84,6 +85,22 @@ export function resolved<T>(value: T): Vow<T> {
 }
 
 /**
+ * What {@linkcode fromPromise} takes: the promise, and the panic runtime that
+ * reports a dependent that throws.
+ *
+ * @template T The type of the fulfilled value
+ */
+export interface FromPromiseOptions<T> {
+	/** The Promise to convert into a Vow */
+	readonly promise: Promise<T>;
+	/**
+	 * The panic runtime whose hook reports a dependent that throws when the
+	 * vow resolves; see {@linkcode fromPromise}
+	 */
+	readonly panics: PanicRuntime;
+}
+
+/**
  * Creates a Vow from a Promise, bridging async and sync worlds.
  *
  * A Promise can fail and a Vow cannot, so the failure is carried in the
@@ -91,28 +108,57 @@ export function resolved<T>(value: T): Vow<T> {
  * resolves with `Ok(value)` on fulfilment or `Err(reason)` on rejection.
  * The rejection is always handled, so it never surfaces as unhandled.
  *
+ * The vow resolves inside the promise's `then` callback, where no caller
+ * could catch what a dependent throws. So it resolves inside
+ * `panics.catchUnwind`: a dependent that throws is a bug, and the runtime's
+ * hook reports the `AggregateError` of everything thrown, instead of it
+ * escaping as an unhandled rejection. Every other dependent still runs, and
+ * the vow still resolves. Only a hook that itself throws escapes, as the
+ * runtime's `Panic (PanicHook)`.
+ *
  * @template T The type of the fulfilled value
- * @param promise The Promise to convert into a Vow
+ * @param options The promise, and the panic runtime that reports a
+ *   dependent that throws
  * @returns A Vow that resolves with the Promise's outcome as a Result
  *
  * @example
  * ```ts
- * import { fromPromise, wait } from "@sekhmet/vow";
+ * import { fromPromise, map, wait } from "@sekhmet/vow";
  * import { Err, Ok } from "@sekhmet/enum/result/mini";
- * import { assertEquals } from "@std/assert";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { assertEquals, assertInstanceOf } from "@std/assert";
  *
- * const fulfilled = fromPromise(Promise.resolve({ id: 1 }));
+ * const panics = definePanicRuntime();
+ * const reported: unknown[] = [];
+ * panics.setHook(({ payload }) => reported.push(payload));
+ *
+ * const fulfilled = fromPromise({ promise: Promise.resolve({ id: 1 }), panics });
  * assertEquals(await wait(fulfilled), Ok({ id: 1 }));
  *
- * const rejected = fromPromise(Promise.reject("offline"));
+ * const rejected = fromPromise({ promise: Promise.reject("offline"), panics });
  * assertEquals(await wait(rejected), Err("offline"));
+ *
+ * // A dependent that throws is reported, not left as an unhandled rejection
+ * const loaded = fromPromise({ promise: Promise.resolve(1), panics });
+ * map(loaded, () => {
+ *   throw new Error("bad dependent");
+ * });
+ * await wait(loaded);
+ * assertInstanceOf(reported[0], AggregateError);
  * ```
  */
-export function fromPromise<T>(promise: Promise<T>): Vow<Result<T, unknown>> {
+export function fromPromise<T>({
+	promise,
+	panics,
+}: FromPromiseOptions<T>): Vow<Result<T, unknown>> {
 	return new Vow<Result<T, unknown>>((resolve) => {
+		const settle = (outcome: Result<T, unknown>): void => {
+			panics.catchUnwind(() => resolve(outcome));
+		};
+
 		promise.then(
-			(value) => resolve(Ok(value)),
-			(reason: unknown) => resolve(Err(reason)),
+			(value) => settle(Ok(value)),
+			(reason: unknown) => settle(Err(reason)),
 		);
 	});
 }

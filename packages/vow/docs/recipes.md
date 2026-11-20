@@ -189,16 +189,22 @@ resolved.
 This guide shows you how to bring a promise's outcome into a vow graph without
 losing its rejection.
 
-1. Call `fromPromise`. The vow it returns stays pending until the promise
-   settles, then resolves with `Ok(value)` or `Err(reason)`.
+1. Call `fromPromise` with the promise and your program's panic runtime. The vow
+   it returns stays pending until the promise settles, then resolves with
+   `Ok(value)` or `Err(reason)`.
 2. `map` the vow and `match` on the `Result` to handle both cases.
 
 ```ts
 import { assertEquals } from "@std/assert";
 import { fromPromise, map, wait } from "@sekhmet/vow";
 import { match } from "@sekhmet/enum/core/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 
-const loaded = fromPromise(Promise.reject(new Error("offline")));
+const panics = definePanicRuntime(); // once, at your program's entry point
+const loaded = fromPromise({
+	promise: Promise.reject(new Error("offline")),
+	panics,
+});
 const message = map(loaded, (result) => {
 	return match(result)({
 		Ok: (value) => `loaded ${String(value)}`,
@@ -217,7 +223,9 @@ assertEquals(await wait(message), "failed: offline");
 The reason is typed `unknown`, since a promise can reject with anything, so
 narrow it before use. The predicates and unwrapping helpers in
 `@sekhmet/enum/result/mini`, such as `isOk` and `unwrapOr`, work on the value
-too.
+too. The panic runtime is for a different failure: a dependent of the vow that
+throws, which is a bug, not an outcome of the promise. See
+[how to catch errors thrown by dependents](#how-to-catch-errors-thrown-by-dependents).
 
 ## How to catch errors thrown by dependents
 
@@ -253,7 +261,29 @@ The vow is resolved and every other dependent has run by the time the error
 reaches you. See [errors in dependents](./concepts.md#errors-in-dependents) for
 why.
 
-This does not apply to a vow from `fromPromise`. You never call its resolver:
-the promise's `then` callback does, so a dependent that throws becomes an
-unhandled promise rejection, out of reach of any `try`. Keep the dependents of
-such a vow from throwing.
+A vow from `fromPromise` is different: you never call its resolver, the
+promise's `then` callback does, so there is no `try` to put it in. Its
+dependents' errors go to the panic runtime you passed instead.
+
+1. Pass `fromPromise` the panic runtime your program runs in.
+2. Set that runtime's hook to report faults; it receives the `AggregateError`.
+
+```ts
+import { assertEquals, assertInstanceOf } from "@std/assert";
+import { fromPromise, map, wait } from "@sekhmet/vow";
+import { Ok } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+
+const panics = definePanicRuntime();
+const reported: unknown[] = [];
+panics.setHook(({ payload }) => reported.push(payload)); // stands in for a real reporter
+
+const loaded = fromPromise({ promise: Promise.resolve(1), panics });
+map(loaded, () => {
+	throw new Error("bad dependent");
+});
+
+assertEquals(await wait(loaded), Ok(1));
+assertEquals(reported.length, 1);
+assertInstanceOf(reported[0], AggregateError);
+```
