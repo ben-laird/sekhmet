@@ -504,7 +504,7 @@ export const FEATURES: readonly Feature[] = [
 			'import { Break, Continue, type ControlFlow } from "@sekhmet/enum/control-flow";',
 			"",
 			"const check = (n: number): ControlFlow<string, number> => {",
-			"\tif (n < 0) return Break(`negative: ${n}`);",
+			'\tif (n < 0) return Break("negative");',
 			"\treturn Continue(n);",
 			"};",
 			"",
@@ -514,7 +514,7 @@ export const FEATURES: readonly Feature[] = [
 			'\t.unwrapOr("ok");',
 			"// {}",
 			"",
-			'assertEquals(reason, "NEGATIVE: -1");',
+			'assertEquals(reason, "NEGATIVE");',
 		].join("\n"),
 	},
 	{

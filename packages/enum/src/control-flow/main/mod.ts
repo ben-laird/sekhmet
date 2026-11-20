@@ -13,7 +13,7 @@
  * import { Break, Continue, type ControlFlow } from "@sekhmet/enum/control-flow";
  *
  * const check = (n: number): ControlFlow<string, number> => {
- * 	if (n < 0) return Break(`negative: ${n}`);
+ * 	if (n < 0) return Break("negative");
  * 	return Continue(n);
  * };
  *
@@ -23,7 +23,7 @@
  * 	.unwrapOr("ok");
  * // {}
  *
- * assertEquals(reason, "NEGATIVE: -1");
+ * assertEquals(reason, "NEGATIVE");
  * ```
  *
  * @module
@@ -192,11 +192,13 @@ export class ControlFlow<out B, out C = undefined> extends mini.ControlFlow<
 	 * Extracts the value of a ControlFlow whose two variants hold the same type:
 	 * Rust's `ControlFlow<T, T>::into_value`.
 	 *
-	 * Returns the value of `Break(value)` or `Continue(value)` alike. A
-	 * ControlFlow whose break and continue types differ is a type error, except
-	 * where one side is `never` (`Continue(1)`, a `ControlFlow<never, number>`)
-	 * or one is the other made nullable: TypeScript infers
-	 * `ControlFlow<number, undefined>` as `number | undefined`, which is sound.
+	 * Returns the value of `Break(value)` or `Continue(value)` alike. `T` is the
+	 * common type TypeScript infers from the break and continue types, which is
+	 * always sound: a `never` side drops out (`Continue(1)` gives `number`), a
+	 * nullable side is added (`ControlFlow<number, undefined>` gives
+	 * `number | undefined`), and related types meet (`ControlFlow<"a", "b">`
+	 * gives `"a" | "b"`, `ControlFlow<"a", string>` gives `string`). Only
+	 * unrelated types, such as `ControlFlow<string, number>`, are a type error.
 	 *
 	 * @template T - The type of both the break and the continue value
 	 * @returns The value held by either variant
@@ -339,8 +341,9 @@ export class ControlFlow<out B, out C = undefined> extends mini.ControlFlow<
 /**
  * Creates a `ControlFlow` that tells the caller to go on as normal.
  *
- * `Break` defaults to `never`, so a function returning `Break(x)` on one path
- * and `Continue(y)` on another infers cleanly into `ControlFlow<X, Y>`.
+ * `B` defaults to `never`, so a function returning `Break(x)` on one path and
+ * `Continue(y)` on another infers `ControlFlow<X, never> | ControlFlow<never, Y>`,
+ * which is assignable to `ControlFlow<X, Y>`.
  *
  * @template B - The type of the break value (defaults to never, since Continue holds none)
  * @template C - The type of the continue value
@@ -361,8 +364,9 @@ export function Continue<B = never, C = unknown>(value: C): ControlFlow<B, C> {
 /**
  * Creates a `ControlFlow` that tells the caller to exit early.
  *
- * `Continue` defaults to `never`, so a function returning `Break(x)` on one
- * path and `Continue(y)` on another infers cleanly into `ControlFlow<X, Y>`.
+ * `C` defaults to `never`, so a function returning `Break(x)` on one path and
+ * `Continue(y)` on another infers `ControlFlow<X, never> | ControlFlow<never, Y>`,
+ * which is assignable to `ControlFlow<X, Y>`.
  *
  * @template B - The type of the break value
  * @template C - The type of the continue value (defaults to never, since Break holds none)

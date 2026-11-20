@@ -126,3 +126,18 @@ Deno.test("intoValue() widens a nullable side soundly", () => {
 	assertType<IsExact<typeof subject, number | undefined>>(true);
 	assertEquals(subject, undefined);
 });
+
+Deno.test("intoValue() takes the common type of related sides", () => {
+	// Given: ControlFlows whose two sides are related but not equal
+	const literals: ControlFlow<"a", "b"> = Break("a");
+	const widened: ControlFlow<"a", string> = Continue("z");
+
+	// When: extracting their values
+	const fromLiterals = TestSubject.intoValue(literals);
+	const fromWidened = TestSubject.intoValue(widened);
+
+	// Then: T is the common type TypeScript infers for both sides
+	assertType<IsExact<typeof fromLiterals, "a" | "b">>(true);
+	assertType<IsExact<typeof fromWidened, string>>(true);
+	assertEquals([fromLiterals, fromWidened], ["a", "z"]);
+});

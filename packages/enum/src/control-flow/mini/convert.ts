@@ -132,11 +132,13 @@ export function continueOk<B, C>(self: ControlFlow<B, C>): Result<C, B> {
  * Extracts the value of a ControlFlow whose two variants hold the same type:
  * Rust's `ControlFlow<T, T>::into_value`.
  *
- * Returns the value of `Break(value)` or `Continue(value)` alike. A
- * ControlFlow whose break and continue types differ is a type error, except
- * where one side is `never` (`Continue(1)`, a `ControlFlow<never, number>`)
- * or one is the other made nullable: TypeScript infers
- * `ControlFlow<number, undefined>` as `number | undefined`, which is sound.
+ * Returns the value of `Break(value)` or `Continue(value)` alike. `T` is the
+ * common type TypeScript infers from the break and continue types, which is
+ * always sound: a `never` side drops out (`Continue(1)` gives `number`), a
+ * nullable side is added (`ControlFlow<number, undefined>` gives
+ * `number | undefined`), and related types meet (`ControlFlow<"a", "b">`
+ * gives `"a" | "b"`, `ControlFlow<"a", string>` gives `string`). Only
+ * unrelated types, such as `ControlFlow<string, number>`, are a type error.
  *
  * @template T The type of both the break and the continue value
  * @param self A ControlFlow holding a T in either variant

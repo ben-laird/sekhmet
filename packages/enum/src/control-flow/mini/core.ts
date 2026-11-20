@@ -9,8 +9,9 @@ import { Enum, type Split } from "@/src/core/mini/core.ts";
 /**
  * Creates a `ControlFlow` that tells the caller to go on as normal.
  *
- * `Break` defaults to `never`, so a function returning `Break(x)` on one path
- * and `Continue(y)` on another infers cleanly into `ControlFlow<X, Y>`.
+ * `B` defaults to `never`, so a function returning `Break(x)` on one path and
+ * `Continue(y)` on another infers `ControlFlow<X, never> | ControlFlow<never, Y>`,
+ * which is assignable to `ControlFlow<X, Y>`.
  *
  * @template B The type of the break value (defaults to never, since Continue holds none)
  * @template C The type of the continue value
@@ -32,8 +33,9 @@ export function Continue<B = never, C = unknown>(value: C): ControlFlow<B, C> {
 /**
  * Creates a `ControlFlow` that tells the caller to exit early.
  *
- * `Continue` defaults to `never`, so a function returning `Break(x)` on one
- * path and `Continue(y)` on another infers cleanly into `ControlFlow<X, Y>`.
+ * `C` defaults to `never`, so a function returning `Break(x)` on one path and
+ * `Continue(y)` on another infers `ControlFlow<X, never> | ControlFlow<never, Y>`,
+ * which is assignable to `ControlFlow<X, Y>`.
  *
  * @template B The type of the break value
  * @template C The type of the continue value (defaults to never, since Break holds none)

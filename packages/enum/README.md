@@ -28,15 +28,15 @@ bunx jsr add @sekhmet/enum     # bun
 
 The package has no root export: import the feature you need.
 
-| Entrypoint                   | What it holds                                  |
-| ---------------------------- | ---------------------------------------------- |
-| `@sekhmet/enum/core`         | `Enum`, `Split`, `Isolate`, `Eliminate`        |
-| `@sekhmet/enum/option`       | `Option`: `Some(value)` or `None()`            |
-| `@sekhmet/enum/result`       | `Result`: `Ok(value)` or `Err(error)`          |
-| `@sekhmet/enum/ordering`     | `Ordering`: `Less()`, `Equal()`, `Greater()`   |
-| `@sekhmet/enum/latch`        | `Latch`: `Active(a)` or `Inactive(i)`          |
-| `@sekhmet/enum/poll`         | `Poll`: `Ready(value)` or `Pending()`          |
-| `@sekhmet/enum/control-flow` | `ControlFlow`: `Continue(value)` or `Break(b)` |
+| Entrypoint                   | What it holds                                      |
+| ---------------------------- | -------------------------------------------------- |
+| `@sekhmet/enum/core`         | `Enum`, `Split`, `Isolate`, `Eliminate`            |
+| `@sekhmet/enum/option`       | `Option`: `Some(value)` or `None()`                |
+| `@sekhmet/enum/result`       | `Result`: `Ok(value)` or `Err(error)`              |
+| `@sekhmet/enum/ordering`     | `Ordering`: `Less()`, `Equal()`, `Greater()`       |
+| `@sekhmet/enum/latch`        | `Latch`: `Active(a)` or `Inactive(i)`              |
+| `@sekhmet/enum/poll`         | `Poll`: `Ready(value)` or `Pending()`              |
+| `@sekhmet/enum/control-flow` | `ControlFlow`: `Continue(value)` or `Break(value)` |
 
 ## Main and mini
 
