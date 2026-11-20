@@ -340,12 +340,12 @@ export function unzip<T, U>(
 export function transpose<T, E>(
 	self: Option<Result<T, E>>,
 ): Result<Option<T>, E> {
-	return mapOr(self, Ok(None()), (result) =>
-		match(result)({
+	return mapOr(self, Ok(None()), (result) => {
+		return match(result)({
 			Ok: (value): Result<Option<T>, E> => Ok(Some(value)),
 			Err: (err): Result<Option<T>, E> => Err(err),
-		}),
-	);
+		});
+	});
 }
 
 /**
