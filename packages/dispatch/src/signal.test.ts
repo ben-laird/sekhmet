@@ -309,6 +309,26 @@ Deno.test("any's Unsubscribe reports false once its listener has run", () => {
 	assertEquals(stop(), false);
 });
 
+Deno.test("any decides the earliest Ready source even when a listener dispatches another first", () => {
+	// Given: an earlier listener on a that dispatches b, then any([a, b]) with a listener
+	const { panics } = recordingPanics();
+	const a = new DispatchController<string>(panics.catchUnwind);
+	const b = new DispatchController<string>(panics.catchUnwind);
+	a.signal.whenDispatched(() => {
+		b.dispatch("b");
+	});
+	const either = DispatchSignal.any([a.signal, b.signal]);
+	const heard: string[] = [];
+	either.whenDispatched((value) => void heard.push(value));
+
+	// When: a dispatches, and its first listener dispatches b inside that dispatch
+	a.dispatch("a");
+
+	// Then: b's listener fired first, but a was Ready and earlier in the array, so a won
+	assertEquals(heard, ["a"]);
+	assertEquals(either.poll(), Ready("a"));
+});
+
 Deno.test("any, read after its sources dispatched, picks the earliest in order", () => {
 	// Given: two sources that have both dispatched, the later one first
 	const { panics } = recordingPanics();

@@ -114,10 +114,14 @@ Two consequences follow:
   Each listener's boundary reports its own poison panic, and `poll()` throws
   one to its caller. A throw can't be replayed honestly, and running the
   mapping again would break the run-once promise.
-- `any` sees the race only through its listeners. With a listener, the first
-  source to dispatch wins. With none, it can't know which source came first,
-  so among sources already dispatched when it is first read, the earliest in
-  the array wins.
+- `any` follows one rule, whether or not anyone listens: it decides the
+  first time it sees a dispatch (a source's listener firing, or a poll), and
+  picks the earliest source in the array that is Ready at that moment.
+  Usually that is the source that dispatched first. It isn't when several
+  are Ready by then: a listener on `a` that dispatches `b` still makes
+  `any([a, b])` decide `a`, and so does polling after both dispatched in
+  either order. Ordering by true time would need a clock or counter shared
+  by every signal, which is global state the package avoids.
 
 The conversions are different: `wait`, `toVow` and `toAbortSignal` subscribe
 until the dispatch, since the promise, vow or platform signal they return has

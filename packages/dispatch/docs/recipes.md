@@ -58,8 +58,9 @@ shutdown.dispatch("shutting down");
 assertEquals(heard, ["client went away"]);
 ```
 
-`any` sees the race through its listeners. If nobody listens and both
-sources dispatch before you poll it, the earliest in the array wins.
+`any` decides the first time it sees a dispatch, and picks the earliest
+source in the array that is Ready at that moment. So when the order matters
+for sources that can be Ready together, put the one that should win first.
 `DispatchSignal.any([])` never dispatches.
 
 ## How to wait for two signals

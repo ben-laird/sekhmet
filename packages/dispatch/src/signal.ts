@@ -15,6 +15,7 @@ import { isolate, union } from "@sekhmet/enum/core/mini";
 import { Pending, type Poll, Ready } from "@sekhmet/enum/poll/mini";
 import type { PanicRuntime } from "@sekhmet/panic";
 import { type Vow, vowWithResolver } from "@sekhmet/vow/mini";
+import { invariant } from "@sekhmet/workflow/invariant";
 import { once } from "./memo.ts";
 
 /**
@@ -435,16 +436,22 @@ export class DispatchSignal<out T> {
 	}
 
 	/**
-	 * A signal that dispatches with the first of `signals` to dispatch, like
+	 * A signal that dispatches once any of `signals` has, like
 	 * `AbortSignal.any`. Each listener lets go of the other sources once one
-	 * dispatches. Since it holds no subscription while nobody listens, it
-	 * sees the race only through its listeners: among sources already
-	 * dispatched when it is first read (polled or listened to), the earliest
-	 * in `signals` wins. `any([])` never dispatches.
+	 * dispatches. `any([])` never dispatches.
+	 *
+	 * It decides the first time it sees a dispatch: when a source's listener
+	 * fires, or when it is polled. Either way, the winner is the earliest
+	 * source in `signals` that is Ready at that moment, and the decision
+	 * stands. Usually that is the source that dispatched first; it differs
+	 * when several are Ready by then (say, one listener dispatches another
+	 * source, or nobody listened until both had dispatched). Ordering by true
+	 * time would need a clock or counter shared by every signal, global state
+	 * the package avoids.
 	 *
 	 * @template T The type of the dispatched value
 	 * @param signals The signals to race
-	 * @returns A signal of the first value dispatched
+	 * @returns A signal of the value from the source it decides on
 	 *
 	 * @example
 	 * ```ts
@@ -474,26 +481,21 @@ export class DispatchSignal<out T> {
 			| { readonly winner: SignalSource<T>; readonly value: T }
 			| undefined;
 		// {}
-		const decide = ({
-			winner,
-			value,
-		}: {
-			winner: SignalSource<T>;
-			value: T;
-		}): T => {
-			decided ??= { winner, value };
-			return decided.value;
-		};
-		const poll = (): Poll<T> => {
-			if (decided === undefined) {
-				for (const source of sources) {
-					const polled = source.poll();
-					if (isolate(polled, "Ready")) {
-						decide({ winner: source, value: union(polled) });
-						break;
-					}
+		// The one rule: the earliest source in the array that is Ready right now.
+		const decide = (): void => {
+			if (decided !== undefined) {
+				return;
+			}
+			for (const winner of sources) {
+				const polled = winner.poll();
+				if (isolate(polled, "Ready")) {
+					decided = { winner, value: union(polled) };
+					return;
 				}
 			}
+		};
+		const poll = (): Poll<T> => {
+			decide();
 			if (decided === undefined) {
 				return Pending();
 			}
@@ -517,12 +519,17 @@ export class DispatchSignal<out T> {
 					const stops: Unsubscribe[] = [];
 					for (const source of sources) {
 						stops.push(
-							source.listen((value) => {
+							source.listen(() => {
 								waiting = false;
 								for (const stop of stops) {
 									stop();
 								}
-								listener(decide({ winner: source, value }));
+								decide();
+								invariant(decided !== undefined, {
+									expectedBehavior:
+										"a source whose listener runs should poll Ready, so any can decide",
+								});
+								listener(decided.value);
 							}),
 						);
 					}
