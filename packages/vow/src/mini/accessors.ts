@@ -4,8 +4,8 @@
  * @module
  */
 
-import { union } from "@sekhmet/enum/core/mini";
-import { None, type Option, Some } from "@sekhmet/enum/option/mini";
+import { union } from "@sekhmet/enum/core/mini/exit";
+import { None, type Option, Some } from "@sekhmet/enum/option/mini/core";
 import type { Vow } from "./core.ts";
 import { isResolved } from "./predicates.ts";
 

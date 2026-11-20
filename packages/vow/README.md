@@ -2,9 +2,9 @@
 
 `Vow` is a promise-like value that resolves **synchronously**. A vow is
 `Pending` until something resolves it, then `Resolved` with its value. Callbacks
-attached with `map` or `zip` run inside the `resolve` call, not on a later
-microtask, so a value flows through a chain of vows in one call stack. `wait`
-and `fromPromise` bridge to promises.
+attached with `map`, `andThen` or `zip` run inside the `resolve` call, not on a
+later microtask, so a value flows through a chain of vows in one call stack.
+`wait` and `fromPromise` bridge to promises.
 
 ## Install
 

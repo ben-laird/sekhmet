@@ -239,6 +239,44 @@ Deno.test("andThen() chains a vow-returning step", async (t) => {
 		assertEquals(thrown.errors, [error]);
 		assertEquals(peek(chained), ["Pending"]);
 	});
+
+	await t.step("throws a step's error out of andThen on a resolved vow", () => {
+		// Given: a resolved vow and a step that throws
+		const error = new Error("bad step");
+
+		// When: chaining them
+		const thrown = assertThrows(() => {
+			return andThen(resolved(1), (): Vow<number> => {
+				throw error;
+			});
+		});
+
+		// Then: the error comes straight out of andThen, unwrapped, like map
+		assertEquals(thrown, error);
+	});
+
+	await t.step(
+		"nests dependents' errors when the inner vow resolves later",
+		() => {
+			// Given: a chain whose inner vow is pending, with a throwing dependent
+			const inner = vowWithResolver<number>();
+			const chained = andThen(resolved(1), () => inner.vow);
+			const error = new Error("bad dependent");
+			map(chained, () => {
+				throw error;
+			});
+
+			// When: resolving the inner vow
+			const thrown = assertThrows(() => inner.resolve(2), AggregateError);
+
+			// Then: the error is wrapped by the chained vow, then by the inner one
+			assertEquals(thrown.errors.length, 1);
+			const [nested] = thrown.errors;
+			assertInstanceOf(nested, AggregateError);
+			assertEquals(nested.errors, [error]);
+			assertEquals(peek(chained), ["Resolved", 2]);
+		},
+	);
 });
 
 Deno.test("andThen() obeys the monad laws", async (t) => {

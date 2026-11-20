@@ -156,9 +156,14 @@ A few consequences follow from where the mapping runs:
 - The vow `map` returned for a throwing mapping has no value to resolve with, so
   it stays `Pending`, and so does everything derived from it.
 - Mapping an already-resolved vow runs the mapping inside `map`, so a throw
-  comes straight out of the `map` call, not wrapped in an `AggregateError`.
+  comes straight out of the `map` call, not wrapped in an `AggregateError`. The
+  same holds for `andThen`: a step that throws on an already-resolved vow throws
+  straight out of the `andThen` call.
 - A throw further down a chain is wrapped once per vow it passes through: the
   `resolve` call throws an `AggregateError` whose error is the `AggregateError`
   thrown by the intermediate vow's resolution. `zipWith` is `map` over `zip`, so
   a throw in its mapping passes through two vows and is wrapped one level deeper
-  than a throw in a `map` would be.
+  than a throw in a `map` would be. Likewise, when the vow a step of `andThen`
+  returns resolves later, a throwing dependent of the chained vow reaches that
+  inner vow's `resolve` wrapped twice: once by the chained vow, once by the
+  inner one.

@@ -7,7 +7,8 @@
  * @module
  */
 
-import { type Enum, type Isolate, isolate } from "@sekhmet/enum/core/mini";
+import type { Enum, Isolate } from "@sekhmet/enum/core/mini/core";
+import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import type { Vow, VowVariants } from "./core.ts";
 
 /**
