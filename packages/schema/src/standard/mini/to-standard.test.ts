@@ -298,6 +298,7 @@ Deno.test("toStandard's types enforce its contract", async (t) => {
 
 	await t.step("bypassing the types to omit toIssue panics", () => {
 		// Given: a string-error schema exposed without toIssue, against the types
+		const { panics, reported } = recordingPanics();
 		// @ts-expect-error: deliberately bypasses the overloads
 		const standard = toStandard({
 			panics,
@@ -305,12 +306,13 @@ Deno.test("toStandard's types enforce its contract", async (t) => {
 		});
 
 		// When: validating
-		// Then: the broken contract panics
+		// Then: the broken contract panics, reported to the runtime first
 		assertThrows(
 			() => standard["~standard"].validate(0),
 			TypeError,
 			"needs a toIssue option",
 		);
+		assertEquals(reported.length, 1);
 	});
 });
 
@@ -363,4 +365,35 @@ Deno.test("toStandard reports a panic, then resumes it out of validate", async (
 		await assertRejects(() => Promise.resolve(validated), Error, "bug");
 		assertEquals(reported, [bug]);
 	});
+
+	for (const [timing, schema] of [
+		["synchronous", new Schema({ parse: (_input: unknown) => Err("bad") })],
+		[
+			"asynchronous",
+			new Schema({ parse: (_input: unknown) => Promise.resolve(Err("bad")) }),
+		],
+	] as const) {
+		await t.step(`a ${timing} toIssue that throws`, async () => {
+			// Given: a schema exposed with a toIssue that throws
+			const { panics, reported } = recordingPanics();
+			const standard = toStandard({
+				panics,
+				schema,
+				toIssue: (): string => {
+					throw bug;
+				},
+			});
+
+			// When: validating a failing value
+			const validate = (): unknown => standard["~standard"].validate(0);
+
+			// Then: validate throws (or rejects with) the payload, reported once
+			if (timing === "synchronous") {
+				assertThrows(validate, Error, "bug");
+			} else {
+				await assertRejects(() => Promise.resolve(validate()), Error, "bug");
+			}
+			assertEquals(reported, [bug]);
+		});
+	}
 });

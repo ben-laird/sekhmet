@@ -76,8 +76,8 @@ export interface ToStandardOptions<O, E> {
  * The schema's input must be `unknown`, as Standard Schema's `validate` takes
  * any value. `validate` returns its result synchronously when the parse
  * settled synchronously, and a `Promise` (through `wait`) otherwise. A
- * panic in the parse is reported to `panics`' hook and resumed: `validate`
- * throws the payload, or its promise rejects with it. A `SchemaIssue` error becomes
+ * panic in the parse, or in `toIssue`, is reported to `panics`' hook and
+ * resumed: `validate` throws the payload, or its promise rejects with it. A `SchemaIssue` error becomes
  * one Standard issue with `formatIssue`'s message, and an
  * `Issues<SchemaIssue>` one issue per entry, with the entry's path. Any other
  * error needs a `toIssue` option, and the types require it.
@@ -155,16 +155,26 @@ export function toStandard<O, E>(options: {
 }): StandardSchemaV1<unknown, O> {
 	const { schema, panics } = options;
 	const toIssue = options.toIssue ?? formatSchemaIssue;
+	const issuesOf = (error: E): StandardResult<O> => ({
+		issues: entries(toIssues(error)).map(({ path, error }) => {
+			return locateIssue({ path, issue: toIssue(error) });
+		}),
+	});
 	const toStandardResult = (
 		outcome: Outcome<O, E, unknown>,
 	): StandardResult<O> => {
 		return match(outcome)<StandardResult<O>>({
 			Ok: (value) => ({ value }),
-			Err: (error) => ({
-				issues: entries(toIssues(error)).map(({ path, error }) => {
-					return locateIssue({ path, issue: toIssue(error) });
-				}),
-			}),
+			Err: (error) => {
+				// toIssue is user code: a throw is a panic, reported, then resumed
+				const caught = panics.catchUnwind(() => ({ result: issuesOf(error) }));
+
+				return match(caught)<StandardResult<O>>({
+					Ok: ({ result }) => result,
+					Err: (impossible) => impossible,
+					Panicked: (payload) => panics.resumeUnwind(payload),
+				});
+			},
 			Panicked: (payload) => panics.resumeUnwind(payload),
 		});
 	};
