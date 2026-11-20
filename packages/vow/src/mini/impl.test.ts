@@ -15,6 +15,7 @@ import {
 } from "@std/assert";
 import type { Vow } from "@/src/mini/core.ts";
 import {
+	all,
 	andThen,
 	fromPromise,
 	map,
@@ -399,6 +400,62 @@ Deno.test("zip() never resolves while one side stays pending", () => {
 
 	// Then: it is pending
 	assertEquals(subject, ["Pending"]);
+});
+
+Deno.test("all() joins vows in order", async (t) => {
+	await t.step("no vows", () => {
+		// Given: nothing to join
+		const vows: Vow<number>[] = [];
+
+		// When: joining them
+		const joined = all(vows);
+
+		// Then: the join is resolved immediately, empty
+		assertEquals(peek(joined), ["Resolved", []]);
+	});
+
+	await t.step("every vow already resolved", () => {
+		// Given: resolved vows
+		const vows = [resolved("a"), resolved("b"), resolved("c")];
+
+		// When: joining them
+		const joined = all(vows);
+
+		// Then: the join resolves inside the call, in input order
+		assertEquals(peek(joined), ["Resolved", ["a", "b", "c"]]);
+	});
+
+	await t.step("pending vows resolved out of order", () => {
+		// Given: two pending vows around a resolved one
+		const first = vowWithResolver<number>();
+		const last = vowWithResolver<number>();
+		const joined = all([first.vow, resolved(2), last.vow]);
+
+		// When: resolving the last before the first
+		last.resolve(3);
+		const halfway = peek(joined);
+		first.resolve(1);
+
+		// Then: it resolves once all have, still in input order
+		assertEquals(halfway, ["Pending"]);
+		assertEquals(peek(joined), ["Resolved", [1, 2, 3]]);
+	});
+});
+
+Deno.test("all([a, b]) ≡ zip(a, b) as an array", () => {
+	// Given: two deferred vows
+	const a = vowWithResolver<number>();
+	const b = vowWithResolver<number>();
+
+	// When: joining with all and with zip
+	const viaAll = all([a.vow, b.vow]);
+	const viaZip = map(zip(a.vow, b.vow), ([x, y]) => [x, y]);
+	b.resolve(2);
+	a.resolve(1);
+
+	// Then: both resolve to the same values
+	assertEquals(peek(viaAll), ["Resolved", [1, 2]]);
+	assertEquals(peek(viaAll), peek(viaZip));
 });
 
 Deno.test("zipWith() ≡ map(zip(a, b), ([x, y]) => f(x, y))", () => {

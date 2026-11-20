@@ -58,6 +58,7 @@ assertEquals(await wait(total), 15);
 | `map(vow, f)`                       | a vow of `f(value)`                                            |
 | `andThen(vow, f)`                   | a vow of the value of the vow `f(value)` returns               |
 | `zip(a, b)`, `zipWith(a, b, f)`     | a vow of both values once both resolve                         |
+| `all(vows)`                         | a vow of every value, in order, once all resolve               |
 | `wait(vow)`                         | a `Promise` of the value                                       |
 | `value(vow)`                        | `Some(value)` once resolved, `None` while pending, read now    |
 | `isResolved(vow)`, `isPending(vow)` | type guards for the vow's current state                        |

@@ -8,7 +8,12 @@
 import { unwrap } from "@sekhmet/enum/result/mini/unwrap";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { map, vowWithResolver, wait, zipWith } from "@sekhmet/vow";
-import { fromPromise, wait as miniWait, resolved } from "@sekhmet/vow/mini";
+import {
+	all,
+	fromPromise,
+	wait as miniWait,
+	resolved,
+} from "@sekhmet/vow/mini";
 import { Vow } from "@sekhmet/vow/mini/core";
 import { map as miniMap } from "@sekhmet/vow/mini/impl";
 import { expectEqual } from "../check.ts";
@@ -47,5 +52,11 @@ export async function exercise(): Promise<void> {
 		label: "mini map",
 		actual: [doubled instanceof Vow, await miniWait(doubled)],
 		expected: [true, 42],
+	});
+
+	expectEqual({
+		label: "all",
+		actual: await miniWait(all([resolved(1), resolved(2)])),
+		expected: [1, 2],
 	});
 }

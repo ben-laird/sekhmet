@@ -1,6 +1,6 @@
 /**
  * Creating and combining vows: `vowWithResolver`, `resolved`, `fromPromise`,
- * `map`, `andThen`, `zip`, `zipWith` and `wait`.
+ * `map`, `andThen`, `zip`, `zipWith`, `all` and `wait`.
  *
  * @module
  */
@@ -349,6 +349,55 @@ export function zipWith<T, U, V>(
 	mapping: (first: T, second: U) => V,
 ): Vow<V> {
 	return map(zip(self, otherVow), ([first, second]) => mapping(first, second));
+}
+
+/**
+ * Joins any number of Vows into a single Vow of all their values, in order:
+ * the n-ary {@linkcode zip}.
+ *
+ * The result resolves once every input has. When every input is already
+ * resolved (or there are none), it resolves inside the call, so a join of
+ * synchronous work stays synchronous.
+ *
+ * @template T The type of each Vow's resolved value
+ * @param vows The Vows to join
+ * @returns A Vow that resolves with every value, in the order of `vows`
+ *
+ * @example
+ * ```ts
+ * import { all, resolved, value, vowWithResolver, wait } from "@sekhmet/vow";
+ * import { Some } from "@sekhmet/enum/option/mini";
+ * import { assertEquals } from "@std/assert";
+ *
+ * // Every input already resolved: the join resolves inside the call
+ * assertEquals(value(all([resolved(1), resolved(2)])), Some([1, 2]));
+ *
+ * const { vow: later, resolve } = vowWithResolver<number>();
+ * const joined = all([resolved(1), later]);
+ * resolve(3);
+ *
+ * assertEquals(await wait(joined), [1, 3]);
+ * ```
+ */
+export function all<T>(vows: readonly Vow<T>[]): Vow<T[]> {
+	return new Vow<T[]>((resolve) => {
+		const values: T[] = [];
+		let remaining = vows.length;
+
+		const arrive = ({ index, value }: { index: number; value: T }): void => {
+			values[index] = value;
+			remaining -= 1;
+			if (remaining === 0) resolve(values);
+		};
+
+		if (remaining === 0) resolve(values);
+		vows.forEach((vow, index) => {
+			match(vow)({
+				Pending: (subscribe) => subscribe((value) => arrive({ index, value })),
+				Resolved: (value) => arrive({ index, value }),
+			});
+		});
+	});
 }
 
 /**
