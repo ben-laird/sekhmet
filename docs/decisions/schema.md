@@ -877,7 +877,11 @@ those sections are kept as history.
   to a vow continuation runs under the boundary (through `parse`, `guard`,
   or the internal `step`), internal code included, since it can throw when
   it reads a user value (a getter, a Proxy trap): none can throw inside a
-  `resolve`, where the parse would never settle.
+  `resolve`, where the parse would never settle. The one exception is by
+  design: a panic hook that throws while reporting (a `HookFailurePanic`)
+  escapes every boundary, per the panic runtime's contract (lifetime does
+  the same), so an async parse may then never settle, and the failure
+  surfaces as an unhandled rejection.
 - **Composites join children with `all`**, added to `@sekhmet/vow`: the
   n-ary `zip`, which stays synchronous when every child was. A child's panic
   panics the composite (the first by key order); a union does not try the

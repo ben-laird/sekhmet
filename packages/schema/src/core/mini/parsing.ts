@@ -11,6 +11,12 @@
  * parse would never settle. That covers internal code too, which can throw
  * when it reads a user value (a getter, a Proxy trap).
  *
+ * One throw escapes by design: a panic hook that throws while reporting (a
+ * `HookFailurePanic`) escapes every boundary, as the panic runtime's
+ * contract says. In an async parse it then throws inside a `resolve`: the
+ * parse may never settle, and the failure surfaces as an unhandled
+ * rejection. `@sekhmet/lifetime` treats a hook failure the same way.
+ *
  * @module
  */
 
