@@ -53,8 +53,8 @@ A dispatch happens once. Later calls change nothing, and say so:
 `dispatch(value)` returns the value already there, like Rust's
 `HashMap::insert` returns the previous entry. `None` means this call
 dispatched; `Some(first)` means an earlier call had, and carries its value.
-It never throws, so two parties racing to end something both get a clear
-answer without a `try`.
+Losing the race isn't an error, so two parties racing to end something both
+get a clear answer without a `try`.
 
 That return is an `Option` rather than a `Poll` on purpose: it answers "was
 something already there?", not "is it ready yet?". Only `signal.poll()`
@@ -78,6 +78,12 @@ A listener shouldn't throw: one that does has a bug. The controller takes the
 so a throw is isolated and reported to that runtime's hook. The other
 listeners still run, the signal is still dispatched, and `dispatch` returns
 normally.
+
+A hook that throws while reporting is a double fault, which `catchUnwind`
+turns into a panic of its own. That one does propagate, since the runtime can
+no longer report it. Even then the dispatch completes first: every queued
+listener runs in order, the queue drains, and later listeners still run at
+once. Then `dispatch` rethrows the first such panic.
 
 The controller takes only `catchUnwind`, not the whole runtime, because that
 is all it needs: `new DispatchController<T>(runtime.catchUnwind)`. Derived

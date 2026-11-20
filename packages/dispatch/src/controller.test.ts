@@ -1,7 +1,12 @@
 import { isNone, Some } from "@sekhmet/enum/option/mini";
 import { Ready } from "@sekhmet/enum/poll/mini";
-import { definePanicRuntime, type PanicRuntime } from "@sekhmet/panic";
-import { assert, assertEquals } from "@std/assert";
+import { definePanicRuntime, Panic, type PanicRuntime } from "@sekhmet/panic";
+import {
+	assert,
+	assertEquals,
+	assertInstanceOf,
+	assertThrows,
+} from "@std/assert";
 import { DispatchController } from "@/mod.ts";
 
 /** A panic runtime whose reports the test can read. */
@@ -153,4 +158,29 @@ Deno.test("a listener that dispatches again mid-dispatch gets the first value ba
 	// Then: the re-entrant dispatch changed nothing and returned the first value
 	assertEquals(again, [Some("first")]);
 	assertEquals(controller.signal.poll(), Ready("first"));
+});
+
+Deno.test("a throwing panic hook (a double fault) propagates, but the dispatch still completes", () => {
+	// Given: a runtime whose hook throws, and a throwing listener between two others
+	const panics = definePanicRuntime();
+	panics.setHook(() => {
+		throw new Error("hook bug");
+	});
+	const controller = new DispatchController<string>(panics.catchUnwind);
+	const heard: string[] = [];
+	controller.signal.whenDispatched(() => void heard.push("first"));
+	controller.signal.whenDispatched(() => {
+		throw new Error("listener bug");
+	});
+	controller.signal.whenDispatched(() => void heard.push("third"));
+
+	// When: it dispatches, then a listener is added afterwards
+	const thrown = assertThrows(() => controller.dispatch("go"));
+	controller.signal.whenDispatched(() => void heard.push("late"));
+
+	// Then: the double fault reached the caller as a panic, yet every listener ran and the queue drained
+	assertInstanceOf(thrown, Panic);
+	assertEquals(heard, ["first", "third", "late"]);
+	assertEquals(controller.signal.poll(), Ready("go"));
+	assertEquals(controller.dispatch("next"), Some("go"));
 });

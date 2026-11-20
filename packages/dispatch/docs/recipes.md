@@ -177,7 +177,12 @@ end.signal.whenDispatched((value) => {
 	heard.push(value);
 });
 
-end.dispatch("done"); // never throws
+end.dispatch("done"); // the listener's throw never reaches us
 assertEquals(heard, ["done"]);
 assertEquals(reported.length, 1);
 ```
+
+The one throw that does reach `dispatch` is a double fault: a hook that
+throws while reporting. The dispatch still completes (every listener runs, and
+later listeners still run at once), then `dispatch` rethrows the panic
+`catchUnwind` raised.

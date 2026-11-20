@@ -23,7 +23,8 @@ import {
  *
  * Its listeners run inside the `catchUnwind` it was given, so a throwing
  * listener is reported to that runtime's hook, the other listeners still
- * run, and `dispatch` never throws.
+ * run, and `dispatch` doesn't throw for it. Only a hook that throws while
+ * reporting (a double fault) propagates.
  *
  * @template T The type of the dispatched value
  *
@@ -123,12 +124,21 @@ export class DispatchController<T> {
 			});
 			state = Ready(value);
 			const queue = waiting;
+			// A double fault (a throwing hook) still lets every listener run and the queue drain.
+			let doubleFault: { readonly thrown: unknown } | undefined;
 			for (const listener of queue) {
 				// A Set visits entries added during iteration, so late joiners run too.
 				queue.delete(listener);
-				run({ listener, value });
+				try {
+					run({ listener, value });
+				} catch (thrown: unknown) {
+					doubleFault ??= { thrown };
+				}
 			}
 			waiting = undefined;
+			if (doubleFault !== undefined) {
+				throw doubleFault.thrown;
+			}
 			return None();
 		};
 	}
@@ -136,11 +146,18 @@ export class DispatchController<T> {
 	/**
 	 * Dispatches `value`, once. It returns the value already there, like
 	 * Rust's `HashMap::insert`: `None` if this call dispatched, and
-	 * `Some(first)` if an earlier call had. It never throws: a throwing
-	 * listener is reported through `catchUnwind`.
+	 * `Some(first)` if an earlier call had. A throwing listener is reported
+	 * through `catchUnwind`, never thrown to the caller.
+	 *
+	 * The one exception is a double fault: if the panic hook itself throws
+	 * while reporting a listener's throw, `catchUnwind` throws a panic. The
+	 * dispatch still completes first (every queued listener runs, in order,
+	 * and later listeners run at once as usual), then `dispatch` rethrows the
+	 * first such panic.
 	 *
 	 * @param value The value to dispatch
 	 * @returns `None` if this call dispatched, or `Some` of the earlier value
+	 * @throws The panic from a throwing panic hook (a double fault)
 	 *
 	 * @example
 	 * ```ts

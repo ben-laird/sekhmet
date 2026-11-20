@@ -8,7 +8,8 @@
  *   the signal and keep the controller.
  * - **The first dispatch wins.** `dispatch` returns the value already
  *   there, like Rust's `HashMap::insert`: `None` if this call dispatched,
- *   `Some(first)` if one had already happened. It never throws.
+ *   `Some(first)` if one had already happened. A listener's throw never
+ *   reaches the caller.
  * - **Listeners never miss it.** A listener added after the dispatch runs
  *   at once (an `AbortSignal` silently never fires one added after the
  *   abort), and every listener returns an {@linkcode Unsubscribe}.
