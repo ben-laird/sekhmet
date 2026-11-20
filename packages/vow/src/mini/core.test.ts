@@ -1,4 +1,4 @@
-import { union } from "@sekhmet/enum/core/mini/exit";
+import { match, union } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import {
 	assert,
@@ -6,7 +6,17 @@ import {
 	assertInstanceOf,
 	assertThrows,
 } from "@std/assert";
-import { type Resolver, Vow } from "@/src/mini/core.ts";
+import { type Resolver, type Subscribe, Vow } from "@/src/mini/core.ts";
+
+/** The pending vow's subscribe function; fails the test if the vow is resolved. */
+function subscribeOf<T>(vow: Vow<T>): Subscribe<T> {
+	return match(vow)({
+		Pending: (subscribe) => subscribe,
+		Resolved: () => {
+			throw new Error("expected a pending vow");
+		},
+	});
+}
 
 Deno.test("Vow resolved synchronously in its executor is Resolved", () => {
 	// Given: an executor that resolves immediately
@@ -27,9 +37,8 @@ Deno.test("Vow whose executor does not resolve stays Pending", () => {
 	// When: constructing the Vow
 	const vow = new Vow<number>(executor);
 
-	// Then: it is Pending with no dependents
+	// Then: it is Pending
 	assert(isolate(vow, "Pending"));
-	assertEquals(union(vow), []);
 });
 
 Deno.test("Vow resolved later notifies dependents in registration order", () => {
@@ -39,11 +48,9 @@ Deno.test("Vow resolved later notifies dependents in registration order", () => 
 		resolve = r;
 	});
 	const calls: string[] = [];
-	const deps = union(vow);
-	if (Array.isArray(deps)) {
-		deps.push((v) => calls.push(`first:${v}`));
-		deps.push((v) => calls.push(`second:${v}`));
-	}
+	const subscribe = subscribeOf(vow);
+	subscribe((v) => calls.push(`first:${v}`));
+	subscribe((v) => calls.push(`second:${v}`));
 
 	// When: resolving it
 	resolve("x");
@@ -60,8 +67,7 @@ Deno.test("Vow resolves at most once", () => {
 		resolve = r;
 	});
 	let calls = 0;
-	const deps = union(vow);
-	if (Array.isArray(deps)) deps.push(() => calls++);
+	subscribeOf(vow)(() => calls++);
 
 	// When: resolving twice with different values
 	resolve(1);
@@ -81,18 +87,16 @@ Deno.test("Vow aggregates errors thrown by dependents", () => {
 	const first = new Error("first");
 	const second = new Error("second");
 	let healthyRan = false;
-	const deps = union(vow);
-	if (Array.isArray(deps)) {
-		deps.push(() => {
-			throw first;
-		});
-		deps.push(() => {
-			healthyRan = true;
-		});
-		deps.push(() => {
-			throw second;
-		});
-	}
+	const subscribe = subscribeOf(vow);
+	subscribe(() => {
+		throw first;
+	});
+	subscribe(() => {
+		healthyRan = true;
+	});
+	subscribe(() => {
+		throw second;
+	});
 
 	// When: resolving it
 	const thrown = assertThrows(() => resolve(1));
@@ -102,4 +106,47 @@ Deno.test("Vow aggregates errors thrown by dependents", () => {
 	assertEquals(thrown.errors, [first, second]);
 	assert(healthyRan);
 	assert(isolate(vow, "Resolved"));
+});
+
+Deno.test("Vow runs a dependent at once when subscribed after resolving", () => {
+	// Given: the subscribe function of a vow that has since resolved
+	let resolve!: Resolver<number>;
+	const vow = new Vow<number>((r) => {
+		resolve = r;
+	});
+	const subscribe = subscribeOf(vow);
+	resolve(7);
+	const seen: number[] = [];
+
+	// When: subscribing through the stale function
+	subscribe((v) => seen.push(v));
+
+	// Then: the dependent ran at once with the value
+	assertEquals(seen, [7]);
+});
+
+Deno.test("Vow is covariant in its value type", () => {
+	// Given: vows of narrower value types
+	const done = new Vow<undefined>((resolve) => resolve(undefined));
+	const cause = new Vow<"a" | "b">((resolve) => resolve("a"));
+
+	// When: assigning them to vows of wider value types
+	const asVoid: Vow<void> = done;
+	const asString: Vow<string> = cause;
+
+	// Then: they type-check and are the same vows
+	assertEquals(asVoid, done);
+	assertEquals(asString, cause);
+});
+
+Deno.test("Vow is not contravariant in its value type", () => {
+	// Given: a vow of a wider value type
+	const wide = new Vow<string>((resolve) => resolve("c"));
+
+	// When: assigning it to a vow of a narrower value type
+	// @ts-expect-error: a Vow<string> is not a Vow<"a" | "b">
+	const narrow: Vow<"a" | "b"> = wide;
+
+	// Then: only the type checker objects; the value is the same vow
+	assertEquals(narrow, wide);
 });

@@ -144,9 +144,7 @@ export function fromPromise<T>(promise: Promise<T>): Vow<Result<T, unknown>> {
 export function map<T, U>(self: Vow<T>, mapping: (value: T) => U): Vow<U> {
 	return new Vow<U>((resolve) => {
 		match(self)({
-			Pending: (deps) => {
-				deps.push(resolveMap);
-			},
+			Pending: (subscribe) => subscribe(resolveMap),
 			Resolved: resolveMap,
 		});
 
@@ -195,16 +193,12 @@ export function zip<T, U>(
 		}
 
 		match(self)({
-			Pending: (deps) => {
-				deps.push(tryResolve);
-			},
+			Pending: (subscribe) => subscribe(tryResolve),
 			Resolved: tryResolve,
 		});
 
 		match(otherVow)({
-			Pending: (deps) => {
-				deps.push(tryResolve);
-			},
+			Pending: (subscribe) => subscribe(tryResolve),
 			Resolved: tryResolve,
 		});
 	});
@@ -271,9 +265,7 @@ export function zipWith<T, U, V>(
 export function wait<T>(self: Vow<T>): Promise<T> {
 	return new Promise((resolve) => {
 		match(self)({
-			Pending: (deps) => {
-				deps.push(resolve);
-			},
+			Pending: (subscribe) => subscribe(resolve),
 			Resolved: resolve,
 		});
 	});

@@ -62,9 +62,15 @@ dependents run on a microtask too, after the promise settles.
 ## A vow is an enum
 
 A `Vow` is built on `Enum` from `@sekhmet/enum`, with two variants. `Pending`
-holds the list of dependents waiting for the value; `Resolved` holds the value.
-Resolving a vow swaps the first variant for the second and then calls each
-dependent. There is no third state: a vow has no `Rejected` variant.
+holds a `subscribe` function that registers a dependent; `Resolved` holds the
+value. The dependents themselves live in a closure the constructor creates, not
+in the variant. Resolving a vow swaps the first variant for the second and then
+calls each dependent. There is no third state: a vow has no `Rejected` variant.
+
+Because `Pending` holds only a way to subscribe, the value type appears only as
+an output, so a vow is covariant in it, like a `Promise`: a `Vow<"a" | "b">` is
+a `Vow<string>`, and a `Vow<undefined>` is a `Vow<void>`. The type is declared
+`Vow<out T>`, so TypeScript checks this.
 
 ## A vow resolves once
 
