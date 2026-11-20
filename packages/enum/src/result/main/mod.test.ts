@@ -1,7 +1,7 @@
 import { assertEquals, assertInstanceOf, unreachable } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import * as coreMini from "@/src/core/mini/mod.ts";
-import { Option } from "@/src/option/main/mod.ts";
+import { None, Option, Some } from "@/src/option/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 import {
 	Err,
@@ -290,4 +290,65 @@ Deno.test("promiseResult resolves to a main Result that chains", async () => {
 	assertEquals(ok.map((n) => n * 2).unwrapOr(0), 42);
 	assertEquals(err.mapErr((e) => e.toUpperCase()).unwrapErr(), "BAD");
 	assertType<IsExact<typeof resolved, Promise<Result<number, string>>>>(true);
+});
+
+Deno.test("Result.transpose returns a main Option holding a main Result", () => {
+	// Given: an Ok holding a Some, an Ok holding a None, and an Err
+	const okSome = Ok<Option<number>, string>(Some(5));
+	const okNone = Ok<Option<number>, string>(None());
+	const err = Err<Option<number>, string>("bad");
+
+	// When: transposing them and chaining through both layers
+	const transposed = okSome.transpose();
+	const inner = transposed.unwrap();
+
+	// Then: the Option and the Result inside it are both main
+	assertInstanceOf(transposed, Option);
+	assertInstanceOf(inner, Result);
+	assertType<IsExact<typeof transposed, Option<Result<number, string>>>>(true);
+	assertEquals(inner.map((n) => n * 2).unwrap(), 10);
+	assertEquals(okNone.transpose().isNone(), true);
+	assertEquals(err.transpose().unwrap().unwrapErr(), "bad");
+});
+
+Deno.test("Result.transpose exists only for a Result of an Option", () => {
+	// Given: a Result of a number
+	const plain = Ok<number, string>(1);
+
+	// When: writing a transpose on it
+	// @ts-expect-error: transpose's this is a Result of an Option
+	const misuse = (): unknown => plain.transpose();
+
+	// Then: it doesn't compile, so it is never called
+	assertEquals(typeof misuse, "function");
+});
+
+Deno.test("Result.flatten returns a main Result", () => {
+	// Given: an Ok holding an Ok, and an Ok holding an Err
+	const okOk = Ok<Result<number, string>, string>(Ok(3));
+	const okErr = Ok<Result<number, string>, string>(Err("bad"));
+
+	// When: flattening them
+	const flat = okOk.flatten();
+
+	// Then: the result is a main Result<number, string> that chains
+	assertInstanceOf(flat, Result);
+	assertType<IsExact<typeof flat, Result<number, string>>>(true);
+	assertEquals(flat.map((n) => n + 1).unwrap(), 4);
+	assertEquals(okErr.flatten().unwrapErr(), "bad");
+});
+
+Deno.test("Result.flatten exists only for a Result of a Result with the same error", () => {
+	// Given: a Result of a number, and a Result of a Result whose errors differ
+	const plain = Ok<number, string>(1);
+	const mixed = Ok<Result<number, number>, string>(Ok(1));
+
+	// When: writing a flatten on each
+	// @ts-expect-error: flatten's this is a Result of a Result
+	const onPlain = (): unknown => plain.flatten();
+	// @ts-expect-error: both layers must share the error type
+	const onMixed = (): unknown => mixed.flatten();
+
+	// Then: neither compiles, so neither is called
+	assertEquals([typeof onPlain, typeof onMixed], ["function", "function"]);
 });

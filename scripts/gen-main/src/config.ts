@@ -482,6 +482,7 @@ export const FEATURES: readonly Feature[] = [
 		primary: "Poll",
 		construct: "variant",
 		mappers: ["map"],
+		wraps: [RESULT],
 		example: [
 			'import { assertEquals } from "@std/assert";',
 			'import { Pending, Ready } from "@sekhmet/enum/poll";',

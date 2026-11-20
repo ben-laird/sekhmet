@@ -1,5 +1,6 @@
 import { assertEquals, assertFalse } from "@std/assert";
-import { None, Some } from "@/src/option/mini/core.ts";
+import { transpose as transposeOption } from "@/src/option/mini/combinators.ts";
+import { None, type Option, Some } from "@/src/option/mini/core.ts";
 import * as TestSubject from "@/src/result/mini/combinators.ts";
 import { Err, Ok, type Result } from "@/src/result/mini/core.ts";
 
@@ -285,6 +286,93 @@ Deno.test("orElse() obeys the monad laws on the error channel (Err as unit)", as
 
 			// Then: both agree
 			assertEquals(left, right);
+		}
+	});
+});
+
+Deno.test("transpose() turns a Result of an Option inside out", async (t) => {
+	await t.step("Ok(Some(x)) becomes Some(Ok(x))", () => {
+		// Given: an Ok holding a Some
+		const result: Result<Option<number>, string> = Ok(Some(5));
+
+		// When: transposing it
+		const subject = TestSubject.transpose(result);
+
+		// Then: the Option is outside, holding an Ok
+		assertEquals(subject, Some(Ok(5)));
+	});
+
+	await t.step("Ok(None) becomes None", () => {
+		// Given: an Ok holding a None
+		const result: Result<Option<number>, string> = Ok(None());
+
+		// When: transposing it
+		const subject = TestSubject.transpose(result);
+
+		// Then: there is no value, so the whole is None
+		assertEquals(subject, None());
+	});
+
+	await t.step("Err(e) becomes Some(Err(e))", () => {
+		// Given: an Err
+		const result: Result<Option<number>, string> = Err("bad");
+
+		// When: transposing it
+		const subject = TestSubject.transpose(result);
+
+		// Then: the error is kept inside a Some
+		assertEquals(subject, Some(Err("bad")));
+	});
+
+	await t.step("it inverts Option's transpose", () => {
+		const samples: Result<Option<number>, string>[] = [
+			Ok(Some(1)),
+			Ok(None()),
+			Err("e"),
+		];
+		for (const sample of samples) {
+			// Given: a Result of an Option
+			// When: transposing it there and back
+			const subject = transposeOption(TestSubject.transpose(sample));
+
+			// Then: it is unchanged
+			assertEquals(subject, sample);
+		}
+	});
+});
+
+Deno.test("flatten() removes one layer of a nested Result", async (t) => {
+	await t.step("Ok(Ok(x)) becomes Ok(x)", () => {
+		// Given: an Ok holding an Ok
+		const nested: Result<Result<number, string>, string> = Ok(Ok(6));
+
+		// When: flattening it
+		const subject = TestSubject.flatten(nested);
+
+		// Then: the inner Ok remains
+		assertEquals(subject, Ok(6));
+	});
+
+	await t.step("Ok(Err(e)) and Err(e) both become Err(e)", () => {
+		// Given: an Ok holding an Err, and an outer Err
+		const innerErr: Result<Result<number, string>, string> = Ok(Err("in"));
+		const outerErr: Result<Result<number, string>, string> = Err("out");
+
+		// When: flattening each
+		const subjects = [innerErr, outerErr].map(TestSubject.flatten);
+
+		// Then: each keeps its error
+		assertEquals(subjects, [Err("in"), Err("out")]);
+	});
+
+	await t.step("it undoes wrapping in Ok: flatten(Ok(r)) ≡ r", () => {
+		for (const r of SAMPLES) {
+			// Given: a Result r
+			// When: wrapping it in Ok, then flattening
+			const subject = TestSubject.flatten(Ok(r));
+
+			// Then: r comes back
+			assertEquals(subject, r);
 		}
 	});
 });

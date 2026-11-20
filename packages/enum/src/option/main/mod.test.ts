@@ -8,7 +8,7 @@ import { assertType, type IsExact } from "@std/testing/types";
 import * as coreMini from "@/src/core/mini/mod.ts";
 import { Err, Ok, Result } from "@/src/result/main/mod.ts";
 import * as mini from "../mini/mod.ts";
-import { flatten, maybe, None, Option, Some, transpose, unzip } from "./mod.ts";
+import { maybe, None, Option, Some } from "./mod.ts";
 
 Deno.test("Option methods chain on main constructors", () => {
 	// Given: a main Some
@@ -53,7 +53,7 @@ Deno.test("Option methods returning Option return main Options", () => {
 
 	// When: combining them through methods and wrappers
 	const ored = miniNone instanceof Option ? undefined : some.and(miniNone);
-	const flat = flatten(Some(Some(3)));
+	const flat = Some(Some(3)).flatten();
 
 	// Then: results are main Options even when mini returned a mini one
 	assertInstanceOf(ored, Option);
@@ -123,7 +123,7 @@ Deno.test("unzip returns a tuple of main Options", () => {
 	const pair = Some<[number, string]>([1, "a"]);
 
 	// When: unzipping it and chaining on each half
-	const [first, second] = unzip(pair);
+	const [first, second] = pair.unzip();
 
 	// Then: both halves are main Options that chain
 	assertInstanceOf(first, Option);
@@ -154,14 +154,14 @@ Deno.test("transpose returns a main Result holding a main Option", () => {
 	const errInside = Some(Err<number, string>("bad"));
 
 	// When: transposing them and chaining through both layers
-	const transposed = transpose(okInside);
+	const transposed = okInside.transpose();
 	const inner = transposed.unwrap();
 
 	// Then: the Result and the Option inside it are both main
 	assertInstanceOf(transposed, Result);
 	assertInstanceOf(inner, Option);
 	assertEquals(inner.map((n) => n * 2).unwrap(), 10);
-	assertEquals(transpose(errInside).unwrapErr(), "bad");
+	assertEquals(errInside.transpose().unwrapErr(), "bad");
 });
 
 Deno.test("main isSome() narrows to Some and keeps a main Option<T>", async (t) => {
@@ -284,4 +284,67 @@ Deno.test("main isNone() narrows to None and to a main Option<never>", async (t)
 			assertType<IsExact<typeof option, Option<number>>>(true);
 		}
 	});
+});
+
+Deno.test("receiver-constrained methods exist only for their receiver's shape", async (t) => {
+	await t.step("flatten() needs an Option of an Option", () => {
+		// Given: a nested Option and a plain one
+		const nested = Some(Some(1));
+		const plain = Some(1);
+
+		// When: flattening the nested one
+		const flat = nested.flatten();
+
+		// Then: it flattens to a main Option<number>, and the plain one can't be flattened
+		assertType<IsExact<typeof flat, Option<number>>>(true);
+		assertEquals(flat.unwrap(), 1);
+		// @ts-expect-error: flatten's this is an Option of an Option
+		const misuse = (): unknown => plain.flatten();
+		assertEquals(typeof misuse, "function"); // never called: it is ill-typed
+	});
+
+	await t.step("transpose() needs an Option of a Result", () => {
+		// Given: an Option of a Result and an Option of a number
+		const ofResult = Some(Ok<number, string>(2));
+		const plain = Some(2);
+
+		// When: transposing the Option of a Result
+		const transposed = ofResult.transpose();
+
+		// Then: it is typed as a Result of an Option, and the plain one can't be transposed
+		assertType<IsExact<typeof transposed, Result<Option<number>, string>>>(
+			true,
+		);
+		// @ts-expect-error: transpose's this is an Option of a Result
+		const misuse = (): unknown => plain.transpose();
+		assertEquals(typeof misuse, "function"); // never called: it is ill-typed
+	});
+
+	await t.step("unzip() needs an Option of a pair", () => {
+		// Given: an Option of a pair and an Option of a number
+		const pair = Some<[number, string]>([1, "a"]);
+		const plain = Some(1);
+
+		// When: unzipping the pair
+		const halves = pair.unzip();
+
+		// Then: it is typed as a pair of Options, and the plain one can't be unzipped
+		assertType<
+			IsExact<typeof halves, [first: Option<number>, second: Option<string>]>
+		>(true);
+		// @ts-expect-error: unzip's this is an Option of a pair
+		const misuse = (): unknown => plain.unzip();
+		assertEquals(typeof misuse, "function"); // never called: it is ill-typed
+	});
+});
+
+Deno.test("main Option stays covariant with receiver-constrained methods", () => {
+	// Given: an Option of an Option of a literal type
+	const narrow: Option<Option<"a">> = Some(Some("a" as const));
+
+	// When: widening it to an Option of an Option of a string
+	const wide: Option<Option<string>> = narrow;
+
+	// Then: the widened Option still flattens
+	assertEquals(wide.flatten().unwrap(), "a");
 });

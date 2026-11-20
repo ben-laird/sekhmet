@@ -1,6 +1,7 @@
 import { assertEquals, assertInstanceOf, unreachable } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import * as coreMini from "@/src/core/mini/mod.ts";
+import { Err, Ok, Result } from "@/src/result/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 import { Pending, Poll, Ready } from "./mod.ts";
 
@@ -129,4 +130,44 @@ Deno.test("main isPending() narrows to Pending and to a main Poll<never>", async
 			assertType<IsExact<typeof poll, Poll<number>>>(true);
 		}
 	});
+});
+
+Deno.test("Poll.mapOk and mapErr return main Polls of main Results", () => {
+	// Given: a ready Ok, a ready Err and a Pending, each of a Result
+	const done: Poll<Result<number, string>> = Ready(Ok(2));
+	const failed: Poll<Result<number, string>> = Ready(Err("bad"));
+	const waiting: Poll<Result<number, string>> = Pending();
+
+	// When: mapping the success of one and the error of another
+	const mapped = done.mapOk((n) => n * 10);
+	const recovered = failed.mapErr((e) => e.length);
+
+	// Then: both are main Polls whose Results are main, and chain
+	assertInstanceOf(mapped, Poll);
+	assertType<IsExact<typeof mapped, Poll<Result<number, string>>>>(true);
+	assertType<IsExact<typeof recovered, Poll<Result<number, number>>>>(true);
+	assertInstanceOf(coreMini.union(mapped), Result);
+	assertEquals(
+		mapped.map((result) => result.unwrapOr(0)),
+		Ready(20),
+	);
+	assertEquals(
+		recovered.map((result) => result.unwrapErr()),
+		Ready(3),
+	);
+	assertEquals(waiting.mapOk((n) => n * 10).isPending(), true);
+});
+
+Deno.test("Poll.mapOk and mapErr exist only for a Poll of a Result", () => {
+	// Given: a Poll of a number
+	const plain = Ready(1);
+
+	// When: writing mapOk and mapErr on it
+	// @ts-expect-error: mapOk's this is a Poll of a Result
+	const mapOk = (): unknown => plain.mapOk((n: number) => n);
+	// @ts-expect-error: mapErr's this is a Poll of a Result
+	const mapErr = (): unknown => plain.mapErr((e: string) => e);
+
+	// Then: neither compiles, so neither is called
+	assertEquals([typeof mapOk, typeof mapErr], ["function", "function"]);
 });

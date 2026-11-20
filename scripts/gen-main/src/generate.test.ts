@@ -825,8 +825,8 @@ Deno.test("generateMain rejects self that omits the class's type arguments", () 
 	assertStringIncludes(error.message, "must pass all 1");
 });
 
-Deno.test("generateMain rejects self type arguments that aren't the function's type parameters", () => {
-	// Given: self typed Box<number>
+Deno.test("generateMain declares a receiver with fixed type arguments as this", () => {
+	// Given: fixed(self: Box<number>), a receiver of one shape only
 	const fixed = fn(
 		"fixed",
 		signature({
@@ -836,11 +836,130 @@ Deno.test("generateMain rejects self type arguments that aren't the function's t
 	);
 
 	// When: generating
-	const error = rejection([fixed]);
+	const output = source([fixed]);
 
-	// Then: generation fails, asking for distinct type parameters
-	assertEquals(error.symbol, "fixed");
-	assertStringIncludes(error.message, "distinct type parameters");
+	// Then: the method takes the shape as its this parameter
+	assertStringIncludes(output, "fixed(this: Box<number>): void {");
+	assertStringIncludes(output, "mini.fixed(this);");
+});
+
+/** `flatten<A>(self: Box<Box<A>>): Box<A>`, documented with an example. */
+const FLATTEN = fn(
+	"flatten",
+	signature({
+		typeParams: ["A"],
+		params: [param("self", named("Box", [named("Box", [typeParam("A")])]))],
+		returnType: named("Box", [typeParam("A")]),
+		jsDoc: {
+			doc: "Flattens a nested box.",
+			tags: [
+				{ kind: "param", name: "self", doc: "The nested box" },
+				{ kind: "return", doc: "The inner box" },
+				{
+					kind: "example",
+					doc: '```ts\nimport { flatten, full } from "@pkg/box/mini";\n\nflatten(full(full(1)));\n```',
+				},
+			],
+		},
+	}),
+);
+
+Deno.test("generateMain turns a constrained receiver into a this parameter", () => {
+	// Given: flatten(self: Box<Box<A>>), whose receiver's type argument is a Box
+	const symbols = [FLATTEN];
+
+	// When: generating
+	const output = source(symbols);
+
+	// Then: it is a method whose this parameter is the nested shape (the
+	// inner Box kept mini, like any parameter), keeping A as its own, and
+	// its result is converted to the main class
+	assertStringIncludes(output, "flatten<A>(this: Box<mini.Box<A>>): Box<A> {");
+	assertStringIncludes(output, "return Box.fromMini(mini.flatten(this));");
+	assertEquals(output.includes("export function flatten"), false);
+	assertEquals(output.includes("export { flatten"), false);
+});
+
+Deno.test("generateMain rewrites a constrained receiver's docs to method form", () => {
+	// Given: flatten documented with a function-form example and @param self
+	const symbols = [FLATTEN];
+
+	// When: generating
+	const output = source(symbols);
+
+	// Then: the example calls the method, imports it no more, and @param self is gone
+	assertStringIncludes(output, "full(full(1)).flatten();");
+	assertStringIncludes(output, 'import { full } from "@pkg/box";');
+	assertStringIncludes(output, "@returns The inner box");
+	assertEquals(output.includes("The nested box"), false);
+});
+
+Deno.test("generateMain lets a constrained receiver's type parameters share the class's names", () => {
+	// Given: mapInner<T, U>(self: Box<Box<T>>, f: (t: T) => U): Box<U>,
+	// whose T is its own, not Box's
+	const mapInner = fn(
+		"mapInner",
+		signature({
+			typeParams: ["T", "U"],
+			params: [
+				param("self", named("Box", [named("Box", [typeParam("T")])])),
+				param("f", {
+					kind: "function",
+					constructor: false,
+					typeParams: [],
+					params: [param("t", typeParam("T"))],
+					returnType: typeParam("U"),
+				}),
+			],
+			returnType: named("Box", [typeParam("U")]),
+		}),
+	);
+
+	// When: generating
+	const output = source([mapInner]);
+
+	// Then: T stays the method's own, and the other parameters follow this
+	assertStringIncludes(
+		output,
+		"mapInner<T, U>(this: Box<mini.Box<T>>, f: (t: T) => U): Box<U> {",
+	);
+	assertStringIncludes(output, "mini.mapInner(this, f)");
+});
+
+Deno.test("generateMain declares a receiver repeating a type parameter as this", () => {
+	// Given: same<A>(self: Pair<A, A>) on a two-parameter Pair
+	const pairClass: DocSymbol = {
+		name: "Pair",
+		declarations: [
+			{
+				kind: "class",
+				location: { filename: CORE, byteIndex: 0 },
+				jsDoc: undefined,
+				typeParams: [declare("L"), declare("R")],
+			},
+		],
+	};
+	const same = fn(
+		"same",
+		signature({
+			typeParams: ["A"],
+			params: [param("self", named("Pair", [typeParam("A"), typeParam("A")]))],
+			returnType: keyword("boolean"),
+		}),
+	);
+
+	// When: generating
+	const result = generateMain({
+		feature: { ...FEATURE, primary: "Pair" },
+		symbols: [pairClass, same],
+		sources: SOURCES,
+		miniUrl: MINI_URL,
+		outputUrl: OUTPUT_URL,
+	});
+
+	// Then: A can't be both L and R, so the receiver is constrained
+	assert(result.ok);
+	assertStringIncludes(result.value, "same<A>(this: Pair<A, A>): boolean {");
 });
 
 Deno.test("generateMain rejects a method without a return type", () => {
@@ -1481,6 +1600,33 @@ Deno.test("generateMain puts a borrow with a property on a namespace class", () 
 		"from `@pkg/shelf/mini` as methods of its `.on` namespace (`BoxOn`).",
 	);
 	assert(!output.includes("shelf.wrap(this, label)"));
+});
+
+Deno.test("generateMain rejects a constrained receiver on a namespace", () => {
+	// Given: wrap(self: Box<Box<A>>, label) borrowed onto the `.on` namespace
+	const nestedWrap = fn(
+		"wrap",
+		signature({
+			typeParams: ["A"],
+			params: [
+				param("self", named("Box", [named("Box", [typeParam("A")])])),
+				param("label", keyword("string")),
+			],
+			returnType: keyword("void"),
+		}),
+	);
+	const borrow: Borrow = {
+		...ON_SHELF,
+		methods: [{ name: "wrap", doc: METHOD_DOC }],
+	};
+
+	// When: generating
+	const result = borrowingWith({ borrow, borrowed: [nestedWrap, LABEL] });
+
+	// Then: generation fails, since only a this parameter can constrain it
+	assert(!result.ok);
+	assertEquals(result.error.symbol, "wrap");
+	assertStringIncludes(result.error.message, "can't constrain");
 });
 
 Deno.test("generateMain leaves a namespace method's function examples alone", () => {

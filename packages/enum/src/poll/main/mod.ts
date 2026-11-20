@@ -21,6 +21,8 @@
 
 import { getStructParams, struct } from "@sekhmet/primordials/struct";
 import type { Enum, Isolate } from "@/src/core/mini/core.ts";
+import type { Result as MiniResult } from "@/src/result/mini/core.ts";
+import { Result } from "../../result/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
 export type { PollVariants } from "../mini/mod.ts";
@@ -82,6 +84,80 @@ export class Poll<out T> extends mini.Poll<T> {
 	 */
 	map<U>(mapping: (value: T) => U): Poll<U> {
 		return Poll.fromMini(mini.map(this, mapping));
+	}
+
+	/**
+	 * Maps the success value of a ready Result: Rust's
+	 * `Poll<Result<T, E>>::map_ok`.
+	 *
+	 * `Ready(Ok(value))` becomes `Ready(Ok(mapping(value)))`; `Ready(Err(e))`
+	 * and `Pending` pass through without calling `mapping`.
+	 *
+	 * @template T - The success type of the Result in the source Poll
+	 * @template E - The error type of the Result
+	 * @template U - The success type of the Result in the resulting Poll
+	 * @param mapping - The function to apply to the success value
+	 * @returns A Poll of the Result with its success value mapped
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Pending, type Poll, Ready } from "@sekhmet/enum/poll";
+	 * import { Err, Ok, type Result, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+	 *
+	 * const done: Poll<Result<number, string>> = Ready(Ok(5));
+	 * const failed: Poll<Result<number, string>> = Ready(Err("boom"));
+	 * const waiting: Poll<Result<number, string>> = Pending();
+	 *
+	 * assertEquals((done.mapOk((n) => n * 2)).map(unwrap), Ready(10));
+	 * assertEquals((failed.mapOk((n) => n * 2)).map(unwrapErr), Ready("boom"));
+	 * assertEquals(waiting.mapOk((n) => n * 2), Pending());
+	 * ```
+	 * @see {@link mini.mapOk}
+	 */
+	mapOk<T, E, U>(
+		this: Poll<MiniResult<T, E>>,
+		mapping: (value: T) => U,
+	): Poll<Result<U, E>> {
+		return Poll.fromMini(mini.mapOk(this, mapping)).map(($value0) => {
+			return Result.fromMini($value0);
+		});
+	}
+
+	/**
+	 * Maps the error value of a ready Result: Rust's
+	 * `Poll<Result<T, E>>::map_err`.
+	 *
+	 * `Ready(Err(error))` becomes `Ready(Err(mapping(error)))`; `Ready(Ok(v))`
+	 * and `Pending` pass through without calling `mapping`.
+	 *
+	 * @template T - The success type of the Result
+	 * @template E - The error type of the Result in the source Poll
+	 * @template F - The error type of the Result in the resulting Poll
+	 * @param mapping - The function to apply to the error value
+	 * @returns A Poll of the Result with its error value mapped
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Pending, type Poll, Ready } from "@sekhmet/enum/poll";
+	 * import { Err, Ok, type Result, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+	 *
+	 * const failed: Poll<Result<number, string>> = Ready(Err("boom"));
+	 * const done: Poll<Result<number, string>> = Ready(Ok(5));
+	 * const waiting: Poll<Result<number, string>> = Pending();
+	 *
+	 * assertEquals((failed.mapErr((e) => e.length)).map(unwrapErr), Ready(4));
+	 * assertEquals((done.mapErr((e) => e.length)).map(unwrap), Ready(5));
+	 * assertEquals(waiting.mapErr((e) => e.length), Pending());
+	 * ```
+	 * @see {@link mini.mapErr}
+	 */
+	mapErr<T, E, F>(
+		this: Poll<MiniResult<T, E>>,
+		mapping: (error: E) => F,
+	): Poll<Result<T, F>> {
+		return Poll.fromMini(mini.mapErr(this, mapping)).map(($value0) => {
+			return Result.fromMini($value0);
+		});
 	}
 
 	/**
