@@ -242,7 +242,10 @@ sketched in the playground first, then implemented on `feat/job` (#67).
 Sketched in the playground first, then implemented on `feat/job` (#67).
 
 - **`JobOutcome` gets methods** through the repo's main/mini split
-  (`gen:main`), mirroring `Result`'s names:
+  (`gen:main`), mirroring `Result`'s names (_renamed `JobEnd`, at
+  `@sekhmet/job/end`, by
+  [decision 16](#16-joboutcome-is-renamed-jobend); the text below keeps the
+  old name_):
   - variant predicates (`isSucceeded`, `isSucceededAnd`, `isFailed`, …), all
     type guards shaped like `Result`'s `isOk`;
   - two complement pairs, so `!a.isX()` always means the opposite:
@@ -379,6 +382,34 @@ Owner, 2026-11-19; implemented on `feat/job-context-cleanup`, for `feat/job`
 - **Open:** a cleanup that hangs has no timeout yet
   ([open question 2](#open-questions)); async factories; step-level cleanup;
   whether the factory should see the run's signal.
+
+## Decisions (owner, 2026-11-20)
+
+### 16. `JobOutcome` is renamed `JobEnd`
+
+Owner, 2026-11-20 ([#87](https://github.com/ben-laird/sekhmet/issues/87)).
+Earlier decisions keep the old name as history.
+
+- **"Outcome" now names `@sekhmet/panic`'s three-channel `Outcome<T, E, P>`**
+  (#86), what a panic boundary such as `catchUnwind` returns. Job's
+  five-variant enum says how a job finished, so it takes the `-End` names
+  lifetime already uses (`SetupEnd`).
+- **The rename, as a clean break** (job is pre-1.0, so no aliases):
+  `JobOutcome` → `JobEnd`, `JobOutcomeVariants` → `JobEndVariants`, and the
+  feature `@sekhmet/job/outcome` (its `mini` barrel and single-module paths
+  included) → `@sekhmet/job/end`. The variants, their constructors and the
+  methods are unchanged.
+- **The types named after outcomes follow:** `Outcomes<J>` → `JobEnds<J>`,
+  `NeedOutcomes` → `NeedEnds` and `OutcomeView` → `EndView` (and, inside
+  the package, `CountedOutcome` → `CountedEnd`, `NamedOutcome` → `NamedEnd`),
+  so no exported type reads as a collection of panic's `Outcome`.
+- **The fields keep "outcome",** a plain English word for a `JobEnd` value:
+  `report.outcomes`, a condition's `{ outcomes }`, a guard's
+  `view.outcome(need)` and the `Finished` event's `outcome`. `report.ends`
+  and `view.end(need)` would read badly, `end` looking like a verb.
+- **Out of scope:** changing the variants, such as whether `Failed` should
+  become a `Panicked` built on `Outcome`. Job never consumes a panic
+  boundary's result, so nothing in it moves to `Outcome`.
 
 ## What sets job apart from effect
 

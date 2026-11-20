@@ -116,7 +116,7 @@ A hand-written `runIf` is a function of `{ meta, cancelled, needs }`.
 The condition also types `run`. Under `success()`, `run` is reached only
 when every need succeeded, so it gets their values. Under any other
 condition it may be reached whatever happened, so it gets each need's
-`JobOutcome` and has to look.
+`JobEnd` and has to look.
 
 The guards on conditional needs are data too. `succeeded(need)`,
 `failed(need)` and `succeededWith({ need, where, describe })` each carry a
@@ -180,7 +180,7 @@ otherwise only the first would silently run.
 
 ## The outcome algebra
 
-Every job reached ends with exactly one `JobOutcome`:
+Every job reached ends with exactly one `JobEnd`:
 
 - `Succeeded`, with what `run` returned;
 - `Failed`, with what `run` threw or rejected with;
@@ -231,8 +231,8 @@ Outcomes have no `match` method. Matching is the one place outcome code
 uses enum's own `match(outcome)({ … })`, so there is one way to match any
 enum in the repo. The other methods mirror `Result`'s names: `value()`,
 `error()` and `blockedBy()` return `Option`s, and `map`, `toResult` and
-`catchFailure` transform the outcome. `@sekhmet/job/outcome` has them as
-methods, and `@sekhmet/job/outcome/mini` as tree-shakable functions of the
+`catchFailure` transform the outcome. `@sekhmet/job/end` has them as
+methods, and `@sekhmet/job/end/mini` as tree-shakable functions of the
 same names.
 
 ## Everything is planned before anything runs

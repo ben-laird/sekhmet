@@ -19,13 +19,13 @@ import {
 	isolate,
 	isolateAnd,
 } from "@sekhmet/enum/core/mini";
-import type { JobOutcome, JobOutcomeVariants } from "./core.ts";
+import type { JobEnd, JobEndVariants } from "./core.ts";
 
 /**
  * Whether the job succeeded.
  *
  * Narrows the variant, so its value can be read with `union`, and keeps the
- * outcome a `JobOutcome<T>`.
+ * outcome a `JobEnd<T>`.
  *
  * @template T What a succeeded job returned
  * @param self The outcome to check
@@ -34,10 +34,10 @@ import type { JobOutcome, JobOutcomeVariants } from "./core.ts";
  * @example
  * ```ts
  * import { union } from "@sekhmet/enum/core/mini";
- * import { isSucceeded, type JobOutcome, Succeeded } from "@sekhmet/job/outcome/mini";
+ * import { isSucceeded, type JobEnd, Succeeded } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
- * const outcome: JobOutcome<string> = Succeeded("dist");
+ * const outcome: JobEnd<string> = Succeeded("dist");
  * if (isSucceeded(outcome)) {
  * 	const value: string = union(outcome);
  * 	assertEquals(value, "dist");
@@ -45,8 +45,8 @@ import type { JobOutcome, JobOutcomeVariants } from "./core.ts";
  * ```
  */
 export function isSucceeded<T>(
-	self: JobOutcome<T>,
-): self is Enum<Isolate<JobOutcomeVariants<T>, "Succeeded">> & JobOutcome<T> {
+	self: JobEnd<T>,
+): self is Enum<Isolate<JobEndVariants<T>, "Succeeded">> & JobEnd<T> {
 	return isolate(self, "Succeeded");
 }
 
@@ -54,7 +54,7 @@ export function isSucceeded<T>(
  * Whether the job succeeded with a value that satisfies `predicate`.
  *
  * Narrows the variant and, for a type-guard predicate, the value: the
- * outcome becomes a succeeded `JobOutcome<U>`.
+ * outcome becomes a succeeded `JobEnd<U>`.
  *
  * @template T What a succeeded job returned
  * @template U The narrowed value type, for a type-guard predicate
@@ -64,7 +64,7 @@ export function isSucceeded<T>(
  *
  * @example
  * ```ts
- * import { isSucceededAnd, Succeeded } from "@sekhmet/job/outcome/mini";
+ * import { isSucceededAnd, Succeeded } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isSucceededAnd(Succeeded(2), (n) => n > 1), true);
@@ -72,9 +72,9 @@ export function isSucceeded<T>(
  * ```
  */
 export function isSucceededAnd<T, U extends T>(
-	self: JobOutcome<T>,
+	self: JobEnd<T>,
 	predicate: ((value: T) => value is U) | ((value: T) => boolean),
-): self is Enum<Isolate<JobOutcomeVariants<U>, "Succeeded">> & JobOutcome<U> {
+): self is Enum<Isolate<JobEndVariants<U>, "Succeeded">> & JobEnd<U> {
 	return isolateAnd(self, "Succeeded", predicate);
 }
 
@@ -82,7 +82,7 @@ export function isSucceededAnd<T, U extends T>(
  * Whether the job's body threw.
  *
  * Narrows the variant, so the error can be read with `union`, and makes the
- * outcome a `JobOutcome<never>`, which fits an outcome of any type.
+ * outcome a `JobEnd<never>`, which fits an outcome of any type.
  *
  * @template T What a succeeded job returned
  * @param self The outcome to check
@@ -90,15 +90,15 @@ export function isSucceededAnd<T, U extends T>(
  *
  * @example
  * ```ts
- * import { Failed, isFailed } from "@sekhmet/job/outcome/mini";
+ * import { Failed, isFailed } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isFailed(Failed(new Error("boom"))), true);
  * ```
  */
 export function isFailed<T>(
-	self: JobOutcome<T>,
-): self is Enum<Isolate<JobOutcomeVariants<T>, "Failed">> & JobOutcome<never> {
+	self: JobEnd<T>,
+): self is Enum<Isolate<JobEndVariants<T>, "Failed">> & JobEnd<never> {
 	return isolate(self, "Failed");
 }
 
@@ -111,15 +111,15 @@ export function isFailed<T>(
  *
  * @example
  * ```ts
- * import { isSkipped, Skipped } from "@sekhmet/job/outcome/mini";
+ * import { isSkipped, Skipped } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isSkipped(Skipped()), true);
  * ```
  */
 export function isSkipped<T>(
-	self: JobOutcome<T>,
-): self is Enum<Isolate<JobOutcomeVariants<T>, "Skipped">> & JobOutcome<never> {
+	self: JobEnd<T>,
+): self is Enum<Isolate<JobEndVariants<T>, "Skipped">> & JobEnd<never> {
 	return isolate(self, "Skipped");
 }
 
@@ -134,15 +134,15 @@ export function isSkipped<T>(
  *
  * @example
  * ```ts
- * import { Blocked, isBlocked } from "@sekhmet/job/outcome/mini";
+ * import { Blocked, isBlocked } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isBlocked(Blocked(["build"])), true);
  * ```
  */
 export function isBlocked<T>(
-	self: JobOutcome<T>,
-): self is Enum<Isolate<JobOutcomeVariants<T>, "Blocked">> & JobOutcome<never> {
+	self: JobEnd<T>,
+): self is Enum<Isolate<JobEndVariants<T>, "Blocked">> & JobEnd<never> {
 	return isolate(self, "Blocked");
 }
 
@@ -155,16 +155,15 @@ export function isBlocked<T>(
  *
  * @example
  * ```ts
- * import { Cancelled, isCancelled } from "@sekhmet/job/outcome/mini";
+ * import { Cancelled, isCancelled } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isCancelled(Cancelled()), true);
  * ```
  */
 export function isCancelled<T>(
-	self: JobOutcome<T>,
-): self is Enum<Isolate<JobOutcomeVariants<T>, "Cancelled">> &
-	JobOutcome<never> {
+	self: JobEnd<T>,
+): self is Enum<Isolate<JobEndVariants<T>, "Cancelled">> & JobEnd<never> {
 	return isolate(self, "Cancelled");
 }
 
@@ -178,7 +177,7 @@ export function isCancelled<T>(
  *
  * @example
  * ```ts
- * import { Cancelled, isPassing, Skipped } from "@sekhmet/job/outcome/mini";
+ * import { Cancelled, isPassing, Skipped } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isPassing(Skipped()), true);
@@ -186,9 +185,9 @@ export function isCancelled<T>(
  * ```
  */
 export function isPassing<T>(
-	self: JobOutcome<T>,
-): self is Enum<Isolate<JobOutcomeVariants<T>, "Succeeded" | "Skipped">> &
-	JobOutcome<T> {
+	self: JobEnd<T>,
+): self is Enum<Isolate<JobEndVariants<T>, "Succeeded" | "Skipped">> &
+	JobEnd<T> {
 	return isolate(self, "Succeeded") || isolate(self, "Skipped");
 }
 
@@ -202,7 +201,7 @@ export function isPassing<T>(
  *
  * @example
  * ```ts
- * import { Cancelled, isFailing, Succeeded } from "@sekhmet/job/outcome/mini";
+ * import { Cancelled, isFailing, Succeeded } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isFailing(Cancelled()), true);
@@ -210,11 +209,11 @@ export function isPassing<T>(
  * ```
  */
 export function isFailing<T>(
-	self: JobOutcome<T>,
+	self: JobEnd<T>,
 ): self is Enum<
-	Isolate<JobOutcomeVariants<T>, "Failed" | "Blocked" | "Cancelled">
+	Isolate<JobEndVariants<T>, "Failed" | "Blocked" | "Cancelled">
 > &
-	JobOutcome<never> {
+	JobEnd<never> {
 	return !isPassing(self);
 }
 
@@ -228,7 +227,7 @@ export function isFailing<T>(
  *
  * @example
  * ```ts
- * import { Blocked, Cancelled, isHealthy } from "@sekhmet/job/outcome/mini";
+ * import { Blocked, Cancelled, isHealthy } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isHealthy(Cancelled()), true);
@@ -236,11 +235,11 @@ export function isFailing<T>(
  * ```
  */
 export function isHealthy<T>(
-	self: JobOutcome<T>,
+	self: JobEnd<T>,
 ): self is Enum<
-	Isolate<JobOutcomeVariants<T>, "Succeeded" | "Skipped" | "Cancelled">
+	Isolate<JobEndVariants<T>, "Succeeded" | "Skipped" | "Cancelled">
 > &
-	JobOutcome<T> {
+	JobEnd<T> {
 	return !isUnhealthy(self);
 }
 
@@ -255,7 +254,7 @@ export function isHealthy<T>(
  *
  * @example
  * ```ts
- * import { Cancelled, Failed, isUnhealthy } from "@sekhmet/job/outcome/mini";
+ * import { Cancelled, Failed, isUnhealthy } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isUnhealthy(Failed(new Error("boom"))), true);
@@ -263,8 +262,8 @@ export function isHealthy<T>(
  * ```
  */
 export function isUnhealthy<T>(
-	self: JobOutcome<T>,
-): self is Enum<Isolate<JobOutcomeVariants<T>, "Failed" | "Blocked">> &
-	JobOutcome<never> {
+	self: JobEnd<T>,
+): self is Enum<Isolate<JobEndVariants<T>, "Failed" | "Blocked">> &
+	JobEnd<never> {
 	return isolate(self, "Failed") || isolate(self, "Blocked");
 }

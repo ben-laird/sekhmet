@@ -118,7 +118,7 @@ whatever happened.
    unhealthy: `Failed`, or `Blocked` by a failure. Otherwise it is
    `Skipped`.
 2. For a cleanup, set `runIf: always()`.
-3. In `run`, read each need as a `JobOutcome`: under any `runIf` other than
+3. In `run`, read each need as a `JobEnd`: under any `runIf` other than
    the default, `run` gets outcomes, not values.
 4. Add `continueOnError: true` to a cleanup whose own failure shouldn't fail
    the run.
@@ -274,7 +274,7 @@ own: here, a coverage report that runs only when the needs succeeded and
 the run's metadata asks for it.
 
 1. Pass `runIf` a function of `{ meta, cancelled, needs }`. `needs` is your
-   plan with each need replaced by its `JobOutcome`. There is no context
+   plan with each need replaced by its `JobEnd`. There is no context
    yet: a job's context is built only once it is known to run.
 2. Rebuild the default rule with `all(needs).isSucceeded()`, and add
    `!cancelled` unless the job should run after a cancel: a hand-written
@@ -614,7 +614,7 @@ This guide shows you how to pass a job's outcome to code that speaks
 ```ts
 import { match } from "@sekhmet/enum/core/mini";
 import { isErr, unwrapErr } from "@sekhmet/enum/result/mini";
-import { Blocked, Failed, Succeeded } from "@sekhmet/job/outcome";
+import { Blocked, Failed, Succeeded } from "@sekhmet/job/end";
 import { assert, assertEquals } from "@std/assert";
 
 assertEquals(Succeeded("dist").toResult().unwrap(), "dist");
@@ -707,7 +707,7 @@ comes after the terminal events of every job it needs.
 
 This guide shows you how to handle every way a job can end.
 
-1. Import `match` from `@sekhmet/enum/core/mini`. `JobOutcome` has no
+1. Import `match` from `@sekhmet/enum/core/mini`. `JobEnd` has no
    `match` method of its own: matching is the one place outcome code uses
    enum's function.
 2. Give one arm per variant: `Succeeded`, `Failed`, `Skipped`, `Blocked`
@@ -719,13 +719,13 @@ import {
 	Blocked,
 	Cancelled,
 	Failed,
-	type JobOutcome,
+	type JobEnd,
 	Skipped,
 	Succeeded,
-} from "@sekhmet/job/outcome";
+} from "@sekhmet/job/end";
 import { assertEquals } from "@std/assert";
 
-const describe = (outcome: JobOutcome<string>): string => {
+const describe = (outcome: JobEnd<string>): string => {
 	return match(outcome)({
 		Succeeded: (value) => `built ${value}`,
 		Failed: (error) => `failed: ${String(error)}`,

@@ -5,14 +5,14 @@ import {
 	Blocked,
 	Cancelled,
 	Failed,
-	type JobOutcome,
+	type JobEnd,
 	Skipped,
 	Succeeded,
 } from "./core.ts";
 import { isSucceeded } from "./predicates.ts";
 import { catchFailure, map, toResult } from "./transform.ts";
 
-const EVERY_VARIANT: readonly JobOutcome<number>[] = [
+const EVERY_VARIANT: readonly JobEnd<number>[] = [
 	Succeeded(1),
 	Failed(new Error("boom")),
 	Skipped(),

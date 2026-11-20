@@ -1,11 +1,11 @@
 /**
- * Tree-shakable `JobOutcome`: how a job ended in one run, with self-first
- * functions over it. For method chaining, import `@sekhmet/job/outcome`
+ * Tree-shakable `JobEnd`: how a job ended in one run, with self-first
+ * functions over it. For method chaining, import `@sekhmet/job/end`
  * instead.
  *
  * @example
  * ```ts
- * import { all, Failed, isUnhealthy, Succeeded } from "@sekhmet/job/outcome/mini";
+ * import { all, Failed, isUnhealthy, Succeeded } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * const combined = all({ lint: Failed(new Error("lint")), test: Succeeded(1) });

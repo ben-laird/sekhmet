@@ -4,14 +4,14 @@
  * @module
  */
 
-import type { JobOutcome } from "@/src/outcome/main/mod.ts";
+import type { JobEnd } from "@/src/end/main/mod.ts";
 
 /**
- * A job's outcome with the option that changes how it counts.
+ * A job's {@linkcode JobEnd} with the option that changes how it counts.
  */
-export interface CountedOutcome {
+export interface CountedEnd {
 	/** The job's outcome */
-	readonly outcome: JobOutcome<unknown>;
+	readonly outcome: JobEnd<unknown>;
 	/** Whether the job was defined with `continueOnError` */
 	readonly continueOnError: boolean;
 }
@@ -23,7 +23,7 @@ export interface CountedOutcome {
  * @param outcomes Every job's outcome in the run
  * @returns `true` if the run passed
  */
-export function passed(outcomes: Iterable<CountedOutcome>): boolean {
+export function passed(outcomes: Iterable<CountedEnd>): boolean {
 	for (const { outcome, continueOnError } of outcomes) {
 		if (outcome.isPassing()) continue;
 		if (outcome.isFailed() && continueOnError) continue;

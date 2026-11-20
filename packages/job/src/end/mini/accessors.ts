@@ -7,7 +7,7 @@
 
 import { isolate, union } from "@sekhmet/enum/core/mini";
 import { None, type Option, Some } from "@sekhmet/enum/option/mini";
-import type { JobOutcome } from "./core.ts";
+import type { JobEnd } from "./core.ts";
 
 /**
  * The value, if the job succeeded.
@@ -19,13 +19,13 @@ import type { JobOutcome } from "./core.ts";
  * @example
  * ```ts
  * import { unwrap } from "@sekhmet/enum/option/mini";
- * import { Succeeded, value } from "@sekhmet/job/outcome/mini";
+ * import { Succeeded, value } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(unwrap(value(Succeeded("dist"))), "dist");
  * ```
  */
-export function value<T>(self: JobOutcome<T>): Option<T> {
+export function value<T>(self: JobEnd<T>): Option<T> {
 	if (isolate(self, "Succeeded")) return Some(union(self));
 	return None();
 }
@@ -40,13 +40,13 @@ export function value<T>(self: JobOutcome<T>): Option<T> {
  * @example
  * ```ts
  * import { isNone } from "@sekhmet/enum/option/mini";
- * import { error, Succeeded } from "@sekhmet/job/outcome/mini";
+ * import { error, Succeeded } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(isNone(error(Succeeded(1))), true);
  * ```
  */
-export function error<T>(self: JobOutcome<T>): Option<unknown> {
+export function error<T>(self: JobEnd<T>): Option<unknown> {
 	if (isolate(self, "Failed")) return Some(union(self));
 	return None();
 }
@@ -61,13 +61,13 @@ export function error<T>(self: JobOutcome<T>): Option<unknown> {
  * @example
  * ```ts
  * import { unwrap } from "@sekhmet/enum/option/mini";
- * import { Blocked, blockedBy } from "@sekhmet/job/outcome/mini";
+ * import { Blocked, blockedBy } from "@sekhmet/job/end/mini";
  * import { assertEquals } from "@std/assert";
  *
  * assertEquals(unwrap(blockedBy(Blocked(["lint"]))), ["lint"]);
  * ```
  */
-export function blockedBy<T>(self: JobOutcome<T>): Option<readonly string[]> {
+export function blockedBy<T>(self: JobEnd<T>): Option<readonly string[]> {
 	if (isolate(self, "Blocked")) return Some(union(self));
 	return None();
 }

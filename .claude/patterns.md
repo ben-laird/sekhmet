@@ -461,8 +461,8 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
 - **Enum narrowings.** A returned intersection of one wrap target that has
   no views with enum's own `Enum`s only (imported from `@sekhmet/enum/core`
   or one of its subpaths) (`catchFailure` returns
-  `Enum<Eliminate<JobOutcomeVariants<Result<T, unknown>>, "Failed">> &
-  JobOutcome<Result<T, unknown>>`) is a narrowing of the target's variants.
+  `Enum<Eliminate<JobEndVariants<Result<T, unknown>>, "Failed">> &
+  JobEnd<Result<T, unknown>>`) is a narrowing of the target's variants.
   Main spells the target as its main class with its type arguments as they
   are (the narrowing names them in mini, so they are not converted), and
   converts through `Object.assign(Target.fromMini(value), value)`, which
