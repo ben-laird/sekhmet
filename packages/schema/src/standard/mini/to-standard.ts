@@ -155,11 +155,13 @@ export function toStandard<O, E>(options: {
 }): StandardSchemaV1<unknown, O> {
 	const { schema, panics } = options;
 	const toIssue = options.toIssue ?? formatSchemaIssue;
-	const issuesOf = (error: E): StandardResult<O> => ({
-		issues: entries(toIssues(error)).map(({ path, error }) => {
-			return locateIssue({ path, issue: toIssue(error) });
-		}),
-	});
+	const issuesOf = (error: E): StandardResult<O> => {
+		return {
+			issues: entries(toIssues(error)).map(({ path, error }) => {
+				return locateIssue({ path, issue: toIssue(error) });
+			}),
+		};
+	};
 	const toStandardResult = (
 		outcome: Outcome<O, E, unknown>,
 	): StandardResult<O> => {
