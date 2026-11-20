@@ -122,7 +122,9 @@ Packages (`packages/`):
   parameterized tests
 - `@sekhmet/panic`: `Panic` error, `panic()`/`panicWithoutCause()`, a Rust-style
   panic runtime (`definePanicRuntime()`: a reporting hook plus `catchUnwind`
-  boundaries, no global state) and a metadata registry
+  boundaries, no global state), a metadata registry, and `Outcome<T, E, P>`
+  (`@sekhmet/panic/outcome`, a main/mini feature): `Ok | Err | Panicked`,
+  whose ordinary combinators pass a panic through untouched
 - `@sekhmet/primordials`: foundation primitives (`Struct`, `Subtle`, `block`,
   `define`)
 - `@sekhmet/schema`: typed validation and transformation (`Schema<I, O, E>`

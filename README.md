@@ -19,7 +19,7 @@ with TypeScript's strictest settings, including `isolatedDeclarations`.
 | [`@sekhmet/lifetime`](packages/lifetime/README.md)       | RAII: a `Resource` acquires and releases, a `Lifetime` owns the value and guarantees its teardown         |
 | [`@sekhmet/vow`](packages/vow/README.md)                 | `Vow`, a promise-like value that resolves synchronously                                                   |
 | [`@sekhmet/matrix`](packages/matrix/README.md)           | `matrix()`, every combination of a set of values, for parameterized tests                                 |
-| [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic)        | Rust-style panics: a reporting hook and a catchUnwind recovery boundary, with no global state             |
+| [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic)        | Rust-style panics: a reporting hook, a catchUnwind boundary and `Outcome`, with no global state           |
 | [`@sekhmet/schema`](packages/schema/README.md)           | Typed validation and transformation: `Schema<I, O, E>` parses to a `Result`, and describes itself as data |
 | [`@sekhmet/primordials`](packages/primordials/README.md) | `Struct`, `Subtle`, `block` and `define`: the building blocks of the other packages                       |
 | [`@sekhmet/workflow`](packages/workflow/README.md)       | `todo`/`unimplemented`, `unreachable` and invariant checks: panics that mark the state of the code        |

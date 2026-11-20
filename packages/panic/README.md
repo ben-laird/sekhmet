@@ -15,6 +15,10 @@ In Sekhmet, errors are values (`Result`), and `throw` means panic.
    You create a runtime and run your program inside it.
 3. **Reported once per runtime.** Each runtime reports a thrown `Panic` (or
    any other object) once, however many of its boundaries it passes through.
+4. **Bugs stay apart from expected errors.** `Outcome<T, E, P>`
+   (`@sekhmet/panic/outcome`) holds `Ok(T)`, an expected `Err(E)` or
+   `Panicked(P)`. Its ordinary combinators pass a panic through untouched, so
+   handling an expected error never swallows a bug.
 
 ## Install
 
@@ -57,6 +61,24 @@ const result = mapErr(runtime.catchUnwind(main), (payload) => {
 assertEquals(result, Err("config is missing a port"));
 ```
 
+### Outcome
+
+```ts
+import { Err, Ok, type Outcome, Panicked } from "@sekhmet/panic/outcome";
+import { assertEquals, assertThrows } from "@std/assert";
+
+const failed: Outcome<number, string> = Err("not found");
+const bug: Outcome<number, string> = Panicked(new RangeError("too big"));
+
+const next = Ok(20).map((n) => n + 1);
+
+assertEquals(next.unwrapOr(0), 21);
+// A fallback stands in for an expected error...
+assertEquals(failed.unwrapOr(0), 0);
+// ...but never for a bug: the panic is thrown again
+assertThrows(() => bug.unwrapOr(0), RangeError, "too big");
+```
+
 ## Learn more
 
 - **Tutorial:** [Getting started](./docs/getting-started.md) runs a program in
@@ -67,7 +89,8 @@ assertEquals(result, Err("config is missing a port"));
   attaching a cause, keeping your own metadata about panics and recognizing a
   hook that failed.
 - **Explanation:** [Concepts](./docs/concepts.md) covers panics versus error
-  values, why reporting and recovery are separate, one runtime per program
+  values, why reporting and recovery are separate, how `Outcome` keeps bugs
+  apart from expected errors, one runtime per program
   with no global state, why each panic is reported once per runtime, and what
   happens when the hook throws.
 - **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/panic/doc)

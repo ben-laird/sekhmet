@@ -9,7 +9,17 @@
 		"./mini": "./src/mini/mod.ts",
 		"./mini/core": "./src/mini/core.ts",
 		"./mini/registry": "./src/mini/registry.ts",
-		"./mini/runtime": "./src/mini/runtime.ts"
+		"./mini/runtime": "./src/mini/runtime.ts",
+
+		"./outcome": "./src/outcome/main/mod.ts",
+		"./outcome/mini": "./src/outcome/mini/mod.ts",
+		"./outcome/mini/combinators": "./src/outcome/mini/combinators.ts",
+		"./outcome/mini/convert": "./src/outcome/mini/convert.ts",
+		"./outcome/mini/core": "./src/outcome/mini/core.ts",
+		"./outcome/mini/panic": "./src/outcome/mini/panic.ts",
+		"./outcome/mini/predicates": "./src/outcome/mini/predicates.ts",
+		"./outcome/mini/transform": "./src/outcome/mini/transform.ts",
+		"./outcome/mini/unwrap": "./src/outcome/mini/unwrap.ts"
 	},
 
 	"imports": {

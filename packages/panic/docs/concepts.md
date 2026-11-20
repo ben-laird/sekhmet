@@ -41,6 +41,40 @@ A boundary catches every throw, not only `Panic`s, and hands back the thrown
 value unchanged, typed `unknown`, as Rust's payload is `Box<dyn Any>`. A throw
 from code you don't own still has to be reported and recovered from.
 
+## Two kinds of failure, kept apart: `Outcome`
+
+Work that runs inside a panic boundary can fail two ways: with an expected
+error it returned (`E`), or with a bug it threw (`P`). Nesting them,
+`Result<Result<T, E>, unknown>`, lets an ordinary `mapErr` or `unwrapOr` on
+the outer `Result` treat a bug as an expected failure. `Outcome<T, E, P>`
+(`@sekhmet/panic/outcome`) gives each its own variant: `Ok(T)`, `Err(E)` and
+`Panicked(P)`.
+
+The rule: user code returns a `Result`, and a panic boundary returns an
+`Outcome`. Holding an `Outcome` tells you a boundary was crossed.
+
+The ordinary combinators (`map`, `mapErr`, `andThen`, `orElse`, …) pass a
+`Panicked` through untouched. Where there is no `Outcome` to pass it through
+in, as with `unwrapOr`, which returns a `T`, the panic is resumed: the payload
+is thrown again, so a fallback for an expected error never stands in for a
+bug. Only the panic channel sees a panic: `isPanicked`, `isPanicAnd` (which
+narrows `P` with a type guard), `mapPanic`, `inspectPanic`, `panicked`,
+`recover` (a `Panicked` becomes the `Ok` or `Err` a handler returns) and
+`resume` (Rust's `resume_unwind`).
+
+`P` is the raw payload, `unknown` by default, since JavaScript can throw
+anything, not only a `Panic`. Prior art: Effect's `Exit` (`Fail` versus
+`Die`), ZIO's `Exit`, and Rust's `JoinHandle::join`.
+
+Flattening keeps sources apart too. `flattenResult` turns an
+`Outcome<Result<T, E>, F, P>` into an `Outcome<T, Either<E, F>, P>`, so the
+returned error and the outcome's own error stay distinct at runtime and in
+the type, and `flattenEither` does the same for both channels of a nested
+`Outcome`. `flatten` joins layers that share their types. The bridges back
+to `Result` are typed by what they rule out: `intoResult` needs an `Outcome`
+with no panic channel (`P` is `never`), `panicResult` one with no error
+channel (`E` is `never`), and `intoNested` gives the nested form for interop.
+
 ## One runtime per program, and no global state
 
 There is no global hook and no default runtime. Rust has one process-wide
