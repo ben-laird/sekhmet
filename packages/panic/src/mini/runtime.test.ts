@@ -1,7 +1,4 @@
-import { Ok } from "@sekhmet/enum/result/mini/core";
-import { isErr } from "@sekhmet/enum/result/mini/predicates";
-import { mapErr } from "@sekhmet/enum/result/mini/transform";
-import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+import { Err as ResultErr } from "@sekhmet/enum/result/mini/core";
 import {
 	assert,
 	assertEquals,
@@ -20,6 +17,10 @@ import {
 	type PanicHookInfo,
 	type PanicRuntime,
 } from "@/src/mini/runtime.ts";
+import { Ok } from "@/src/outcome/mini/core.ts";
+import { recover, unwrapPanicked } from "@/src/outcome/mini/panic.ts";
+import { isPanicked } from "@/src/outcome/mini/predicates.ts";
+import { unwrapErr } from "@/src/outcome/mini/unwrap.ts";
 
 /** A runtime whose hook records every report instead of printing it. */
 function recordingRuntime(): {
@@ -62,7 +63,7 @@ Deno.test("catchUnwind() of a returning fn is Ok and reports nothing", () => {
 	assertEquals(reports, []);
 });
 
-Deno.test("catchUnwind() turns every throw into Err of the same payload", async (t) => {
+Deno.test("catchUnwind() turns every throw into Panicked of the same payload", async (t) => {
 	const payloads: [kind: string, payload: unknown][] = [
 		["Panic", boom()],
 		["Error", new TypeError("not a panic")],
@@ -80,9 +81,9 @@ Deno.test("catchUnwind() turns every throw into Err of the same payload", async 
 				throw payload;
 			});
 
-			// Then: the result is Err holding that very payload
-			assert(isErr(result));
-			assertStrictEquals(unwrapErr(result), payload);
+			// Then: the result is Panicked holding that very payload
+			assert(isPanicked(result));
+			assertStrictEquals(unwrapPanicked(result), payload);
 		});
 	}
 });
@@ -106,7 +107,7 @@ Deno.test("catchUnwind() rejects promise-returning functions at the type level",
 
 	// Then: both type-check and behave as usual
 	assertEquals(parsed, Ok(1));
-	assert(isErr(diverged));
+	assert(isPanicked(diverged));
 });
 
 Deno.test("catchUnwind() reports the payload and its stack to the hook once", () => {
@@ -154,7 +155,7 @@ Deno.test("Nested boundaries report a payload only at the innermost", () => {
 
 	// Then: the hook ran once, and the outer boundary still holds the payload
 	assertEquals(reports.length, 1);
-	assertStrictEquals(unwrapErr(outer), payload);
+	assertStrictEquals(unwrapPanicked(outer), payload);
 });
 
 Deno.test("Every runtime a payload passes through reports it once", () => {
@@ -227,7 +228,7 @@ Deno.test("Nested catchUnwindAsync boundaries report a payload once", async () =
 
 	// Then: the hook ran once and the outer boundary holds the payload
 	assertEquals(reports.length, 1);
-	assertStrictEquals(unwrapErr(outer), payload);
+	assertStrictEquals(unwrapPanicked(outer), payload);
 });
 
 Deno.test("resumeUnwind() hands the outer boundary the same payload without re-reporting", () => {
@@ -240,11 +241,11 @@ Deno.test("resumeUnwind() hands the outer boundary the same payload without re-r
 		const inner = runtime.catchUnwind(() => {
 			throw payload;
 		});
-		runtime.resumeUnwind(unwrapErr(inner));
+		runtime.resumeUnwind(unwrapPanicked(inner));
 	});
 
 	// Then: the outer boundary holds the same payload, reported once
-	assertStrictEquals(unwrapErr(outer), payload);
+	assertStrictEquals(unwrapPanicked(outer), payload);
 	assertEquals(reports.length, 1);
 });
 
@@ -301,7 +302,7 @@ Deno.test("Primitive payloads are reported at every boundary that catches them",
 				const inner = runtime.catchUnwind(() => {
 					throw payload;
 				});
-				runtime.resumeUnwind(unwrapErr(inner));
+				runtime.resumeUnwind(unwrapPanicked(inner));
 			});
 
 			// Then: both boundaries reported it
@@ -340,8 +341,8 @@ Deno.test("Hostile payloads are recovered, reported and never mistaken for a hoo
 				throw payload;
 			});
 
-			// Then: it is Err of that payload, reported once with no stack
-			assertStrictEquals(unwrapErr(result), payload);
+			// Then: it is Panicked of that payload, reported once with no stack
+			assertStrictEquals(unwrapPanicked(result), payload);
 			assertEquals(reports.length, 1);
 			assertStrictEquals(reports[0]?.payload, payload);
 			assertEquals(reports[0]?.stack, undefined);
@@ -454,7 +455,7 @@ Deno.test("A throwing hook panics out of the boundary", async (t) => {
 		});
 
 		// Then: it is recovered without being reported a second time
-		assertStrictEquals(unwrapErr(result), payload);
+		assertStrictEquals(unwrapPanicked(result), payload);
 		assertEquals(reports, []);
 	});
 
@@ -475,7 +476,7 @@ Deno.test("A throwing hook panics out of the boundary", async (t) => {
 		);
 
 		// Then: the outer boundary reports the PanicHook panic, not the payload
-		const caught = unwrapErr(result);
+		const caught = unwrapPanicked(result);
 		assertInstanceOf(caught, Panic);
 		assertEquals(caught.name, "Panic (PanicHook)");
 		assertEquals(outer.reports.length, 1);
@@ -553,8 +554,8 @@ Deno.test("catchUnwindAsync() covers resolve, rejection and synchronous throw", 
 			Promise.reject(payload),
 		);
 
-		// Then: the result is Err of the payload, reported once
-		assertStrictEquals(unwrapErr(result), payload);
+		// Then: the result is Panicked of the payload, reported once
+		assertStrictEquals(unwrapPanicked(result), payload);
 		assertEquals(reports.length, 1);
 	});
 
@@ -568,8 +569,8 @@ Deno.test("catchUnwindAsync() covers resolve, rejection and synchronous throw", 
 			throw payload;
 		});
 
-		// Then: the result is Err of the payload, reported once
-		assertStrictEquals(unwrapErr(result), payload);
+		// Then: the result is Panicked of the payload, reported once
+		assertStrictEquals(unwrapPanicked(result), payload);
 		assertEquals(reports.length, 1);
 	});
 
@@ -597,8 +598,8 @@ Deno.test("catchUnwindAsync() covers resolve, rejection and synchronous throw", 
 			thenable<number>((_resolve, reject) => reject(payload)),
 		);
 
-		// Then: the result is Err of the payload, reported once
-		assertStrictEquals(unwrapErr(result), payload);
+		// Then: the result is Panicked of the payload, reported once
+		assertStrictEquals(unwrapPanicked(result), payload);
 		assertEquals(reports.length, 1);
 	});
 
@@ -616,8 +617,8 @@ Deno.test("catchUnwindAsync() covers resolve, rejection and synchronous throw", 
 		// When: catching a function that returns it
 		const result = await runtime.catchUnwindAsync(() => hostile);
 
-		// Then: the result is Err of the payload, reported once
-		assertStrictEquals(unwrapErr(result), payload);
+		// Then: the result is Panicked of the payload, reported once
+		assertStrictEquals(unwrapPanicked(result), payload);
 		assertEquals(reports.length, 1);
 	});
 
@@ -638,14 +639,17 @@ Deno.test("catchUnwindAsync() covers resolve, rejection and synchronous throw", 
 	});
 });
 
-Deno.test("mapErr() converts a caught payload into an app error", () => {
+Deno.test("recover() converts a caught payload into an app error", () => {
 	// Given: a runtime and an app-level conversion
 	const { runtime } = recordingRuntime();
-	const toAppError = (payload: unknown): string =>
-		payload instanceof Panic ? `panic: ${payload.message}` : "unknown";
+	const toAppError = (payload: unknown) => {
+		return ResultErr(
+			payload instanceof Panic ? `panic: ${payload.message}` : "unknown",
+		);
+	};
 
-	// When: catching a panic and mapping the error
-	const result = mapErr(
+	// When: catching a panic and recovering from it
+	const result = recover(
 		runtime.catchUnwind(() => panic({ message: "bad state", cause: null })),
 		toAppError,
 	);

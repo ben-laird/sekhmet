@@ -185,11 +185,6 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 			privateType,
 		);
 	}),
-	privateTypeRef(
-		"panic/src/mini/runtime.ts",
-		'PanicRuntime["catchUnwind"]',
-		"Result",
-	),
 	privateTypeRef("panic/src/outcome/mini/core.ts", "Variants", "Split"),
 	privateTypeRef("panic/src/outcome/mini/core.ts", "Outcome", "Enum"),
 	...[

@@ -28,12 +28,12 @@ Rust's `std::panic` splits what happens to a panic in two. The panic hook
 reports it: it writes the message, sends telemetry, records metadata. A
 `catch_unwind` boundary recovers from it: it stops the unwind and hands the
 caller a value. This package keeps the split. A runtime's hook reports, and
-its boundaries (`catchUnwind`, `catchUnwindAsync`) recover, returning
-`Ok` of the work's value or `Err` of what it threw.
+its boundaries (`catchUnwind`, `catchUnwindAsync`) recover, returning an
+`Outcome`: `Ok` of the work's value or `Panicked` of what it threw.
 
 The hook never decides the outcome. It returns nothing, and what the program
-does next is the caller's call, made on the `Result` the boundary returns:
-turning a payload into an app error is a `mapErr` away. Keeping the two apart
+does next is the caller's call, made on the `Outcome` the boundary returns:
+turning a payload into an app error is a `recover` away. Keeping the two apart
 means a reporter can be swapped without changing how the program recovers,
 and recovery code never has to know where reports go.
 
@@ -51,7 +51,10 @@ the outer `Result` treat a bug as an expected failure. `Outcome<T, E, P>`
 `Panicked(P)`.
 
 The rule: user code returns a `Result`, and a panic boundary returns an
-`Outcome`. Holding an `Outcome` tells you a boundary was crossed.
+`Outcome`. Holding an `Outcome` tells you a boundary was crossed. A runtime's
+boundaries return `Outcome<T, never, unknown>`: they catch only throws, so
+their `Err` channel is `never`, and `panicResult` turns one into a
+`Result<T, unknown>` where that is what other code expects.
 
 The ordinary combinators (`map`, `mapErr`, `andThen`, `orElse`, …) pass a
 `Panicked` through untouched. Where there is no `Outcome` to pass it through

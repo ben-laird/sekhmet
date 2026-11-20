@@ -175,9 +175,14 @@ export function unwrapPanicked<T, E, P>(self: Outcome<T, E, P>): P {
  * so it returns a `Result`; the Outcome it leaves has no panic left in it,
  * and `intoResult` turns it into a `Result`.
  *
+ * The handler's error type `F` joins the Outcome's own: a boundary's
+ * `Outcome<T, never, unknown>` recovers into an `Outcome<T, F, never>`,
+ * turning a panic into an app error.
+ *
  * @template T The type of the success value
  * @template E The type of the error
  * @template P The type of the panic payload
+ * @template F The type of the error the handler returns
  * @param self The Outcome to recover
  * @param handler A function that turns the payload into a Result
  * @returns The Outcome itself if Ok or Err, otherwise the handler's Result as an Outcome
@@ -188,25 +193,25 @@ export function unwrapPanicked<T, E, P>(self: Outcome<T, E, P>): P {
  * import { Err as ResultErr } from "@sekhmet/enum/result/mini";
  * import { Err, Ok, type Outcome, Panicked, recover } from "@sekhmet/panic/outcome/mini";
  *
- * const toError = (payload: unknown) => ResultErr<number, string>(`bug: ${String(payload)}`);
- * const bug: Outcome<number, string> = Panicked("boom");
- * const ok: Outcome<number, string> = Ok(1);
+ * const toError = (payload: unknown) => ResultErr(`bug: ${String(payload)}`);
+ * const bug: Outcome<number, never> = Panicked("boom");
+ * const ok: Outcome<number, never> = Ok(1);
  *
  * assertEquals(recover(bug, toError), Err("bug: boom"));
  * assertEquals(recover(ok, toError), Ok(1));
  * ```
  */
-export function recover<T, E, P>(
+export function recover<T, E, P, F>(
 	self: Outcome<T, E, P>,
-	handler: (payload: P) => Result<T, E>,
-): Outcome<T, E, never> {
+	handler: (payload: P) => Result<T, F>,
+): Outcome<T, E | F, never> {
 	return match(self)({
-		Ok: (value) => Ok<T, E>(value),
-		Err: (error) => Err<T, E>(error),
+		Ok: (value) => Ok<T, E | F>(value),
+		Err: (error) => Err<T, E | F>(error),
 		Panicked: (payload) => {
 			return match(handler(payload))({
-				Ok: (value) => Ok<T, E>(value),
-				Err: (error) => Err<T, E>(error),
+				Ok: (value) => Ok<T, E | F>(value),
+				Err: (error) => Err<T, E | F>(error),
 			});
 		},
 	});

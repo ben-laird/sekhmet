@@ -16,12 +16,12 @@ everything inside its boundary.
 1. Call `definePanicRuntime()` once, at the entry point.
 2. Run the program's main function with `runtime.catchUnwind`, or with
    `runtime.catchUnwindAsync` if it returns a promise.
-3. Read the `Result`: `Ok` holds what the program returned, `Err` what it
-   threw.
+3. Read the `Outcome`: `Ok` holds what the program returned, `Panicked` what
+   it threw.
 
 ```ts
 import { definePanicRuntime } from "@sekhmet/panic";
-import { Ok } from "@sekhmet/enum/result/mini/core";
+import { Ok } from "@sekhmet/panic/outcome/mini";
 import { assertEquals } from "@std/assert";
 
 const main = (): number => 0;
@@ -112,17 +112,20 @@ assertEquals(order, ["telemetry", "reporter"]);
 
 ## How to turn a panic into an app error
 
-A boundary hands back `Err` of whatever was thrown, typed `unknown`, since it
-catches every throw, not only `Panic`s. Convert it on the returned `Result`:
+A boundary hands back `Panicked` of whatever was thrown, typed `unknown`,
+since it catches every throw, not only `Panic`s. Convert it on the returned
+`Outcome`:
 
 1. Run the work in `catchUnwind`.
-2. Map the error with `mapErr`, narrowing the payload with
-   `instanceof Panic`.
+2. Recover with `recover`, narrowing the payload with `instanceof Panic` and
+   returning the app error as a `Result`. The panic becomes that `Err`, and
+   the `Outcome` left has no panic in it, so `intoResult` turns it into a
+   `Result`.
 
 ```ts
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
 import { Err } from "@sekhmet/enum/result/mini/core";
-import { mapErr } from "@sekhmet/enum/result/mini/transform";
+import { intoResult, recover } from "@sekhmet/panic/outcome/mini";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -132,11 +135,11 @@ function main(): number {
 	panic({ message: "config is missing a port", cause: null });
 }
 
-const result = mapErr(runtime.catchUnwind(main), (payload) => {
-	return payload instanceof Panic ? payload.message : "unknown failure";
+const recovered = recover(runtime.catchUnwind(main), (payload) => {
+	return Err(payload instanceof Panic ? payload.message : "unknown failure");
 });
 
-assertEquals(result, Err("config is missing a port"));
+assertEquals(intoResult(recovered), Err("config is missing a port"));
 ```
 
 ## How to recover from async work
@@ -147,8 +150,7 @@ an unhandled rejection. It accepts any `PromiseLike`, so thenables work too.
 
 ```ts
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
-import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
-import { mapErr } from "@sekhmet/enum/result/mini/transform";
+import { mapPanic, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -158,7 +160,7 @@ async function loadConfig(): Promise<string> {
 	panic({ name: "Config", message: "missing port", cause: null });
 }
 
-const result = mapErr(
+const result = mapPanic(
 	await runtime.catchUnwindAsync(() => loadConfig()),
 	(payload) => {
 		if (payload instanceof Panic) {
@@ -168,7 +170,7 @@ const result = mapErr(
 	},
 );
 
-assertEquals(unwrapErr(result), { kind: "panic", name: "Panic (Config)" });
+assertEquals(unwrapPanicked(result), { kind: "panic", name: "Panic (Config)" });
 ```
 
 ## How to pass a panic on to an outer boundary
@@ -184,8 +186,7 @@ again:
 
 ```ts
 import { definePanicRuntime, panic } from "@sekhmet/panic";
-import { isErr } from "@sekhmet/enum/result/mini/predicates";
-import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+import { isPanicked, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -197,13 +198,13 @@ const step = (): number => panic({ message: "bad state", cause: null });
 
 const outer = runtime.catchUnwind(() => {
 	const inner = runtime.catchUnwind(step);
-	if (isErr(inner) && !recoverable(unwrapErr(inner))) {
-		runtime.resumeUnwind(unwrapErr(inner));
+	if (isPanicked(inner) && !recoverable(unwrapPanicked(inner))) {
+		runtime.resumeUnwind(unwrapPanicked(inner));
 	}
 	return inner;
 });
 
-assertEquals([isErr(outer), reports], [true, 1]);
+assertEquals([isPanicked(outer), reports], [true, 1]);
 ```
 
 This holds for object payloads, such as a `Panic`. A thrown primitive is
@@ -264,7 +265,7 @@ import {
 	panic,
 	PanicMetadataRegistry,
 } from "@sekhmet/panic";
-import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+import { unwrapPanicked } from "@sekhmet/panic/outcome/mini";
 import { assert, assertEquals } from "@std/assert";
 
 interface PanicMeta {
@@ -281,7 +282,7 @@ runtime.setHook(({ payload }) => {
 	if (payload instanceof Panic) registry.getOrInsert(payload);
 });
 
-const payload = unwrapErr(
+const payload = unwrapPanicked(
 	runtime.catchUnwind(() => panic({ message: "bad state", cause: null })),
 );
 
@@ -303,7 +304,7 @@ cast:
 
 ```ts
 import { definePanicRuntime, isPanicHookFailure, panic } from "@sekhmet/panic";
-import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+import { unwrapPanicked } from "@sekhmet/panic/outcome/mini";
 import { assert, assertEquals } from "@std/assert";
 
 const outer = definePanicRuntime();
@@ -313,7 +314,7 @@ inner.setHook(() => {
 	throw new Error("reporter offline");
 });
 
-const payload = unwrapErr(
+const payload = unwrapPanicked(
 	outer.catchUnwind(() => {
 		return inner.catchUnwind(() => {
 			return panic({ message: "bad state", cause: null });

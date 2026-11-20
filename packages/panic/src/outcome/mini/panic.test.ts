@@ -99,6 +99,25 @@ Deno.test("recover() turns a panic into the handler's Ok or Err", async (t) => {
 		assertEquals(subject, Err("bug: 404"));
 	});
 
+	await t.step("a boundary's never error widens to the handler's", () => {
+		// Given: a boundary-shaped panic, with no error channel
+		const caught: Outcome<number, never> = Panicked("p");
+
+		// When: recovering with a handler that returns an app error
+		const subject = TestSubject.recover(caught, (p) => {
+			return ResultErr({ kind: "bug", payload: p });
+		});
+
+		// Then: the error type is the handler's, and no panic is left
+		assertEquals(subject, Err({ kind: "bug", payload: "p" }));
+		assertType<
+			IsExact<
+				typeof subject,
+				Outcome<number, { kind: string; payload: unknown }, never>
+			>
+		>(true);
+	});
+
 	await t.step("Ok and Err pass through without calling the handler", () => {
 		// Given: an Ok and an Err, and a counting handler
 		let calls = 0;

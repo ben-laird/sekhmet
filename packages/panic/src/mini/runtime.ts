@@ -9,7 +9,7 @@
  * @module
  */
 
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini/core";
+import { Ok, type Outcome, Panicked } from "@/src/outcome/mini/core.ts";
 import { Panic } from "./core.ts";
 
 /**
@@ -67,7 +67,9 @@ export interface PanicRuntime {
 	 * reports the payload first, unless it has already been reported.
 	 *
 	 * The payload is `unknown`, as Rust's is `Box<dyn Any>`: narrow it with
-	 * `instanceof Panic`, and convert it to an app error with `mapErr`.
+	 * `instanceof Panic` or `isPanicAnd`, and turn it into an app error with
+	 * `recover`. A boundary returns an `Outcome`, never a `Result`: its `Err`
+	 * channel is `never`, since a boundary catches only throws.
 	 *
 	 * If the hook throws, the boundary does not recover: it throws a
 	 * `Panic (PanicHook)` whose cause is a {@linkcode PanicHookFailure}. That
@@ -86,13 +88,12 @@ export interface PanicRuntime {
 	 * @param fn The synchronous work to run
 	 * @param useCatchUnwindAsyncForPromises Never passed; it exists only to
 	 *   reject promise-returning `fn`s
-	 * @returns `Ok` of the return value, or `Err` of the thrown payload
+	 * @returns `Ok` of the return value, or `Panicked` of the thrown payload
 	 *
 	 * @example
 	 * ```ts
 	 * import { definePanicRuntime } from "@sekhmet/panic";
-	 * import { isErr } from "@sekhmet/enum/result/mini/predicates";
-	 * import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+	 * import { isPanicked, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
 	 * import { assert, assertInstanceOf } from "@std/assert";
 	 *
 	 * const runtime = definePanicRuntime();
@@ -100,8 +101,8 @@ export interface PanicRuntime {
 	 *
 	 * const result = runtime.catchUnwind(() => JSON.parse("{ not json"));
 	 *
-	 * assert(isErr(result));
-	 * assertInstanceOf(unwrapErr(result), SyntaxError);
+	 * assert(isPanicked(result));
+	 * assertInstanceOf(unwrapPanicked(result), SyntaxError);
 	 * ```
 	 */
 	readonly catchUnwind: <T>(
@@ -113,7 +114,7 @@ export interface PanicRuntime {
 				: [T] extends [PromiseLike<unknown>]
 					? [useCatchUnwindAsyncForPromises: never]
 					: []
-	) => Result<T, unknown>;
+	) => Outcome<T, never, unknown>;
 	/**
 	 * The async form of {@linkcode PanicRuntime.catchUnwind}: it catches a
 	 * rejection of the returned promise or thenable, a `then` that throws, and
@@ -123,12 +124,12 @@ export interface PanicRuntime {
 	 *
 	 * @template T The resolved type of `fn`'s promise or thenable
 	 * @param fn The async work to run; any `PromiseLike` is accepted
-	 * @returns A promise of `Ok` of the resolved value, or `Err` of the payload
+	 * @returns A promise of `Ok` of the resolved value, or `Panicked` of the payload
 	 *
 	 * @example
 	 * ```ts
 	 * import { definePanicRuntime } from "@sekhmet/panic";
-	 * import { Ok } from "@sekhmet/enum/result/mini/core";
+	 * import { Ok } from "@sekhmet/panic/outcome/mini";
 	 * import { assertEquals } from "@std/assert";
 	 *
 	 * const runtime = definePanicRuntime();
@@ -140,7 +141,7 @@ export interface PanicRuntime {
 	 */
 	readonly catchUnwindAsync: <T>(
 		fn: () => PromiseLike<T>,
-	) => Promise<Result<T, unknown>>;
+	) => Promise<Outcome<T, never, unknown>>;
 	/**
 	 * Throws `payload` unchanged without reporting it, like Rust's
 	 * `resume_unwind`. Use it to pass a caught payload on to an outer
@@ -148,7 +149,7 @@ export interface PanicRuntime {
 	 * resumed; another runtime's boundary still reports it once. A primitive
 	 * payload is reported by every boundary that catches it.
 	 *
-	 * @param payload The payload to re-throw, usually an `Err` from a boundary
+	 * @param payload The payload to re-throw, usually a `Panicked` payload from a boundary
 	 * @returns Never; it always throws
 	 */
 	readonly resumeUnwind: (payload: unknown) => never;
@@ -253,8 +254,8 @@ function errorReport({
  * @example
  * ```ts
  * import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
- * import { Err } from "@sekhmet/enum/result/mini/core";
- * import { mapErr } from "@sekhmet/enum/result/mini/transform";
+ * import { Err as ResultErr } from "@sekhmet/enum/result/mini/core";
+ * import { Err, recover } from "@sekhmet/panic/outcome/mini";
  * import { assertEquals } from "@std/assert";
  *
  * const runtime = definePanicRuntime();
@@ -270,9 +271,9 @@ function errorReport({
  * });
  *
  * const main = (): number => panic({ message: "no port", cause: null });
- * const result = mapErr(runtime.catchUnwind(main), (payload) =>
- *   payload instanceof Panic ? payload.message : "unknown failure",
- * );
+ * const result = recover(runtime.catchUnwind(main), (payload) => {
+ *   return ResultErr(payload instanceof Panic ? payload.message : "unknown failure");
+ * });
  *
  * assertEquals(result, Err("no port"));
  * assertEquals([panics, log], [1, ["reported"]]);
@@ -310,17 +311,17 @@ export function definePanicRuntime(): PanicRuntime {
 				return Ok(fn());
 			} catch (payload: unknown) {
 				report(payload);
-				return Err(payload);
+				return Panicked(payload);
 			}
 		},
 		catchUnwindAsync: async <T>(
 			fn: () => PromiseLike<T>,
-		): Promise<Result<T, unknown>> => {
+		): Promise<Outcome<T, never, unknown>> => {
 			try {
 				return Ok(await fn());
 			} catch (payload: unknown) {
 				report(payload);
-				return Err(payload);
+				return Panicked(payload);
 			}
 		},
 		resumeUnwind: (payload: unknown): never => {
@@ -349,7 +350,7 @@ export function definePanicRuntime(): PanicRuntime {
  * @example
  * ```ts
  * import { definePanicRuntime, isPanicHookFailure, panic } from "@sekhmet/panic";
- * import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+ * import { unwrapPanicked } from "@sekhmet/panic/outcome/mini";
  * import { assert, assertEquals } from "@std/assert";
  *
  * const outer = definePanicRuntime();
@@ -359,7 +360,7 @@ export function definePanicRuntime(): PanicRuntime {
  *   throw new Error("reporter offline");
  * });
  *
- * const payload = unwrapErr(
+ * const payload = unwrapPanicked(
  *   outer.catchUnwind(() =>
  *     inner.catchUnwind(() => panic({ message: "bad state", cause: null })),
  *   ),

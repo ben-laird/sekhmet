@@ -597,6 +597,11 @@ export class Outcome<out T, out E, out P = unknown> extends mini.Outcome<
 	 * so it returns a `Result`; the Outcome it leaves has no panic left in it,
 	 * and `intoResult` turns it into a `Result`.
 	 *
+	 * The handler's error type `F` joins the Outcome's own: a boundary's
+	 * `Outcome<T, never, unknown>` recovers into an `Outcome<T, F, never>`,
+	 * turning a panic into an app error.
+	 *
+	 * @template F - The type of the error the handler returns
 	 * @param handler - A function that turns the payload into a Result
 	 * @returns The Outcome itself if Ok or Err, otherwise the handler's Result as an Outcome
 	 * @example
@@ -605,16 +610,18 @@ export class Outcome<out T, out E, out P = unknown> extends mini.Outcome<
 	 * import { Err as ResultErr } from "@sekhmet/enum/result/mini";
 	 * import { Err, Ok, type Outcome, Panicked } from "@sekhmet/panic/outcome";
 	 *
-	 * const toError = (payload: unknown) => ResultErr<number, string>(`bug: ${String(payload)}`);
-	 * const bug: Outcome<number, string> = Panicked("boom");
-	 * const ok: Outcome<number, string> = Ok(1);
+	 * const toError = (payload: unknown) => ResultErr(`bug: ${String(payload)}`);
+	 * const bug: Outcome<number, never> = Panicked("boom");
+	 * const ok: Outcome<number, never> = Ok(1);
 	 *
 	 * assertEquals(bug.recover(toError), Err("bug: boom"));
 	 * assertEquals(ok.recover(toError), Ok(1));
 	 * ```
 	 * @see {@link mini.recover}
 	 */
-	recover(handler: (payload: P) => MiniResult<T, E>): Outcome<T, E, never> {
+	recover<F>(
+		handler: (payload: P) => MiniResult<T, F>,
+	): Outcome<T, E | F, never> {
 		return Outcome.fromMini(mini.recover(this, handler));
 	}
 
