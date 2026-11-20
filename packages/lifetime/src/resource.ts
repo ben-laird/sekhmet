@@ -12,10 +12,15 @@ import {
 	isErr,
 	Ok,
 	type Result,
-	unwrap,
 	unwrapErr,
 } from "@sekhmet/enum/result/mini";
 import { Panic } from "@sekhmet/panic";
+import {
+	isPanicked,
+	type Outcome,
+	unwrap as unwrapOutcome,
+	unwrapPanicked,
+} from "@sekhmet/panic/outcome/mini";
 import { map, resolved, type Vow, vowWithResolver } from "@sekhmet/vow/mini";
 import { Lifetime, type LifetimePanics } from "./lifetime.ts";
 import type { EndReport } from "./phase.ts";
@@ -255,7 +260,7 @@ export class Resource<I, T, C> {
 			return afterSetup(failure);
 		};
 
-		let caught: Result<{ readonly returned: T | PromiseLike<T> }, unknown>;
+		let caught: Outcome<{ readonly returned: T | PromiseLike<T> }, never>;
 		try {
 			// Boxed, so catchUnwind's promise guard sees an object, not a maybe-promise.
 			caught = panics.catchUnwind(() => ({
@@ -269,10 +274,10 @@ export class Resource<I, T, C> {
 			}
 			throw doubleFault;
 		}
-		if (isErr(caught)) {
-			return fail(initFailed(unwrapErr(caught)));
+		if (isPanicked(caught)) {
+			return fail(initFailed(unwrapPanicked(caught)));
 		}
-		const { returned } = unwrap(caught);
+		const { returned } = unwrapOutcome(caught);
 		if (!isThenable(returned)) {
 			return resolved(succeed(returned));
 		}
@@ -300,11 +305,11 @@ export class Resource<I, T, C> {
 		const settling = panics.catchUnwindAsync(() => returned);
 		void settling.then(
 			(settled) => {
-				if (isErr(settled)) {
-					failInContinuation(unwrapErr(settled));
+				if (isPanicked(settled)) {
+					failInContinuation(unwrapPanicked(settled));
 					return;
 				}
-				settle(resolved(succeed(unwrap(settled))));
+				settle(resolved(succeed(unwrapOutcome(settled))));
 			},
 			(doubleFault: unknown) => {
 				failInContinuation(doubleFault);

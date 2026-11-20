@@ -1,7 +1,6 @@
-import { isErr } from "@sekhmet/enum/result/mini/predicates";
-import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { Panic } from "@sekhmet/panic/mini/core";
+import { isPanicked, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
 import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
@@ -156,9 +155,9 @@ Deno.test("a runtime's hook and catchUnwind see an unreachable panic", () => {
 	// When: unreachable runs inside the boundary
 	const result = runtime.catchUnwind(() => unreachable());
 
-	// Then: the hook reported it, and the boundary returned it as Err
+	// Then: the hook reported it, and the boundary returned it as Panicked
 	assertEquals(bugs, 1);
-	assert(isErr(result) && isUnreachablePanic(unwrapErr(result)));
+	assert(isPanicked(result) && isUnreachablePanic(unwrapPanicked(result)));
 });
 
 Deno.test("unreachable and its guard have exact types", () => {

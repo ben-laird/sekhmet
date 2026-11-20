@@ -220,6 +220,12 @@ const ENUM_OPTION: WrapTarget = {
 	from: "@sekhmet/enum/option",
 	mappers: ["map"],
 };
+/** Enum's main `Either`, imported from another package through its entrypoint. */
+const ENUM_EITHER: WrapTarget = {
+	type: "Either",
+	from: "@sekhmet/enum/either",
+	mappers: ["mapLeft", "mapRight"],
+};
 const SCHEMA_MAPPERS: readonly (string | undefined)[] = [
 	undefined,
 	"map",
@@ -538,6 +544,27 @@ export const FEATURES: readonly Feature[] = [
 			"// {}",
 			"",
 			'assertEquals(reason, "NEGATIVE");',
+		].join("\n"),
+	},
+	{
+		entrypoint: "@sekhmet/panic/outcome",
+		mini: "packages/panic/src/outcome/mini/mod.ts",
+		output: "packages/panic/src/outcome/main/mod.ts",
+		primary: "Outcome",
+		construct: "variant",
+		mappers: ["map", "mapErr", "mapPanic"],
+		wraps: [ENUM_OPTION, ENUM_RESULT, ENUM_EITHER],
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { Err, Ok, type Outcome, Panicked } from "@sekhmet/panic/outcome";',
+			"",
+			'const failed: Outcome<number, string> = Err("not found");',
+			'const bug: Outcome<number, string> = Panicked("boom");',
+			"",
+			"assertEquals(Ok(20).map((n) => n + 1).unwrapOr(0), 21);",
+			"assertEquals(failed.unwrapOr(0), 0);",
+			"// A panic is never an expected error: mapErr passes it through",
+			"assertEquals(bug.mapErr((e) => e.length).isPanicked(), true);",
 		].join("\n"),
 	},
 	{

@@ -21,6 +21,11 @@ import {
 	unwrapErr,
 } from "@sekhmet/enum/result/mini";
 import { type Panic, type PanicRuntime, panic } from "@sekhmet/panic";
+import {
+	isPanicked,
+	unwrap as unwrapOutcome,
+	unwrapPanicked,
+} from "@sekhmet/panic/outcome/mini";
 import { block } from "@sekhmet/primordials/scoping";
 import { map, resolved, type Vow, value as vowValue } from "@sekhmet/vow/mini";
 import { invariant } from "@sekhmet/workflow/invariant";
@@ -1115,10 +1120,10 @@ function mapCause<C, D>({
 }): Result<D, Panic<unknown>> {
 	// Boxed, so catchUnwind's promise guard sees an object, not a maybe-promise.
 	const caught = panics.catchUnwind(() => ({ mapped: fromParent(cause) }));
-	if (isErr(caught)) {
-		return Err(causeMappingFailed(unwrapErr(caught)));
+	if (isPanicked(caught)) {
+		return Err(causeMappingFailed(unwrapPanicked(caught)));
 	}
-	return Ok(unwrap(caught).mapped);
+	return Ok(unwrapOutcome(caught).mapped);
 }
 
 function causeMappingFailed(payload: unknown): Panic<unknown> {

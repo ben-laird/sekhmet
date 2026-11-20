@@ -1,7 +1,6 @@
-import { isErr } from "@sekhmet/enum/result/mini/predicates";
-import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { Panic } from "@sekhmet/panic/mini/core";
+import { isPanicked, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
 import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
@@ -221,10 +220,10 @@ Deno.test("a runtime's hook and catchUnwind see a todo panic", () => {
 	// When: todo runs inside the boundary
 	const result = runtime.catchUnwind(() => todo({ description: "later" }));
 
-	// Then: the hook saw it once, and the boundary returned it as Err
+	// Then: the hook saw it once, and the boundary returned it as Panicked
 	assertEquals(seen, ["later"]);
-	assert(isErr(result));
-	assert(isTodoPanic(unwrapErr(result)));
+	assert(isPanicked(result));
+	assert(isTodoPanic(unwrapPanicked(result)));
 });
 
 Deno.test("todo and its guards have exact types", () => {

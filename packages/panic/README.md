@@ -10,11 +10,16 @@ In Sekhmet, errors are values (`Result`), and `throw` means panic.
 ## Features
 
 1. **Reporting and recovery are separate.** The hook only reports; the
-   boundary recovers and hands you a `Result`.
+   boundary recovers and hands you an `Outcome`, which keeps
+   a caught panic apart from an expected error.
 2. **No global state.** There is no default runtime and no module-level hook.
    You create a runtime and run your program inside it.
 3. **Reported once per runtime.** Each runtime reports a thrown `Panic` (or
    any other object) once, however many of its boundaries it passes through.
+4. **Bugs stay apart from expected errors.** `Outcome<T, E, P>`
+   (`@sekhmet/panic/outcome`) holds `Ok(T)`, an expected `Err(E)` or
+   `Panicked(P)`. Its ordinary combinators pass a panic through untouched, so
+   handling an expected error never swallows a bug.
 
 ## Install
 
@@ -38,8 +43,9 @@ bunx jsr add @sekhmet/panic     # bun
 
 ```ts
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
-import { Err } from "@sekhmet/enum/result/mini/core";
-import { mapErr } from "@sekhmet/enum/result/mini/transform";
+import { Err as ResultErr } from "@sekhmet/enum/result/mini/core";
+import { intoInner } from "@sekhmet/enum/either/mini";
+import { Err, mapErr, recover } from "@sekhmet/panic/outcome/mini";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -49,12 +55,34 @@ function main(): number {
 }
 
 // Every throw inside main is reported once (to console.error by default),
-// then returned as Err
-const result = mapErr(runtime.catchUnwind(main), (payload) => {
-	return payload instanceof Panic ? payload.message : "unknown failure";
+// then returned as Panicked. recover turns the panic into an app error, kept
+// in an Either apart from the outcome's own errors; a boundary has none.
+const recovered = recover(runtime.catchUnwind(main), (payload) => {
+	return ResultErr(
+		payload instanceof Panic ? payload.message : "unknown failure",
+	);
 });
+const result = mapErr(recovered, intoInner);
 
 assertEquals(result, Err("config is missing a port"));
+```
+
+### Outcome
+
+```ts
+import { Err, Ok, type Outcome, Panicked } from "@sekhmet/panic/outcome";
+import { assertEquals, assertThrows } from "@std/assert";
+
+const failed: Outcome<number, string> = Err("not found");
+const bug: Outcome<number, string> = Panicked(new RangeError("too big"));
+
+const next = Ok(20).map((n) => n + 1);
+
+assertEquals(next.unwrapOr(0), 21);
+// A fallback stands in for an expected error...
+assertEquals(failed.unwrapOr(0), 0);
+// ...but never for a bug: the panic is thrown again
+assertThrows(() => bug.unwrapOr(0), RangeError, "too big");
 ```
 
 ## Learn more
@@ -67,7 +95,8 @@ assertEquals(result, Err("config is missing a port"));
   attaching a cause, keeping your own metadata about panics and recognizing a
   hook that failed.
 - **Explanation:** [Concepts](./docs/concepts.md) covers panics versus error
-  values, why reporting and recovery are separate, one runtime per program
+  values, why reporting and recovery are separate, how `Outcome` keeps bugs
+  apart from expected errors, one runtime per program
   with no global state, why each panic is reported once per runtime, and what
   happens when the hook throws.
 - **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/panic/doc)

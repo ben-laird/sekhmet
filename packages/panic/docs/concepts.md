@@ -28,18 +28,56 @@ Rust's `std::panic` splits what happens to a panic in two. The panic hook
 reports it: it writes the message, sends telemetry, records metadata. A
 `catch_unwind` boundary recovers from it: it stops the unwind and hands the
 caller a value. This package keeps the split. A runtime's hook reports, and
-its boundaries (`catchUnwind`, `catchUnwindAsync`) recover, returning
-`Ok` of the work's value or `Err` of what it threw.
+its boundaries (`catchUnwind`, `catchUnwindAsync`) recover, returning an
+`Outcome`: `Ok` of the work's value or `Panicked` of what it threw.
 
 The hook never decides the outcome. It returns nothing, and what the program
-does next is the caller's call, made on the `Result` the boundary returns:
-turning a payload into an app error is a `mapErr` away. Keeping the two apart
+does next is the caller's call, made on the `Outcome` the boundary returns:
+turning a payload into an app error is a `recover` away. Keeping the two apart
 means a reporter can be swapped without changing how the program recovers,
 and recovery code never has to know where reports go.
 
 A boundary catches every throw, not only `Panic`s, and hands back the thrown
 value unchanged, typed `unknown`, as Rust's payload is `Box<dyn Any>`. A throw
 from code you don't own still has to be reported and recovered from.
+
+## Two kinds of failure, kept apart: `Outcome`
+
+Work that runs inside a panic boundary can fail two ways: with an expected
+error it returned (`E`), or with a bug it threw (`P`). Nesting them,
+`Result<Result<T, E>, unknown>`, lets an ordinary `mapErr` or `unwrapOr` on
+the outer `Result` treat a bug as an expected failure. `Outcome<T, E, P>`
+(`@sekhmet/panic/outcome`) gives each its own variant: `Ok(T)`, `Err(E)` and
+`Panicked(P)`.
+
+The rule: user code returns a `Result`, and a panic boundary returns an
+`Outcome`. Holding an `Outcome` tells you a boundary was crossed. A runtime's
+boundaries return `Outcome<T, never, unknown>`: they catch only throws, so
+their `Err` channel is `never`, and `panicResult` turns one into a
+`Result<T, unknown>` where that is what other code expects.
+
+The ordinary combinators (`map`, `mapErr`, `andThen`, `orElse`, …) pass a
+`Panicked` through untouched. Where there is no `Outcome` to pass it through
+in, as with `unwrapOr`, which returns a `T`, the panic is resumed: the payload
+is thrown again, so a fallback for an expected error never stands in for a
+bug. Only the panic channel sees a panic: `isPanicked`, `isPanicAnd` (which
+narrows `P` with a type guard), `mapPanic`, `inspectPanic`, `panicked`,
+`recover` (a `Panicked` becomes the `Ok` or `Err` a handler returns, its
+error kept apart from the outcome's own in an `Either`) and
+`resume` (Rust's `resume_unwind`).
+
+`P` is the raw payload, `unknown` by default, since JavaScript can throw
+anything, not only a `Panic`. Prior art: Effect's `Exit` (`Fail` versus
+`Die`), ZIO's `Exit`, and Rust's `JoinHandle::join`.
+
+Flattening keeps sources apart too. `flattenResult` turns an
+`Outcome<Result<T, E>, F, P>` into an `Outcome<T, Either<E, F>, P>`, so the
+returned error and the outcome's own error stay distinct at runtime and in
+the type, and `flattenEither` does the same for both channels of a nested
+`Outcome`. `flatten` joins layers that share their types. The bridges back
+to `Result` are typed by what they rule out: `intoResult` needs an `Outcome`
+with no panic channel (`P` is `never`), `panicResult` one with no error
+channel (`E` is `never`), and `intoNested` gives the nested form for interop.
 
 ## One runtime per program, and no global state
 

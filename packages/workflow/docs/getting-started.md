@@ -246,7 +246,7 @@ assertEquals(bugs, [
 ```
 
 A good parcel gets its quote. Each bad one panics inside its `catchUnwind`,
-which reports the panic to the hook, then returns it as an `Err` instead of
+which reports the panic to the hook, then returns it as `Panicked` instead of
 letting it propagate. The hook sees only panics that reach a boundary: one
 caught by a plain `try`/`catch` first is never reported.
 

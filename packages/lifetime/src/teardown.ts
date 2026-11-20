@@ -12,10 +12,14 @@ import {
 	isErr,
 	Ok,
 	type Result,
-	unwrap,
 	unwrapErr,
 } from "@sekhmet/enum/result/mini";
 import { Panic } from "@sekhmet/panic";
+import {
+	isPanicked,
+	unwrap as unwrapOutcome,
+	unwrapPanicked,
+} from "@sekhmet/panic/outcome/mini";
 import { resolved, type Vow, vowWithResolver } from "@sekhmet/vow/mini";
 import { invariant } from "@sekhmet/workflow/invariant";
 import type { LifetimePanics } from "./lifetime.ts";
@@ -92,10 +96,10 @@ export function runCleanup({
 }): Vow<Result<void, Panic<unknown>>> {
 	// Boxed, so catchUnwind's promise guard sees an object, not a maybe-promise.
 	const caught = panics.catchUnwind(() => ({ returned: cleanup() }));
-	if (isErr(caught)) {
-		return resolved(cleanupFailed(unwrapErr(caught)));
+	if (isPanicked(caught)) {
+		return resolved(cleanupFailed(unwrapPanicked(caught)));
 	}
-	const { returned } = unwrap(caught);
+	const { returned } = unwrapOutcome(caught);
 	if (!isThenable(returned)) {
 		return resolved<Result<void, Panic<unknown>>>(Ok(undefined));
 	}
@@ -103,8 +107,12 @@ export function runCleanup({
 	const settling = panics.catchUnwindAsync(() => returned);
 	void settling.then(
 		(settled) => {
-			if (isErr(settled)) {
-				deliver({ resolve, panics, value: cleanupFailed(unwrapErr(settled)) });
+			if (isPanicked(settled)) {
+				deliver({
+					resolve,
+					panics,
+					value: cleanupFailed(unwrapPanicked(settled)),
+				});
 				return;
 			}
 			deliver({ resolve, panics, value: Ok(undefined) });

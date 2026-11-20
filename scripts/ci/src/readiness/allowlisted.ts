@@ -185,11 +185,72 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 			privateType,
 		);
 	}),
+	privateTypeRef("panic/src/outcome/mini/core.ts", "Variants", "Split"),
+	privateTypeRef("panic/src/outcome/mini/core.ts", "Outcome", "Enum"),
+	...[
+		"isOk",
+		"isOkAnd",
+		"isErr",
+		"isErrAnd",
+		"isPanicked",
+		"isPanicAnd",
+	].flatMap((predicate) => {
+		return [
+			privateTypeRef("panic/src/outcome/mini/predicates.ts", predicate, "Enum"),
+			privateTypeRef(
+				"panic/src/outcome/mini/predicates.ts",
+				predicate,
+				"Isolate",
+			),
+		];
+	}),
+	...["ok", "err", "transpose"].map((name) => {
+		return privateTypeRef(
+			"panic/src/outcome/mini/combinators.ts",
+			name,
+			"Option",
+		);
+	}),
 	privateTypeRef(
-		"panic/src/mini/runtime.ts",
-		'PanicRuntime["catchUnwind"]',
+		"panic/src/outcome/mini/combinators.ts",
+		"flattenResult",
+		"Either",
+	),
+	privateTypeRef(
+		"panic/src/outcome/mini/combinators.ts",
+		"flattenResult",
 		"Result",
 	),
+	privateTypeRef(
+		"panic/src/outcome/mini/combinators.ts",
+		"flattenEither",
+		"Either",
+	),
+	...["fromResult", "intoResult", "panicResult", "intoNested"].map((name) => {
+		return privateTypeRef("panic/src/outcome/mini/convert.ts", name, "Result");
+	}),
+	privateTypeRef("panic/src/outcome/mini/panic.ts", "panicked", "Option"),
+	privateTypeRef("panic/src/outcome/mini/panic.ts", "recover", "Result"),
+	privateTypeRef("panic/src/outcome/mini/panic.ts", "recover", "Either"),
+	privateTypeRef("panic/src/outcome/mini/panic.ts", "resume", "Result"),
+	...(
+		[
+			["Outcome.prototype.isOk", "Enum"],
+			["Outcome.prototype.isOk", "Isolate"],
+			["Outcome.prototype.ok", "Option"],
+			["Outcome.prototype.transpose", "Option"],
+			["Outcome.prototype.flattenResult", "Either"],
+			["Outcome.prototype.flattenResult", "Result"],
+			["Outcome.prototype.intoResult", "Result"],
+			["fromResult", "Result"],
+		] as const
+	).map(([publicType, privateType]) => {
+		return privateTypeRef(
+			"panic/src/outcome/main/mod.ts",
+			publicType,
+			privateType,
+		);
+	}),
 	privateTypeRef(
 		"schema/src/core/main/mod.ts",
 		"Schema.prototype.parse",

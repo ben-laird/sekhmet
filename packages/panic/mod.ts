@@ -12,6 +12,7 @@
  * | `take_hook`         | `runtime.takeHook()` (restores `defaultPanicHook`) |
  * | `PanicHookInfo`     | `PanicHookInfo` (`payload`, `stack`)               |
  * | `catch_unwind`      | `runtime.catchUnwind(fn)` / `catchUnwindAsync(fn)` |
+ * | `thread::Result`    | `Outcome` (`@sekhmet/panic/outcome`)               |
  * | `resume_unwind`     | `runtime.resumeUnwind(payload)`                    |
  * | `Box<dyn Any>`      | `unknown`                                          |
  *
@@ -23,7 +24,7 @@
  * @example
  * ```ts
  * import { definePanicRuntime } from "@sekhmet/panic";
- * import { Ok } from "@sekhmet/enum/result/mini/core";
+ * import { Ok } from "@sekhmet/panic/outcome/mini";
  * import { assertEquals } from "@std/assert";
  *
  * const main = (): number => 42;

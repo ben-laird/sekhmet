@@ -289,7 +289,7 @@ After `catchUnwind`:
 ```ts
 import { definePanicRuntime } from "@sekhmet/panic";
 import { defined, isInvariantPanic } from "@sekhmet/workflow/invariant";
-import { isErr, unwrapErr } from "@sekhmet/enum/result/mini";
+import { isPanicAnd, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
 import { assert, assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -301,9 +301,8 @@ const result = runtime.catchUnwind(() => {
 	});
 });
 
-assert(isErr(result));
-const payload = unwrapErr(result);
-assert(isInvariantPanic(payload));
+assert(isPanicAnd(result, isInvariantPanic));
+const payload = unwrapPanicked(result);
 assertEquals(payload.cause.check.kind, "defined");
 ```
 

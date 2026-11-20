@@ -7,9 +7,10 @@
  * @module
  */
 
-import { isOk } from "@sekhmet/enum/result/mini/predicates";
-import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
 import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrapPanicked } from "@sekhmet/panic/outcome/mini/panic";
+import { isOk } from "@sekhmet/panic/outcome/mini/predicates";
+import { unwrap } from "@sekhmet/panic/outcome/mini/unwrap";
 import { isTodoPanic, todo } from "@sekhmet/workflow";
 import { invariant, isInvariantPanic } from "@sekhmet/workflow/invariant";
 import { defined } from "@sekhmet/workflow/invariant/defined";
@@ -42,7 +43,7 @@ function exerciseChecks(): void {
 		),
 		expected: ["Ada", 0],
 	});
-	const fromDefined = unwrapErr(
+	const fromDefined = unwrapPanicked(
 		runtime.catchUnwind(() => {
 			return defined(absent, { expectedBehavior: "a name is set" });
 		}),
@@ -60,7 +61,7 @@ function exerciseChecks(): void {
 		),
 		expected: 4,
 	});
-	const fromSatisfies = unwrapErr(
+	const fromSatisfies = unwrapPanicked(
 		runtime.catchUnwind(() => {
 			return satisfies(3, { predicate: isEven, expectedBehavior: "even" });
 		}),
@@ -73,7 +74,7 @@ function exerciseChecks(): void {
 			expectedBehavior: "NaN is itself by Object.is",
 		});
 	});
-	const fromEqual = unwrapErr(
+	const fromEqual = unwrapPanicked(
 		runtime.catchUnwind(() => {
 			invariantEqual({ actual: 1, expected: 2, expectedBehavior: "1 is 2" });
 		}),
@@ -98,7 +99,7 @@ export function exercise(): void {
 		reported.push(payload instanceof Error ? payload.name : "?");
 	});
 
-	const fromTodo = unwrapErr(
+	const fromTodo = unwrapPanicked(
 		runtime.catchUnwind(() => {
 			return todo({
 				description: "export to CSV",
@@ -118,20 +119,20 @@ export function exercise(): void {
 		],
 	});
 
-	const fromUnimplemented = unwrapErr(
+	const fromUnimplemented = unwrapPanicked(
 		runtime.catchUnwind(() => unimplemented()),
 	);
 	const cyclic: Record<string, unknown> = { big: 1n };
 	cyclic.self = cyclic;
 	const untyped = JSON.parse("null") ?? cyclic;
-	const fromUnreachable = unwrapErr(
+	const fromUnreachable = unwrapPanicked(
 		runtime.catchUnwind(() => {
 			const flag: true = untyped;
 			if (flag === true) return;
 			unreachable({ value: flag });
 		}),
 	);
-	const fromInvariant = unwrapErr(
+	const fromInvariant = unwrapPanicked(
 		runtime.catchUnwind(() => {
 			invariant(false, { expectedBehavior: "false should be true" });
 		}),

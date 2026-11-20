@@ -97,13 +97,13 @@ export function panic<T>(source: PanicSource<T>): never {
  * @example
  * ```ts
  * import { definePanicRuntime, Panic } from "@sekhmet/panic";
- * import { unwrapErr } from "@sekhmet/enum/result/mini/unwrap";
+ * import { unwrapPanicked } from "@sekhmet/panic/outcome/mini";
  * import { assert, assertEquals } from "@std/assert";
  *
  * const runtime = definePanicRuntime();
  * runtime.setHook(() => {}); // keep the example quiet
  *
- * const payload = unwrapErr(
+ * const payload = unwrapPanicked(
  *   runtime.catchUnwind(() => {
  *     throw new Panic({
  *       name: "DatabaseError",
