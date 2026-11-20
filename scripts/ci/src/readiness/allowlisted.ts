@@ -139,6 +139,36 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	),
 	privateTypeRef("job/src/plan.ts", "planJobs", "Result"),
 	privateTypeRef("job/src/run.ts", "runJobs", "Result"),
+	privateTypeRef("lifetime/src/adoption.ts", "Variants", "Split"),
+	privateTypeRef("lifetime/src/adoption.ts", "Adoption", "Enum"),
+	privateTypeRef("lifetime/src/lifetime.ts", "LifetimePanics", "PanicRuntime"),
+	privateTypeRef(
+		"lifetime/src/lifetime.ts",
+		"Lifetime.prototype.ending",
+		"DispatchSignal",
+	),
+	privateTypeRef(
+		"lifetime/src/lifetime.ts",
+		"Lifetime.prototype.value",
+		"Option",
+	),
+	privateTypeRef(
+		"lifetime/src/lifetime.ts",
+		"Lifetime.prototype.endWhen",
+		"Unsubscribe",
+	),
+	privateTypeRef("lifetime/src/phase.ts", 'EndFailure["panics"]', "Panic"),
+	privateTypeRef("lifetime/src/phase.ts", "EndReport", "Result"),
+	privateTypeRef("lifetime/src/phase.ts", "Variants", "Split"),
+	privateTypeRef("lifetime/src/phase.ts", "Phase", "Enum"),
+	...["Split", "Unsubscribe", "Vow", "Result", "Panic"].map((privateType) => {
+		return privateTypeRef(
+			"lifetime/src/registration.ts",
+			"Variants",
+			privateType,
+		);
+	}),
+	privateTypeRef("lifetime/src/registration.ts", "Registration", "Enum"),
 	privateTypeRef(
 		"panic/src/mini/runtime.ts",
 		'PanicRuntime["catchUnwind"]',
