@@ -149,10 +149,16 @@ export class DispatchSignal<out T> {
 	 * Not for use: it throws a `TypeError`, like `new AbortSignal()`. Get a
 	 * signal from a {@linkcode DispatchController}, a combinator or a static.
 	 *
-	 * @param token The package's private token
-	 * @param source How to poll and listen to the signal
+	 * @param options The package's private `token`, and the `source` that
+	 *   says how to poll and listen to the signal
 	 */
-	constructor(token: typeof BUILT_HERE, source: SignalSource<T>) {
+	constructor({
+		token,
+		source,
+	}: {
+		readonly token: typeof BUILT_HERE;
+		readonly source: SignalSource<T>;
+	}) {
 		if (token !== BUILT_HERE) {
 			throw new TypeError(
 				"Illegal constructor: get a DispatchSignal from a DispatchController",
@@ -336,18 +342,21 @@ export class DispatchSignal<out T> {
 			memo ??= { value: mapping(value) };
 			return memo.value;
 		};
-		return new DispatchSignal(BUILT_HERE, {
-			poll: () => {
-				const polled = source.poll();
-				if (isolate(polled, "Ready")) {
-					return Ready(mapped(union(polled)));
-				}
-				return Pending();
-			},
-			listen: (listener) => {
-				return source.listen((value) => {
-					listener(mapped(value));
-				});
+		return new DispatchSignal({
+			token: BUILT_HERE,
+			source: {
+				poll: () => {
+					const polled = source.poll();
+					if (isolate(polled, "Ready")) {
+						return Ready(mapped(union(polled)));
+					}
+					return Pending();
+				},
+				listen: (listener) => {
+					return source.listen((value) => {
+						listener(mapped(value));
+					});
+				},
 			},
 		});
 	}
@@ -386,23 +395,26 @@ export class DispatchSignal<out T> {
 			memo ??= [a, b];
 			return memo;
 		};
-		return new DispatchSignal(BUILT_HERE, {
-			poll: () => {
-				const a = self.poll();
-				const b = that.poll();
-				if (isolate(a, "Ready") && isolate(b, "Ready")) {
-					return Ready(paired({ a: union(a), b: union(b) }));
-				}
-				return Pending();
-			},
-			listen: (listener) => {
-				let stopB: Unsubscribe | undefined;
-				const stopA = self.listen((a) => {
-					stopB = that.listen((b) => {
-						listener(paired({ a, b }));
+		return new DispatchSignal({
+			token: BUILT_HERE,
+			source: {
+				poll: () => {
+					const a = self.poll();
+					const b = that.poll();
+					if (isolate(a, "Ready") && isolate(b, "Ready")) {
+						return Ready(paired({ a: union(a), b: union(b) }));
+					}
+					return Pending();
+				},
+				listen: (listener) => {
+					let stopB: Unsubscribe | undefined;
+					const stopA = self.listen((a) => {
+						stopB = that.listen((b) => {
+							listener(paired({ a, b }));
+						});
 					});
-				});
-				return () => (stopB ?? stopA)();
+					return () => (stopB ?? stopA)();
+				},
 			},
 		});
 	}
@@ -472,39 +484,42 @@ export class DispatchSignal<out T> {
 			}
 			return Ready(decided.value);
 		};
-		return new DispatchSignal(BUILT_HERE, {
-			poll,
-			listen: (listener) => {
-				poll();
-				if (decided !== undefined) {
-					const { winner, value } = decided;
-					// The winner runs it now, inside its own boundary.
-					return winner.listen(() => {
-						listener(value);
-					});
-				}
-				// Whether the listener still waits: `any([])` holds nothing to remove.
-				let waiting = sources.length > 0;
-				const stops: Unsubscribe[] = [];
-				for (const source of sources) {
-					stops.push(
-						source.listen((value) => {
-							waiting = false;
-							for (const stop of stops) {
-								stop();
-							}
-							listener(decide({ winner: source, value }));
-						}),
-					);
-				}
-				return () => {
-					const was = waiting;
-					waiting = false;
-					for (const stop of stops) {
-						stop();
+		return new DispatchSignal({
+			token: BUILT_HERE,
+			source: {
+				poll,
+				listen: (listener) => {
+					poll();
+					if (decided !== undefined) {
+						const { winner, value } = decided;
+						// The winner runs it now, inside its own boundary.
+						return winner.listen(() => {
+							listener(value);
+						});
 					}
-					return was;
-				};
+					// Whether the listener still waits: `any([])` holds nothing to remove.
+					let waiting = sources.length > 0;
+					const stops: Unsubscribe[] = [];
+					for (const source of sources) {
+						stops.push(
+							source.listen((value) => {
+								waiting = false;
+								for (const stop of stops) {
+									stop();
+								}
+								listener(decide({ winner: source, value }));
+							}),
+						);
+					}
+					return () => {
+						const was = waiting;
+						waiting = false;
+						for (const stop of stops) {
+							stop();
+						}
+						return was;
+					};
+				},
 			},
 		});
 	}
@@ -539,11 +554,14 @@ export class DispatchSignal<out T> {
 		readonly value: T;
 		readonly catchUnwind: CatchUnwind;
 	}): DispatchSignal<T> {
-		return new DispatchSignal(BUILT_HERE, {
-			poll: () => Ready(value),
-			listen: (listener) => {
-				catchUnwind(() => listener(value));
-				return () => false;
+		return new DispatchSignal({
+			token: BUILT_HERE,
+			source: {
+				poll: () => Ready(value),
+				listen: (listener) => {
+					catchUnwind(() => listener(value));
+					return () => false;
+				},
 			},
 		});
 	}
@@ -566,9 +584,12 @@ export class DispatchSignal<out T> {
 	 * ```
 	 */
 	static never<T = never>(): DispatchSignal<T> {
-		return new DispatchSignal<T>(BUILT_HERE, {
-			poll: () => Pending(),
-			listen: () => () => false,
+		return new DispatchSignal<T>({
+			token: BUILT_HERE,
+			source: {
+				poll: () => Pending(),
+				listen: () => () => false,
+			},
 		});
 	}
 
@@ -604,30 +625,33 @@ export class DispatchSignal<out T> {
 		readonly signal: AbortSignal;
 		readonly catchUnwind: CatchUnwind;
 	}): DispatchSignal<unknown> {
-		return new DispatchSignal<unknown>(BUILT_HERE, {
-			poll: () => {
-				if (signal.aborted) {
-					return Ready(signal.reason);
-				}
-				return Pending();
-			},
-			listen: (listener) => {
-				if (signal.aborted) {
-					catchUnwind(() => listener(signal.reason));
-					return () => false;
-				}
-				let waiting = true;
-				const onAbort = (): void => {
-					waiting = false;
-					catchUnwind(() => listener(signal.reason));
-				};
-				signal.addEventListener("abort", onAbort, { once: true });
-				return () => {
-					const was = waiting;
-					waiting = false;
-					signal.removeEventListener("abort", onAbort);
-					return was;
-				};
+		return new DispatchSignal<unknown>({
+			token: BUILT_HERE,
+			source: {
+				poll: () => {
+					if (signal.aborted) {
+						return Ready(signal.reason);
+					}
+					return Pending();
+				},
+				listen: (listener) => {
+					if (signal.aborted) {
+						catchUnwind(() => listener(signal.reason));
+						return () => false;
+					}
+					let waiting = true;
+					const onAbort = (): void => {
+						waiting = false;
+						catchUnwind(() => listener(signal.reason));
+					};
+					signal.addEventListener("abort", onAbort, { once: true });
+					return () => {
+						const was = waiting;
+						waiting = false;
+						signal.removeEventListener("abort", onAbort);
+						return was;
+					};
+				},
 			},
 		});
 	}

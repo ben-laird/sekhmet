@@ -98,19 +98,22 @@ export class DispatchController<T> {
 			catchUnwind(() => listener(value));
 		};
 
-		this.signal = new DispatchSignal(BUILT_HERE, {
-			poll: () => state,
-			listen: (listener) => {
-				if (waiting !== undefined) {
-					// A listener added mid-dispatch joins the queue, keeping order.
-					const queue = waiting;
-					queue.add(listener);
-					return () => queue.delete(listener);
-				}
-				if (isolate(state, "Ready")) {
-					run({ listener, value: union(state) });
-				}
-				return () => false;
+		this.signal = new DispatchSignal({
+			token: BUILT_HERE,
+			source: {
+				poll: () => state,
+				listen: (listener) => {
+					if (waiting !== undefined) {
+						// A listener added mid-dispatch joins the queue, keeping order.
+						const queue = waiting;
+						queue.add(listener);
+						return () => queue.delete(listener);
+					}
+					if (isolate(state, "Ready")) {
+						run({ listener, value: union(state) });
+					}
+					return () => false;
+				},
 			},
 		});
 

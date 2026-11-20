@@ -133,10 +133,13 @@ Deno.test("a DispatchSignal can't be built without a controller", () => {
 
 	// When: someone builds one anyway, bypassing the types
 	const attempt = (): unknown => {
-		// @ts-expect-error: the token's type is unexported, so no outside value fits
-		return new DispatchSignal(forged, {
-			poll: () => Pending(),
-			listen: () => () => false,
+		return new DispatchSignal({
+			// @ts-expect-error: the token's type is unexported, so no outside value fits
+			token: forged,
+			source: {
+				poll: () => Pending(),
+				listen: () => () => false,
+			},
 		});
 	};
 
