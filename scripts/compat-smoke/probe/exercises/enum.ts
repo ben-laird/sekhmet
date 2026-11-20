@@ -1,15 +1,28 @@
 /**
  * Exercises `@sekhmet/enum`: every feature through its main entrypoint, and
- * Option and Result again through mini barrels and single-function paths,
- * including the 0.2.0 additions `maybe`, `fallible`, `fallibleAsync` and
- * `promiseResult`. Every rejection they meet is captured as an `Err`, so the
- * exercise never leaves an unhandled rejection behind.
+ * Option, Result, ControlFlow (0.4.0) and Either (0.5.0) again through mini
+ * barrels and single-function paths, including the 0.2.0 additions `maybe`,
+ * `fallible`, `fallibleAsync` and `promiseResult`. Every rejection they meet
+ * is captured as an `Err`, so the exercise never leaves an unhandled
+ * rejection behind.
  *
  * @module
  */
 
+import { Break, Continue, type ControlFlow } from "@sekhmet/enum/control-flow";
+import {
+	breakValue,
+	Break as MiniBreak,
+	mapBreak,
+} from "@sekhmet/enum/control-flow/mini";
+import { Continue as MiniContinue } from "@sekhmet/enum/control-flow/mini/core";
+import { isContinue } from "@sekhmet/enum/control-flow/mini/predicates";
 import { Enum, type Split } from "@sekhmet/enum/core";
 import { match } from "@sekhmet/enum/core/mini/exit";
+import { type Either, Left, Right } from "@sekhmet/enum/either";
+import { either, Left as MiniLeft, mapLeft } from "@sekhmet/enum/either/mini";
+import { flip } from "@sekhmet/enum/either/mini/transform";
+import { unwrapRight } from "@sekhmet/enum/either/mini/unwrap";
 import { Active, type Latch } from "@sekhmet/enum/latch";
 import { maybe, None, type Option, Some } from "@sekhmet/enum/option";
 import { filter, Some as MiniSome } from "@sekhmet/enum/option/mini";
@@ -41,6 +54,64 @@ function parsePort(text: string): Result<number, string> {
 	return Number.isInteger(port) && port > 0
 		? Ok(port)
 		: Err(`invalid port: ${text}`);
+}
+
+function lookup(key: string): Either<number, string> {
+	return key === "port" ? Left(8080) : Right(key);
+}
+
+function check(n: number): ControlFlow<string, number> {
+	return n < 0 ? Break(`negative: ${n}`) : Continue(n);
+}
+
+function exerciseEitherAndControlFlow(): void {
+	expectEqual({
+		label: "either main chain",
+		actual: [
+			lookup("port")
+				.mapLeft((port) => port + 1)
+				.left()
+				.unwrapOr(0),
+			lookup("host").either({
+				onLeft: (port) => `port ${port}`,
+				onRight: (name) => `unknown ${name}`,
+			}),
+		],
+		expected: [8081, "unknown host"],
+	});
+	expectEqual({
+		label: "either mini chain",
+		actual: [
+			either(
+				mapLeft(MiniLeft<number, string>(1), (n) => n * 2),
+				{
+					onLeft: (n) => `left ${n}`,
+					onRight: (s) => `right ${s}`,
+				},
+			),
+			unwrapRight(flip(MiniLeft("swapped"))),
+		],
+		expected: ["left 2", "swapped"],
+	});
+
+	expectEqual({
+		label: "control-flow main chain",
+		actual: [-1, 1].map((n) =>
+			check(n)
+				.mapBreak((reason) => reason.toUpperCase())
+				.breakValue()
+				.unwrapOr("ok"),
+		),
+		expected: ["NEGATIVE: -1", "ok"],
+	});
+	expectEqual({
+		label: "control-flow mini chain",
+		actual: [
+			unwrapOr(breakValue(mapBreak(MiniBreak("stop"), (s) => s.length)), 0),
+			isContinue(MiniContinue(1)),
+		],
+		expected: [4, true],
+	});
 }
 
 type Shape = Split<{ Circle: [radius: number]; Square: [side: number] }>;
@@ -221,5 +292,6 @@ export async function exercise(): Promise<void> {
 		});
 	expectEqual({ label: "core match", actual: area(square), expected: 9 });
 
+	exerciseEitherAndControlFlow();
 	await exerciseAdditions();
 }
