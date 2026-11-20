@@ -340,3 +340,39 @@ Deno.test("transpose() turns a Result of an Option inside out", async (t) => {
 		}
 	});
 });
+
+Deno.test("flatten() removes one layer of a nested Result", async (t) => {
+	await t.step("Ok(Ok(x)) becomes Ok(x)", () => {
+		// Given: an Ok holding an Ok
+		const nested: Result<Result<number, string>, string> = Ok(Ok(6));
+
+		// When: flattening it
+		const subject = TestSubject.flatten(nested);
+
+		// Then: the inner Ok remains
+		assertEquals(subject, Ok(6));
+	});
+
+	await t.step("Ok(Err(e)) and Err(e) both become Err(e)", () => {
+		// Given: an Ok holding an Err, and an outer Err
+		const innerErr: Result<Result<number, string>, string> = Ok(Err("in"));
+		const outerErr: Result<Result<number, string>, string> = Err("out");
+
+		// When: flattening each
+		const subjects = [innerErr, outerErr].map(TestSubject.flatten);
+
+		// Then: each keeps its error
+		assertEquals(subjects, [Err("in"), Err("out")]);
+	});
+
+	await t.step("it undoes wrapping in Ok: flatten(Ok(r)) ≡ r", () => {
+		for (const r of SAMPLES) {
+			// Given: a Result r
+			// When: wrapping it in Ok, then flattening
+			const subject = TestSubject.flatten(Ok(r));
+
+			// Then: r comes back
+			assertEquals(subject, r);
+		}
+	});
+});

@@ -176,9 +176,10 @@ assertEquals(Pending<number>().isPending(), true);
 ```
 
 Like Rust's, some methods exist only for one shape of receiver: a `this`
-parameter makes `flatten` a method of an `Option<Option<T>>` alone,
-`transpose` of an `Option<Result<T, E>>` or a `Result<Option<T>, E>`, `unzip`
-of an `Option<[T, U]>`, and `mapOk`/`mapErr` of a `Poll<Result<T, E>>`.
+parameter makes `flatten` a method of an `Option<Option<T>>` or a
+`Result<Result<T, E>, E>` alone, `transpose` of an `Option<Result<T, E>>` or
+a `Result<Option<T>, E>`, `unzip` of an `Option<[T, U]>`, and
+`mapOk`/`mapErr` of a `Poll<Result<T, E>>`.
 Calling one on any other receiver is a type error.
 
 ```ts

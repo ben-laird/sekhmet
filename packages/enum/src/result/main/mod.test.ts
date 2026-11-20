@@ -322,3 +322,33 @@ Deno.test("Result.transpose exists only for a Result of an Option", () => {
 	// Then: it doesn't compile, so it is never called
 	assertEquals(typeof misuse, "function");
 });
+
+Deno.test("Result.flatten returns a main Result", () => {
+	// Given: an Ok holding an Ok, and an Ok holding an Err
+	const okOk = Ok<Result<number, string>, string>(Ok(3));
+	const okErr = Ok<Result<number, string>, string>(Err("bad"));
+
+	// When: flattening them
+	const flat = okOk.flatten();
+
+	// Then: the result is a main Result<number, string> that chains
+	assertInstanceOf(flat, Result);
+	assertType<IsExact<typeof flat, Result<number, string>>>(true);
+	assertEquals(flat.map((n) => n + 1).unwrap(), 4);
+	assertEquals(okErr.flatten().unwrapErr(), "bad");
+});
+
+Deno.test("Result.flatten exists only for a Result of a Result with the same error", () => {
+	// Given: a Result of a number, and a Result of a Result whose errors differ
+	const plain = Ok<number, string>(1);
+	const mixed = Ok<Result<number, number>, string>(Ok(1));
+
+	// When: writing a flatten on each
+	// @ts-expect-error: flatten's this is a Result of a Result
+	const onPlain = (): unknown => plain.flatten();
+	// @ts-expect-error: both layers must share the error type
+	const onMixed = (): unknown => mixed.flatten();
+
+	// Then: neither compiles, so neither is called
+	assertEquals([typeof onPlain, typeof onMixed], ["function", "function"]);
+});

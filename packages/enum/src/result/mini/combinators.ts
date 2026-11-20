@@ -1,6 +1,6 @@
 /**
  * Combining results: `and`/`or` and their lazy forms, conversion to `Option`
- * (`ok`, `err`), `transpose` and iteration.
+ * (`ok`, `err`), `transpose`, `flatten` and iteration.
  *
  * @module
  */
@@ -128,6 +128,32 @@ export function transpose<T, E>(
 		},
 		Err: (err): Option<Result<T, E>> => Some(Err(err)),
 	});
+}
+
+/**
+ * Flattens a nested Result into a single-level Result: Rust's
+ * `Result<Result<T, E>, E>::flatten`.
+ *
+ * Converts `Ok(Ok(x))` into `Ok(x)`, and both `Ok(Err(e))` and `Err(e)` into
+ * `Err(e)`. Both layers share the error type.
+ *
+ * @template T The type of the inner success value
+ * @template E The type of the error value, shared by both layers
+ * @param self A Result containing another Result
+ * @returns The inner Result if Ok, otherwise the outer Err
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err, Ok, flatten } from "@sekhmet/enum/result/mini";
+ *
+ * assertEquals(flatten(Ok(Ok(6))), Ok(6));
+ * assertEquals(flatten(Ok(Err("inner"))), Err("inner"));
+ * assertEquals(flatten(Err("outer")), Err("outer"));
+ * ```
+ */
+export function flatten<T, E>(self: Result<Result<T, E>, E>): Result<T, E> {
+	return andThen(self, (inner) => inner);
 }
 
 /**
