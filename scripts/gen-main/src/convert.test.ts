@@ -34,6 +34,7 @@ const CONTEXT: ConvertContext = {
 			: undefined,
 	mappers: (target) => (target === "Result" ? ["map", "mapErr"] : ["map"]),
 	views: (target) => target === "Option",
+	carrier: () => undefined,
 };
 
 Deno.test("convertReturn leaves types without wrap targets alone", () => {
@@ -183,6 +184,89 @@ Deno.test("convertReturn converts a promise's fulfilled value", () => {
 		body,
 		"return f().then(($value0) => { return Result.fromMini($value0); });",
 	);
+});
+
+/** A `Vow<inner>`, imported from vow as a mini module would import it. */
+const vow = (inner: TypeNode): TypeNode => ({
+	kind: "ref",
+	name: "Vow",
+	args: [inner],
+	resolution: {
+		kind: "import",
+		specifier: "@sekhmet/vow/mini/core",
+		name: "Vow",
+	},
+});
+
+/** FUNCTION_CONTEXT, with `Vow` a carrier mapped by `mapVow`. */
+const CARRIER_CONTEXT: ConvertContext = {
+	...FUNCTION_CONTEXT,
+	render: (type) => {
+		if (type.kind === "ref" && type.name === "Vow") {
+			return `Vow<${type.args.map(CARRIER_CONTEXT.render).join(", ")}>`;
+		}
+
+		return FUNCTION_CONTEXT.render(type);
+	},
+	carrier: (type) => {
+		return type.kind === "ref" && type.name === "Vow" ? "mapVow" : undefined;
+	},
+};
+
+const carriedBodyOf = (type: TypeNode): { text: string; body: string } => {
+	const planned = convertReturn({ type, context: CARRIER_CONTEXT });
+	assert(planned.ok);
+
+	return {
+		text: planned.value.text,
+		body: convertedBody({
+			call: "f()",
+			conversion: planned.value.conversion,
+			isVoid: false,
+			indent: "",
+		}),
+	};
+};
+
+Deno.test("convertReturn converts a carrier's carried value through its map", () => {
+	// Given: Vow<Result<A, E>>, Vow a carrier
+	const type = vow(ref("Result", [ref("A"), ref("E")]));
+
+	// When: planning it and rendering its body
+	const { text, body } = carriedBodyOf(type);
+
+	// Then: the carried result converts through mapVow, keeping the Vow
+	assertEquals(text, "Vow<Result<mini.A, mini.E>>");
+	assertEquals(
+		body,
+		"return mapVow(f(), ($value0) => { return Result.fromMini($value0); });",
+	);
+});
+
+Deno.test("convertReturn converts a carrier nested in a wrap target", () => {
+	// Given: Result<Vow<Option<A>>, E>
+	const type = ref("Result", [vow(ref("Option", [ref("A")])), ref("E")]);
+
+	// When: planning it and rendering its body
+	const { body } = carriedBodyOf(type);
+
+	// Then: the result's value maps the vow, whose value converts in turn
+	assertEquals(
+		body,
+		"return Result.fromMini(f()).map(($value0) => { return mapVow($value0, ($value1) => { return Option.fromMini($value1); }); });",
+	);
+});
+
+Deno.test("convertReturn leaves a carrier of a plain value alone", () => {
+	// Given: Vow<A>, whose value names no wrap target
+	const type = vow(ref("A"));
+
+	// When: planning it
+	const planned = convertReturn({ type, context: CARRIER_CONTEXT });
+
+	// Then: nothing converts
+	assert(planned.ok);
+	assertEquals(planned.value.conversion, { kind: "none" });
 });
 
 Deno.test("convertReturn converts what a returned function returns", () => {

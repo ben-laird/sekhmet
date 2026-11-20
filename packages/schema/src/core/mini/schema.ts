@@ -439,9 +439,9 @@ export type ErrorOf<S extends AnySchema> =
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { type Result, Ok as ResultOk } from "@sekhmet/enum/result/mini";
- * import { Some } from "@sekhmet/enum/option/mini";
+ * import { unwrap as unwrapSome } from "@sekhmet/enum/option/mini";
  * import { definePanicRuntime } from "@sekhmet/panic";
- * import { isPanicked, Ok } from "@sekhmet/panic/outcome/mini";
+ * import { isPanicked, unwrap } from "@sekhmet/panic/outcome/mini";
  * import { parse, Schema } from "@sekhmet/schema/core/mini";
  * import { isPending, value, wait } from "@sekhmet/vow";
  *
@@ -451,11 +451,12 @@ export type ErrorOf<S extends AnySchema> =
  * 	parse: (input: string) => Promise.resolve(ResultOk(input)),
  * });
  *
- * assertEquals(value(parse(now, { input: "a", panics })), Some(Ok("a")));
+ * // Synchronous: the vow is already resolved, read now with value
+ * assertEquals(unwrap(unwrapSome(value(parse(now, { input: "a", panics })))), "a");
  *
  * const pending = parse(later, { input: "b", panics });
  * assertEquals(isPending(pending), true);
- * assertEquals(await wait(pending), Ok("b"));
+ * assertEquals(unwrap(await wait(pending)), "b");
  *
  * // A bug in user code: reported to the hook, and settled as Panicked
  * panics.setHook(() => {});

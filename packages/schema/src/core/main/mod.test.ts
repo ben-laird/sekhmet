@@ -2,10 +2,11 @@ import { Ok as MainOk, Result } from "@sekhmet/enum/result";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
 import {
+	Outcome,
 	Err as OutcomeErr,
 	Ok as OutcomeOk,
-	resume,
-} from "@sekhmet/panic/outcome/mini";
+} from "@sekhmet/panic/outcome";
+import { resume } from "@sekhmet/panic/outcome/mini";
 import { wait } from "@sekhmet/vow";
 import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
@@ -452,12 +453,13 @@ Deno.test("the Result-style transforms chain as methods and take main Results", 
 	];
 
 	// Then: each method ran in the chain's order and returned a main Schema
-	// with the chain's types
+	// with the chain's types, and parse settled to main Outcomes
 	assertEquals(results, [
 		OutcomeOk(21),
 		OutcomeOk(-1),
 		OutcomeErr("not digits"),
 	]);
+	for (const result of results) assertInstanceOf(result, Outcome);
 	assertEquals(seen, [21, 0, 0]);
 	assertType<IsExact<Input<typeof halved>, string>>(true);
 	assertType<IsExact<Output<typeof halved>, number>>(true);

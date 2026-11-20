@@ -27,9 +27,10 @@
  */
 
 import { Result } from "@sekhmet/enum/result";
-import type { Outcome } from "@sekhmet/panic/outcome/mini/core";
+import { Outcome } from "@sekhmet/panic/outcome";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import type { Vow } from "@sekhmet/vow/mini/core";
+import { map as mapVow } from "@sekhmet/vow/mini/impl";
 import * as algebra from "../../algebra/mini/mod.ts";
 import * as composites from "../../composites/mini/mod.ts";
 import * as mini from "../mini/mod.ts";
@@ -508,9 +509,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
 	 * import { type Result, Ok as ResultOk } from "@sekhmet/enum/result/mini";
-	 * import { Some } from "@sekhmet/enum/option/mini";
+	 * import { unwrap as unwrapSome } from "@sekhmet/enum/option/mini";
 	 * import { definePanicRuntime } from "@sekhmet/panic";
-	 * import { isPanicked, Ok } from "@sekhmet/panic/outcome/mini";
+	 * import { isPanicked, unwrap } from "@sekhmet/panic/outcome/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 * import { isPending, value, wait } from "@sekhmet/vow";
 	 *
@@ -520,11 +521,12 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * 	parse: (input: string) => Promise.resolve(ResultOk(input)),
 	 * });
 	 *
-	 * assertEquals(value(now.parse({ input: "a", panics })), Some(Ok("a")));
+	 * // Synchronous: the vow is already resolved, read now with value
+	 * assertEquals(unwrap(unwrapSome(value(now.parse({ input: "a", panics })))), "a");
 	 *
 	 * const pending = later.parse({ input: "b", panics });
 	 * assertEquals(isPending(pending), true);
-	 * assertEquals(await wait(pending), Ok("b"));
+	 * assertEquals(unwrap(await wait(pending)), "b");
 	 *
 	 * // A bug in user code: reported to the hook, and settled as Panicked
 	 * panics.setHook(() => {});
@@ -538,7 +540,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * @see {@link mini.parse}
 	 */
 	parse(options: mini.ParseOptions<I>): Vow<Outcome<O, E, unknown>> {
-		return mini.parse(this, options);
+		return mapVow(mini.parse(this, options), ($value0) => {
+			return Outcome.fromMini($value0);
+		});
 	}
 
 	/**

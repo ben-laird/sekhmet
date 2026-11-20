@@ -25,6 +25,22 @@ export interface WrapTarget {
 }
 
 /**
+ * A mini generic type that carries one value, converted by mapping that
+ * value with a free function, as `Promise<T>` is through `.then`: a
+ * `Vow<Result<T, E>>` becomes a `Vow` of main's `Result<T, E>` through
+ * vow's `map(self, mapping)`. Its one type argument converts as any
+ * returned type does.
+ */
+export interface CarrierTarget {
+	/** The mini type's name (e.g. `Vow`). */
+	readonly type: string;
+	/** The module exporting {@linkcode CarrierTarget.map}. */
+	readonly from: string;
+	/** The function mapping the carried value: `map(self, mapping)`. */
+	readonly map: string;
+}
+
+/**
  * How a primary class carries views: own properties holding the children
  * a value was built from (`Schema<I, O, E> & ObjectView<S>`). With it, main
  * gets a `fromMiniView` static that copies a mini value's own properties
@@ -50,6 +66,8 @@ export interface FeatureBase {
 	readonly output: string;
 	/** Other features' main classes that top-level return types convert to. */
 	readonly wraps?: readonly WrapTarget[];
+	/** Carriers whose carried value converts (see {@linkcode CarrierTarget}). */
+	readonly carriers?: readonly CarrierTarget[];
 	/** Curried mini functions whose method takes the returned function's parameters. */
 	readonly uncurry?: readonly string[];
 	/** Mini exports left out of main (e.g. names that clash in a kitchen-sink barrel). */
@@ -225,6 +243,18 @@ const ENUM_EITHER: WrapTarget = {
 	type: "Either",
 	from: "@sekhmet/enum/either",
 	mappers: ["mapLeft", "mapRight"],
+};
+/** Panic's main `Outcome`, imported from another package through its entrypoint. */
+const PANIC_OUTCOME: WrapTarget = {
+	type: "Outcome",
+	from: "@sekhmet/panic/outcome",
+	mappers: ["map", "mapErr", "mapPanic"],
+};
+/** Vow's `Vow`, whose resolved value converts through vow's `map`. */
+const VOW: CarrierTarget = {
+	type: "Vow",
+	from: "@sekhmet/vow/mini/impl",
+	map: "map",
 };
 const SCHEMA_MAPPERS: readonly (string | undefined)[] = [
 	undefined,
@@ -628,7 +658,8 @@ export const FEATURES: readonly Feature[] = [
 		construct: "params",
 		mappers: SCHEMA_MAPPERS,
 		views: { any: "AnySchema" },
-		wraps: [ENUM_RESULT],
+		wraps: [ENUM_RESULT, PANIC_OUTCOME],
+		carriers: [VOW],
 		// The shape modifiers belong to composites but read best chained.
 		borrows: [
 			{

@@ -23,6 +23,7 @@ import { dirname, relative } from "@std/path/posix";
 import {
 	type Borrow,
 	type BorrowedMethod,
+	type CarrierTarget,
 	type ClassFeature,
 	type Feature,
 	isClassFeature,
@@ -139,6 +140,8 @@ interface Module {
 	readonly mappers: ReadonlyMap<string, readonly (string | undefined)[]>;
 	/** The wrap targets whose main class has a `fromMiniView` static. */
 	readonly views: ReadonlySet<string>;
+	/** Each carrier's local map function, by the carrier's mini name. */
+	readonly carriers: ReadonlyMap<string, string>;
 	readonly localNames: ReadonlySet<string>;
 	readonly sources: ReadonlyMap<string, string>;
 	readonly outputUrl: string;
@@ -261,6 +264,25 @@ function wrapTargetOf(
 	return wrapNames.has(name) ? name : undefined;
 }
 
+/** The local map function of the carrier a top-level type names, if any. */
+function carrierOf(
+	carriers: ReadonlyMap<string, string>,
+	type: TypeNode,
+): string | undefined {
+	if (type.kind !== "ref" || type.resolution.kind === "typeParam") {
+		return undefined;
+	}
+
+	return carriers.get(
+		originalName({ name: type.name, resolution: type.resolution }),
+	);
+}
+
+/** The local name a carrier's map function is imported under (`mapVow`). */
+function carrierLocal(carrier: CarrierTarget): string {
+	return `${carrier.map}${carrier.type}`;
+}
+
 /**
  * Renders a type, spelling a top-level wrap target as its main class. Each
  * member of a top-level intersection counts as top-level.
@@ -293,9 +315,11 @@ function renderWrapped({
 /** Whether a return type names a wrap target anywhere main converts it. */
 function needsConversion({
 	wrapNames,
+	carriers,
 	type,
 }: {
 	wrapNames: ReadonlySet<string>;
+	carriers: ReadonlyMap<string, string>;
 	type: TypeNode | undefined;
 }): boolean {
 	if (type === undefined) return false;
@@ -307,6 +331,7 @@ function needsConversion({
 			wrapTarget: (inner) => wrapTargetOf(wrapNames, inner),
 			mappers: () => [],
 			views: () => true,
+			carrier: (inner) => carrierOf(carriers, inner),
 		},
 	});
 
@@ -687,6 +712,7 @@ function convertContextFor({
 		wrapTarget: (type) => wrapTargetOf(module.wrapNames, type),
 		mappers: (target) => module.mappers.get(target) ?? [],
 		views: (target) => module.views.has(target),
+		carrier: (type) => carrierOf(module.carriers, type),
 	};
 }
 
@@ -1690,6 +1716,9 @@ function renderImports({
 		...(module.feature.wraps ?? []).map(
 			(target) => `import { ${target.type} } from "${target.from}";`,
 		),
+		...(module.feature.carriers ?? []).map((carrier) => {
+			return `import { ${carrier.map} as ${carrierLocal(carrier)} } from "${carrier.from}";`;
+		}),
 		...[...module.typeImports].map(([specifier, names]) => {
 			const list = [...names]
 				.map(([name, local]) => (name === local ? name : `${name} as ${local}`))
@@ -2116,6 +2145,11 @@ export function generateMain(input: GenerateInput): Generated<string> {
 			(target) => [target.type, target.mappers ?? []] as const,
 		),
 	]);
+	const carriers = new Map(
+		(feature.carriers ?? []).map((carrier) => {
+			return [carrier.type, carrierLocal(carrier)] as const;
+		}),
+	);
 
 	const methodSymbols: DocSymbol[] = [];
 	const wrapperSymbols: DocSymbol[] = [];
@@ -2142,7 +2176,7 @@ export function generateMain(input: GenerateInput): Generated<string> {
 				});
 			}
 			const returnsWrapped = signatures.map((sig) =>
-				needsConversion({ wrapNames, type: sig.returnType }),
+				needsConversion({ wrapNames, carriers, type: sig.returnType }),
 			);
 			if (returnsWrapped.some(Boolean)) {
 				wrapperSymbols.push(symbol);
@@ -2163,6 +2197,7 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		"struct",
 		...borrows.map((borrow) => borrow.namespace),
 		...wrapNames,
+		...carriers.values(),
 		...wrapperSymbols.map((symbol) => symbol.name),
 	]);
 	const borrowed = borrowedMethods({
@@ -2203,6 +2238,7 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		wrapNames,
 		mappers,
 		views: viewTargets(feature),
+		carriers,
 		sources,
 		outputUrl,
 		typeImports: new Map(),

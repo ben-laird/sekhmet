@@ -7,6 +7,7 @@
 export type {
 	Borrow,
 	BorrowedMethod,
+	CarrierTarget,
 	ClassFeature,
 	Feature,
 	FeatureBase,
