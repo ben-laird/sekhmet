@@ -1,3 +1,4 @@
+import { intoInner } from "@sekhmet/enum/either/mini";
 import { Err as ResultErr } from "@sekhmet/enum/result/mini/core";
 import {
 	assert,
@@ -654,8 +655,8 @@ Deno.test("recover() converts a caught payload into an app error", () => {
 		toAppError,
 	);
 
-	// Then: the Err holds the converted value
-	assertEquals(unwrapErr(result), "panic: bad state");
+	// Then: the Err holds the converted value, on the handler's side
+	assertEquals(intoInner(unwrapErr(result)), "panic: bad state");
 });
 
 Deno.test("defaultPanicHook writes a 'panicked:' report to console.error", async (t) => {

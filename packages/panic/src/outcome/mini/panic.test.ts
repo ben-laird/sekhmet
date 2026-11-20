@@ -1,3 +1,4 @@
+import { type Either, intoInner, Left, Right } from "@sekhmet/enum/either/mini";
 import { isNone, unwrap as unwrapOption } from "@sekhmet/enum/option/mini";
 import {
 	type Result,
@@ -8,6 +9,7 @@ import { assertEquals, assertStrictEquals, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { Err, Ok, type Outcome, Panicked } from "@/src/outcome/mini/core.ts";
 import * as TestSubject from "@/src/outcome/mini/panic.ts";
+import { unwrapErr } from "@/src/outcome/mini/unwrap.ts";
 
 const ok: Outcome<number, string> = Ok(1);
 const failed: Outcome<number, string> = Err("e");
@@ -76,17 +78,21 @@ Deno.test("unwrapPanicked() and expectPanicked() return a payload or throw", () 
 Deno.test("recover() turns a panic into the handler's Ok or Err", async (t) => {
 	await t.step("into Ok", () => {
 		// Given: a panic, and a handler that recovers with a value
-		const handler = (p: unknown): Result<number, string> => ResultOk(Number(p));
+		const handler = (p: unknown): Result<number, boolean> => {
+			return ResultOk(Number(p));
+		};
 
 		// When: recovering
 		const subject = TestSubject.recover(bug, handler);
 
-		// Then: it is Ok, and its type has no panic left
+		// Then: it is Ok, and its type keeps both error sources and no panic
 		assertEquals(subject, Ok(404));
-		assertType<IsExact<typeof subject, Outcome<number, string, never>>>(true);
+		assertType<
+			IsExact<typeof subject, Outcome<number, Either<string, boolean>, never>>
+		>(true);
 	});
 
-	await t.step("into Err", () => {
+	await t.step("into Err, on the Right", () => {
 		// Given: a panic, and a handler that recovers with an error
 		const handler = (p: unknown): Result<number, string> => {
 			return ResultErr(`bug: ${String(p)}`);
@@ -95,11 +101,11 @@ Deno.test("recover() turns a panic into the handler's Ok or Err", async (t) => {
 		// When: recovering
 		const subject = TestSubject.recover(bug, handler);
 
-		// Then: it is Err
-		assertEquals(subject, Err("bug: 404"));
+		// Then: the handler's error is Right, apart from the Outcome's own
+		assertEquals(subject, Err(Right("bug: 404")));
 	});
 
-	await t.step("a boundary's never error widens to the handler's", () => {
+	await t.step("a boundary's never error leaves only the handler's", () => {
 		// Given: a boundary-shaped panic, with no error channel
 		const caught: Outcome<number, never> = Panicked("p");
 
@@ -108,31 +114,34 @@ Deno.test("recover() turns a panic into the handler's Ok or Err", async (t) => {
 			return ResultErr({ kind: "bug", payload: p });
 		});
 
-		// Then: the error type is the handler's, and no panic is left
-		assertEquals(subject, Err({ kind: "bug", payload: "p" }));
+		// Then: the error is Right, and intoInner reads the app error
+		assertEquals(subject, Err(Right({ kind: "bug", payload: "p" })));
+		type AppError = { kind: string; payload: unknown };
 		assertType<
-			IsExact<
-				typeof subject,
-				Outcome<number, { kind: string; payload: unknown }, never>
-			>
+			IsExact<typeof subject, Outcome<number, Either<never, AppError>, never>>
 		>(true);
+		const error = intoInner(unwrapErr(subject));
+		assertType<IsExact<typeof error, AppError>>(true);
 	});
 
-	await t.step("Ok and Err pass through without calling the handler", () => {
-		// Given: an Ok and an Err, and a counting handler
-		let calls = 0;
-		const handler = (): Result<number, string> => {
-			calls++;
-			return ResultOk(0);
-		};
+	await t.step(
+		"Ok passes through, and Err becomes Left, without the handler",
+		() => {
+			// Given: an Ok and an Err, and a counting handler
+			let calls = 0;
+			const handler = (): Result<number, string> => {
+				calls++;
+				return ResultOk(0);
+			};
 
-		// When: recovering each
-		const subject = [ok, failed].map((o) => TestSubject.recover(o, handler));
+			// When: recovering each
+			const subject = [ok, failed].map((o) => TestSubject.recover(o, handler));
 
-		// Then: both are unchanged, and the handler never ran
-		assertEquals(subject, [Ok(1), Err("e")]);
-		assertEquals(calls, 0);
-	});
+			// Then: Ok is unchanged, the Outcome's own error is Left, and the handler never ran
+			assertEquals(subject, [Ok(1), Err(Left("e"))]);
+			assertEquals(calls, 0);
+		},
+	);
 });
 
 Deno.test("resume() returns Ok or Err as a Result and rethrows a payload", () => {

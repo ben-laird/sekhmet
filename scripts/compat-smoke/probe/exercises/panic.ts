@@ -6,6 +6,7 @@
  * @module
  */
 
+import { intoInner } from "@sekhmet/enum/either/mini/transform";
 import { Err as ResultErr } from "@sekhmet/enum/result/mini/core";
 import { definePanicRuntime, Panic as RootPanic } from "@sekhmet/panic";
 import { PanicMetadataRegistry } from "@sekhmet/panic/mini/registry";
@@ -58,7 +59,7 @@ export async function exercise(): Promise<void> {
 
 	expectEqual({
 		label: "recover turns a caught panic into an app error",
-		actual: unwrapErr(recover(caught, () => ResultErr("no port"))),
+		actual: intoInner(unwrapErr(recover(caught, () => ResultErr("no port")))),
 		expected: "no port",
 	});
 

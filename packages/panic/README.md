@@ -44,7 +44,8 @@ bunx jsr add @sekhmet/panic     # bun
 ```ts
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
 import { Err as ResultErr } from "@sekhmet/enum/result/mini/core";
-import { Err, recover } from "@sekhmet/panic/outcome/mini";
+import { intoInner } from "@sekhmet/enum/either/mini";
+import { Err, mapErr, recover } from "@sekhmet/panic/outcome/mini";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -54,12 +55,14 @@ function main(): number {
 }
 
 // Every throw inside main is reported once (to console.error by default),
-// then returned as Panicked. recover turns the panic into an app error.
-const result = recover(runtime.catchUnwind(main), (payload) => {
+// then returned as Panicked. recover turns the panic into an app error, kept
+// in an Either apart from the outcome's own errors; a boundary has none.
+const recovered = recover(runtime.catchUnwind(main), (payload) => {
 	return ResultErr(
 		payload instanceof Panic ? payload.message : "unknown failure",
 	);
 });
+const result = mapErr(recovered, intoInner);
 
 assertEquals(result, Err("config is missing a port"));
 ```

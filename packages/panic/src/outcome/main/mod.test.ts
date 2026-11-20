@@ -102,11 +102,15 @@ Deno.test("Outcome.recover returns a main Outcome that intoResult converts", () 
 	const recovered = bug.recover((p) => resultMini.Err(`bug: ${String(p)}`));
 	const result = recovered.intoResult();
 
-	// Then: both are main values, and no panic is left in the type
+	// Then: both are main values, the error is a main Either, and no panic is left
 	assertInstanceOf(recovered, Outcome);
-	assertType<IsExact<typeof recovered, Outcome<number, string, never>>>(true);
+	assertType<
+		IsExact<typeof recovered, Outcome<number, Either<string, string>, never>>
+	>(true);
 	assertInstanceOf(result, Result);
-	assertEquals(result.unwrapErr(), "bug: boom");
+	const error = result.unwrapErr();
+	assertInstanceOf(error, Either);
+	assertEquals(error.unwrapRight(), "bug: boom");
 });
 
 Deno.test("Outcome.intoResult exists only for an Outcome with no panic channel", () => {

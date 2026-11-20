@@ -62,7 +62,8 @@ in, as with `unwrapOr`, which returns a `T`, the panic is resumed: the payload
 is thrown again, so a fallback for an expected error never stands in for a
 bug. Only the panic channel sees a panic: `isPanicked`, `isPanicAnd` (which
 narrows `P` with a type guard), `mapPanic`, `inspectPanic`, `panicked`,
-`recover` (a `Panicked` becomes the `Ok` or `Err` a handler returns) and
+`recover` (a `Panicked` becomes the `Ok` or `Err` a handler returns, its
+error kept apart from the outcome's own in an `Either`) and
 `resume` (Rust's `resume_unwind`).
 
 `P` is the raw payload, `unknown` by default, since JavaScript can throw

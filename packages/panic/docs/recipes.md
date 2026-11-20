@@ -118,14 +118,18 @@ since it catches every throw, not only `Panic`s. Convert it on the returned
 
 1. Run the work in `catchUnwind`.
 2. Recover with `recover`, narrowing the payload with `instanceof Panic` and
-   returning the app error as a `Result`. The panic becomes that `Err`, and
-   the `Outcome` left has no panic in it, so `intoResult` turns it into a
+   returning the app error as a `Result`. The panic becomes that `Err`, as
+   the `Right` of an `Either` that keeps it apart from the outcome's own
+   errors (`Left`), and the `Outcome` left has no panic in it.
+3. A boundary has no errors of its own, so `intoInner` reads the app error
+   out of the `Either`, and `intoResult` turns the `Outcome` into a
    `Result`.
 
 ```ts
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
 import { Err } from "@sekhmet/enum/result/mini/core";
-import { intoResult, recover } from "@sekhmet/panic/outcome/mini";
+import { intoInner } from "@sekhmet/enum/either/mini";
+import { intoResult, mapErr, recover } from "@sekhmet/panic/outcome/mini";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -139,7 +143,9 @@ const recovered = recover(runtime.catchUnwind(main), (payload) => {
 	return Err(payload instanceof Panic ? payload.message : "unknown failure");
 });
 
-assertEquals(intoResult(recovered), Err("config is missing a port"));
+const result = intoResult(mapErr(recovered, intoInner));
+
+assertEquals(result, Err("config is missing a port"));
 ```
 
 ## How to recover from async work

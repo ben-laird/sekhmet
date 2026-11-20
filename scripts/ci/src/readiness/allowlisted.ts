@@ -231,6 +231,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	}),
 	privateTypeRef("panic/src/outcome/mini/panic.ts", "panicked", "Option"),
 	privateTypeRef("panic/src/outcome/mini/panic.ts", "recover", "Result"),
+	privateTypeRef("panic/src/outcome/mini/panic.ts", "recover", "Either"),
 	privateTypeRef("panic/src/outcome/mini/panic.ts", "resume", "Result"),
 	...(
 		[

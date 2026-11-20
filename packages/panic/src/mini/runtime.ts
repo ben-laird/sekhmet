@@ -255,7 +255,8 @@ function errorReport({
  * ```ts
  * import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
  * import { Err as ResultErr } from "@sekhmet/enum/result/mini/core";
- * import { Err, recover } from "@sekhmet/panic/outcome/mini";
+ * import { intoInner } from "@sekhmet/enum/either/mini";
+ * import { Err, mapErr, recover } from "@sekhmet/panic/outcome/mini";
  * import { assertEquals } from "@std/assert";
  *
  * const runtime = definePanicRuntime();
@@ -271,9 +272,11 @@ function errorReport({
  * });
  *
  * const main = (): number => panic({ message: "no port", cause: null });
- * const result = recover(runtime.catchUnwind(main), (payload) => {
+ * const recovered = recover(runtime.catchUnwind(main), (payload) => {
  *   return ResultErr(payload instanceof Panic ? payload.message : "unknown failure");
  * });
+ * // A boundary has no error of its own, so the Either holds only the app error
+ * const result = mapErr(recovered, intoInner);
  *
  * assertEquals(result, Err("no port"));
  * assertEquals([panics, log], [1, ["reported"]]);
