@@ -49,7 +49,7 @@ Deno.test("readmeLinks points docs/ links at sibling pages", () => {
 
 Deno.test("readmeLinks points source links at the repository", () => {
 	// Given: a README linking source files the site has no page for, and an anchor
-	const text = "[m](./mod.ts) [o](src/outcome/main/mod.ts#L3) [a](#example)";
+	const text = "[m](./mod.ts) [o](src/end/main/mod.ts#L3) [a](#example)";
 
 	// When: rewriting it for the site
 	const rewritten = readmeLinks({ text, dir: "job" });
@@ -57,7 +57,7 @@ Deno.test("readmeLinks points source links at the repository", () => {
 	// Then: each source link points at the package's file in the repository
 	assertEquals(
 		rewritten,
-		"[m](https://github.com/ben-laird/sekhmet/blob/main/packages/job/mod.ts) [o](https://github.com/ben-laird/sekhmet/blob/main/packages/job/src/outcome/main/mod.ts#L3) [a](#example)",
+		"[m](https://github.com/ben-laird/sekhmet/blob/main/packages/job/mod.ts) [o](https://github.com/ben-laird/sekhmet/blob/main/packages/job/src/end/main/mod.ts#L3) [a](#example)",
 	);
 });
 

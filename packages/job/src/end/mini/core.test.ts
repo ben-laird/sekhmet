@@ -4,7 +4,7 @@ import {
 	Blocked,
 	Cancelled,
 	Failed,
-	JobOutcome,
+	JobEnd,
 	Skipped,
 	Succeeded,
 } from "./core.ts";
@@ -22,8 +22,8 @@ Deno.test("each constructor builds its variant with its payload", () => {
 		Cancelled(),
 	];
 
-	// Then: each is a JobOutcome of its kind, holding its payload
-	for (const outcome of outcomes) assertInstanceOf(outcome, JobOutcome);
+	// Then: each is a JobEnd of its kind, holding its payload
+	for (const outcome of outcomes) assertInstanceOf(outcome, JobEnd);
 	assertEquals(outcomes.map(unionKinds), [
 		"Succeeded",
 		"Failed",
@@ -47,7 +47,7 @@ Deno.test("constructors take the success type, as None<T>() does", () => {
 	// When: it's reassigned once the job succeeds
 	outcome = Succeeded(42);
 
-	// Then: the binding was a JobOutcome<number> from the start
-	const typed: JobOutcome<number> = outcome;
+	// Then: the binding was a JobEnd<number> from the start
+	const typed: JobEnd<number> = outcome;
 	assertEquals(typed, Succeeded(42));
 });

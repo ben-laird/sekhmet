@@ -256,7 +256,7 @@ export interface SuccessJobDefinition<M, C, P, T>
 /**
  * A job that may run whatever its needs' outcomes were: its `runIf` is
  * `failure()`, `cancelled()`, `always()`, or a hand-written predicate. Its
- * `run` gets the needs' `JobOutcome`s.
+ * `run` gets the needs' `JobEnd`s.
  *
  * @template M The run's metadata type
  * @template C The job's context type

@@ -6,7 +6,7 @@ import {
 	Failed,
 	Skipped,
 	Succeeded,
-} from "@/src/outcome/main/mod.ts";
+} from "@/src/end/main/mod.ts";
 
 const FINE = { build: Succeeded("dist") };
 const BROKEN = { build: Failed(new Error("boom")), test: Blocked(["build"]) };

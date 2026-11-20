@@ -7,8 +7,8 @@
  */
 
 import { Struct } from "@sekhmet/primordials/struct";
+import type { JobEnd } from "@/src/end/main/mod.ts";
 import type { BoundJob, Job } from "@/src/job.ts";
-import type { JobOutcome } from "@/src/outcome/main/mod.ts";
 
 /**
  * What a plan returns: the job's dependency list, a plain record of needs.
@@ -110,7 +110,7 @@ export interface OutcomeView {
 	 * (`UndeclaredGuardRead`), and the run rejects with that panic once
 	 * every job has settled.
 	 */
-	outcome<T>(need: Need<T, boolean>): JobOutcome<Readonly<T>>;
+	outcome<T>(need: Need<T, boolean>): JobEnd<Readonly<T>>;
 }
 
 /**
@@ -136,7 +136,7 @@ export interface Guard {
  * - `"success"`: `run` is reached only when every need succeeded, so it
  *   gets their values;
  * - `"any"`: `run` may be reached whatever the needs' outcomes, so it gets
- *   their `JobOutcome`s.
+ *   their `JobEnd`s.
  */
 export type ConditionKind = "success" | "any";
 
@@ -161,7 +161,7 @@ export type ConditionKind = "success" | "any";
 export type Field<F, K extends ConditionKind> =
 	F extends Need<infer T, infer O>
 		?
-				| (K extends "success" ? Readonly<T> : JobOutcome<Readonly<T>>)
+				| (K extends "success" ? Readonly<T> : JobEnd<Readonly<T>>)
 				| (O extends true ? undefined : never)
 		: F extends (...args: never) => unknown
 			? F

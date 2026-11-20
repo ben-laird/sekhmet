@@ -6,14 +6,14 @@
  * @module
  */
 
+import { all, type JobEnd } from "@/src/end/main/mod.ts";
 import type { ConditionKind } from "@/src/need.ts";
-import { all, type JobOutcome } from "@/src/outcome/main/mod.ts";
 
 /**
  * The settled needs' outcomes, by job name, in the order the plan declared
  * them. A `needsIf` whose guard was false is absent.
  */
-export type NeedOutcomes = { readonly [job: string]: JobOutcome<unknown> };
+export type NeedOutcomes = { readonly [job: string]: JobEnd<unknown> };
 
 /**
  * What a condition is tested with, once the job's needs have settled.
@@ -51,7 +51,7 @@ export interface Condition<K extends ConditionKind> {
  * @example
  * ```ts
  * import { success } from "@sekhmet/job";
- * import { Succeeded } from "@sekhmet/job/outcome";
+ * import { Succeeded } from "@sekhmet/job/end";
  * import { assertEquals } from "@std/assert";
  *
  * const outcomes = { build: Succeeded("dist") };
@@ -78,7 +78,7 @@ export function success(): Condition<"success"> {
  * @example
  * ```ts
  * import { failure } from "@sekhmet/job";
- * import { Failed } from "@sekhmet/job/outcome";
+ * import { Failed } from "@sekhmet/job/end";
  * import { assertEquals } from "@std/assert";
  *
  * const outcomes = { build: Failed(new Error("boom")) };

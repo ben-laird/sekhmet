@@ -7,7 +7,7 @@
  * @module
  */
 
-import { Blocked, Cancelled, type JobOutcome, Skipped } from "./core.ts";
+import { Blocked, Cancelled, type JobEnd, Skipped } from "./core.ts";
 import { isCancelled, isSkipped, isUnhealthy } from "./predicates.ts";
 
 /**
@@ -17,7 +17,7 @@ export interface NamedOutcome {
 	/** The outcome's name (a need's job name, or a record key) */
 	readonly name: string;
 	/** The outcome */
-	readonly outcome: JobOutcome<unknown>;
+	readonly outcome: JobEnd<unknown>;
 }
 
 /**
@@ -35,7 +35,7 @@ export interface NamedOutcome {
  */
 export function unmet(
 	outcomes: readonly NamedOutcome[],
-): JobOutcome<never> | undefined {
+): JobEnd<never> | undefined {
 	const unhealthy = outcomes.filter(({ outcome }) => isUnhealthy(outcome));
 	if (unhealthy.length > 0) {
 		return Blocked([...new Set(unhealthy.map(({ name }) => name))]);

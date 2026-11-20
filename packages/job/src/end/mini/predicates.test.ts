@@ -4,7 +4,7 @@ import {
 	Blocked,
 	Cancelled,
 	Failed,
-	type JobOutcome,
+	type JobEnd,
 	Skipped,
 	Succeeded,
 } from "./core.ts";
@@ -21,7 +21,7 @@ import {
 	isUnhealthy,
 } from "./predicates.ts";
 
-const EVERY_VARIANT: readonly JobOutcome<number>[] = [
+const EVERY_VARIANT: readonly JobEnd<number>[] = [
 	Succeeded(1),
 	Failed(new Error("boom")),
 	Skipped(),
@@ -76,7 +76,7 @@ Deno.test("passing, unhealthy and cancelled partition the variants", () => {
 
 Deno.test("predicates narrow, as Result's isOk does", () => {
 	// Given: an outcome whose value type is a union
-	const outcome: JobOutcome<string | number> = Succeeded("dist");
+	const outcome: JobEnd<string | number> = Succeeded("dist");
 
 	// When: it's checked with a refining predicate
 	const refined = isSucceededAnd(
@@ -90,7 +90,7 @@ Deno.test("predicates narrow, as Result's isOk does", () => {
 	assertEquals(value, "dist");
 
 	// Then: a non-success narrows to its own payload
-	const blocked: JobOutcome<number> = Blocked(["build"]);
+	const blocked: JobEnd<number> = Blocked(["build"]);
 	assert(isBlocked(blocked));
 	const by: readonly string[] = union(blocked);
 	assertEquals(by, ["build"]);

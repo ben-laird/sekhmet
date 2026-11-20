@@ -5,7 +5,7 @@
  */
 
 import { Enum } from "@sekhmet/enum/core/mini";
-import type { JobOutcome } from "@/src/outcome/main/mod.ts";
+import type { JobEnd } from "@/src/end/main/mod.ts";
 
 /**
  * The variants of a {@linkcode JobEvent}, for type-level work on them.
@@ -27,7 +27,7 @@ type Variants =
 	  ]
 	| [
 			kind: "Finished",
-			finished: { readonly job: string; readonly outcome: JobOutcome<unknown> },
+			finished: { readonly job: string; readonly outcome: JobEnd<unknown> },
 	  ]
 	| [kind: "Skipped", skipped: { readonly job: string }]
 	| [

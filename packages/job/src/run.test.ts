@@ -17,8 +17,8 @@ import {
 	failure,
 	type GraphError,
 	type Job,
+	type JobEnd,
 	type JobEvent,
-	type JobOutcome,
 	type OutcomeView,
 	type PlanRecord,
 	type Roots,
@@ -81,7 +81,7 @@ function describe(event: JobEvent): string {
 	});
 }
 
-function kind(outcome: JobOutcome<unknown>): string {
+function kind(outcome: JobEnd<unknown>): string {
 	return match(outcome)({
 		Succeeded: () => "Succeeded",
 		Failed: () => "Failed",
@@ -98,7 +98,7 @@ function reached({
 }: {
 	readonly report: RunReport<unknown>;
 	readonly name: string;
-}): JobOutcome<unknown> {
+}): JobEnd<unknown> {
 	const outcome = report.all.get(name);
 	assert(outcome !== undefined, `no outcome for ${name}`);
 	return outcome;
@@ -133,8 +133,8 @@ Deno.test("the report mirrors the roots, typed per key", async () => {
 	const report = unwrap(await run({ jobs: { version, count } }));
 
 	// Then: each root's outcome sits under its key, with its own type
-	const text: JobOutcome<string> = report.outcomes.version;
-	const number: JobOutcome<number> = report.outcomes.count;
+	const text: JobEnd<string> = report.outcomes.version;
+	const number: JobEnd<number> = report.outcomes.count;
 	assertEquals(text, Succeeded("1.2.0"));
 	assertEquals(number, Succeeded(3));
 	assertEquals([...report.all.keys()].sort(), ["count", "version"]);

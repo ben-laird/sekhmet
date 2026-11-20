@@ -2,8 +2,8 @@ import {
 	always,
 	defineJobs,
 	type Job,
+	type JobEnd,
 	type JobKit,
-	type JobOutcome,
 	type Need,
 	succeeded,
 } from "@sekhmet/job";
@@ -85,13 +85,13 @@ Deno.test("run's needs are typed by the plan and the runIf", async (t) => {
 	await t.step("under any other runIf, needs arrive as outcomes", () => {
 		// Given: an always() job
 		// When: run receives its needs
-		// Then: each is the job's JobOutcome
+		// Then: each is the job's JobEnd
 		job({
 			name: "cleanup",
 			plan: (p) => ({ build: p.needs(build) }),
 			runIf: always(),
 			run: (_r, { build }) => {
-				assertType<IsExact<typeof build, JobOutcome<Readonly<Build>>>>(true);
+				assertType<IsExact<typeof build, JobEnd<Readonly<Build>>>>(true);
 			},
 		});
 	});
@@ -167,9 +167,7 @@ Deno.test("a hand-written runIf reads meta and the needs' outcomes", () => {
 		plan: (p) => ({ build: p.needs(build) }),
 		runIf: (input) => {
 			const { meta, cancelled, needs } = input;
-			assertType<IsExact<typeof needs.build, JobOutcome<Readonly<Build>>>>(
-				true,
-			);
+			assertType<IsExact<typeof needs.build, JobEnd<Readonly<Build>>>>(true);
 			// @ts-expect-error a runIf has no ctx: it is built only if the job runs
 			void input.ctx;
 			return meta.release && !cancelled;

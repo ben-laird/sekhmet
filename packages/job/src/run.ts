@@ -12,6 +12,14 @@ import { panic } from "@sekhmet/panic/mini/core";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { cleanupStack } from "@/src/cleanup.ts";
 import type { NeedOutcomes } from "@/src/condition.ts";
+import {
+	Cancelled,
+	Failed,
+	JobEnd,
+	Skipped,
+	Succeeded,
+} from "@/src/end/main/mod.ts";
+import { unmet } from "@/src/end/mini/fold.ts";
 import { unerased } from "@/src/erasure.ts";
 import { JobEvent } from "@/src/event.ts";
 import {
@@ -26,14 +34,6 @@ import type {
 } from "@/src/graph-error.ts";
 import type { BoundJob, Job, Roots, StepDefinition } from "@/src/job.ts";
 import type { AnyNeed, Guard, OutcomeView } from "@/src/need.ts";
-import {
-	Cancelled,
-	Failed,
-	JobOutcome,
-	Skipped,
-	Succeeded,
-} from "@/src/outcome/main/mod.ts";
-import { unmet } from "@/src/outcome/mini/fold.ts";
 import { resolveNeeds } from "@/src/plan-data.ts";
 import { type CountedOutcome, passed } from "@/src/verdict.ts";
 
@@ -92,7 +92,7 @@ export interface OptionalMetaRunOptions<J extends Roots<undefined>>
  */
 export type Outcomes<J> = {
 	readonly [K in keyof J]: J[K] extends Job<infer T, never>
-		? JobOutcome<Readonly<T>>
+		? JobEnd<Readonly<T>>
 		: never;
 };
 
@@ -105,7 +105,7 @@ export interface RunReport<J> {
 	/** Each root's outcome, under its key, typed */
 	readonly outcomes: Outcomes<J>;
 	/** Every job the run reached, by name, in the order they settled */
-	readonly all: ReadonlyMap<string, JobOutcome<unknown>>;
+	readonly all: ReadonlyMap<string, JobEnd<unknown>>;
 	/**
 	 * Every job reached is passing (`Succeeded` or `Skipped`), or `Failed`
 	 * with `continueOnError`
@@ -280,15 +280,15 @@ export async function runJobs<M, J extends Roots<M>>({
 		}
 	};
 
-	const runs = new Map<GraphNode, Promise<JobOutcome<unknown>>>();
-	const reached = new Map<string, JobOutcome<unknown>>();
+	const runs = new Map<GraphNode, Promise<JobEnd<unknown>>>();
+	const reached = new Map<string, JobEnd<unknown>>();
 	const counted: CountedOutcome[] = [];
 
 	const forwardAbort = (): void => cancel.abort(signal?.reason);
 	if (signal?.aborted) forwardAbort();
 	signal?.addEventListener("abort", forwardAbort, { once: true });
 
-	let roots: readonly JobOutcome<unknown>[] = [];
+	let roots: readonly JobEnd<unknown>[] = [];
 	let ended = false;
 	try {
 		roots = await Promise.all(graph.roots.map(start));
@@ -310,7 +310,7 @@ export async function runJobs<M, J extends Roots<M>>({
 		passed: passed(counted),
 	});
 
-	function start(node: GraphNode): Promise<JobOutcome<unknown>> {
+	function start(node: GraphNode): Promise<JobEnd<unknown>> {
 		const known = runs.get(node);
 		if (known !== undefined) return known;
 
@@ -328,8 +328,8 @@ export async function runJobs<M, J extends Roots<M>>({
 		job,
 		plan,
 		needs,
-	}: GraphNode): Promise<JobOutcome<unknown>> {
-		const settled = new Map<AnyNeed, JobOutcome<unknown>>();
+	}: GraphNode): Promise<JobEnd<unknown>> {
+		const settled = new Map<AnyNeed, JobEnd<unknown>>();
 		const pull = async ({ need, node }: NodeNeed): Promise<void> => {
 			settled.set(need, await start(node));
 		};
@@ -386,7 +386,7 @@ export async function runJobs<M, J extends Roots<M>>({
 		if (job.runIf.kind === "success") {
 			const forced = unmet(pulled);
 			if (forced !== undefined) {
-				return finish({ job, outcome: JobOutcome.fromMini(forced) });
+				return finish({ job, outcome: JobEnd.fromMini(forced) });
 			}
 			if (cancelled) return finish({ job, outcome: Cancelled() });
 		} else {
@@ -421,7 +421,7 @@ export async function runJobs<M, J extends Roots<M>>({
 	}: {
 		readonly job: BoundJob<unknown>;
 		readonly needs: unknown;
-	}): Promise<JobOutcome<unknown>> {
+	}): Promise<JobEnd<unknown>> {
 		const { name } = job;
 		const { cleanup, dispose } = cleanupStack();
 		let running = true;
@@ -471,8 +471,8 @@ export async function runJobs<M, J extends Roots<M>>({
 		outcome,
 	}: {
 		readonly job: BoundJob<unknown>;
-		readonly outcome: JobOutcome<unknown>;
-	}): JobOutcome<unknown> {
+		readonly outcome: JobEnd<unknown>;
+	}): JobEnd<unknown> {
 		const { name, continueOnError } = job;
 		reached.set(name, outcome);
 		counted.push({ outcome, continueOnError });
@@ -526,7 +526,7 @@ function terminalEvent({
 	outcome,
 }: {
 	readonly job: string;
-	readonly outcome: JobOutcome<unknown>;
+	readonly outcome: JobEnd<unknown>;
 }): JobEvent {
 	if (outcome.isSkipped()) return new JobEvent("Skipped", { job });
 	if (outcome.isCancelled()) return new JobEvent("Cancelled", { job });
