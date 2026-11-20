@@ -16,7 +16,8 @@
  * - **A throwing listener is a panic,** isolated by the
  *   {@linkcode CatchUnwind} the controller was given and reported to its
  *   runtime's hook, so the other listeners still run.
- * - **Signals compose and convert:** `map`, `zip` and `DispatchSignal.any`
+ * - **Signals compose and convert:** `map` (whose mapping runs once, and
+ *   poisons the signal if it throws), `zip` and `DispatchSignal.any`
  *   derive signals that hold no subscription until someone listens, and
  *   `wait`, `toVow`, `toAbortSignal` and `DispatchSignal.fromAbortSignal`
  *   bridge to promises, vows and the platform.

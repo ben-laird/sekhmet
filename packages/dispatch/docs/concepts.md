@@ -102,7 +102,13 @@ and dropped.
 Two consequences follow:
 
 - `map` remembers its mapped value, so `mapping` runs once however many
-  listeners and polls read it.
+  listeners and polls read it. A mapping that throws poisons the signal,
+  like Rust's `LazyLock`: its throw goes to whoever ran it first (a
+  listener's boundary reports it, or `poll()` throws it), and every later
+  read panics as `Panic (Poisoned)` with the original payload as its cause.
+  Each listener's boundary reports its own poison panic, and `poll()` throws
+  one to its caller. A throw can't be replayed honestly, and running the
+  mapping again would break the run-once promise.
 - `any` sees the race only through its listeners. With a listener, the first
   source to dispatch wins. With none, it can't know which source came first,
   so among sources already dispatched when it is first read, the earliest in

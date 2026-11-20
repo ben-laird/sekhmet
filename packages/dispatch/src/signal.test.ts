@@ -1,6 +1,6 @@
 import { isolate, union } from "@sekhmet/enum/core/mini";
 import { isPending, isReady, Pending, Ready } from "@sekhmet/enum/poll/mini";
-import { definePanicRuntime, type PanicRuntime } from "@sekhmet/panic";
+import { definePanicRuntime, Panic, type PanicRuntime } from "@sekhmet/panic";
 import { isResolved } from "@sekhmet/vow/mini";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { DispatchController, DispatchSignal } from "@/mod.ts";
@@ -106,6 +106,37 @@ Deno.test("map runs its mapping once, however many readers it has", () => {
 	// Then: the mapping ran once
 	assertEquals(calls, 1);
 	assertEquals(polls, [Ready(42), Ready(42)]);
+});
+
+Deno.test("a throwing mapping poisons map: it runs once, and every later read is a poison panic", () => {
+	// Given: a mapped signal whose mapping throws, with two listeners
+	const { panics, reported } = recordingPanics();
+	const controller = new DispatchController<number>(panics.catchUnwind);
+	const payload = new Error("mapping bug");
+	let runs = 0;
+	const mapped = controller.signal.map((): number => {
+		runs += 1;
+		throw payload;
+	});
+	const heard: number[] = [];
+	mapped.whenDispatched((value) => void heard.push(value));
+	mapped.whenDispatched((value) => void heard.push(value));
+
+	// When: it dispatches, then the mapped signal is polled
+	controller.dispatch(1);
+	const polled = assertThrows(() => mapped.poll());
+
+	// Then: the mapping ran once; the first listener's boundary reported its throw, the second a poison panic
+	assertEquals(runs, 1);
+	assertEquals(heard, []);
+	assertEquals(reported.length, 2);
+	assert(reported[0] === payload);
+	const poison = reported[1];
+	assert(poison instanceof Panic && poison.name === "Panic (Poisoned)");
+	assert(poison.cause === payload);
+	// Then: poll threw a poison panic of its own to its caller
+	assert(polled instanceof Panic && polled.cause === payload);
+	assert(polled !== poison);
 });
 
 Deno.test("a derived signal holds a source's subscription only while it has listeners", () => {

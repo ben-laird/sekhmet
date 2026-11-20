@@ -15,6 +15,7 @@ import { isolate, union } from "@sekhmet/enum/core/mini";
 import { Pending, type Poll, Ready } from "@sekhmet/enum/poll/mini";
 import type { PanicRuntime } from "@sekhmet/panic";
 import { type Vow, vowWithResolver } from "@sekhmet/vow/mini";
+import { once } from "./memo.ts";
 
 /**
  * Stops a listener before it runs. It returns `true` if it removed the
@@ -315,6 +316,12 @@ export class DispatchSignal<out T> {
 	 * A signal that dispatches `mapping(value)` when this one dispatches.
 	 * `mapping` runs once, however many listeners and polls read it.
 	 *
+	 * A mapping that throws poisons the signal, like Rust's `LazyLock`. Its
+	 * throw goes to whoever ran it first: a listener's boundary reports it,
+	 * or `poll()` throws it. Every later read panics as `Panic (Poisoned)`,
+	 * whose cause is the original payload: each listener's
+	 * boundary reports one, and `poll()` throws one to its caller.
+	 *
 	 * @template U The type of the mapped value
 	 * @param mapping Turns the dispatched value into the new one
 	 * @returns The mapped signal
@@ -337,11 +344,7 @@ export class DispatchSignal<out T> {
 	 */
 	map<U>(mapping: (value: T) => U): DispatchSignal<U> {
 		const source = this.#source;
-		let memo: { readonly value: U } | undefined;
-		const mapped = (value: T): U => {
-			memo ??= { value: mapping(value) };
-			return memo.value;
-		};
+		const mapped = once(mapping);
 		return new DispatchSignal({
 			token: BUILT_HERE,
 			source: {
