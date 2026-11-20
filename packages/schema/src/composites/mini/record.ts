@@ -10,7 +10,7 @@
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import type { Flatten, Issues } from "@/src/core/mini/issues.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";
-import type { Schema } from "@/src/core/mini/schema.ts";
+import type { ParseOptions, Schema } from "@/src/core/mini/schema.ts";
 import { viewed } from "@/src/core/mini/view.ts";
 import {
 	type Child,
@@ -187,18 +187,19 @@ export function record(options: {
 
 	return viewed({
 		init: {
-			parse: (input: unknown): Parsed => {
+			run: ({ input, panics }: ParseOptions<unknown>): Parsed => {
 				if (!isRecord(input)) return invalidType({ input, expected: "object" });
 
 				// Each key's own parse, then its value's: issues stay in key order.
 				const pending = Object.keys(input).flatMap((name) => [
-					run({ key: name, child: key, value: name }),
-					run({ key: name, child: value, value: input[name] }),
+					run({ key: name, child: key, value: name, panics }),
+					run({ key: name, child: value, value: input[name], panics }),
 				]);
 
 				return compose({
 					pending,
 					extra: undefined,
+					panics,
 					build: (outputs) => {
 						return Object.fromEntries(
 							outputs.flatMap(([, outputKey], index) => {

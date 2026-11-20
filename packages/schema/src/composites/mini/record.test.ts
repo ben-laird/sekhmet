@@ -1,5 +1,8 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { resume } from "@sekhmet/panic/outcome/mini";
+import { wait } from "@sekhmet/vow";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
@@ -9,13 +12,14 @@ import {
 	type Input,
 	type Output,
 	parse,
-	parseAsync,
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { enumOf } from "./enum-of.ts";
 import { optional } from "./modifiers.ts";
 import { record } from "./record.ts";
+
+const panics = definePanicRuntime();
 
 const name: Schema<string, string, "too long"> = new Schema({
 	parse: (input) => {
@@ -52,7 +56,11 @@ Deno.test("record reports failing keys and values at their key", async () => {
 
 	// When: parsing a bad key and, under another key, a bad value
 	const issues = unwrapErr(
-		await parseAsync(scores, { alexandra: 1, bo: "x", cy: 2 }),
+		resume(
+			await wait(
+				parse(scores, { input: { alexandra: 1, bo: "x", cy: 2 }, panics }),
+			),
+		),
 	);
 
 	// Then: each issue is at its key, in key order
@@ -81,7 +89,9 @@ Deno.test("record rejects non-objects with InvalidType at the root", async () =>
 	const scores = record({ key: name, value: count });
 
 	// When: parsing an array
-	const issues = unwrapErr(await parseAsync(scores, [1]));
+	const issues = unwrapErr(
+		resume(await wait(parse(scores, { input: [1], panics }))),
+	);
 
 	// Then: one InvalidType issue is reported at the root
 	assertEquals(entries(issues), [
@@ -89,16 +99,19 @@ Deno.test("record rejects non-objects with InvalidType at the root", async () =>
 	]);
 });
 
-Deno.test("record is Async when its value schema is", async () => {
+Deno.test("record is pending when its value schema is", async () => {
 	// Given: a record with an async value schema
 	const scores = record({ key: name, value: laterCount });
 
 	// When: parsing with it
-	const kind = unionKinds(parse(scores, { ada: 1 }));
+	const kind = unionKinds(parse(scores, { input: { ada: 1 }, panics }));
 
-	// Then: the parse is Async and still succeeds
-	assertEquals(kind, "Async");
-	assertEquals(unwrap(await parseAsync(scores, { ada: 1 })), { ada: 1 });
+	// Then: the parse is pending and still succeeds
+	assertEquals(kind, "Pending");
+	assertEquals(
+		unwrap(resume(await wait(parse(scores, { input: { ada: 1 }, panics })))),
+		{ ada: 1 },
+	);
 });
 
 Deno.test("record infers its input, output and error types", () => {

@@ -7,10 +7,9 @@
  * @module
  */
 
-import { union } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { Issues, type Located } from "@/src/core/mini/issues.ts";
-import { from, map as mapPotential } from "@/src/core/mini/potential.ts";
+import { isPromiseLike } from "@/src/core/mini/parsing.ts";
 import { Schema } from "@/src/core/mini/schema.ts";
 import type {
 	StandardIssue,
@@ -31,7 +30,10 @@ export const EMPTY_FAILURE_MESSAGE: string = "Validation failed without issues";
  * Each Standard issue becomes an `Issues` entry: its `path` is normalised to
  * `PropertyKey`s (a `{ key }` segment becomes its key, and a missing path is
  * the root), and the issue itself is the entry's error. A `Promise` from
- * `validate` makes the parse `Async`; any other result keeps it `Sync`.
+ * `validate` makes the parse asynchronous; any other result keeps it
+ * synchronous. `validate` is foreign code, so it runs under the parse's
+ * panic boundary: a throw, or a rejection of its promise, settles the parse
+ * as `Panicked`.
  *
  * @template O The Standard Schema's output type
  * @param standard The Standard Schema to wrap
@@ -40,9 +42,11 @@ export const EMPTY_FAILURE_MESSAGE: string = "Validation failed without issues";
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
- * import { entries, parseAsync } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { unwrap, unwrapErr } from "@sekhmet/panic/outcome/mini";
+ * import { entries, parse } from "@sekhmet/schema/core/mini";
  * import { fromStandard, type StandardSchemaV1 } from "@sekhmet/schema/standard/mini";
+ * import { wait } from "@sekhmet/vow";
  *
  * const text: StandardSchemaV1<unknown, string> = {
  * 	"~standard": {
@@ -55,10 +59,11 @@ export const EMPTY_FAILURE_MESSAGE: string = "Validation failed without issues";
  * 	},
  * };
  * const schema = fromStandard(text);
+ * const panics = definePanicRuntime();
  *
- * assertEquals(unwrap(await parseAsync(schema, "a")), "a");
+ * assertEquals(unwrap(await wait(parse(schema, { input: "a", panics }))), "a");
  *
- * const [issue] = entries(unwrapErr(await parseAsync(schema, 1)));
+ * const [issue] = entries(unwrapErr(await wait(parse(schema, { input: 1, panics }))));
  * assertEquals(issue.path, ["name"]);
  * assertEquals(issue.error.message, "Expected string");
  * ```
@@ -68,9 +73,10 @@ export function fromStandard<O>(
 ): Schema<unknown, O, Issues<StandardIssue>> {
 	return new Schema({
 		parse: (input: unknown) => {
-			return union(
-				mapPotential(from(standard["~standard"].validate(input)), toResult),
-			);
+			const validated = standard["~standard"].validate(input);
+			if (!isPromiseLike(validated)) return toResult(validated);
+
+			return Promise.resolve(validated).then(toResult);
 		},
 	});
 }

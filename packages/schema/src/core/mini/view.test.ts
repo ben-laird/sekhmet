@@ -29,7 +29,7 @@ Deno.test("viewed builds the schema init describes, with the view's own properti
 
 	// When: building the viewed schema
 	const labelled = viewed({
-		init: { parse: getStructParams(text).parse, node },
+		init: { run: getStructParams(text).run, node },
 		view: { text },
 	});
 
@@ -110,7 +110,7 @@ Deno.test("RESERVED_VIEW_NAMES names every reserved key that is a name", () => {
 
 	// Then: its keys are exactly the string reserved keys, and it is frozen
 	assertType<IsExact<Names, Exclude<ReservedViewKey, symbol>>>(true);
-	assertEquals(names.length, 18);
+	assertEquals(names.length, 17);
 	assertEquals(Object.isFrozen(RESERVED_VIEW_NAMES), true);
 	// @ts-expect-error a view key that isn't reserved is no key of the record
 	assertEquals(RESERVED_VIEW_NAMES.shape, undefined);

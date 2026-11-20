@@ -113,16 +113,22 @@ export function brand<
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { union } from "@sekhmet/enum/core/mini/exit";
- * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { or } from "@sekhmet/schema/algebra";
- * import { entries, parseAsync, parseSync } from "@sekhmet/schema/core/mini";
+ * import { entries, parse, parseSync } from "@sekhmet/schema/core/mini";
  * import { boolean, number, string } from "@sekhmet/schema/primitives/mini";
+ * import { wait } from "@sekhmet/vow";
  *
  * const scalar = or({ left: or({ left: string(), right: number() }), right: boolean() });
  *
  * assertEquals(unwrap(parseSync(scalar, true)), true);
  *
- * const [{ error }] = entries(unwrapErr(await parseAsync(scalar, null)));
+ * const panics = definePanicRuntime();
+ * const [{ error }] = entries(
+ * 	unwrapErr(await wait(parse(scalar, { input: null, panics }))),
+ * );
  * const details = union(error);
  * assertEquals("branches" in details ? details.branches.length : 0, 3);
  * ```

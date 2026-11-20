@@ -1,5 +1,9 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
+import { Some } from "@sekhmet/enum/option/mini";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { Panicked, resume } from "@sekhmet/panic/outcome/mini";
+import { value, wait } from "@sekhmet/vow";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
@@ -9,13 +13,14 @@ import {
 	type Input,
 	type Output,
 	parse,
-	parseAsync,
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { array } from "./array.ts";
 import { lazy, nullable, optional } from "./modifiers.ts";
 import { object } from "./object.ts";
+
+const panics = definePanicRuntime();
 
 const text: Schema<unknown, string, "not text"> = new Schema({
 	parse: (input) => {
@@ -38,7 +43,10 @@ Deno.test("optional passes undefined through and parses anything else", async ()
 	// Then: undefined and the string pass; the number fails as text would
 	assertEquals(unwrap(parseSync(maybe, undefined)), undefined);
 	assertEquals(unwrap(parseSync(maybe, "a")), "a");
-	assertEquals(unwrapErr(await parseAsync(maybe, 1)), "not text");
+	assertEquals(
+		unwrapErr(resume(await wait(parse(maybe, { input: 1, panics })))),
+		"not text",
+	);
 });
 
 Deno.test("nullable passes null through and parses anything else", async () => {
@@ -49,7 +57,10 @@ Deno.test("nullable passes null through and parses anything else", async () => {
 	// Then: null and the string pass; undefined fails as text would
 	assertEquals(unwrap(parseSync(maybe, null)), null);
 	assertEquals(unwrap(parseSync(maybe, "a")), "a");
-	assertEquals(unwrapErr(await parseAsync(maybe, undefined)), "not text");
+	assertEquals(
+		unwrapErr(resume(await wait(parse(maybe, { input: undefined, panics })))),
+		"not text",
+	);
 });
 
 Deno.test("optional and nullable keep the inner schema's timing", () => {
@@ -58,11 +69,14 @@ Deno.test("optional and nullable keep the inner schema's timing", () => {
 	const orNull = nullable(laterText);
 
 	// When: parsing the empty value and a string
-	// Then: the empty value is Sync; anything else runs the async schema
-	assertEquals(unionKinds(parse(maybe, undefined)), "Sync");
-	assertEquals(unionKinds(parse(maybe, "a")), "Async");
-	assertEquals(unionKinds(parse(orNull, null)), "Sync");
-	assertEquals(unionKinds(parse(orNull, "a")), "Async");
+	// Then: the empty value is resolved; anything else runs the async schema
+	assertEquals(
+		unionKinds(parse(maybe, { input: undefined, panics })),
+		"Resolved",
+	);
+	assertEquals(unionKinds(parse(maybe, { input: "a", panics })), "Pending");
+	assertEquals(unionKinds(parse(orNull, { input: null, panics })), "Resolved");
+	assertEquals(unionKinds(parse(orNull, { input: "a", panics })), "Pending");
 });
 
 Deno.test("optional and nullable widen the input and output types", () => {
@@ -114,12 +128,33 @@ Deno.test("lazy locates issues deep in a recursive schema", async () => {
 	};
 
 	// When: parsing a tree with a bad label two levels down
-	const issues = unwrapErr(await parseAsync(tree, input));
+	const issues = unwrapErr(resume(await wait(parse(tree, { input, panics }))));
 
 	// Then: the issue's path runs through every level
 	assertEquals(entries(issues), [
 		{ path: ["children", 0, "children", 0, "label"], error: "not text" },
 	]);
+});
+
+Deno.test("lazy panics the parse when its getter throws", () => {
+	// Given: a lazy schema whose getter throws, under a recording runtime
+	const recording = definePanicRuntime();
+	const reported: unknown[] = [];
+	recording.setHook(({ payload }) => reported.push(payload));
+	const bug = new Error("bug");
+	const broken = lazy((): Schema<unknown, string, "not text"> => {
+		throw bug;
+	});
+
+	// When: parsing it inside an object
+	const parsing = parse(object({ shape: { name: broken } }), {
+		input: { name: "Ada" },
+		panics: recording,
+	});
+
+	// Then: the parse settles synchronously as the getter's panic
+	assertEquals(value(parsing), Some(Panicked(bug)));
+	assertEquals(reported, [bug]);
 });
 
 Deno.test("lazy keeps the deferred schema's types", () => {

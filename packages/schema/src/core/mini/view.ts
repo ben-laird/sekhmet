@@ -35,7 +35,6 @@ export type MainSchemaMember =
 	| "optional"
 	| "orElse"
 	| "parse"
-	| "parseAsync"
 	| "parseSync"
 	| "pipe"
 	| "preprocess"
@@ -101,7 +100,6 @@ export const RESERVED_VIEW_NAMES: ReservedViewNames =
 		optional: true,
 		orElse: true,
 		parse: true,
-		parseAsync: true,
 		parseSync: true,
 		pipe: true,
 		preprocess: true,
@@ -285,7 +283,7 @@ export interface ViewedOptions<I, O, E, V extends object> {
  * const text = string();
  * const labelled = viewed({
  * 	init: {
- * 		parse: getStructParams(text).parse,
+ * 		run: getStructParams(text).run,
  * 		node: custom({ kind: Labelled, data: { label: "name" }, children: [text] }),
  * 	},
  * 	view: { text },

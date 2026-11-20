@@ -38,15 +38,20 @@ function oneOf<T extends Literal>(
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { enumOf } from "@sekhmet/schema/composites/mini";
- * import { formatIssue, parseAsync, parseSync } from "@sekhmet/schema/core/mini";
+ * import { formatIssue, parse, parseSync } from "@sekhmet/schema/core/mini";
+ * import { wait } from "@sekhmet/vow";
  *
  * const color = enumOf(["red", "green"]);
  *
  * assertEquals(unwrap(parseSync(color, "red")), "red");
  * assertEquals(
- * 	formatIssue(unwrapErr(await parseAsync(color, "blue"))),
+ * 	formatIssue(
+ * 		unwrapErr(await wait(parse(color, { input: "blue", panics: definePanicRuntime() }))),
+ * 	),
  * 	'Expected one of "red", "green"',
  * );
  * ```

@@ -62,7 +62,7 @@ export function is<I, O, E>(
 					ParseError: () => false,
 					UnexpectedAsyncParse: () => {
 						throw new TypeError(
-							"is: the schema parsed asynchronously, but a type guard must be synchronous; use parseAsync for an async schema",
+							"is: the schema parsed asynchronously, but a type guard must be synchronous; parse with `parse` for an async schema",
 						);
 					},
 				});

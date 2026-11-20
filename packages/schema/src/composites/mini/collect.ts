@@ -1,7 +1,8 @@
 /**
  * The machinery every composite shares: run each child's parse, settle them
- * together (`Sync` when every child was), and collect every failure with its
- * path. Internal: not exported from the mini barrel.
+ * together (synchronously when every child was), and collect every failure
+ * with its path, or the first panic. Internal: not exported from the mini
+ * barrel.
  *
  * Composites build their typed public signatures as overloads over an erased
  * implementation that works on {@linkcode Child} schemas, the same way
@@ -13,8 +14,16 @@
 
 import { match, union } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
-import { getStructParams } from "@sekhmet/primordials/struct";
+import { Err, Ok } from "@sekhmet/enum/result/mini";
+import {
+	type Outcome,
+	Err as OutcomeErr,
+	Ok as OutcomeOk,
+	Panicked,
+} from "@sekhmet/panic/outcome/mini/core";
+import { map as mapOutcome } from "@sekhmet/panic/outcome/mini/transform";
+import type { Vow } from "@sekhmet/vow/mini/core";
+import { all, andThen, map, resolved } from "@sekhmet/vow/mini/impl";
 import { InvalidType, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import {
 	concat,
@@ -23,23 +32,22 @@ import {
 	locate,
 } from "@/src/core/mini/issues.ts";
 import { nodeOf, SchemaNode } from "@/src/core/mini/node.ts";
+import { type Parsing, settled, step } from "@/src/core/mini/parsing.ts";
 import {
-	Async,
-	type MaybePromise,
-	map as mapPotential,
-	type Potential,
-	Sync,
-} from "@/src/core/mini/potential.ts";
-import { parse, Schema } from "@/src/core/mini/schema.ts";
+	type PanicBoundary,
+	type ParseOptions,
+	parse,
+	Schema,
+} from "@/src/core/mini/schema.ts";
 
 /** A child schema with its type parameters erased. */
 export type Child = Schema<unknown, unknown, unknown>;
 
-/** What an erased composite parser returns. */
-export type Parsed = MaybePromise<Result<unknown, Issues<unknown>>>;
+/** What an erased composite's run returns. */
+export type Parsed = Parsing<unknown, Issues<unknown>>;
 
-/** What an erased child's parser returns. */
-export type ChildParsed = MaybePromise<Result<unknown, unknown>>;
+/** What an erased child's run returns. */
+export type ChildParsed = Parsing<unknown, unknown>;
 
 /**
  * `nullable`'s erased implementation: `null` passes, anything else is
@@ -51,10 +59,12 @@ export type ChildParsed = MaybePromise<Result<unknown, unknown>>;
  */
 export function acceptNull<I, O, E>(inner: Schema<I, O, E>): Child;
 export function acceptNull(inner: Child): Child {
-	const parser = getStructParams(inner).parse;
-
 	return new Schema({
-		parse: (input): ChildParsed => (input === null ? Ok(null) : parser(input)),
+		run: (options: ParseOptions<unknown>): ChildParsed => {
+			if (options.input === null) return settled(Ok(null));
+
+			return parse(inner, options);
+		},
 		node: new SchemaNode("Nullable", { inner }),
 	});
 }
@@ -81,12 +91,12 @@ export function withoutOptional(schema: Child): Child {
 	return schema;
 }
 
-/** A child's parse result, found under `key`. */
+/** A child's settled parse, found under `key`. */
 export interface Settled {
 	/** The key the child was found under. */
 	readonly key: PropertyKey;
-	/** The child's result. */
-	readonly result: Result<unknown, unknown>;
+	/** The child's outcome. */
+	readonly outcome: Outcome<unknown, unknown, unknown>;
 }
 
 /** A child's (possibly pending) parse, found under `key`. */
@@ -94,59 +104,40 @@ export interface Pending {
 	/** The key the child was found under. */
 	readonly key: PropertyKey;
 	/** The child's parse. */
-	readonly parsed: Potential<Result<unknown, unknown>>;
+	readonly parsed: ChildParsed;
 }
 
-/** Starts a child's parse of `value`, found under `key`. */
+/** Starts a child's parse of `value`, found under `key`, under `panics`. */
 export function run<I>({
 	key,
 	child,
 	value,
+	panics,
 }: {
 	key: PropertyKey;
 	child: Schema<I, unknown, unknown>;
 	value: I;
+	panics: PanicBoundary;
 }): Pending {
-	return { key, parsed: parse(child, value) };
-}
-
-function toPromise<T>(potential: Potential<T>): Promise<T> {
-	return match(potential)({
-		Sync: (value) => Promise.resolve(value),
-		Async: (promise) => promise,
-	});
+	return { key, parsed: parse(child, { input: value, panics }) };
 }
 
 /**
- * Settles every child: `Sync` when every child's parse was, otherwise
- * `Async`, awaiting them all (they already run concurrently).
+ * Settles every child: synchronously when every child's parse was,
+ * otherwise once the last one does (they already run concurrently).
  */
-export function settle(pending: readonly Pending[]): Potential<Settled[]> {
-	const settled: Settled[] = [];
-	for (const { key, parsed } of pending) {
-		const result = match(parsed)({
-			Sync: (value): Result<unknown, unknown> | undefined => value,
-			Async: () => undefined,
-		});
-		if (result === undefined) {
-			return Async(
-				Promise.all(
-					pending.map(async ({ key, parsed }) => ({
-						key,
-						result: await toPromise(parsed),
-					})),
-				),
-			);
-		}
-		settled.push({ key, result });
-	}
-
-	return Sync(settled);
+export function settle(pending: readonly Pending[]): Vow<Settled[]> {
+	return all(
+		pending.map(({ key, parsed }) => {
+			return map(parsed, (outcome): Settled => ({ key, outcome }));
+		}),
+	);
 }
 
 /**
  * Collects the children's outputs, or every failure: each child's error
  * located under its key, then `extra` (issues the composite found itself).
+ * A child that panicked panics the composite: the first such, by key order.
  */
 export function gather({
 	settled,
@@ -154,48 +145,54 @@ export function gather({
 }: {
 	settled: readonly Settled[];
 	extra: Issues<unknown> | undefined;
-}): Result<[PropertyKey, unknown][], Issues<unknown>> {
+}): Outcome<[PropertyKey, unknown][], Issues<unknown>, unknown> {
 	const outputs: [PropertyKey, unknown][] = [];
 	const failures: Issues<unknown>[] = [];
 
-	for (const { key, result } of settled) {
-		match(result)({
+	for (const { key, outcome } of settled) {
+		const panic = match(outcome)<{ payload: unknown } | undefined>({
 			Ok: (output) => {
 				outputs.push([key, output]);
+				return undefined;
 			},
 			Err: (error) => {
 				failures.push(locate({ key, error }));
+				return undefined;
 			},
+			Panicked: (payload) => ({ payload }),
 		});
+		if (panic !== undefined) return Panicked(panic.payload);
 	}
 	if (extra !== undefined) failures.push(extra);
 
 	const [first, ...rest] = failures;
+	if (first === undefined) return OutcomeOk(outputs);
 
-	return first === undefined ? Ok(outputs) : Err(concat([first, ...rest]));
+	return OutcomeErr(concat([first, ...rest]));
 }
 
 /**
  * Runs the children, settles them, and builds the composite's output from
- * theirs, or fails with every issue.
+ * theirs, or fails with every issue. Gathering and `build` run under
+ * `panics`, since they read user values (an extra key's getter, an error).
  */
 export function compose({
 	pending,
 	extra,
 	build,
+	panics,
 }: {
 	pending: readonly Pending[];
 	extra: Issues<unknown> | undefined;
 	build: (outputs: [PropertyKey, unknown][]) => unknown;
+	panics: PanicBoundary;
 }): Parsed {
-	return union(
-		mapPotential(settle(pending), (settled) => {
-			return match(gather({ settled, extra }))({
-				Ok: (outputs): Result<unknown, Issues<unknown>> => Ok(build(outputs)),
-				Err: (issues) => Err(issues),
-			});
-		}),
-	);
+	return andThen(settle(pending), (settled) => {
+		return step({
+			panics,
+			work: () => resolved(mapOutcome(gather({ settled, extra }), build)),
+		});
+	});
 }
 
 /** Fails at the root with an `InvalidType` issue. */
@@ -205,8 +202,10 @@ export function invalidType({
 }: {
 	input: unknown;
 	expected: string;
-}): Result<never, Issues<SchemaIssue>> {
-	return Err(fromError(InvalidType({ input, expected })));
+}): Parsed {
+	return settled<unknown, Issues<SchemaIssue>>(
+		Err(fromError(InvalidType({ input, expected }))),
+	);
 }
 
 /** Whether a value is a non-array object whose keys can be read. */

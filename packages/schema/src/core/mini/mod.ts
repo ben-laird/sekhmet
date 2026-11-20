@@ -2,8 +2,8 @@
  * Tree-shakable core schema utilities.
  *
  * This module provides granular exports for the schema core functionality,
- * including the Potential type for async/sync handling and the Schema type
- * with all its manipulation functions.
+ * including the Schema type, how it parses (a `Vow` of an `Outcome` under a
+ * panic runtime), and all its manipulation functions.
  *
  * @module
  */
@@ -88,15 +88,6 @@ export {
 	type UnionDetails,
 	type WrapperDetails,
 } from "./node.ts";
-export {
-	Async,
-	from,
-	type MaybePromise,
-	map as mapPotential,
-	Potential,
-	type PotentialVariants,
-	Sync,
-} from "./potential.ts";
 
 export {
 	type AnySchema,
@@ -108,21 +99,27 @@ export {
 	type Input,
 	inspect,
 	inspectErr,
+	type MaybePromise,
 	map,
 	mapErr,
 	type Output,
 	orElse,
+	type PanicBoundary,
 	ParseError,
+	type ParseOptions,
 	type Parser,
+	type ParserInit,
 	ParseSyncError,
 	type ParseSyncErrorVariants,
 	parse,
-	parseAsync,
 	parseSync,
 	pipe,
 	preprocess,
+	type Runner,
+	type RunnerInit,
 	Schema,
 	type SchemaInit,
+	type SchemaInitBase,
 	type SchemaParams,
 	UnexpectedAsyncParse,
 } from "./schema.ts";

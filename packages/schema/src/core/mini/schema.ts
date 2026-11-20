@@ -1,6 +1,6 @@
 /**
  * The {@linkcode Schema} type and its core API: running a schema
- * ({@linkcode parse}, {@linkcode parseSync}, {@linkcode parseAsync}),
+ * ({@linkcode parse} under a panic runtime, {@linkcode parseSync}),
  * transforming one ({@linkcode map}, {@linkcode mapErr}, {@linkcode pipe},
  * {@linkcode filter}, {@linkcode andThen}, {@linkcode orElse},
  * {@linkcode inspect}, {@linkcode inspectErr}, {@linkcode preprocess}), and its
@@ -11,7 +11,7 @@
  */
 
 import { Enum, type Split } from "@sekhmet/enum/core/mini/core";
-import { match, union } from "@sekhmet/enum/core/mini/exit";
+import { match } from "@sekhmet/enum/core/mini/exit";
 import {
 	Err,
 	inspectErr as inspectErrResult,
@@ -21,19 +21,41 @@ import {
 	Ok,
 	type Result,
 } from "@sekhmet/enum/result/mini";
+import type { PanicRuntime } from "@sekhmet/panic/mini/runtime";
+import {
+	type Outcome,
+	Ok as OutcomeOk,
+	Panicked,
+} from "@sekhmet/panic/outcome/mini/core";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
+import type { Vow } from "@sekhmet/vow/mini/core";
 import type { Annotation } from "./annotation.ts";
 import { Opaque, SchemaNode, type TransformStep } from "./node.ts";
-import {
-	from,
-	type MaybePromise,
-	map as mapPotential,
-	type Potential,
-} from "./potential.ts";
+import { guard, isPromiseLike, proceed, settled, step } from "./parsing.ts";
 import { type PipeView, type TransformView, viewed } from "./view.ts";
 
 /**
- * A parser function that validates and transforms input into output.
+ * A value, or a promise-like (any thenable) of that value.
+ *
+ * @template T The type of the value
+ *
+ * @example
+ * ```ts
+ * import type { MaybePromise } from "@sekhmet/schema/core/mini";
+ *
+ * const now: MaybePromise<number> = 1;
+ * const later: MaybePromise<number> = Promise.resolve(1);
+ * ```
+ */
+export type MaybePromise<T> = T | PromiseLike<T>;
+
+/**
+ * A parser function that validates and transforms input into output: user
+ * code, returning a `Result` or a promise of one.
+ *
+ * A parser that throws, or whose promise rejects, panics: {@linkcode parse}
+ * catches it at its panic boundary and settles as `Panicked`. An expected
+ * failure is an `Err`.
  *
  * @template I The input type
  * @template O The output type
@@ -50,10 +72,80 @@ import { type PipeView, type TransformView, viewed } from "./view.ts";
 export type Parser<I, O, E> = (input: I) => MaybePromise<Result<O, E>>;
 
 /**
+ * The part of a panic runtime a parse runs user code under: its
+ * `catchUnwind` and `catchUnwindAsync`. Every `PanicRuntime` from
+ * `definePanicRuntime()` is one.
+ *
+ * @example
+ * ```ts
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import type { PanicBoundary } from "@sekhmet/schema/core/mini";
+ *
+ * const panics: PanicBoundary = definePanicRuntime();
+ * ```
+ */
+export type PanicBoundary = Pick<
+	PanicRuntime,
+	"catchUnwind" | "catchUnwindAsync"
+>;
+
+/**
+ * What {@linkcode parse} takes: the input, and the panic runtime its user
+ * code (parsers, refinements, transforms) runs under.
+ *
+ * @template I The input type
+ *
+ * @example
+ * ```ts
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import type { ParseOptions } from "@sekhmet/schema/core/mini";
+ *
+ * const options: ParseOptions<string> = {
+ * 	input: "a",
+ * 	panics: definePanicRuntime(),
+ * };
+ * ```
+ */
+export interface ParseOptions<I> {
+	/** The input to parse. */
+	readonly input: I;
+	/** The panic runtime a throw or rejection in user code is caught by. */
+	readonly panics: PanicBoundary;
+}
+
+/**
+ * How a schema runs under a panic boundary: from {@linkcode ParseOptions}
+ * to a `Vow` of the parse's `Outcome`. It is what a schema holds
+ * ({@linkcode SchemaParams}); `new Schema({ parse })` builds one from a
+ * {@linkcode Parser}, and a composite builds its own (`new Schema({ run })`)
+ * from its children's {@linkcode parse}.
+ *
+ * @template I The input type
+ * @template O The output type
+ * @template E The error type
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { parse, parseSync, type Runner, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const text = new Schema({ parse: (input: string) => Ok(input) });
+ * const traced: Runner<string, string, never> = (options) => parse(text, options);
+ *
+ * assertEquals(unwrap(parseSync(new Schema({ run: traced }), "a")), "a");
+ * ```
+ */
+export type Runner<I, O, E> = (
+	options: ParseOptions<I>,
+) => Vow<Outcome<O, E, unknown>>;
+
+/**
  * A schema that validates and transforms input values.
  *
  * Schemas are composable validation units that can parse, transform,
- * and validate data. They support both synchronous and asynchronous validation.
+ * and validate data. A parse settles synchronously when every step of it
+ * is synchronous, and later otherwise (see {@linkcode parse}).
  *
  * @template I The input type
  * @template O The output type
@@ -76,19 +168,28 @@ export type Parser<I, O, E> = (input: I) => MaybePromise<Result<O, E>>;
  */
 export class Schema<I, O, E> extends Struct<SchemaParams<I, O, E>> {
 	/**
-	 * Builds a schema from its parser, and optionally its node and
-	 * annotations.
+	 * Builds a schema from its parser (or its runner), and optionally its
+	 * node and annotations.
 	 *
-	 * @param init The parser, the node (default `Opaque()`) and the
-	 *   annotations (default none)
+	 * @param init The parser or runner, the node (default `Opaque()`) and
+	 *   the annotations (default none)
 	 */
 	constructor(init: SchemaInit<I, O, E>) {
 		super({
-			parse: init.parse,
+			run: runnerOf(init),
 			node: init.node ?? Opaque(),
 			annotations: init.annotations ?? [],
 		});
 	}
+}
+
+/** The runner a schema's init describes: its own, or its parser's, guarded. */
+function runnerOf<I, O, E>(init: SchemaInit<I, O, E>): Runner<I, O, E> {
+	if (init.run !== undefined) return init.run;
+
+	const parser = init.parse;
+
+	return ({ input, panics }) => guard({ panics, work: () => parser(input) });
 }
 
 /**
@@ -116,8 +217,8 @@ export class Schema<I, O, E> extends Struct<SchemaParams<I, O, E>> {
  * ```
  */
 export interface SchemaParams<I, O, E> {
-	/** Parses an input. */
-	readonly parse: Parser<I, O, E>;
+	/** Parses an input under a panic boundary (see {@linkcode Runner}). */
+	readonly run: Runner<I, O, E>;
 	/** What the schema is, as data (see {@linkcode SchemaNode}). */
 	readonly node: SchemaNode;
 	/** The schema's annotations, in order; a later one for a key wins. */
@@ -125,10 +226,12 @@ export interface SchemaParams<I, O, E> {
 }
 
 /**
- * What `new Schema(…)` takes: the parser, and optionally the schema's node
- * and annotations. A schema that names no node is `Opaque`, and one that
- * names no annotations has none. Under `exactOptionalPropertyTypes`, an
- * omitted field is left out, not set to `undefined`.
+ * What `new Schema(…)` takes: the parser (user code, see
+ * {@linkcode Parser}) or the runner (see {@linkcode Runner}), and
+ * optionally the schema's node and annotations. A schema that names no node
+ * is `Opaque`, and one that names no annotations has none. Under
+ * `exactOptionalPropertyTypes`, an omitted field is left out, not set to
+ * `undefined`.
  *
  * @template I The input type
  * @template O The output type
@@ -145,9 +248,72 @@ export interface SchemaParams<I, O, E> {
  * const length = new Schema(init);
  * ```
  */
-export interface SchemaInit<I, O, E> {
+export type SchemaInit<I, O, E> = ParserInit<I, O, E> | RunnerInit<I, O, E>;
+
+/**
+ * A {@linkcode SchemaInit} from user code: a {@linkcode Parser}, run under
+ * the parse's panic boundary.
+ *
+ * @template I The input type
+ * @template O The output type
+ * @template E The error type
+ *
+ * @example
+ * ```ts
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import type { ParserInit } from "@sekhmet/schema/core/mini";
+ *
+ * const init: ParserInit<string, number, never> = {
+ * 	parse: (input) => Ok(input.length),
+ * };
+ * ```
+ */
+export interface ParserInit<I, O, E> extends SchemaInitBase {
 	/** Parses an input. */
 	readonly parse: Parser<I, O, E>;
+	/** Absent: a parser init has no runner. */
+	readonly run?: never;
+}
+
+/**
+ * A {@linkcode SchemaInit} from a {@linkcode Runner}: how composites (and
+ * schemas reusing another's params) build a schema.
+ *
+ * @template I The input type
+ * @template O The output type
+ * @template E The error type
+ *
+ * @example
+ * ```ts
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import { getStructParams } from "@sekhmet/primordials/struct";
+ * import { type RunnerInit, Schema } from "@sekhmet/schema/core/mini";
+ *
+ * const text = new Schema({ parse: (input: string) => Ok(input) });
+ * const init: RunnerInit<string, string, never> = {
+ * 	run: getStructParams(text).run,
+ * };
+ * ```
+ */
+export interface RunnerInit<I, O, E> extends SchemaInitBase {
+	/** Parses an input under a panic boundary. */
+	readonly run: Runner<I, O, E>;
+	/** Absent: a runner init has no parser. */
+	readonly parse?: never;
+}
+
+/**
+ * What every {@linkcode SchemaInit} may name besides how it parses: the
+ * schema's node and annotations.
+ *
+ * @example
+ * ```ts
+ * import type { SchemaInitBase } from "@sekhmet/schema/core/mini";
+ *
+ * const base: SchemaInitBase = { annotations: [] };
+ * ```
+ */
+export interface SchemaInitBase {
 	/**
 	 * What the schema is, as data.
 	 *
@@ -245,37 +411,115 @@ export type ErrorOf<S extends AnySchema> =
 	S extends Schema<infer _I, infer _O, infer E> ? E : never;
 
 /**
- * Parses input using a schema, returning a Potential result.
+ * Parses input with a schema, under a panic runtime: a `Vow` of the parse's
+ * `Outcome`.
  *
- * This function handles both synchronous and asynchronous parsing,
- * wrapping the result in a Potential to indicate timing.
+ * The outcome is `Ok(output)`, `Err(error)` for an expected failure, or
+ * `Panicked` with what user code (a parser, refinement, transform or async
+ * schema) threw or rejected with: `options.panics` catches and reports it,
+ * so a bug never passes for a validation failure. The vow resolves inside
+ * the call when every step of the parse is synchronous; read it with
+ * `value` from `@sekhmet/vow`, or `wait` for a `Promise`.
  *
  * @template I The input type
  * @template O The output type
  * @template E The error type
  * @param self The schema to use for parsing
- * @param input The input to parse
- * @returns A Potential containing the parse result
+ * @param options The input, and the panic runtime to run user code under
+ * @returns A vow of the parse's outcome, resolved now when the parse was
+ *   synchronous
  *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unionKinds } from "@sekhmet/enum/core/mini/exit";
- * import { Ok } from "@sekhmet/enum/result/mini";
+ * import { type Result, Ok as ResultOk } from "@sekhmet/enum/result/mini";
+ * import { unwrap as unwrapSome } from "@sekhmet/enum/option/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { isPanicked, unwrap } from "@sekhmet/panic/outcome/mini";
  * import { parse, Schema } from "@sekhmet/schema/core/mini";
+ * import { isPending, value, wait } from "@sekhmet/vow";
  *
- * const now = new Schema({ parse: (input: string) => Ok(input) });
- * const later = new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) });
+ * const panics = definePanicRuntime();
+ * const now = new Schema({ parse: (input: string) => ResultOk(input) });
+ * const later = new Schema({
+ * 	parse: (input: string) => Promise.resolve(ResultOk(input)),
+ * });
  *
- * assertEquals(unionKinds(parse(now, "a")), "Sync");
- * assertEquals(unionKinds(parse(later, "a")), "Async");
+ * // Synchronous: the vow is already resolved, read now with value
+ * assertEquals(unwrap(unwrapSome(value(parse(now, { input: "a", panics })))), "a");
+ *
+ * const pending = parse(later, { input: "b", panics });
+ * assertEquals(isPending(pending), true);
+ * assertEquals(unwrap(await wait(pending)), "b");
+ *
+ * // A bug in user code: reported to the hook, and settled as Panicked
+ * panics.setHook(() => {});
+ * const buggy = new Schema({
+ * 	parse: (_input: string): Result<string, never> => {
+ * 		throw new Error("bug");
+ * 	},
+ * });
+ * assertEquals(isPanicked(await wait(parse(buggy, { input: "c", panics }))), true);
  * ```
  */
 export function parse<I, O, E>(
 	self: Schema<I, O, E>,
-	input: I,
-): Potential<Result<O, E>> {
-	return from(getStructParams(self).parse(input));
+	options: ParseOptions<I>,
+): Vow<Outcome<O, E, unknown>> {
+	const { run } = getStructParams(self);
+
+	return step({ panics: options.panics, work: () => run(options) });
+}
+
+/** {@linkcode parseSync}'s boundary, and how to abandon what it leaves. */
+interface Unwinding {
+	/** The boundary the parse runs under. */
+	readonly panics: PanicBoundary;
+	/** Marks the parse abandoned: `parseSync` has returned or thrown. */
+	readonly abandon: () => void;
+}
+
+/**
+ * {@linkcode parseSync}'s boundary, one per call. While `parseSync` runs, it
+ * catches nothing, so a throw in user code unwinds to its caller, as an
+ * unguarded call's would. Once `parseSync` has returned, what is left of an
+ * asynchronous parse runs with nobody to unwind to: a throw or rejection
+ * then settles the abandoned parse as `Panicked`, which nothing reads, so
+ * it never escapes as an unhandled rejection.
+ */
+function unwinding(): Unwinding {
+	let abandoned = false;
+
+	return {
+		panics: {
+			// The guard rest is type-only, as in definePanicRuntime: never read
+			catchUnwind: <T>(
+				fn: () => T,
+				..._useCatchUnwindAsyncForPromises: unknown[]
+			): Outcome<T, never, unknown> => {
+				if (!abandoned) return OutcomeOk(fn());
+
+				try {
+					return OutcomeOk(fn());
+				} catch (payload: unknown) {
+					return Panicked(payload);
+				}
+			},
+			// Only an abandoned parse awaits: a rejection settles it as Panicked
+			catchUnwindAsync: async <T>(
+				fn: () => PromiseLike<T>,
+			): Promise<Outcome<T, never, unknown>> => {
+				try {
+					return OutcomeOk(await fn());
+				} catch (payload: unknown) {
+					return Panicked(payload);
+				}
+			},
+		},
+		abandon: () => {
+			abandoned = true;
+		},
+	};
 }
 
 /**
@@ -368,6 +612,12 @@ export function ParseError<E>(error: E): ParseSyncError<E> {
  * This function will return an error if the schema requires asynchronous
  * validation. Use this when you need guaranteed synchronous parsing.
  *
+ * It takes no panic runtime: a throw in user code is not caught, and
+ * unwinds to the caller, as any unguarded call's would. A schema that turns
+ * out to be asynchronous is not waited for: its parse is abandoned, and a
+ * panic it raises later settles the abandoned parse, unreported, rather
+ * than escape as an unhandled rejection. Use {@linkcode parse} for either.
+ *
  * @template I The input type
  * @template O The output type
  * @template E The error type
@@ -393,43 +643,26 @@ export function parseSync<I, O, E>(
 	self: Schema<I, O, E>,
 	input: I,
 ): Result<O, ParseSyncError<E>> {
-	return match(parse(self, input))({
-		Sync: (result) => mapErrResult(result, (error) => ParseError(error)),
-		Async: () => Err(UnexpectedAsyncParse()),
-	});
-}
+	type Synchronous = Result<O, ParseSyncError<E>>;
+	const { panics, abandon } = unwinding();
+	let parsing: Vow<Outcome<O, E, unknown>>;
+	try {
+		parsing = parse(self, { input, panics });
+	} finally {
+		abandon();
+	}
 
-/**
- * Parses input asynchronously, handling both sync and async schemas.
- *
- * This function always returns a Promise, converting synchronous
- * parse results to promises for consistency.
- *
- * @template I The input type
- * @template O The output type
- * @template E The error type
- * @param self The schema to use for parsing
- * @param input The input to parse
- * @returns A Promise of the parse result
- *
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
- * import { parseAsync, Schema } from "@sekhmet/schema/core/mini";
- *
- * const later = new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) });
- *
- * assertEquals(unwrap(await parseAsync(later, "a")), "a");
- * ```
- */
-export function parseAsync<I, O, E>(
-	self: Schema<I, O, E>,
-	input: I,
-): Promise<Result<O, E>> {
-	return match(parse(self, input))({
-		Sync: (result) => Promise.resolve(result),
-		Async: (promisedResult) => promisedResult,
+	return match(parsing)<Synchronous>({
+		Pending: () => Err(UnexpectedAsyncParse()),
+		Resolved: (outcome) => {
+			return match(outcome)<Synchronous>({
+				Ok: (output) => Ok(output),
+				Err: (error) => Err(ParseError(error)),
+				Panicked: (payload) => {
+					throw payload;
+				},
+			});
+		},
 	});
 }
 
@@ -437,7 +670,8 @@ export function parseAsync<I, O, E>(
  * Maps a schema's output through a transformation function.
  *
  * This creates a new schema that first parses with the original schema,
- * then applies the mapping function to successful results.
+ * then applies the mapping function to successful results. A `mapping`
+ * that throws panics: {@linkcode parse} settles as `Panicked`.
  *
  * @template I The input type
  * @template O The original output type
@@ -475,7 +709,8 @@ export function map<I, O, E, P, S extends Schema<I, O, E>>(
  * Maps a schema's error through a transformation function.
  *
  * This creates a new schema that transforms any errors produced
- * by the original schema using the provided mapping function.
+ * by the original schema using the provided mapping function. A `mapping`
+ * that throws panics: {@linkcode parse} settles as `Panicked`.
  *
  * @template I The input type
  * @template O The output type
@@ -554,19 +789,16 @@ export function pipe<
 	self: S & Schema<I, O, E>,
 	nextSchema: N & Schema<O, P, E>,
 ): Schema<I, P, E> & PipeView<S, N> {
-	const next = getStructParams(nextSchema).parse;
-
 	return viewed({
 		init: {
-			parse: (input: I) => {
-				return union(
-					mapPotential(parse(self, input), (result) => {
-						return match(result)<MaybePromise<Result<P, E>>>({
-							Ok: next,
-							Err: (error) => Err(error),
-						});
-					}),
-				);
+			run: (options: ParseOptions<I>) => {
+				return proceed(parse(self, options), {
+					panics: options.panics,
+					Ok: (output) => {
+						return parse(nextSchema, { input: output, panics: options.panics });
+					},
+					Err: (error) => settled<P, E>(Err(error)),
+				});
 			},
 			node: new SchemaNode("Pipe", { inner: self, next: nextSchema }),
 		},
@@ -673,6 +905,7 @@ interface Continuation<I, O, E, P, F, S extends Schema<I, O, E>> {
  * A schema that parses with `schema`, then passes the result to `next`,
  * recorded as a `Transform` node of `step` and viewing `schema` as `inner`.
  * The parse stays sync when both are; a promise from either makes it async.
+ * `next` is user code, so it runs under the parse's panic boundary.
  */
 function continueWith<I, O, E, P, F, S extends Schema<I, O, E>>(
 	continuation: Continuation<I, O, E, P, F, S>,
@@ -681,7 +914,15 @@ function continueWith<I, O, E, P, F, S extends Schema<I, O, E>>(
 
 	return viewed({
 		init: {
-			parse: (input: I) => union(mapPotential(parse(schema, input), next)),
+			run: (options: ParseOptions<I>) => {
+				const { panics } = options;
+
+				return proceed(parse(schema, options), {
+					panics,
+					Ok: (output) => guard({ panics, work: () => next(Ok(output)) }),
+					Err: (error) => guard({ panics, work: () => next(Err(error)) }),
+				});
+			},
 			node: new SchemaNode("Transform", { step, inner: schema }),
 		},
 		view: { inner: schema },
@@ -694,9 +935,10 @@ function continueWith<I, O, E, P, F, S extends Schema<I, O, E>>(
  *
  * On success, the output goes to `next`, whose `Result` becomes the parse's;
  * a failure passes through without calling it. `next` may return enum's main
- * or mini `Result`, or a promise of one, which makes the parse `Async` (and
- * `parseSync` then reports `UnexpectedAsyncParse`). A `next` that throws
- * panics: the throw is not caught, as with {@linkcode map}.
+ * or mini `Result`, or a promise of one, which makes the parse asynchronous
+ * (and `parseSync` then reports `UnexpectedAsyncParse`). A `next` that
+ * throws, or whose promise rejects, panics: {@linkcode parse} settles as
+ * `Panicked`, as with {@linkcode map}.
  *
  * @template I The input type
  * @template O The original output type
@@ -749,9 +991,10 @@ export function andThen<I, O, E, P, F, S extends Schema<I, O, E>>(
  *
  * On failure, the error goes to `recover`, whose `Result` becomes the parse's;
  * a success passes through without calling it. `recover` may return enum's
- * main or mini `Result`, or a promise of one, which makes the parse `Async`
- * (and `parseSync` then reports `UnexpectedAsyncParse`). A `recover` that
- * throws panics: the throw is not caught, as with {@linkcode mapErr}.
+ * main or mini `Result`, or a promise of one, which makes the parse
+ * asynchronous (and `parseSync` then reports `UnexpectedAsyncParse`). A
+ * `recover` that throws, or whose promise rejects, panics:
+ * {@linkcode parse} settles as `Panicked`, as with {@linkcode mapErr}.
  *
  * @template I The input type
  * @template O The output type
@@ -806,8 +1049,8 @@ export function orElse<I, O, E, F, S extends Schema<I, O, E>>(
  * like Result's `inspect`; the result passes through unchanged.
  *
  * `inspector` runs once per successful parse, after the output is known
- * (when an `Async` parse resolves), and never on failure. An `inspector`
- * that throws panics: the throw is not caught.
+ * (when an asynchronous parse resolves), and never on failure. An
+ * `inspector` that throws panics: {@linkcode parse} settles as `Panicked`.
  *
  * @template I The input type
  * @template O The output type
@@ -853,8 +1096,8 @@ export function inspect<I, O, E, S extends Schema<I, O, E>>(
  * `inspectErr`; the result passes through unchanged.
  *
  * `inspector` runs once per failed parse, after the error is known (when an
- * `Async` parse resolves), and never on success. An `inspector` that throws
- * panics: the throw is not caught.
+ * asynchronous parse resolves), and never on success. An `inspector` that
+ * throws panics: {@linkcode parse} settles as `Panicked`.
  *
  * @template I The input type
  * @template O The output type
@@ -901,9 +1144,10 @@ export function inspectErr<I, O, E, S extends Schema<I, O, E>>(
  *
  * `prepare` turns each input into the one `self` parses; it cannot fail
  * (fail in `self`, or use {@linkcode andThen} after it). A promise from
- * `prepare` makes the parse `Async` (and `parseSync` then reports
- * `UnexpectedAsyncParse`). A `prepare` that throws panics: the throw is not
- * caught, as with {@linkcode map}.
+ * `prepare` makes the parse asynchronous (and `parseSync` then reports
+ * `UnexpectedAsyncParse`). A `prepare` that throws, or whose promise
+ * rejects, panics: {@linkcode parse} settles as `Panicked`, as with
+ * {@linkcode map}.
  *
  * @template J The new input type
  * @template I The input type `self` parses
@@ -939,11 +1183,25 @@ export function preprocess<J, I, O, E, S extends Schema<I, O, E>>(
 	self: S & Schema<I, O, E>,
 	prepare: (input: J) => MaybePromise<I>,
 ): Schema<J, O, E> & TransformView<S> {
-	const parser = getStructParams(self).parse;
-
 	return viewed({
 		init: {
-			parse: (input: J) => union(mapPotential(from(prepare(input)), parser)),
+			run: ({ input, panics }: ParseOptions<J>) => {
+				const prepared = guard<I, never>({
+					panics,
+					work: () => {
+						const returned = prepare(input);
+						if (!isPromiseLike(returned)) return Ok(returned);
+
+						return Promise.resolve(returned).then((value) => Ok(value));
+					},
+				});
+
+				return proceed(prepared, {
+					panics,
+					Ok: (value) => parse(self, { input: value, panics }),
+					Err: (impossible) => impossible,
+				});
+			},
 			node: new SchemaNode("Transform", { step: "preprocess", inner: self }),
 		},
 		view: { inner: self },

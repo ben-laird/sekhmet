@@ -23,7 +23,9 @@ or a list of messages to send back.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrap, unwrapErr } from "@sekhmet/panic/outcome/mini";
 import { object } from "@sekhmet/schema/composites";
 import {
 	Custom,
@@ -35,6 +37,9 @@ import {
 	type SchemaIssue,
 } from "@sekhmet/schema/core";
 import { number, string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const json = new Schema({
 	parse: (text: string) => {
@@ -61,15 +66,27 @@ const messages = (issues: Issues<SchemaIssue>): string[] => {
 	});
 };
 
-assertEquals(unwrap(await body.parseAsync('{"sku":"A1","quantity":2}')), {
-	sku: "A1",
-	quantity: 2,
-});
-assertEquals(messages(unwrapErr(await body.parseAsync("{"))), [
-	"(body): Invalid JSON",
-]);
 assertEquals(
-	messages(unwrapErr(await body.parseAsync('{"sku":"","quantity":0,"x":1}'))),
+	unwrap(
+		await wait(body.parse({ input: '{"sku":"A1","quantity":2}', panics })),
+	),
+	{
+		sku: "A1",
+		quantity: 2,
+	},
+);
+assertEquals(
+	messages(unwrapErr(await wait(body.parse({ input: "{", panics })))),
+	["(body): Invalid JSON"],
+);
+assertEquals(
+	messages(
+		unwrapErr(
+			await wait(
+				body.parse({ input: '{"sku":"","quantity":0,"x":1}', panics }),
+			),
+		),
+	),
 	[
 		"sku: Too small: expected string to have >= 1 characters",
 		"quantity: Too small: expected number to be >= 1",
@@ -98,9 +115,13 @@ guide shows you how to read them as numbers and booleans.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { isErr, unwrap } from "@sekhmet/panic/outcome/mini";
 import { object } from "@sekhmet/schema/composites";
 import { number, string, stringbool } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const search = object({
 	shape: {
@@ -113,7 +134,12 @@ const search = object({
 	},
 });
 const read = (query: string) => {
-	return search.parseAsync(Object.fromEntries(new URLSearchParams(query)));
+	return wait(
+		search.parse({
+			input: Object.fromEntries(new URLSearchParams(query)),
+			panics,
+		}),
+	);
 };
 
 assertEquals(unwrap(await read("q=+tea+&page=2&archived=yes")), {
@@ -144,10 +170,14 @@ case's.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrap, unwrapErr } from "@sekhmet/panic/outcome/mini";
 import { array, discriminatedUnion, object } from "@sekhmet/schema/composites";
 import { entries, formatIssue } from "@sekhmet/schema/core";
 import { number, string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const response = discriminatedUnion({
 	key: "status",
@@ -160,14 +190,20 @@ const response = discriminatedUnion({
 });
 
 assertEquals(
-	unwrap(await response.parseAsync({ status: "ok", items: ["a"] })),
+	unwrap(
+		await wait(
+			response.parse({ input: { status: "ok", items: ["a"] }, panics }),
+		),
+	),
 	{
 		status: "ok",
 		items: ["a"],
 	},
 );
 
-const failed = unwrapErr(await response.parseAsync({ status: "teapot" }));
+const failed = unwrapErr(
+	await wait(response.parse({ input: { status: "teapot" }, panics })),
+);
 assertEquals(
 	entries(failed).map(({ path, error }) => [path, formatIssue(error)]),
 	[[["status"], 'Expected one of "ok", "error"']],
@@ -187,9 +223,13 @@ schema has the branded type.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrap } from "@sekhmet/panic/outcome/mini";
 import type { Branded } from "@sekhmet/schema/algebra";
 import { string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 type UserId = Branded<string, "UserId">;
 
@@ -197,7 +237,7 @@ const userId = string({ startsWith: "u_" }).with.brand("UserId");
 
 const findUser = (id: UserId): string => `user ${id}`;
 
-const id = unwrap(await userId.parseAsync("u_42"));
+const id = unwrap(await wait(userId.parse({ input: "u_42", panics })));
 assertEquals(findUser(id), "user u_42");
 
 // @ts-expect-error: a plain string is not a UserId
@@ -221,10 +261,14 @@ public view, an update patch) from one shape.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { isErr, unwrap } from "@sekhmet/panic/outcome/mini";
 import { omit, partial } from "@sekhmet/schema/algebra";
 import { object, type Shape } from "@sekhmet/schema/composites";
 import { string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const account = {
 	name: string({ minLength: 1 }),
@@ -237,18 +281,27 @@ const visible = object({ shape: omit({ shape: account, keys: ["password"] }) });
 const patch = object({ shape: partial(account) });
 
 assertEquals(
-	isErr(await stored.parseAsync({ name: "Ada", password: "x" })),
+	isErr(
+		await wait(stored.parse({ input: { name: "Ada", password: "x" }, panics })),
+	),
 	true,
 );
 assertEquals(
-	unwrap(await visible.parseAsync({ name: "Ada", password: "secret!!" })),
+	unwrap(
+		await wait(
+			visible.parse({ input: { name: "Ada", password: "secret!!" }, panics }),
+		),
+	),
 	{
 		name: "Ada",
 	},
 );
-assertEquals(unwrap(await patch.parseAsync({ nickname: "ada" })), {
-	nickname: "ada",
-});
+assertEquals(
+	unwrap(await wait(patch.parse({ input: { nickname: "ada" }, panics }))),
+	{
+		nickname: "ada",
+	},
+);
 ```
 
 If you already have the object schema, its `.shape` is the shape it was built
@@ -264,10 +317,14 @@ infer for a recursive value.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { isErr, unwrap } from "@sekhmet/panic/outcome/mini";
 import { array, lazy, object } from "@sekhmet/schema/composites";
 import type { Issues, Schema, SchemaIssue } from "@sekhmet/schema/core";
 import { string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 interface Comment {
 	text: string;
@@ -282,9 +339,14 @@ const comment: Schema<unknown, Comment, Issues<SchemaIssue>> = object({
 });
 
 const thread = { text: "a", replies: [{ text: "b", replies: [] }] };
-assertEquals(unwrap(await comment.parseAsync(thread)), thread);
 assertEquals(
-	isErr(await comment.parseAsync({ text: "a", replies: [{}] })),
+	unwrap(await wait(comment.parse({ input: thread, panics }))),
+	thread,
+);
+assertEquals(
+	isErr(
+		await wait(comment.parse({ input: { text: "a", replies: [{}] }, panics })),
+	),
 	true,
 );
 ```
@@ -300,8 +362,13 @@ chain the `Result`-style transforms:
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrap } from "@sekhmet/panic/outcome/mini";
 import { string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const port = string({ trim: true })
 	.andThen((text) => {
@@ -315,8 +382,8 @@ const port = string({ trim: true })
 	.orElse(() => Ok(8080));
 // {}
 
-assertEquals(unwrap(await port.parseAsync(" 3000 ")), 3000);
-assertEquals(unwrap(await port.parseAsync("http")), 8080);
+assertEquals(unwrap(await wait(port.parse({ input: " 3000 ", panics }))), 3000);
+assertEquals(unwrap(await wait(port.parse({ input: "http", panics }))), 8080);
 ```
 
 A callback may return a promise, which makes the parse asynchronous. For a
@@ -332,16 +399,26 @@ parameter type becomes the new schema's input type.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { isErr, unwrap } from "@sekhmet/panic/outcome/mini";
 import { string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const tags = string({ trim: true, minLength: 1 })
 	.array()
 	.preprocess((input: string) => input.split(","));
 // {}
 
-assertEquals(unwrap(await tags.parseAsync("tea, cake")), ["tea", "cake"]);
-assertEquals(isErr(await tags.parseAsync("tea,,cake")), true);
+assertEquals(unwrap(await wait(tags.parse({ input: "tea, cake", panics }))), [
+	"tea",
+	"cake",
+]);
+assertEquals(
+	isErr(await wait(tags.parse({ input: "tea,,cake", panics }))),
+	true,
+);
 ```
 
 The callback can't fail; a callback that throws panics. If the conversion
@@ -430,21 +507,26 @@ as `.map`: annotate after the transform.
 Valibot, ArkType and many form and router libraries share.
 
 - To hand a schema to a tool that accepts a Standard Schema, wrap it with
-  `toStandard({ schema })`. The schema's input must be `unknown`. If its
-  error isn't a `SchemaIssue` or `Issues<SchemaIssue>`, also pass `toIssue`,
-  which turns your error into a message.
+  `toStandard({ schema, panics })`, with the panic runtime it parses under:
+  a panic is reported, then thrown out of `validate`. The schema's input must
+  be `unknown`. If its error isn't a `SchemaIssue` or `Issues<SchemaIssue>`,
+  also pass `toIssue`, which turns your error into a message.
 - To use a schema from another library inside a sekhmet schema, wrap it
   with `fromStandard(other)`. It fails with `Issues<StandardIssue>`.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrap } from "@sekhmet/panic/outcome/mini";
 import { object } from "@sekhmet/schema/composites";
 import { string } from "@sekhmet/schema/primitives";
 import { fromStandard, toStandard } from "@sekhmet/schema/standard";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const user = object({ shape: { name: string() } });
-const standard = toStandard({ schema: user });
+const standard = toStandard({ schema: user, panics });
 
 assertEquals(standard["~standard"].validate({ name: 1 }), {
 	issues: [{ message: "Expected string, received number", path: ["name"] }],
@@ -452,7 +534,10 @@ assertEquals(standard["~standard"].validate({ name: 1 }), {
 
 // Any Standard schema, such as a Zod or Valibot one, wraps the same way.
 const wrapped = fromStandard(standard);
-assertEquals(unwrap(await wrapped.parseAsync({ name: "Ada" })), {
-	name: "Ada",
-});
+assertEquals(
+	unwrap(await wait(wrapped.parse({ input: { name: "Ada" }, panics }))),
+	{
+		name: "Ada",
+	},
+);
 ```

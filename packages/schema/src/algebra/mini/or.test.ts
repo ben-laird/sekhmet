@@ -1,6 +1,9 @@
 import { unionKinds, union as variant } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { resume } from "@sekhmet/panic/outcome/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
+import { wait } from "@sekhmet/vow";
 import { assertEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { union } from "@/src/composites/mini/union.ts";
@@ -14,11 +17,12 @@ import {
 	type Input,
 	type Output,
 	parse,
-	parseAsync,
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { or } from "./or.ts";
+
+const panics = definePanicRuntime();
 
 const text: Schema<unknown, string, "not text"> = new Schema({
 	parse: (input) => {
@@ -77,8 +81,12 @@ Deno.test("or fails exactly like the union of its sides", async () => {
 	const same = union([text, count]);
 
 	// When: both parse a value neither side accepts
-	const found = unwrapErr(await parseAsync(either, null));
-	const expected = unwrapErr(await parseAsync(same, null));
+	const found = unwrapErr(
+		resume(await wait(parse(either, { input: null, panics }))),
+	);
+	const expected = unwrapErr(
+		resume(await wait(parse(same, { input: null, panics }))),
+	);
 
 	// Then: the errors are equal: one InvalidUnion with each branch's issues
 	assertEquals(found, expected);
@@ -92,14 +100,19 @@ Deno.test("or chains flatten into one union", async () => {
 		right: or({ left: count, right: flag }),
 	});
 	const flat = union([text, count, flag]);
-	const expected = unwrapErr(await parseAsync(flat, null));
+	const expected = unwrapErr(
+		resume(await wait(parse(flat, { input: null, panics }))),
+	);
 
 	// When: each chain accepts a value of the last side, and rejects another
 	// Then: it accepts what any side accepts, fails with one InvalidUnion of
 	// three branches, and records the flat union's node
 	for (const chain of [leftChain, rightChain]) {
 		assertEquals(unwrap(parseSync(chain, true)), true);
-		assertEquals(unwrapErr(await parseAsync(chain, null)), expected);
+		assertEquals(
+			unwrapErr(resume(await wait(parse(chain, { input: null, panics })))),
+			expected,
+		);
 		assertEquals(nodeOf(chain), nodeOf(flat));
 	}
 });
@@ -131,8 +144,12 @@ Deno.test("or keeps an annotated union whole", async () => {
 	// Then: the annotated union is one branch, so the issue has two branches
 	assertEquals(variant(nodeOf(extended)), { options: [labelled, flag] });
 	assertEquals(
-		unwrapErr(await parseAsync(extended, null)),
-		unwrapErr(await parseAsync(union([labelled, flag]), null)),
+		unwrapErr(resume(await wait(parse(extended, { input: null, panics })))),
+		unwrapErr(
+			resume(
+				await wait(parse(union([labelled, flag]), { input: null, panics })),
+			),
+		),
 	);
 });
 
@@ -146,15 +163,15 @@ Deno.test("or of two non-unions is a union of the two", () => {
 	);
 });
 
-Deno.test("or stays Sync when both sides are, and is Async otherwise", () => {
+Deno.test("or stays resolved when both sides are, and is pending otherwise", () => {
 	// Given: a sync or, and one with an async right side
 	const now = or({ left: text, right: count });
 	const later = or({ left: text, right: laterCount });
 
 	// When: parsing a value only the right side accepts
-	// Then: the parse's Potential follows the sides that ran
-	assertEquals(unionKinds(parse(now, 1)), "Sync");
-	assertEquals(unionKinds(parse(later, 1)), "Async");
+	// Then: the parse's timing follows the sides that ran
+	assertEquals(unionKinds(parse(now, { input: 1, panics })), "Resolved");
+	assertEquals(unionKinds(parse(later, { input: 1, panics })), "Pending");
 });
 
 Deno.test("or's types: input intersects, output unions, error is Issues", () => {

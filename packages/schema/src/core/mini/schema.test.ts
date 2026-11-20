@@ -1,4 +1,5 @@
 import { match, union, unionKinds } from "@sekhmet/enum/core/mini/exit";
+import { Some } from "@sekhmet/enum/option/mini";
 import { Ok as MainOk } from "@sekhmet/enum/result";
 import {
 	Err,
@@ -7,6 +8,14 @@ import {
 	unwrap,
 	unwrapErr,
 } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime, type PanicRuntime } from "@sekhmet/panic";
+import {
+	Err as OutcomeErr,
+	Ok as OutcomeOk,
+	Panicked,
+	resume,
+} from "@sekhmet/panic/outcome/mini";
+import { isPending, value, wait } from "@sekhmet/vow";
 import {
 	assertEquals,
 	assertExists,
@@ -14,6 +23,7 @@ import {
 	assertThrows,
 } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
+import { object } from "@/src/composites/mini/object.ts";
 import {
 	type AnySchema,
 	andThen,
@@ -28,7 +38,6 @@ import {
 	type Output,
 	orElse,
 	parse,
-	parseAsync,
 	parseSync,
 	pipe,
 	preprocess,
@@ -36,42 +45,200 @@ import {
 } from "./schema.ts";
 import type { TransformView } from "./view.ts";
 
-Deno.test("parse handles synchronous schemas", () => {
+const panics = definePanicRuntime();
+
+/** A panic runtime whose hook records each payload it reports. */
+function recordingPanics(): { panics: PanicRuntime; reported: unknown[] } {
+	const recording = definePanicRuntime();
+	const reported: unknown[] = [];
+	recording.setHook(({ payload }) => reported.push(payload));
+
+	return { panics: recording, reported };
+}
+
+Deno.test("parse settles a synchronous schema inside the call", () => {
 	// Given: a synchronous schema
 	const schema = new Schema({ parse: (input: number) => Ok(input * 2) });
 
 	// When: parsing input
-	const result = parse(schema, 10);
+	const parsing = parse(schema, { input: 10, panics });
 
-	// Then: the result should be a synchronous Potential
-	const value = match(result)({
-		Sync: (r) => r,
-		Async: () => {
-			throw new Error("Should not be async");
-		},
-	});
-
-	assertEquals(match(value)({ Ok: (v) => v, Err: () => -1 }), 20);
+	// Then: the vow is already resolved with Ok
+	assertEquals(value(parsing), Some(OutcomeOk(20)));
 });
 
-Deno.test("parse handles asynchronous schemas", async () => {
+Deno.test("parse settles an asynchronous schema once it resolves", async () => {
 	// Given: an asynchronous schema
 	const schema = new Schema({
 		parse: (input: number) => Promise.resolve(Ok(input * 2)),
 	});
 
 	// When: parsing input
-	const result = parse(schema, 10);
+	const parsing = parse(schema, { input: 10, panics });
 
-	// Then: the result should be an asynchronous Potential
-	const value = await match(result)({
-		Sync: () => {
-			throw new Error("Should not be sync");
-		},
-		Async: (p) => p,
+	// Then: the vow is pending, then resolves with Ok
+	assertEquals(isPending(parsing), true);
+	assertEquals(await wait(parsing), OutcomeOk(20));
+});
+
+Deno.test("parse settles an expected failure as Err", () => {
+	// Given: a schema that rejects odd numbers
+	const even = new Schema({
+		parse: (input: number) => (input % 2 === 0 ? Ok(input) : Err("odd")),
 	});
 
-	assertEquals(match(value)({ Ok: (v) => v, Err: () => -1 }), 20);
+	// When: parsing an odd number
+	const parsing = parse(even, { input: 3, panics });
+
+	// Then: the outcome is Err, not a panic
+	assertEquals(value(parsing), Some(OutcomeErr("odd")));
+});
+
+Deno.test("parse catches a panic in user code as Panicked", async (t) => {
+	const bug = new Error("bug");
+	const throwing = (): Result<number, never> => {
+		throw bug;
+	};
+
+	await t.step("a parser that throws", () => {
+		// Given: a parser that throws, under a recording runtime
+		const { panics, reported } = recordingPanics();
+		const schema = new Schema({ parse: (_input: number) => throwing() });
+
+		// When: parsing
+		const parsing = parse(schema, { input: 1, panics });
+
+		// Then: it settles synchronously as Panicked, reported once
+		assertEquals(value(parsing), Some(Panicked(bug)));
+		assertEquals(reported, [bug]);
+	});
+
+	await t.step("a parser whose promise rejects", async () => {
+		// Given: an async parser that rejects
+		const { panics, reported } = recordingPanics();
+		const schema = new Schema({
+			parse: (_input: number): Promise<Result<number, never>> => {
+				return Promise.reject(bug);
+			},
+		});
+
+		// When: parsing
+		const outcome = await wait(parse(schema, { input: 1, panics }));
+
+		// Then: the vow settles as Panicked, reported once
+		assertEquals(outcome, Panicked(bug));
+		assertEquals(reported, [bug]);
+	});
+
+	await t.step("a mapping that throws after an async parse", async () => {
+		// Given: a throwing map over an async schema
+		const { panics, reported } = recordingPanics();
+		const later = new Schema({
+			parse: (input: number) => Promise.resolve(Ok(input)),
+		});
+		const mapped = map(later, () => throwing());
+
+		// When: parsing
+		const outcome = await wait(parse(mapped, { input: 1, panics }));
+
+		// Then: the vow still settles, as Panicked
+		assertEquals(outcome, Panicked(bug));
+		assertEquals(reported, [bug]);
+	});
+
+	await t.step("a panic passes through the transforms after it", () => {
+		// Given: a throwing parser, recovered with orElse and mapped
+		const { panics } = recordingPanics();
+		const schema = new Schema({ parse: (_input: number) => throwing() });
+		const recovered = map(
+			orElse(schema, () => Ok(0)),
+			(n) => n + 1,
+		);
+
+		// When: parsing
+		const parsing = parse(recovered, { input: 1, panics });
+
+		// Then: orElse never sees the panic: it stays Panicked
+		assertEquals(value(parsing), Some(Panicked(bug)));
+	});
+});
+
+/** Lets every pending callback of an abandoned parse run. */
+function drain(): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+// An unhandled rejection fails a test on every runtime the suite runs on, so
+// draining after each abandoned parse proves none escapes.
+Deno.test("parseSync abandons an async parse without leaving a rejection behind", async (t) => {
+	const later = new Schema({
+		parse: (input: number) => Promise.resolve(Ok(input)),
+	});
+
+	await t.step("a mapping that throws once the parse resumes", async () => {
+		// Given: a throwing map over an async schema
+		const mapped = map(later, (): number => {
+			throw new Error("mapping bug");
+		});
+
+		// When: parsing synchronously, then letting the abandoned parse run
+		const result = parseSync(mapped, 1);
+		await drain();
+
+		// Then: the parse was reported async, and its panic stayed with it
+		assertEquals(unionKinds(unwrapErr(result)), "UnexpectedAsyncParse");
+	});
+
+	await t.step("a parser whose promise rejects", async () => {
+		// Given: an async parser that rejects
+		const rejecting = new Schema({
+			parse: (_input: number): Promise<Result<number, never>> => {
+				return Promise.reject(new Error("async bug"));
+			},
+		});
+
+		// When: parsing synchronously, then letting the abandoned parse run
+		const result = parseSync(rejecting, 1);
+		await drain();
+
+		// Then: the parse was reported async, and the rejection stayed with it
+		assertEquals(unionKinds(unwrapErr(result)), "UnexpectedAsyncParse");
+	});
+
+	await t.step("a synchronous panic beside async work", async () => {
+		// Given: an object whose field a starts async work that will throw,
+		// and whose field b throws now
+		const both = object({
+			shape: {
+				a: map(later, (): number => {
+					throw new Error("mapping bug");
+				}),
+				b: new Schema({
+					parse: (_input: number): Result<number, never> => {
+						throw new RangeError("sync bug");
+					},
+				}),
+			},
+		});
+
+		// When / Then: parseSync unwinds b's throw at once
+		assertThrows(() => parseSync(both, { a: 1, b: 1 }), RangeError, "sync bug");
+
+		// Then: field a's abandoned work resumes without leaving a rejection
+		await drain();
+	});
+});
+
+Deno.test("parseSync lets a panic unwind to its caller", () => {
+	// Given: a parser that throws
+	const schema = new Schema({
+		parse: (_input: number): Result<number, never> => {
+			throw new RangeError("bug");
+		},
+	});
+
+	// When / Then: parseSync throws the payload unchanged
+	assertThrows(() => parseSync(schema, 1), RangeError, "bug");
 });
 
 Deno.test("parseSync succeeds with synchronous schema", () => {
@@ -141,12 +308,12 @@ Deno.test("parseSync wraps parse errors", () => {
 	);
 });
 
-Deno.test("parseAsync handles synchronous schemas", async () => {
+Deno.test("wait(parse(…)) gives a Promise of a synchronous schema's outcome", async () => {
 	// Given: a synchronous schema
 	const schema = new Schema({ parse: (input: number) => Ok(input * 2) });
 
-	// When: parsing asynchronously
-	const result = await parseAsync(schema, 10);
+	// When: waiting for its parse
+	const result = resume(await wait(parse(schema, { input: 10, panics })));
 
 	// Then: the result should be Ok
 	assertEquals(
@@ -158,14 +325,14 @@ Deno.test("parseAsync handles synchronous schemas", async () => {
 	);
 });
 
-Deno.test("parseAsync handles asynchronous schemas", async () => {
+Deno.test("wait(parse(…)) gives a Promise of an asynchronous schema's outcome", async () => {
 	// Given: an asynchronous schema
 	const schema = new Schema({
 		parse: (input: number) => Promise.resolve(Ok(input * 2)),
 	});
 
-	// When: parsing asynchronously
-	const result = await parseAsync(schema, 10);
+	// When: waiting for its parse
+	const result = resume(await wait(parse(schema, { input: 10, panics })));
 
 	// Then: the result should be Ok
 	assertEquals(
@@ -368,7 +535,7 @@ Deno.test("filter builds its error from the rejected output of an async schema",
 	});
 
 	// When: parsing a value that fails the predicate
-	const result = await parseAsync(filtered, -10);
+	const result = resume(await wait(parse(filtered, { input: -10, panics })));
 
 	// Then: the error carries the rejected output
 	assertEquals(unwrapErr(result), "-10 is not positive");
@@ -397,7 +564,7 @@ Deno.test("filter does not build an error for an accepted output", async () => {
 
 	// When: parsing values that pass the predicate
 	const syncResult = parseSync(sync, 10);
-	const asyncResult = await parseAsync(async, 20);
+	const asyncResult = resume(await wait(parse(async, { input: 20, panics })));
 
 	// Then: both pass through, and the error builder was never called
 	assertEquals(unwrap(syncResult), 10);
@@ -477,7 +644,7 @@ Deno.test("andThen transforms a successful output into its Result", () => {
 	assertEquals(unwrap(parseSync(halved, "42")), 21);
 	assertEquals(syncError(halved, "7"), "odd");
 	assertEquals(syncError(halved, "x"), "not digits");
-	assertEquals(unionKinds(parse(halved, "42")), "Sync");
+	assertEquals(unionKinds(parse(halved, { input: "42", panics })), "Resolved");
 });
 
 Deno.test("andThen does not call next when self fails", () => {
@@ -501,17 +668,29 @@ Deno.test("andThen with a promise is async, and parseSync reports it", async () 
 	const afterAsync = andThen(laterDigits, (n) => Ok(n + 1));
 
 	// When: parsing each
-	// Then: both parses are Async, parseSync reports UnexpectedAsyncParse, and
-	// parseAsync resolves the chained result
-	assertEquals(unionKinds(parse(fetched, "1")), "Async");
-	assertEquals(unionKinds(parse(afterAsync, "1")), "Async");
+	// Then: both parses are pending, parseSync reports UnexpectedAsyncParse, and
+	// waiting for the parse gives the chained result
+	assertEquals(unionKinds(parse(fetched, { input: "1", panics })), "Pending");
+	assertEquals(
+		unionKinds(parse(afterAsync, { input: "1", panics })),
+		"Pending",
+	);
 	assertEquals(
 		unionKinds(unwrapErr(parseSync(fetched, "1"))),
 		"UnexpectedAsyncParse",
 	);
-	assertEquals(unwrap(await parseAsync(fetched, "1")), 2);
-	assertEquals(unwrap(await parseAsync(afterAsync, "1")), 2);
-	assertEquals(unwrapErr(await parseAsync(afterAsync, "x")), "not digits");
+	assertEquals(
+		unwrap(resume(await wait(parse(fetched, { input: "1", panics })))),
+		2,
+	);
+	assertEquals(
+		unwrap(resume(await wait(parse(afterAsync, { input: "1", panics })))),
+		2,
+	);
+	assertEquals(
+		unwrapErr(resume(await wait(parse(afterAsync, { input: "x", panics })))),
+		"not digits",
+	);
 });
 
 Deno.test("andThen accepts enum's main Result from next", () => {
@@ -557,7 +736,7 @@ Deno.test("orElse replaces a failure with recover's Result", () => {
 	assertEquals(unwrap(parseSync(lenient, "7")), 7);
 	assertEquals(unwrap(parseSync(lenient, "x")), 0);
 	assertEquals(syncError(reworded, "x"), "not digits!");
-	assertEquals(unionKinds(parse(lenient, "x")), "Sync");
+	assertEquals(unionKinds(parse(lenient, { input: "x", panics })), "Resolved");
 });
 
 Deno.test("orElse does not call recover when self succeeds", () => {
@@ -580,11 +759,14 @@ Deno.test("orElse with a promise is async", async () => {
 	const retried = orElse(digits, () => Promise.resolve(Ok(-1)));
 
 	// When: parsing an input self rejects, and one it accepts
-	// Then: the failing parse is Async and resolves recover's result, and the
-	// successful one stays Sync
-	assertEquals(unionKinds(parse(retried, "x")), "Async");
-	assertEquals(unwrap(await parseAsync(retried, "x")), -1);
-	assertEquals(unionKinds(parse(retried, "1")), "Sync");
+	// Then: the failing parse is pending and resolves recover's result, and the
+	// successful one stays resolved
+	assertEquals(unionKinds(parse(retried, { input: "x", panics })), "Pending");
+	assertEquals(
+		unwrap(resume(await wait(parse(retried, { input: "x", panics })))),
+		-1,
+	);
+	assertEquals(unionKinds(parse(retried, { input: "1", panics })), "Resolved");
 });
 
 Deno.test("inspect taps each successful output once, without changing it", async () => {
@@ -598,15 +780,18 @@ Deno.test("inspect taps each successful output once, without changing it", async
 
 	// When: parsing valid and invalid inputs
 	const results = [parseSync(syncTapped, "1"), parseSync(syncTapped, "x")];
-	const pending = parseAsync(asyncTapped, "2");
+	const pending = wait(parse(asyncTapped, { input: "2", panics }));
 	const seenBeforeResolving = [...seen];
-	const resolved = await pending;
-	await parseAsync(asyncTapped, "y");
+	const resolved = resume(await pending);
+	resume(await wait(parse(asyncTapped, { input: "y", panics })));
 
 	// Then: the tap ran once per success, after the async value was known, and
 	// the results are those of the untapped schemas
 	assertEquals(results, [parseSync(digits, "1"), parseSync(digits, "x")]);
-	assertEquals(resolved, await parseAsync(laterDigits, "2"));
+	assertEquals(
+		resolved,
+		resume(await wait(parse(laterDigits, { input: "2", panics }))),
+	);
 	assertEquals(seenBeforeResolving, [1]);
 	assertEquals(seen, [1, 2]);
 });
@@ -622,15 +807,18 @@ Deno.test("inspectErr taps each error once, without changing it", async () => {
 
 	// When: parsing valid and invalid inputs
 	const results = [parseSync(syncTapped, "1"), parseSync(syncTapped, "x")];
-	const pending = parseAsync(asyncTapped, "y");
+	const pending = wait(parse(asyncTapped, { input: "y", panics }));
 	const seenBeforeResolving = [...seen];
-	const resolved = await pending;
-	await parseAsync(asyncTapped, "2");
+	const resolved = resume(await pending);
+	resume(await wait(parse(asyncTapped, { input: "2", panics })));
 
 	// Then: the tap ran once per failure, after the async error was known, and
 	// the results are those of the untapped schemas
 	assertEquals(results, [parseSync(digits, "1"), parseSync(digits, "x")]);
-	assertEquals(resolved, await parseAsync(laterDigits, "y"));
+	assertEquals(
+		resolved,
+		resume(await wait(parse(laterDigits, { input: "y", panics }))),
+	);
 	assertEquals(seenBeforeResolving, ["not digits"]);
 	assertEquals(seen, ["not digits", "not digits"]);
 });
@@ -643,7 +831,7 @@ Deno.test("preprocess transforms the input before parsing", () => {
 	// Then: digits parsed the trimmed input, synchronously
 	assertEquals(unwrap(parseSync(trimmed, " 42 ")), 42);
 	assertEquals(syncError(trimmed, " x "), "not digits");
-	assertEquals(unionKinds(parse(trimmed, "1")), "Sync");
+	assertEquals(unionKinds(parse(trimmed, { input: "1", panics })), "Resolved");
 });
 
 Deno.test("preprocess with a promise is async", async () => {
@@ -653,9 +841,12 @@ Deno.test("preprocess with a promise is async", async () => {
 	});
 
 	// When: parsing
-	// Then: the parse is Async and resolves the prepared input's result
-	assertEquals(unionKinds(parse(fetched, 7)), "Async");
-	assertEquals(unwrap(await parseAsync(fetched, 7)), 7);
+	// Then: the parse is pending and resolves the prepared input's result
+	assertEquals(unionKinds(parse(fetched, { input: 7, panics })), "Pending");
+	assertEquals(
+		unwrap(resume(await wait(parse(fetched, { input: 7, panics })))),
+		7,
+	);
 });
 
 Deno.test("law: preprocess with the identity equals the schema", () => {

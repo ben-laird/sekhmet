@@ -11,12 +11,13 @@ transforming what it parses. Each step is a complete program you can run.
 
 ## Install
 
-Add the package, `@sekhmet/enum`, whose `Result` helpers we will use to read
-what a schema returns, and `@std/assert`, which each step uses to check its
-output:
+Add the package, `@sekhmet/panic`, whose panic runtime a parse runs under
+and whose `Outcome` helpers we will use to read what it returns,
+`@sekhmet/vow`, whose `wait` turns a parse into a `Promise`, and
+`@std/assert`, which each step uses to check its output:
 
 ```sh
-deno add jsr:@sekhmet/schema jsr:@sekhmet/enum jsr:@std/assert
+deno add jsr:@sekhmet/schema jsr:@sekhmet/panic jsr:@sekhmet/vow jsr:@std/assert
 ```
 
 ## Parse a string
@@ -26,28 +27,38 @@ it:
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrap } from "@sekhmet/panic/outcome/mini";
 import { string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const name = string();
-const parsed = await name.parseAsync("Ada");
+const parsed = await wait(name.parse({ input: "Ada", panics }));
 
 assertEquals(unwrap(parsed), "Ada");
 ```
 
-`parseAsync` returns a `Result`. Here it is `Ok("Ada")`, and `unwrap` takes
-the value out: `"Ada"`.
+`parse` returns a `Vow` of an `Outcome`, and `wait` gives us a `Promise` of
+it. Here it is `Ok("Ada")`, and `unwrap` takes the value out: `"Ada"`. The
+panic runtime, `panics`, is where a bug in your own schema code would be
+caught and reported, as a `Panicked` outcome instead of an `Ok` or `Err`.
 
 Now let's give it something that isn't a string:
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { isErr, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { isErr, unwrapErr } from "@sekhmet/panic/outcome/mini";
 import { formatIssue } from "@sekhmet/schema/core";
 import { string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const name = string();
-const parsed = await name.parseAsync(42);
+const parsed = await wait(name.parse({ input: 42, panics }));
 
 assertEquals(isErr(parsed), true);
 assertEquals(
@@ -56,7 +67,7 @@ assertEquals(
 );
 ```
 
-Nothing was thrown. The `Result` is an `Err`, and its error is an issue that
+Nothing was thrown. The `Outcome` is an `Err`, and its error is an issue that
 says what went wrong; `formatIssue` turns it into the message
 `Expected string, received number`.
 
@@ -66,14 +77,20 @@ A member has a name and an age, so we put two schemas together with `object`:
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrap } from "@sekhmet/panic/outcome/mini";
 import { object } from "@sekhmet/schema/composites";
 import { number, string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const member = object({
 	shape: { name: string(), age: number() },
 });
-const parsed = await member.parseAsync({ name: "Ada", age: 36 });
+const parsed = await wait(
+	member.parse({ input: { name: "Ada", age: 36 }, panics }),
+);
 
 assertEquals(unwrap(parsed), { name: "Ada", age: 36 });
 ```
@@ -88,15 +105,21 @@ all:
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrapErr } from "@sekhmet/panic/outcome/mini";
 import { object } from "@sekhmet/schema/composites";
 import { entries, formatIssue } from "@sekhmet/schema/core";
 import { number, string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const member = object({
 	shape: { name: string(), age: number() },
 });
-const issues = unwrapErr(await member.parseAsync({ name: 1 }));
+const issues = unwrapErr(
+	await wait(member.parse({ input: { name: 1 }, panics })),
+);
 
 const report = entries(issues).map(({ path, error }) => {
 	return `${path.join(".")}: ${formatIssue(error)}`;
@@ -124,10 +147,14 @@ negative. Each check is an option of the schema it refines:
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrap, unwrapErr } from "@sekhmet/panic/outcome/mini";
 import { object } from "@sekhmet/schema/composites";
 import { entries, formatIssue } from "@sekhmet/schema/core";
 import { number, string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const member = object({
 	shape: {
@@ -136,10 +163,14 @@ const member = object({
 	},
 });
 
-const good = await member.parseAsync({ name: "Ada", age: 36 });
+const good = await wait(
+	member.parse({ input: { name: "Ada", age: 36 }, panics }),
+);
 assertEquals(unwrap(good), { name: "Ada", age: 36 });
 
-const issues = unwrapErr(await member.parseAsync({ name: "", age: 1.5 }));
+const issues = unwrapErr(
+	await wait(member.parse({ input: { name: "", age: 1.5 }, panics })),
+);
 const report = entries(issues).map(({ path, error }) => {
 	return `${path.join(".")}: ${formatIssue(error)}`;
 });
@@ -165,9 +196,13 @@ so it always receives a valid member:
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { isErr, unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { isErr, unwrap } from "@sekhmet/panic/outcome/mini";
 import { object } from "@sekhmet/schema/composites";
 import { number, string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const member = object({
 	shape: {
@@ -178,10 +213,14 @@ const member = object({
 	return { ...valid, adult: valid.age >= 18 };
 });
 
-const parsed = await member.parseAsync({ name: "Ada", age: 36 });
+const parsed = await wait(
+	member.parse({ input: { name: "Ada", age: 36 }, panics }),
+);
 assertEquals(unwrap(parsed), { name: "Ada", age: 36, adult: true });
 
-const rejected = await member.parseAsync({ name: "Ada", age: -1 });
+const rejected = await wait(
+	member.parse({ input: { name: "Ada", age: -1 }, panics }),
+);
 assertEquals(isErr(rejected), true);
 ```
 
@@ -198,7 +237,7 @@ From here:
 
 - [Recipes](./recipes.md) show how to handle real inputs: JSON bodies, query
   strings and forms, API responses, IDs.
-- [Concepts](./concepts.md) explain why a schema returns a `Result`, how
+- [Concepts](./concepts.md) explain why a schema parses to an `Outcome`, how
   issues work, and how schemas describe themselves.
 - The [API reference on JSR](https://jsr.io/@sekhmet/schema/doc) lists every
   schema and option.

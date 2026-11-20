@@ -1,8 +1,12 @@
 # @sekhmet/schema
 
 `@sekhmet/schema` validates and transforms values. A `Schema<I, O, E>` parses
-an input `I` into a `Result<O, E>`, so the input, the output and the error
-are all typed, and a failure is a value rather than a throw. The built-in
+an input `I`, under a panic runtime from
+[`@sekhmet/panic`](https://jsr.io/@sekhmet/panic), into a
+[`Vow`](https://jsr.io/@sekhmet/vow) of an `Outcome<O, E>`: the output, an
+expected error, or `Panicked` when your own code in the schema threw. The
+input, the output and the error are all typed, a failure is a value rather
+than a throw, and a synchronous parse settles synchronously. The built-in
 schemas fail with `SchemaIssue`s that say why a value was rejected, and
 composites such as `object` report every failure with its path. Every schema
 also describes itself as data, for tools like form generators, and bridges to
@@ -44,10 +48,14 @@ mini entrypoint of tree-shakable functions, with a subpath per module (e.g.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrap, unwrapErr } from "@sekhmet/panic/outcome/mini";
 import { object } from "@sekhmet/schema/composites";
 import { entries, formatIssue } from "@sekhmet/schema/core";
 import { number, string } from "@sekhmet/schema/primitives";
+import { wait } from "@sekhmet/vow";
+
+const panics = definePanicRuntime();
 
 const member = object({
 	shape: {
@@ -56,12 +64,11 @@ const member = object({
 	},
 });
 
-assertEquals(unwrap(await member.parseAsync({ name: " Ada ", age: 36 })), {
-	name: "Ada",
-	age: 36,
-});
+const ada = member.parse({ input: { name: " Ada ", age: 36 }, panics });
+assertEquals(unwrap(await wait(ada)), { name: "Ada", age: 36 });
 
-const issues = unwrapErr(await member.parseAsync({ name: "", age: 1.5 }));
+const bad = member.parse({ input: { name: "", age: 1.5 }, panics });
+const issues = unwrapErr(await wait(bad));
 assertEquals(
 	entries(issues).map(({ path, error }) => [path, formatIssue(error)]),
 	[
@@ -79,9 +86,9 @@ assertEquals(
   reading query strings and forms, parsing API responses, branding IDs,
   reshaping objects, recursive data, type guards, form labels and Standard
   Schema.
-- **Explanation:** [Concepts](./docs/concepts.md) covers why a schema returns
-  a `Result`, issues as data, strict primitives, checks as options, main and
-  mini, sync and async, and schemas that describe themselves.
+- **Explanation:** [Concepts](./docs/concepts.md) covers why a schema parses
+  to an `Outcome`, issues as data, strict primitives, checks as options, main
+  and mini, sync and async, and schemas that describe themselves.
 - **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/schema/doc)
   documents every schema, option and issue.
 

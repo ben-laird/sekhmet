@@ -11,6 +11,7 @@
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  * import { InvalidType, Schema } from "@sekhmet/schema/core/mini";
  * import { fromStandard, toStandard } from "@sekhmet/schema/standard";
  *
@@ -21,7 +22,10 @@
  * 		return Err(InvalidType({ input, expected: "string" }));
  * 	},
  * });
- * const length = fromStandard(toStandard({ schema: text })).map((s) => s.length);
+ * const panics = definePanicRuntime();
+ * const length = fromStandard(toStandard({ schema: text, panics })).map(
+ * 	(s) => s.length,
+ * );
  *
  * assertEquals(unwrap(length.parseSync("four")), 4);
  * ```
@@ -57,7 +61,10 @@ export { EMPTY_FAILURE_MESSAGE, toStandard } from "../mini/mod.ts";
  * Each Standard issue becomes an `Issues` entry: its `path` is normalised to
  * `PropertyKey`s (a `{ key }` segment becomes its key, and a missing path is
  * the root), and the issue itself is the entry's error. A `Promise` from
- * `validate` makes the parse `Async`; any other result keeps it `Sync`.
+ * `validate` makes the parse asynchronous; any other result keeps it
+ * synchronous. `validate` is foreign code, so it runs under the parse's
+ * panic boundary: a throw, or a rejection of its promise, settles the parse
+ * as `Panicked`.
  *
  * @template O - The Standard Schema's output type
  * @param standard - The Standard Schema to wrap
@@ -65,9 +72,11 @@ export { EMPTY_FAILURE_MESSAGE, toStandard } from "../mini/mod.ts";
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
- * import { entries, parseAsync } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { unwrap, unwrapErr } from "@sekhmet/panic/outcome/mini";
+ * import { entries, parse } from "@sekhmet/schema/core/mini";
  * import { fromStandard, type StandardSchemaV1 } from "@sekhmet/schema/standard";
+ * import { wait } from "@sekhmet/vow";
  *
  * const text: StandardSchemaV1<unknown, string> = {
  * 	"~standard": {
@@ -80,10 +89,11 @@ export { EMPTY_FAILURE_MESSAGE, toStandard } from "../mini/mod.ts";
  * 	},
  * };
  * const schema = fromStandard(text);
+ * const panics = definePanicRuntime();
  *
- * assertEquals(unwrap(await parseAsync(schema, "a")), "a");
+ * assertEquals(unwrap(await wait(parse(schema, { input: "a", panics }))), "a");
  *
- * const [issue] = entries(unwrapErr(await parseAsync(schema, 1)));
+ * const [issue] = entries(unwrapErr(await wait(parse(schema, { input: 1, panics }))));
  * assertEquals(issue.path, ["name"]);
  * assertEquals(issue.error.message, "Expected string");
  * ```

@@ -575,6 +575,61 @@ Deno.test("generateMain converts configured wrap targets and aliases clashing im
 	assertStringIncludes(output, "fill(from: MiniBag<T>): void {");
 });
 
+Deno.test("generateMain converts a carrier's value through its imported map function", () => {
+	// Given: a Bag wrap target, a Vow carrier, and a method returning Vow<Bag<T>>
+	const feature: Feature = {
+		...FEATURE,
+		wraps: [{ type: "Bag", from: "../../bag/main/mod.ts" }],
+		carriers: [{ type: "Vow", from: "@pkg/vow/mini/impl", map: "map" }],
+	};
+	const bag = (arg: string): TypeNode => ({
+		kind: "ref",
+		name: "Bag",
+		args: [typeParam(arg)],
+		resolution: {
+			kind: "import",
+			specifier: "../../bag/mini/core.ts",
+			name: "Bag",
+		},
+	});
+	const vow = (inner: TypeNode): TypeNode => ({
+		kind: "ref",
+		name: "Vow",
+		args: [inner],
+		resolution: {
+			kind: "import",
+			specifier: "@pkg/vow/mini/core",
+			name: "Vow",
+		},
+	});
+	const later = fn(
+		"later",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: vow(bag("T")),
+		}),
+	);
+
+	// When: generating
+	const output = source([later], feature);
+
+	// Then: map is imported under the carrier's local name, and the vow's
+	// value converts to the main Bag
+	assertStringIncludes(
+		output,
+		'import { map as mapVow } from "@pkg/vow/mini/impl";',
+	);
+	assertStringIncludes(
+		output,
+		'import type { Vow } from "@pkg/vow/mini/core";',
+	);
+	assertStringIncludes(
+		output,
+		"later(): Vow<Bag<T>> {\n\t\treturn mapVow(mini.later(this), ($value0) => { return Bag.fromMini($value0); });",
+	);
+});
+
 Deno.test("generateMain re-exports the rest of mini and honours omit", () => {
 	// Given: a type, a value and an omitted value
 	const variants: DocSymbol = {

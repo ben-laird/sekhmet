@@ -7,7 +7,6 @@
  * @module
  */
 
-import { match, union } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { InvalidValue, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import {
@@ -17,11 +16,12 @@ import {
 	toIssues,
 } from "@/src/core/mini/issues.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";
-import { map as mapPotential } from "@/src/core/mini/potential.ts";
+import { proceed, settled } from "@/src/core/mini/parsing.ts";
 import {
 	type ErrorOf,
 	type Input,
 	type Output,
+	type ParseOptions,
 	parse,
 	type Schema,
 } from "@/src/core/mini/schema.ts";
@@ -190,9 +190,12 @@ export interface DiscriminatedUnionView<K extends string, M> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { discriminatedUnion, object } from "@sekhmet/schema/composites/mini";
- * import { entries, formatIssue, parseAsync, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { entries, formatIssue, parse, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { wait } from "@sekhmet/vow";
  *
  * const size = new Schema({
  * 	parse: (input: unknown) => {
@@ -212,7 +215,9 @@ export interface DiscriminatedUnionView<K extends string, M> {
  * 	kind: "circle",
  * });
  *
- * const [issue] = entries(unwrapErr(await parseAsync(shape, { kind: "star" })));
+ * const panics = definePanicRuntime();
+ * const star = { kind: "star" };
+ * const [issue] = entries(unwrapErr(await wait(parse(shape, { input: star, panics }))));
  * assertEquals(issue.path, ["kind"]);
  * ```
  */
@@ -233,7 +238,7 @@ export function discriminatedUnion(declaration: {
 
 	return viewed({
 		init: {
-			parse: (input: unknown): Parsed => {
+			run: ({ input, panics }: ParseOptions<unknown>): Parsed => {
 				if (!isRecord(input)) return invalidType({ input, expected: "object" });
 
 				const value = input[key];
@@ -241,29 +246,28 @@ export function discriminatedUnion(declaration: {
 					typeof value === "string" && Object.hasOwn(options, value);
 				const option = known ? options[value] : undefined;
 				if (typeof value !== "string" || option === undefined) {
-					return Err(
-						locate({
-							key,
-							error: InvalidValue({
-								input: value,
-								expected: Object.keys(options),
+					return settled(
+						Err(
+							locate({
+								key,
+								error: InvalidValue({
+									input: value,
+									expected: Object.keys(options),
+								}),
 							}),
-						}),
+						),
 					);
 				}
 
-				return union(
-					mapPotential(parse(option, input), (result) => {
-						return match(result)({
-							Ok: (output): Parsed => {
-								if (!isRecord(output)) return Ok(output);
+				return proceed(parse(option, { input, panics }), {
+					panics,
+					Ok: (output): Parsed => {
+						if (!isRecord(output)) return settled(Ok(output));
 
-								return Ok({ ...output, [key]: value });
-							},
-							Err: (error) => Err(toIssues(error)),
-						});
-					}),
-				);
+						return settled(Ok({ ...output, [key]: value }));
+					},
+					Err: (error) => settled(Err(toIssues(error))),
+				});
 			},
 			node: new SchemaNode("DiscriminatedUnion", { key, options }),
 		},

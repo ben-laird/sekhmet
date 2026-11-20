@@ -1,5 +1,8 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { resume } from "@sekhmet/panic/outcome/mini";
+import { wait } from "@sekhmet/vow";
 import { assertEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
@@ -13,7 +16,6 @@ import {
 	type ErrorOf,
 	type Output,
 	parse,
-	parseAsync,
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
@@ -25,6 +27,8 @@ import type {
 	StandardSchemaV1,
 } from "./spec.ts";
 import { toStandard } from "./to-standard.ts";
+
+const panics = definePanicRuntime();
 
 /**
  * A hand-written Standard Schema of `{ name: string }`, in the shape Zod or
@@ -81,10 +85,10 @@ Deno.test("fromStandard parses synchronously when validate does", () => {
 	const schema = fromStandard(syncUser);
 
 	// When: parsing a valid value
-	const potential = parse(schema, { name: "Ada" });
+	const parsing = parse(schema, { input: { name: "Ada" }, panics });
 
-	// Then: the parse is Sync and yields the Standard output
-	assertEquals(unionKinds(potential), "Sync");
+	// Then: the parse is resolved and yields the Standard output
+	assertEquals(unionKinds(parsing), "Resolved");
 	assertEquals(unwrap(parseSync(schema, { name: "Ada" })), {
 		name: "Ada",
 	});
@@ -95,13 +99,18 @@ Deno.test("fromStandard parses asynchronously when validate returns a Promise", 
 	const schema = fromStandard(asyncUser);
 
 	// When: parsing a valid value
-	const potential = parse(schema, { name: "Ada" });
+	const parsing = parse(schema, { input: { name: "Ada" }, panics });
 
-	// Then: the parse is Async and yields the Standard output
-	assertEquals(unionKinds(potential), "Async");
-	assertEquals(unwrap(await parseAsync(schema, { name: "Ada" })), {
-		name: "Ada",
-	});
+	// Then: the parse is pending and yields the Standard output
+	assertEquals(unionKinds(parsing), "Pending");
+	assertEquals(
+		unwrap(
+			resume(await wait(parse(schema, { input: { name: "Ada" }, panics }))),
+		),
+		{
+			name: "Ada",
+		},
+	);
 });
 
 Deno.test("fromStandard makes each Standard issue an Issues entry", async (t) => {
@@ -110,7 +119,9 @@ Deno.test("fromStandard makes each Standard issue an Issues entry", async (t) =>
 		const schema = fromStandard(asyncUser);
 
 		// When: parsing an invalid value
-		const issues = unwrapErr(await parseAsync(schema, { name: 1 }));
+		const issues = unwrapErr(
+			resume(await wait(parse(schema, { input: { name: 1 }, panics }))),
+		);
 
 		// Then: each issue is an entry at its normalised path, kept as the error
 		assertEquals(entries(issues), [
@@ -127,7 +138,9 @@ Deno.test("fromStandard makes each Standard issue an Issues entry", async (t) =>
 		const schema = fromStandard(syncUser);
 
 		// When: parsing a non-object
-		const issues = unwrapErr(await parseAsync(schema, 1));
+		const issues = unwrapErr(
+			resume(await wait(parse(schema, { input: 1, panics }))),
+		);
 
 		// Then: the entry's path is empty
 		assertEquals(entries(issues), [
@@ -146,7 +159,9 @@ Deno.test("fromStandard makes each Standard issue an Issues entry", async (t) =>
 		});
 
 		// When: parsing anything
-		const issues = unwrapErr(await parseAsync(schema, 1));
+		const issues = unwrapErr(
+			resume(await wait(parse(schema, { input: 1, panics }))),
+		);
 
 		// Then: Issues, which is never empty, holds one root issue saying so
 		assertEquals(entries(issues), [
@@ -180,13 +195,15 @@ const tagged = new Schema({
 	},
 });
 
-Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
+Deno.test("fromStandard(toStandard({ panics, schema })) round-trips", async (t) => {
 	await t.step("outputs are preserved", async () => {
 		// Given: a schema round-tripped through Standard Schema
-		const schema = fromStandard(toStandard({ schema: tagged }));
+		const schema = fromStandard(toStandard({ panics, schema: tagged }));
 
 		// When: parsing a valid value
-		const output = await parseAsync(schema, ["a", "b"]);
+		const output = resume(
+			await wait(parse(schema, { input: ["a", "b"], panics })),
+		);
 
 		// Then: the output is the original schema's
 		assertEquals(unwrap(output), 2);
@@ -194,11 +211,15 @@ Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
 
 	await t.step("issue messages and paths are preserved", async () => {
 		// Given: a schema round-tripped through Standard Schema
-		const schema = fromStandard(toStandard({ schema: tagged }));
+		const schema = fromStandard(toStandard({ panics, schema: tagged }));
 
 		// When: parsing an invalid value
-		const roundTripped = unwrapErr(await parseAsync(schema, []));
-		const original = unwrapErr(await parseAsync(tagged, []));
+		const roundTripped = unwrapErr(
+			resume(await wait(parse(schema, { input: [], panics }))),
+		);
+		const original = unwrapErr(
+			resume(await wait(parse(tagged, { input: [], panics }))),
+		);
 
 		// Then: each entry keeps its path, and its message is formatIssue's
 		assertEquals(
@@ -220,10 +241,12 @@ Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
 				return Err(InvalidType({ input, expected: "string" }));
 			},
 		});
-		const schema = fromStandard(toStandard({ schema: single }));
+		const schema = fromStandard(toStandard({ panics, schema: single }));
 
 		// When: parsing
-		const issues = unwrapErr(await parseAsync(schema, 1));
+		const issues = unwrapErr(
+			resume(await wait(parse(schema, { input: 1, panics }))),
+		);
 
 		// Then: one entry at the empty path, with formatIssue's message
 		assertEquals(entries(issues), [
@@ -233,13 +256,13 @@ Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
 
 	await t.step("sync stays sync", () => {
 		// Given: a synchronous schema, round-tripped
-		const schema = fromStandard(toStandard({ schema: tagged }));
+		const schema = fromStandard(toStandard({ panics, schema: tagged }));
 
 		// When: parsing
-		const potential = parse(schema, ["a"]);
+		const parsing = parse(schema, { input: ["a"], panics });
 
-		// Then: the parse is Sync
-		assertEquals(unionKinds(potential), "Sync");
+		// Then: the parse is resolved
+		assertEquals(unionKinds(parsing), "Resolved");
 	});
 
 	await t.step("async stays async", async () => {
@@ -253,20 +276,24 @@ Deno.test("fromStandard(toStandard({ schema })) round-trips", async (t) => {
 				);
 			},
 		});
-		const schema = fromStandard(toStandard({ schema: delayed }));
+		const schema = fromStandard(toStandard({ panics, schema: delayed }));
 
 		// When: parsing
-		const potential = parse(schema, 1);
+		const parsing = parse(schema, { input: 1, panics });
 
-		// Then: the parse is Async, with the original output
-		assertEquals(unionKinds(potential), "Async");
-		assertEquals(unwrap(await parseAsync(schema, 1)), 1);
+		// Then: the parse is pending, with the original output
+		assertEquals(unionKinds(parsing), "Pending");
+		assertEquals(
+			unwrap(resume(await wait(parse(schema, { input: 1, panics })))),
+			1,
+		);
 	});
 });
 
 Deno.test("toStandard(fromStandard(standard)) round-trips with toIssue", async () => {
 	// Given: a Standard Schema wrapped and exposed again, keeping each issue
 	const standard = toStandard({
+		panics,
 		schema: fromStandard(asyncUser),
 		toIssue: (issue) => ({ message: issue.message }),
 	});

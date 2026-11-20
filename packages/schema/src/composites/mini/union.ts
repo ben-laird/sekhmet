@@ -6,16 +6,16 @@
  * @module
  */
 
-import { match, union as unionValue } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { InvalidUnion, type SchemaIssue } from "@/src/core/mini/issue.ts";
 import { fromError, type Issues, toIssues } from "@/src/core/mini/issues.ts";
 import { SchemaNode } from "@/src/core/mini/node.ts";
-import { map as mapPotential } from "@/src/core/mini/potential.ts";
+import { proceed, settled } from "@/src/core/mini/parsing.ts";
 import {
 	type AnySchema,
 	type Input,
 	type Output,
+	type ParseOptions,
 	parse,
 	type Schema,
 } from "@/src/core/mini/schema.ts";
@@ -84,9 +84,12 @@ export interface UnionView<T extends readonly AnySchema[]> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { union } from "@sekhmet/schema/composites/mini";
- * import { entries, formatIssue, parseAsync, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { entries, formatIssue, parse, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { wait } from "@sekhmet/vow";
  *
  * const text = new Schema({
  * 	parse: (input: unknown) => {
@@ -102,7 +105,10 @@ export interface UnionView<T extends readonly AnySchema[]> {
  *
  * assertEquals(unwrap(parseSync(textOrCount, 3)), 3);
  *
- * const [{ error }] = entries(unwrapErr(await parseAsync(textOrCount, null)));
+ * const panics = definePanicRuntime();
+ * const [{ error }] = entries(
+ * 	unwrapErr(await wait(parse(textOrCount, { input: null, panics }))),
+ * );
  * assertEquals(formatIssue(error), "Invalid input: no union branch matched");
  * ```
  */
@@ -115,7 +121,7 @@ export function union(
 	UnionView<readonly [Child, ...Child[]]> {
 	return viewed({
 		init: {
-			parse: (input: unknown): Parsed => {
+			run: ({ input, panics }: ParseOptions<unknown>): Parsed => {
 				const attempt = ({
 					index,
 					failures,
@@ -125,22 +131,21 @@ export function union(
 				}): Parsed => {
 					const option = options[index];
 					if (option === undefined) {
-						return Err(fromError(InvalidUnion({ input, branches: failures })));
+						return settled(
+							Err(fromError(InvalidUnion({ input, branches: failures }))),
+						);
 					}
 
-					return unionValue(
-						mapPotential(parse(option, input), (result) => {
-							return match(result)({
-								Ok: (output): Parsed => Ok(output),
-								Err: (error) => {
-									return attempt({
-										index: index + 1,
-										failures: [...failures, toIssues(error)],
-									});
-								},
+					return proceed(parse(option, { input, panics }), {
+						panics,
+						Ok: (output) => settled(Ok(output)),
+						Err: (error) => {
+							return attempt({
+								index: index + 1,
+								failures: [...failures, toIssues(error)],
 							});
-						}),
-					);
+						},
+					});
 				};
 
 				return attempt({ index: 0, failures: [] });

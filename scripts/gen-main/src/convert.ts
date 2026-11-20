@@ -19,6 +19,8 @@
  *   assigned on; its type arguments keep their mini spelling
  * - the fulfilled value of a `Promise<X>` in any converted position, through
  *   `.then` (`Promise<Result<T, E>>`)
+ * - the carried value of a carrier (`Vow<Outcome<T, E>>`) in any converted
+ *   position, through the carrier's map function (`map(vow, …)`)
  * - the return value of a non-generic function type in any converted position
  *   (`(...args: A) => Result<U, E>`), by wrapping the function so that each
  *   call converts; a returned function is bound to a name first, at every
@@ -86,6 +88,11 @@ export interface ConvertContext {
 	readonly mappers: (target: string) => readonly (string | undefined)[];
 	/** Whether a wrap target's main class has a `fromMiniView` static. */
 	readonly views: (target: string) => boolean;
+	/**
+	 * The local name of the map function of the carrier a type names at its
+	 * top level, if it names one (see `CarrierTarget`).
+	 */
+	readonly carrier: (type: TypeNode) => string | undefined;
 }
 
 const ITERABLES: ReadonlySet<string> = new Set([
@@ -141,6 +148,43 @@ function planPromise({
 		text: `Promise<${text}>`,
 		apply: (expression) => {
 			return `${expression}.then(${arrow({ params: item, body: apply(item) })})`;
+		},
+		named: false,
+	});
+}
+
+/**
+ * Plans a carrier (`Vow<X>`): its carried value converts through the
+ * carrier's map function, `map(expression, ($value) => …)`.
+ */
+function planCarrier({
+	type,
+	map,
+	context,
+	depth,
+}: {
+	type: Extract<TypeNode, { kind: "ref" }>;
+	map: string;
+	context: ConvertContext;
+	depth: number;
+}): Result<Value, string> {
+	const [carried] = type.args;
+	if (carried === undefined || type.args.length !== 1) {
+		return ok(unconverted({ type, context }));
+	}
+
+	const planned = planValue({ type: carried, context, depth: depth + 1 });
+	if (!planned.ok) return planned;
+
+	const { text, apply } = planned.value;
+	if (apply === undefined) return ok(unconverted({ type, context }));
+
+	const item = local(`value${depth}`);
+
+	return ok({
+		text: context.render({ ...type, args: [verbatim(text)] }),
+		apply: (expression) => {
+			return `${map}(${expression}, ${arrow({ params: item, body: apply(item) })})`;
 		},
 		named: false,
 	});
@@ -229,6 +273,10 @@ function planValue({
 		type.args.length === 1
 	) {
 		return planPromise({ type, context, depth });
+	}
+	const map = context.carrier(type);
+	if (map !== undefined && type.kind === "ref") {
+		return planCarrier({ type, map, context, depth });
 	}
 	if (
 		type.kind === "function" &&

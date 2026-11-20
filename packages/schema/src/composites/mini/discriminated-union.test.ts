@@ -1,5 +1,8 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+import { Panicked, resume } from "@sekhmet/panic/outcome/mini";
+import { wait } from "@sekhmet/vow";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
@@ -13,12 +16,13 @@ import {
 	type Input,
 	type Output,
 	parse,
-	parseAsync,
 	parseSync,
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { discriminatedUnion } from "./discriminated-union.ts";
 import { object } from "./object.ts";
+
+const panics = definePanicRuntime();
 
 const size: Schema<unknown, number, "not a size"> = new Schema({
 	parse: (input) => {
@@ -55,7 +59,11 @@ Deno.test("discriminatedUnion reports the chosen option's issues", async () => {
 	// Given: a union of circles and squares
 	// When: parsing a circle with a bad radius
 	const issues = unwrapErr(
-		await parseAsync(shape, { kind: "circle", radius: "big" }),
+		resume(
+			await wait(
+				parse(shape, { input: { kind: "circle", radius: "big" }, panics }),
+			),
+		),
 	);
 
 	// Then: the circle's issue is reported at its path
@@ -67,7 +75,9 @@ Deno.test("discriminatedUnion rejects an unknown discriminant with InvalidValue 
 		await t.step(String(kind), async () => {
 			// Given: a union of circles and squares
 			// When: parsing an object whose kind names no option
-			const issues = unwrapErr(await parseAsync(shape, { kind }));
+			const issues = unwrapErr(
+				resume(await wait(parse(shape, { input: { kind }, panics }))),
+			);
 
 			// Then: one InvalidValue issue at ["kind"] lists the options
 			assertEquals(entries(issues), [
@@ -83,7 +93,9 @@ Deno.test("discriminatedUnion rejects an unknown discriminant with InvalidValue 
 Deno.test("discriminatedUnion rejects non-objects with InvalidType at the root", async () => {
 	// Given: a union of circles and squares
 	// When: parsing null
-	const issues = unwrapErr(await parseAsync(shape, null));
+	const issues = unwrapErr(
+		resume(await wait(parse(shape, { input: null, panics }))),
+	);
 
 	// Then: one InvalidType issue is reported at the root
 	assertEquals(entries(issues), [
@@ -91,7 +103,7 @@ Deno.test("discriminatedUnion rejects non-objects with InvalidType at the root",
 	]);
 });
 
-Deno.test("discriminatedUnion is Async when the chosen option is", async () => {
+Deno.test("discriminatedUnion is pending when the chosen option is", async () => {
 	// Given: a union whose circle option is async
 	const later = discriminatedUnion({
 		key: "kind",
@@ -102,16 +114,29 @@ Deno.test("discriminatedUnion is Async when the chosen option is", async () => {
 	});
 
 	// When: parsing a square and a circle
-	const squareKind = unionKinds(parse(later, { kind: "square", side: 1 }));
-	const circleKind = unionKinds(parse(later, { kind: "circle", radius: 1 }));
+	const squareKind = unionKinds(
+		parse(later, { input: { kind: "square", side: 1 }, panics }),
+	);
+	const circleKind = unionKinds(
+		parse(later, { input: { kind: "circle", radius: 1 }, panics }),
+	);
 
-	// Then: only the circle's parse is Async
-	assertEquals(squareKind, "Sync");
-	assertEquals(circleKind, "Async");
-	assertEquals(unwrap(await parseAsync(later, { kind: "circle", radius: 1 })), {
-		radius: 1,
-		kind: "circle",
-	});
+	// Then: only the circle's parse is pending
+	assertEquals(squareKind, "Resolved");
+	assertEquals(circleKind, "Pending");
+	assertEquals(
+		unwrap(
+			resume(
+				await wait(
+					parse(later, { input: { kind: "circle", radius: 1 }, panics }),
+				),
+			),
+		),
+		{
+			radius: 1,
+			kind: "circle",
+		},
+	);
 });
 
 Deno.test("discriminatedUnion infers a union narrowed by its key", () => {
@@ -162,4 +187,42 @@ Deno.test('a discriminatedUnion keyed "optional" is a required key of an object'
 	assertEquals(unwrap(parseSync(holder, { value: { optional: "yes" } })), {
 		value: { optional: "yes" },
 	});
+});
+
+Deno.test("discriminatedUnion panics when its option's output can't be copied", async (t) => {
+	const bug = new Error("ownKeys");
+	const trap = new Proxy(
+		{},
+		{
+			ownKeys: () => {
+				throw bug;
+			},
+		},
+	);
+	const now = new Schema({ parse: (_input: unknown) => Ok(trap) });
+	const later = new Schema({
+		parse: (_input: unknown) => Promise.resolve(Ok(trap)),
+	});
+
+	for (const [timing, option] of [
+		["synchronous", now],
+		["asynchronous", later],
+	] as const) {
+		await t.step(`${timing} option`, async () => {
+			// Given: an option whose output throws when spread
+			const recording = definePanicRuntime();
+			const reported: unknown[] = [];
+			recording.setHook(({ payload }) => reported.push(payload));
+			const tagged = discriminatedUnion({ key: "k", options: { x: option } });
+
+			// When: parsing
+			const outcome = await wait(
+				parse(tagged, { input: { k: "x" }, panics: recording }),
+			);
+
+			// Then: the parse settles as the raw payload, reported once
+			assertEquals(outcome, Panicked(bug));
+			assertEquals(reported, [bug]);
+		});
+	}
 });
