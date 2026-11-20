@@ -23,6 +23,7 @@ import {
 	assertThrows,
 } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
+import { object } from "@/src/composites/mini/object.ts";
 import {
 	type AnySchema,
 	andThen,
@@ -205,26 +206,26 @@ Deno.test("parseSync abandons an async parse without leaving a rejection behind"
 	});
 
 	await t.step("a synchronous panic beside async work", async () => {
-		// Given: a pipe whose first step is async, beside one that throws now
-		const throwing = new Schema({
-			parse: (_input: number): Result<number, never> => {
-				throw new RangeError("sync bug");
+		// Given: an object whose field a starts async work that will throw,
+		// and whose field b throws now
+		const both = object({
+			shape: {
+				a: map(later, (): number => {
+					throw new Error("mapping bug");
+				}),
+				b: new Schema({
+					parse: (_input: number): Result<number, never> => {
+						throw new RangeError("sync bug");
+					},
+				}),
 			},
 		});
-		const both = pipe(
-			later,
-			map(later, (): number => {
-				throw new Error("mapping bug");
-			}),
-		);
 
-		// When: parseSync unwinds the sync throw, after starting async work
-		assertThrows(() => parseSync(throwing, 1), RangeError, "sync bug");
-		const result = parseSync(both, 1);
+		// When / Then: parseSync unwinds b's throw at once
+		assertThrows(() => parseSync(both, { a: 1, b: 1 }), RangeError, "sync bug");
+
+		// Then: field a's abandoned work resumes without leaving a rejection
 		await drain();
-
-		// Then: the async parse was abandoned without a rejection
-		assertEquals(unionKinds(unwrapErr(result)), "UnexpectedAsyncParse");
 	});
 });
 
