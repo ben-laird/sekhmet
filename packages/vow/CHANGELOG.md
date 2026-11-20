@@ -4,6 +4,12 @@ All notable changes to this Package are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this Package adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-20
+
+### Added
+
+- all(vows) joins any number of vows into a vow of every value, in order: the n-ary zip, resolving inside the call when every input already has (#84)
+
 ## [0.3.0] - 2026-11-20
 
 ### Changed
