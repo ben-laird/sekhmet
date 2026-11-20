@@ -50,7 +50,14 @@
 		"./ordering/mini/core": "./src/ordering/mini/core.ts",
 		"./ordering/mini/predicates": "./src/ordering/mini/predicates.ts",
 		"./ordering/mini/combinators": "./src/ordering/mini/combinators.ts",
-		"./ordering/mini/compare": "./src/ordering/mini/compare.ts"
+		"./ordering/mini/compare": "./src/ordering/mini/compare.ts",
+
+		"./control-flow": "./src/control-flow/main/mod.ts",
+		"./control-flow/mini": "./src/control-flow/mini/mod.ts",
+		"./control-flow/mini/convert": "./src/control-flow/mini/convert.ts",
+		"./control-flow/mini/core": "./src/control-flow/mini/core.ts",
+		"./control-flow/mini/predicates": "./src/control-flow/mini/predicates.ts",
+		"./control-flow/mini/transform": "./src/control-flow/mini/transform.ts"
 	},
 
 	"imports": {
