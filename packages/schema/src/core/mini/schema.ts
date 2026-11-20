@@ -25,6 +25,7 @@ import type { PanicRuntime } from "@sekhmet/panic/mini/runtime";
 import {
 	type Outcome,
 	Ok as OutcomeOk,
+	Panicked,
 } from "@sekhmet/panic/outcome/mini/core";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import type { Vow } from "@sekhmet/vow/mini/core";
@@ -470,24 +471,56 @@ export function parse<I, O, E>(
 	return step({ panics: options.panics, work: () => run(options) });
 }
 
+/** {@linkcode parseSync}'s boundary, and how to abandon what it leaves. */
+interface Unwinding {
+	/** The boundary the parse runs under. */
+	readonly panics: PanicBoundary;
+	/** Marks the parse abandoned: `parseSync` has returned or thrown. */
+	readonly abandon: () => void;
+}
+
 /**
- * A boundary that catches nothing: a throw in user code unwinds through
- * {@linkcode parseSync} to its caller, as an unguarded call would.
+ * {@linkcode parseSync}'s boundary, one per call. While `parseSync` runs, it
+ * catches nothing, so a throw in user code unwinds to its caller, as an
+ * unguarded call's would. Once `parseSync` has returned, what is left of an
+ * asynchronous parse runs with nobody to unwind to: a throw or rejection
+ * then settles the abandoned parse as `Panicked`, which nothing reads, so
+ * it never escapes as an unhandled rejection.
  */
-const UNWINDING: PanicBoundary = Object.freeze({
-	// The guard rest is type-only, as in definePanicRuntime: never read
-	catchUnwind: <T>(
-		fn: () => T,
-		..._useCatchUnwindAsyncForPromises: unknown[]
-	): Outcome<T, never, unknown> => {
-		return OutcomeOk(fn());
-	},
-	catchUnwindAsync: async <T>(
-		fn: () => PromiseLike<T>,
-	): Promise<Outcome<T, never, unknown>> => {
-		return OutcomeOk(await fn());
-	},
-});
+function unwinding(): Unwinding {
+	let abandoned = false;
+
+	return {
+		panics: {
+			// The guard rest is type-only, as in definePanicRuntime: never read
+			catchUnwind: <T>(
+				fn: () => T,
+				..._useCatchUnwindAsyncForPromises: unknown[]
+			): Outcome<T, never, unknown> => {
+				if (!abandoned) return OutcomeOk(fn());
+
+				try {
+					return OutcomeOk(fn());
+				} catch (payload: unknown) {
+					return Panicked(payload);
+				}
+			},
+			// Only an abandoned parse awaits: a rejection settles it as Panicked
+			catchUnwindAsync: async <T>(
+				fn: () => PromiseLike<T>,
+			): Promise<Outcome<T, never, unknown>> => {
+				try {
+					return OutcomeOk(await fn());
+				} catch (payload: unknown) {
+					return Panicked(payload);
+				}
+			},
+		},
+		abandon: () => {
+			abandoned = true;
+		},
+	};
+}
 
 /**
  * Error variants that can occur during synchronous parsing.
@@ -581,8 +614,9 @@ export function ParseError<E>(error: E): ParseSyncError<E> {
  *
  * It takes no panic runtime: a throw in user code is not caught, and
  * unwinds to the caller, as any unguarded call's would. A schema that turns
- * out to be asynchronous is not waited for: its parse is abandoned, along
- * with any panic it raises later. Use {@linkcode parse} for either.
+ * out to be asynchronous is not waited for: its parse is abandoned, and a
+ * panic it raises later settles the abandoned parse, unreported, rather
+ * than escape as an unhandled rejection. Use {@linkcode parse} for either.
  *
  * @template I The input type
  * @template O The output type
@@ -610,8 +644,15 @@ export function parseSync<I, O, E>(
 	input: I,
 ): Result<O, ParseSyncError<E>> {
 	type Synchronous = Result<O, ParseSyncError<E>>;
+	const { panics, abandon } = unwinding();
+	let parsing: Vow<Outcome<O, E, unknown>>;
+	try {
+		parsing = parse(self, { input, panics });
+	} finally {
+		abandon();
+	}
 
-	return match(parse(self, { input, panics: UNWINDING }))<Synchronous>({
+	return match(parsing)<Synchronous>({
 		Pending: () => Err(UnexpectedAsyncParse()),
 		Resolved: (outcome) => {
 			return match(outcome)<Synchronous>({

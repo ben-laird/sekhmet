@@ -865,23 +865,31 @@ those sections are kept as history.
 - **`panics` is a `PanicBoundary`**, `Pick<PanicRuntime, "catchUnwind" |
   "catchUnwindAsync">`, the same slice `@sekhmet/lifetime` takes. The
   options object follows the named-arguments rule, with the schema as the
-  receiver, so main's method is `schema.parse({ input, panics })`.
+  receiver, so main's method is `schema.parse({ input, panics })`. It
+  returns a `Vow` of panic's main `Outcome` class, with its methods:
+  gen-main converts a carrier's value (`Vow` is one, mapped with vow's
+  `map`) as it converts a `Promise`'s.
 - **A schema holds a runner.** `SchemaParams.run` is a `Runner<I, O, E>`:
   `(options: ParseOptions<I>) => Vow<Outcome<O, E, unknown>>`.
   `new Schema({ parse })` still takes a user `Parser` (a `Result` or a
   promise of one) and guards it; composites build theirs with
   `new Schema({ run })` from their children's `parse`. Every callback handed
-  to a vow continuation goes through `parse` or the internal `guard`, so
-  none can throw inside a `resolve`, where the parse would never settle.
+  to a vow continuation runs under the boundary (through `parse`, `guard`,
+  or the internal `step`), internal code included, since it can throw when
+  it reads a user value (a getter, a Proxy trap): none can throw inside a
+  `resolve`, where the parse would never settle.
 - **Composites join children with `all`**, added to `@sekhmet/vow`: the
   n-ary `zip`, which stays synchronous when every child was. A child's panic
   panics the composite (the first by key order); a union does not try the
   next option after a panic.
 - **`parseAsync` is dropped** in favour of `wait(parse(…))`.
-- **`parseSync(schema, input)` keeps its shape and takes no runtime.** It
-  runs under a boundary that catches nothing, so a throw unwinds to its
-  caller. An async schema is still `UnexpectedAsyncParse`; its abandoned
-  parse, and any panic it raises later, are dropped.
+- **`parseSync(schema, input)` keeps its shape and takes no runtime.**
+  While it runs, its boundary catches nothing, so a throw unwinds to its
+  caller. An async schema is still `UnexpectedAsyncParse`. Once
+  `parseSync` has returned, the boundary catches: a panic the abandoned
+  parse raises later settles it as `Panicked`, which nothing reads and no
+  hook reports. _Revised after review (2026-11-20):_ the first version's
+  boundary never caught, so such a panic escaped as an unhandled rejection.
 - **`toStandard({ schema, panics })`** takes a runtime. `validate` returns
   the Standard result when the vow is already resolved and `wait(…)`
   otherwise; a panic is reported, then resumed with `resumeUnwind`, so it

@@ -553,8 +553,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 *
 	 * It takes no panic runtime: a throw in user code is not caught, and
 	 * unwinds to the caller, as any unguarded call's would. A schema that turns
-	 * out to be asynchronous is not waited for: its parse is abandoned, along
-	 * with any panic it raises later. Use {@linkcode parse} for either.
+	 * out to be asynchronous is not waited for: its parse is abandoned, and a
+	 * panic it raises later settles the abandoned parse, unreported, rather
+	 * than escape as an unhandled rejection. Use {@linkcode parse} for either.
 	 *
 	 * @param input - The input to parse
 	 * @returns A Result that is either the output or a ParseSyncError

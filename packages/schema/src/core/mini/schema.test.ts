@@ -162,6 +162,72 @@ Deno.test("parse catches a panic in user code as Panicked", async (t) => {
 	});
 });
 
+/** Lets every pending callback of an abandoned parse run. */
+function drain(): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+// An unhandled rejection fails a test on every runtime the suite runs on, so
+// draining after each abandoned parse proves none escapes.
+Deno.test("parseSync abandons an async parse without leaving a rejection behind", async (t) => {
+	const later = new Schema({
+		parse: (input: number) => Promise.resolve(Ok(input)),
+	});
+
+	await t.step("a mapping that throws once the parse resumes", async () => {
+		// Given: a throwing map over an async schema
+		const mapped = map(later, (): number => {
+			throw new Error("mapping bug");
+		});
+
+		// When: parsing synchronously, then letting the abandoned parse run
+		const result = parseSync(mapped, 1);
+		await drain();
+
+		// Then: the parse was reported async, and its panic stayed with it
+		assertEquals(unionKinds(unwrapErr(result)), "UnexpectedAsyncParse");
+	});
+
+	await t.step("a parser whose promise rejects", async () => {
+		// Given: an async parser that rejects
+		const rejecting = new Schema({
+			parse: (_input: number): Promise<Result<number, never>> => {
+				return Promise.reject(new Error("async bug"));
+			},
+		});
+
+		// When: parsing synchronously, then letting the abandoned parse run
+		const result = parseSync(rejecting, 1);
+		await drain();
+
+		// Then: the parse was reported async, and the rejection stayed with it
+		assertEquals(unionKinds(unwrapErr(result)), "UnexpectedAsyncParse");
+	});
+
+	await t.step("a synchronous panic beside async work", async () => {
+		// Given: a pipe whose first step is async, beside one that throws now
+		const throwing = new Schema({
+			parse: (_input: number): Result<number, never> => {
+				throw new RangeError("sync bug");
+			},
+		});
+		const both = pipe(
+			later,
+			map(later, (): number => {
+				throw new Error("mapping bug");
+			}),
+		);
+
+		// When: parseSync unwinds the sync throw, after starting async work
+		assertThrows(() => parseSync(throwing, 1), RangeError, "sync bug");
+		const result = parseSync(both, 1);
+		await drain();
+
+		// Then: the async parse was abandoned without a rejection
+		assertEquals(unionKinds(unwrapErr(result)), "UnexpectedAsyncParse");
+	});
+});
+
 Deno.test("parseSync lets a panic unwind to its caller", () => {
 	// Given: a parser that throws
 	const schema = new Schema({
