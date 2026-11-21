@@ -852,7 +852,7 @@ export const FEATURES: readonly Feature[] = [
 		primary: "Attempt",
 		construct: "variant",
 		mappers: ["map", "mapErr"],
-		wraps: [ENUM_OPTION, ENUM_RESULT],
+		wraps: [ENUM_OPTION, ENUM_RESULT, PANIC_OUTCOME],
 		example: [
 			'import { assertEquals } from "@std/assert";',
 			'import { type Attempt, Failed, Handled } from "@sekhmet/issue/attempt";',
@@ -872,7 +872,7 @@ export const FEATURES: readonly Feature[] = [
 		mappers: [undefined, "map", "mapErr"],
 		// The residue widens from the receiver and the built recovery together
 		constrained: ["orElse"],
-		wraps: [ENUM_RESULT],
+		wraps: [PANIC_OUTCOME],
 		carriers: [VOW],
 		example: [
 			'import { assertEquals } from "@std/assert";',
@@ -919,6 +919,7 @@ export const FEATURES: readonly Feature[] = [
 		wraps: [
 			ENUM_OPTION,
 			ENUM_RESULT,
+			PANIC_OUTCOME,
 			{
 				type: "Attempt",
 				from: "../../attempt/main/mod.ts",

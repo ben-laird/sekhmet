@@ -1,6 +1,6 @@
 /**
- * The {@linkcode Attempt} class and its `AlreadyHandled`, `Handled` and
- * `Failed` constructors.
+ * The {@linkcode Attempt} class and its `AlreadyHandled`, `Handled`,
+ * `Failed` and `Panicked` constructors.
  *
  * @module
  */
@@ -17,6 +17,7 @@ type Variants<R, E> = Split<{
 	AlreadyHandled: [residue: R];
 	Handled: [residue: R];
 	Failed: [error: E];
+	Panicked: [payload: unknown];
 }>;
 
 export type { Variants as AttemptVariants };
@@ -29,6 +30,9 @@ export type { Variants as AttemptVariants };
  * - `Handled(residue)`: this attempt handled the issue, which switched in
  *   place to hold the residue.
  * - `Failed(error)`: the recovery failed, and the issue stays unhandled.
+ * - `Panicked(payload)`: the recovery panicked (a bug, not a failure to
+ *   recover); the panic runtime's hook reported the payload, and the issue
+ *   stays unhandled.
  *
  * An attempt is a plain value, so it is covariant in both type parameters.
  *
@@ -46,6 +50,7 @@ export type { Variants as AttemptVariants };
  * 	AlreadyHandled: (port) => `already on ${port}`,
  * 	Handled: (port) => `now on ${port}`,
  * 	Failed: (error) => `failed: ${error}`,
+ * 	Panicked: () => "a bug",
  * });
  *
  * assertEquals(line, "failed: offline");
@@ -112,4 +117,27 @@ export function Handled<R, E = never>(residue: R): Attempt<R, E> {
  */
 export function Failed<R = never, E = unknown>(error: E): Attempt<R, E> {
 	return new Attempt<R, E>("Failed", error);
+}
+
+/**
+ * An attempt whose recovery panicked, holding the panic payload. The panic
+ * runtime's hook has reported it; the issue stays unhandled.
+ *
+ * @template R The residue type of the attempt it stands in for
+ * @template E The error type of the attempt it stands in for
+ * @param payload What the recovery panicked with
+ * @returns The `Panicked` attempt
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isPanicked, Panicked } from "@sekhmet/issue/attempt/mini";
+ *
+ * assertEquals(isPanicked(Panicked(new Error("bad cache"))), true);
+ * ```
+ */
+export function Panicked<R = never, E = never>(
+	payload: unknown,
+): Attempt<R, E> {
+	return new Attempt<R, E>("Panicked", payload);
 }

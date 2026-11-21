@@ -1,14 +1,14 @@
 /**
  * `fromPromise`: a recovery from a promise-returning repair, with
  * `@sekhmet/vow`'s `fromPromise` contract, except that a `Panic` rejection
- * is reported to the panic hook rather than carried as an `Err`.
+ * is reported to the panic hook and settles as `Panicked`, not as an `Err`.
  *
  * @module
  */
 
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { Panic } from "@sekhmet/panic/mini/core";
 import type { PanicRuntime } from "@sekhmet/panic/mini/runtime";
+import { Err, Ok, type Outcome } from "@sekhmet/panic/outcome/mini";
 import { Vow } from "@sekhmet/vow/mini";
 import { Recovery } from "./core.ts";
 
@@ -42,11 +42,11 @@ export interface FromPromiseOptions<T, R> {
  * recover, so it is not an `Err` that `or` or `firstOf` would move past.
  * It unwinds to a boundary of `panics` around the `then` callback, the top
  * of the async task, whose hook reports it (once: not again if this runtime
- * already reported it). Like a panicked task, the recovery never finishes:
- * its vow stays pending for good, so an attempt it runs in never settles
- * and its issue stays unhandled. Nothing rejects, so no unhandled rejection
- * follows, unless the hook itself throws (see `@sekhmet/vow`'s
- * `fromPromise`).
+ * already reported it), and the vow settles with that boundary's
+ * `Panicked(payload)`. Every combinator stops at it, and an attempt it runs
+ * in settles as `Panicked`, leaving its issue unhandled. Nothing rejects, so
+ * no unhandled rejection follows, unless the hook itself throws (see
+ * `@sekhmet/vow`'s `fromPromise`).
  *
  * The vow resolves inside the promise's `then` callback, under
  * `panics.catchUnwind`, so a dependent that throws is reported to the
@@ -59,13 +59,13 @@ export interface FromPromiseOptions<T, R> {
  * @template R The residue the promise fulfils with
  * @param options The repair, and the panic runtime that reports a panic and
  *   a dependent that throws
- * @returns A recovery that yields the fulfilled residue, or fails with the
- *   rejection reason, and never finishes after a panic
+ * @returns A recovery that yields the fulfilled residue, fails with the
+ *   rejection reason, or settles as `Panicked` after a panic
  *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { unwrap, unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { definePanicRuntime } from "@sekhmet/panic";
  * import { fromPromise, run } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
@@ -85,24 +85,24 @@ export interface FromPromiseOptions<T, R> {
  *
  * @example
  * ```ts
- * import { assert, assertInstanceOf } from "@std/assert";
+ * import { assertEquals, assertInstanceOf } from "@std/assert";
  * import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
+ * import { unwrapPanicked } from "@sekhmet/panic/outcome/mini";
  * import { fromPromise, run } from "@sekhmet/issue/recovery/mini";
- * import { isPending } from "@sekhmet/vow/mini";
+ * import { wait } from "@sekhmet/vow/mini";
  *
  * const panics = definePanicRuntime();
- * const reported = new Promise((resolve) => {
- * 	panics.setHook(({ payload }) => resolve(payload));
- * });
+ * const reported: unknown[] = [];
+ * panics.setHook(({ payload }) => reported.push(payload));
  * const fetchRemote = fromPromise({
  * 	repair: async (_: string): Promise<number> => panic({ message: "bad cache", cause: null }),
  * 	panics,
  * });
  *
- * const ran = run(fetchRemote, "app.json");
+ * const payload = unwrapPanicked(await wait(run(fetchRemote, "app.json")));
  *
- * assertInstanceOf(await reported, Panic); // reported, not an Err
- * assert(isPending(ran)); // and the recovery never finishes
+ * assertInstanceOf(payload, Panic); // settled as Panicked, not as an Err
+ * assertEquals(reported, [payload]); // and reported once
  * ```
  */
 export function fromPromise<T, R>(
@@ -111,19 +111,24 @@ export function fromPromise<T, R>(
 	const { repair, panics } = options;
 
 	return new Recovery<T, R, unknown>((value) => {
-		return new Vow<Result<R, unknown>>((resolve) => {
+		return new Vow<Outcome<R, unknown, unknown>>((resolve) => {
+			const settle = (outcome: Outcome<R, unknown, unknown>): void => {
+				panics.catchUnwind(() => resolve(outcome));
+			};
+
 			repair(value).then(
-				(residue) => {
-					panics.catchUnwind(() => resolve(Ok(residue)));
-				},
+				(residue) => settle(Ok(residue)),
 				(reason: unknown) => {
-					panics.catchUnwind(() => {
-						// A panic unwinds to this boundary, the top of the task
-						if (reason instanceof Panic) {
-							throw reason;
-						}
-						resolve(Err(reason));
+					if (!(reason instanceof Panic)) {
+						settle(Err(reason));
+						return;
+					}
+					// A panic unwinds to this boundary, the top of the task: it
+					// reports the payload and gives the Panicked outcome
+					const unwound = panics.catchUnwind((): never => {
+						throw reason;
 					});
+					settle(unwound);
 				},
 			);
 		});

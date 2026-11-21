@@ -2,9 +2,15 @@
 
 import { Option } from "@sekhmet/enum/option";
 import { Result } from "@sekhmet/enum/result";
-import { assert, assertEquals, assertInstanceOf } from "@std/assert";
+import { Outcome } from "@sekhmet/panic/outcome";
+import {
+	assert,
+	assertEquals,
+	assertInstanceOf,
+	assertStrictEquals,
+} from "@std/assert";
 import * as mini from "../mini/mod.ts";
-import { AlreadyHandled, Attempt, Failed, Handled } from "./mod.ts";
+import { AlreadyHandled, Attempt, Failed, Handled, Panicked } from "./mod.ts";
 
 Deno.test("main Attempt is a mini one, and fromMini views a mini one", () => {
 	// Given: a mini attempt and a main one
@@ -55,4 +61,20 @@ Deno.test("main …And methods keep a narrowed attempt in their false branch", (
 	} else {
 		assert(false, "8080 isn't a low port");
 	}
+});
+
+Deno.test("main Panicked chains its predicates and converts to a main Outcome", () => {
+	// Given: a main panicked attempt
+	const bug = new Error("bad cache");
+	const broken: Attempt<number, string> = Panicked(bug);
+
+	// When: reading it through its methods
+	const outcome = broken.map((port) => port + 1).toOutcome();
+
+	// Then: it is Panicked throughout, and the outcome is main
+	assert(broken.isPanicked());
+	assertEquals(broken.isResolved(), false);
+	assertInstanceOf(outcome, Outcome);
+	assertStrictEquals(outcome.unwrapPanicked(), bug);
+	assertEquals(broken.panicked().unwrap(), bug);
 });

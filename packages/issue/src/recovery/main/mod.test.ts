@@ -1,7 +1,7 @@
 /** The main Recovery, in method form. */
 
-import { Result } from "@sekhmet/enum/result";
-import { Ok } from "@sekhmet/enum/result/mini";
+import { Outcome } from "@sekhmet/panic/outcome";
+import { Ok, Panicked } from "@sekhmet/panic/outcome/mini";
 import { resolved, wait } from "@sekhmet/vow/mini";
 import { assertEquals, assertInstanceOf } from "@std/assert";
 import * as mini from "../mini/mod.ts";
@@ -94,7 +94,7 @@ Deno.test("orElse rejects an unrelated residue", () => {
 	assertEquals(typeof misuse, "function");
 });
 
-Deno.test("methods chain, and run resolves with a main Result", async () => {
+Deno.test("methods chain, and run resolves with a main Outcome", async () => {
 	// Given: a failing recovery
 	const readBackup = fail<string, string>("no backup");
 
@@ -106,8 +106,8 @@ Deno.test("methods chain, and run resolves with a main Result", async () => {
 	// {}
 	const result = await wait(recovery.run("app.json"));
 
-	// Then: the result is a main Result
-	assertInstanceOf(result, Result);
+	// Then: the result is a main Outcome
+	assertInstanceOf(result, Outcome);
 	assertEquals(result.unwrap(), { port: 8080 });
 });
 
@@ -125,4 +125,29 @@ Deno.test("new Recovery(fn) and firstOf build main recoveries", async () => {
 	// Then: it is main, and runs
 	assertInstanceOf(recovery, Recovery);
 	assertEquals((await wait(recovery.run({ path: "app.json" }))).unwrap(), 8);
+});
+
+Deno.test("main or, orElse, firstOf and retry settle with a Panicked outcome", async () => {
+	// Given: a main recovery whose outcome is Panicked, and a fallback
+	const bug = new Error("bad cache");
+	const broken = new Recovery((_: string) => {
+		return resolved(Panicked<number, string, unknown>(bug));
+	});
+	const fallback = succeed<string, number>(8080);
+
+	// When: each composite is run
+	const outcomes = await Promise.all(
+		[
+			broken.or(fallback),
+			broken.orElse(() => fallback),
+			firstOf([broken, fallback]),
+			broken.retry({ times: 2 }),
+		].map((recovery) => wait(recovery.run("app.json"))),
+	);
+
+	// Then: each is a main Outcome, Panicked with the payload
+	for (const outcome of outcomes) {
+		assertInstanceOf(outcome, Outcome);
+		assertEquals(outcome.unwrapPanicked(), bug);
+	}
 });

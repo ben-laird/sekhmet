@@ -1,7 +1,8 @@
 /**
  * Transforming a recovery: `map`, `mapErr` and `andThen` change what it
  * yields, `mapInput` changes what it repairs, and `inspect` and `inspectErr`
- * look at its result on the way through.
+ * look at its result on the way through. A `Panicked` outcome passes
+ * through each of them untouched.
  *
  * @module
  */
@@ -9,12 +10,13 @@
 import { match } from "@sekhmet/enum/core/mini";
 import {
 	Err,
-	inspect as inspectResult,
-	inspectErr as inspectResultErr,
-	map as mapResult,
-	mapErr as mapResultErr,
-	type Result,
-} from "@sekhmet/enum/result/mini";
+	inspect as inspectOutcome,
+	inspectErr as inspectOutcomeErr,
+	map as mapOutcome,
+	mapErr as mapOutcomeErr,
+	type Outcome,
+	Panicked,
+} from "@sekhmet/panic/outcome/mini";
 import {
 	andThen as andThenVow,
 	map as mapVow,
@@ -37,7 +39,7 @@ import { Recovery, run } from "./core.ts";
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { map, type Recovery, run, succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -52,7 +54,7 @@ export function map<T, R, E, U>(
 	mapping: (residue: R) => U,
 ): Recovery<T, U, E> {
 	return new Recovery<T, U, E>((value) => {
-		return mapVow(run(self, value), (result) => mapResult(result, mapping));
+		return mapVow(run(self, value), (result) => mapOutcome(result, mapping));
 	});
 }
 
@@ -70,7 +72,7 @@ export function map<T, R, E, U>(
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { fail, mapErr, type Recovery, run } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -85,14 +87,18 @@ export function mapErr<T, R, E, F>(
 	mapping: (error: E) => F,
 ): Recovery<T, R, F> {
 	return new Recovery<T, R, F>((value) => {
-		return mapVow(run(self, value), (result) => mapResultErr(result, mapping));
+		return mapVow(run(self, value), (result) => {
+			return mapOutcomeErr(result, mapping);
+		});
 	});
 }
 
 /**
  * Chains a step that can fail onto a recovery's residue: when the recovery
- * succeeds, `next` runs on its residue, and its result is the composite's.
- * A failure passes through without running `next`.
+ * succeeds, `next` runs on its residue, and its outcome is the composite's.
+ * `next` returns a vow of an `Outcome`, as a recovery does (`run` of another
+ * recovery, say). A failure or a panic passes through without running
+ * `next`.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields
@@ -105,13 +111,13 @@ export function mapErr<T, R, E, F>(
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Err, Ok, type Result, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { Err, Ok, type Outcome, unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { andThen, type Recovery, run, succeed } from "@sekhmet/issue/recovery/mini";
  * import { resolved, wait } from "@sekhmet/vow/mini";
  *
  * const useDefault: Recovery<string, number, string> = succeed(80);
  * const checked = andThen(useDefault, (port) => {
- * 	return resolved<Result<number, string>>(port > 1024 ? Ok(port) : Err("privileged port"));
+ * 	return resolved<Outcome<number, string>>(port > 1024 ? Ok(port) : Err("privileged port"));
  * });
  *
  * assertEquals(unwrapErr(await wait(run(checked, "app.json"))), "privileged port");
@@ -119,13 +125,14 @@ export function mapErr<T, R, E, F>(
  */
 export function andThen<T, R, E, U>(
 	self: Recovery<T, R, E>,
-	next: (residue: R) => Vow<Result<U, E>>,
+	next: (residue: R) => Vow<Outcome<U, E, unknown>>,
 ): Recovery<T, U, E> {
 	return new Recovery<T, U, E>((value) => {
 		return andThenVow(run(self, value), (result) => {
 			return match(result)({
 				Ok: next,
-				Err: (error) => resolved(Err<U, E>(error)),
+				Err: (error) => resolved(Err<U, E, unknown>(error)),
+				Panicked: (payload) => resolved(Panicked<U, E, unknown>(payload)),
 			});
 		});
 	});
@@ -147,7 +154,8 @@ export function andThen<T, R, E, U>(
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { Ok } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { mapInput, run, sync } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -194,7 +202,7 @@ export function inspect<T, R, E>(
 ): Recovery<T, R, E> {
 	return new Recovery<T, R, E>((value) => {
 		return mapVow(run(self, value), (result) => {
-			inspectResult(result, inspector);
+			inspectOutcome(result, inspector);
 			return result;
 		});
 	});
@@ -230,7 +238,7 @@ export function inspectErr<T, R, E>(
 ): Recovery<T, R, E> {
 	return new Recovery<T, R, E>((value) => {
 		return mapVow(run(self, value), (result) => {
-			inspectResultErr(result, inspector);
+			inspectOutcomeErr(result, inspector);
 			return result;
 		});
 	});

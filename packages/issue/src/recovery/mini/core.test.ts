@@ -1,5 +1,10 @@
 import { Some } from "@sekhmet/enum/option/mini";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import {
+	type Result,
+	Err as ResultErr,
+	Ok as ResultOk,
+} from "@sekhmet/enum/result/mini";
+import { Err, Ok, type Outcome } from "@sekhmet/panic/outcome/mini";
 import { Struct } from "@sekhmet/primordials/struct";
 import {
 	isPending,
@@ -30,7 +35,7 @@ Deno.test("new Recovery(fn) wraps a repair, and run() calls it with the value", 
 
 Deno.test("run() of an async recovery stays pending until it settles", async () => {
 	// Given: a recovery waiting on a resolver
-	const { vow, resolve } = vowWithResolver<Result<number, string>>();
+	const { vow, resolve } = vowWithResolver<Outcome<number, string>>();
 	const recovery = new Recovery((_: string) => vow);
 
 	// When: it is run, then settled
@@ -69,7 +74,9 @@ Deno.test("sync() wraps a Result-returning repair in a resolved vow", () => {
 	// Given: a synchronous parser
 	const parsePort = sync((text: string): Result<number, string> => {
 		const port = Number(text);
-		return Number.isInteger(port) ? Ok(port) : Err(`not a port: ${text}`);
+		return Number.isInteger(port)
+			? ResultOk(port)
+			: ResultErr(`not a port: ${text}`);
 	});
 
 	// When: it is run on good and bad input

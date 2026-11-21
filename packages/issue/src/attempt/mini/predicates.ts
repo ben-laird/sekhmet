@@ -1,6 +1,7 @@
 /**
- * Testing an attempt: `isAlreadyHandled`, `isHandled`, `isFailed` and
- * `isResolved` (either handled variant), each with an `…And` form that also
+ * Testing an attempt: `isAlreadyHandled`, `isHandled`, `isFailed`,
+ * `isPanicked` and `isResolved` (either handled variant), each with an
+ * `…And` form that also
  * tests the value it holds.
  *
  * @module
@@ -331,4 +332,81 @@ export function isResolvedAnd<R, E, U extends R>(
 		isolateAnd(self, "AlreadyHandled", predicate) ||
 		isolateAnd(self, "Handled", predicate)
 	);
+}
+
+/**
+ * Checks whether an attempt's recovery panicked.
+ *
+ * Narrows the variant, so its payload can be read directly, and both type
+ * parameters to `never`.
+ *
+ * @template R The residue handling yields
+ * @template E The error a failed recovery returned
+ * @param self The attempt to check
+ * @returns Whether it is `Panicked`
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Failed, isPanicked, Panicked } from "@sekhmet/issue/attempt/mini";
+ *
+ * assertEquals(isPanicked(Panicked("bad cache")), true);
+ * assertEquals(isPanicked(Failed("offline")), false);
+ * ```
+ */
+export function isPanicked<R, E>(
+	self: Attempt<R, E>,
+): self is Enum<Isolate<AttemptVariants<R, E>, "Panicked">> &
+	Attempt<never, never> {
+	return isolate(self, "Panicked");
+}
+
+/**
+ * Checks whether an attempt's recovery panicked with a payload that
+ * satisfies a predicate. The payload is `unknown`, as a thrown value is.
+ *
+ * On an attempt already narrowed to that variant, it returns a plain
+ * boolean, so a failing predicate leaves the attempt as it was instead of
+ * collapsing it to `never` in the false branch; otherwise it narrows the
+ * variant, as the guard below does.
+ *
+ * @template R The residue handling yields
+ * @template E The error a failed recovery returned
+ * @param self The attempt to check
+ * @param predicate Tests the payload
+ * @returns Whether it is `Panicked` and the predicate holds
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { isPanickedAnd, Panicked } from "@sekhmet/issue/attempt/mini";
+ *
+ * assertEquals(isPanickedAnd(Panicked(new RangeError("too big")), (p) => p instanceof RangeError), true);
+ * ```
+ */
+export function isPanickedAnd<R, E>(
+	self: Enum<Isolate<AttemptVariants<R, E>, "Panicked">> & Attempt<R, E>,
+	predicate: (payload: unknown) => boolean,
+): boolean;
+/**
+ * Checks whether an attempt is `Panicked`, with a payload that satisfies a
+ * predicate, narrowing the variant when it is: the form for an attempt not
+ * yet narrowed to `Panicked`.
+ *
+ * @template R The residue handling yields
+ * @template E The error a failed recovery returned
+ * @param self The attempt to check
+ * @param predicate Tests the payload
+ * @returns Whether it is `Panicked` and the predicate holds
+ */
+export function isPanickedAnd<R, E>(
+	self: Attempt<R, E>,
+	predicate: (payload: unknown) => boolean,
+): self is Enum<Isolate<AttemptVariants<R, E>, "Panicked">> &
+	Attempt<never, never>;
+export function isPanickedAnd<R, E>(
+	self: Attempt<R, E>,
+	predicate: (payload: unknown) => boolean,
+): boolean {
+	return isolateAnd(self, "Panicked", predicate);
 }

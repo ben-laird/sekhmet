@@ -6,7 +6,13 @@
  */
 
 import { inspectIsolated, match } from "@sekhmet/enum/core/mini";
-import { AlreadyHandled, type Attempt, Failed, Handled } from "./core.ts";
+import {
+	AlreadyHandled,
+	type Attempt,
+	Failed,
+	Handled,
+	Panicked,
+} from "./core.ts";
 
 /**
  * Maps the residue of a handled attempt, keeping whether it was `Handled` or
@@ -35,6 +41,7 @@ export function map<R, E, U>(
 		AlreadyHandled: (value) => AlreadyHandled<U, E>(mapping(value)),
 		Handled: (value) => Handled<U, E>(mapping(value)),
 		Failed: (value) => Failed<U, E>(value),
+		Panicked: (payload) => Panicked<U, E>(payload),
 	});
 }
 
@@ -64,6 +71,7 @@ export function mapErr<R, E, F>(
 		AlreadyHandled: (value) => AlreadyHandled<R, F>(value),
 		Handled: (value) => Handled<R, F>(value),
 		Failed: (value) => Failed<R, F>(mapping(value)),
+		Panicked: (payload) => Panicked<R, F>(payload),
 	});
 }
 

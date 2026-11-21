@@ -74,6 +74,8 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("issue/src/attempt/mini/accessors.ts", "residue", "Option"),
 	privateTypeRef("issue/src/attempt/mini/accessors.ts", "error", "Option"),
 	privateTypeRef("issue/src/attempt/mini/accessors.ts", "toResult", "Result"),
+	privateTypeRef("issue/src/attempt/mini/accessors.ts", "panicked", "Option"),
+	privateTypeRef("issue/src/attempt/mini/accessors.ts", "toOutcome", "Outcome"),
 	...[
 		"isAlreadyHandled",
 		"isAlreadyHandledAnd",
@@ -83,6 +85,8 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 		"isFailedAnd",
 		"isResolved",
 		"isResolvedAnd",
+		"isPanicked",
+		"isPanickedAnd",
 	].flatMap((predicate) => {
 		return [
 			privateTypeRef("issue/src/attempt/mini/predicates.ts", predicate, "Enum"),
@@ -97,6 +101,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 		[
 			["Attempt.prototype.residue", "Option"],
 			["Attempt.prototype.toResult", "Result"],
+			["Attempt.prototype.toOutcome", "Outcome"],
 			["Attempt.prototype.isAlreadyHandled", "Enum"],
 			["Attempt.prototype.isAlreadyHandled", "Isolate"],
 		] as const
@@ -112,6 +117,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("issue/src/issue/mini/accessors.ts", "residue", "Option"),
 	privateTypeRef("issue/src/issue/mini/handling.ts", "attempt", "Vow"),
 	privateTypeRef("issue/src/issue/mini/handling.ts", "recoverWith", "Result"),
+	privateTypeRef("issue/src/issue/mini/handling.ts", "recoverWith", "Outcome"),
 	privateTypeRef("issue/src/issue/mini/handling.ts", "recoverWith", "Vow"),
 	privateTypeRef("issue/src/issue/mini/transform.ts", "toResult", "Result"),
 	...(
@@ -120,6 +126,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 			["Issue.prototype.attempt", "Vow"],
 			["Issue.prototype.toResult", "Result"],
 			["recoverWith", "Result"],
+			["recoverWith", "Outcome"],
 			["recoverWith", "Vow"],
 		] as const
 	).map(([publicType, privateType]) => {
@@ -129,7 +136,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 			privateType,
 		);
 	}),
-	...["Struct", "Vow", "Result"].map((privateType) => {
+	...["Struct", "Vow", "Outcome"].map((privateType) => {
 		return privateTypeRef(
 			"issue/src/recovery/mini/core.ts",
 			"Recovery",
@@ -137,7 +144,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 		);
 	}),
 	privateTypeRef("issue/src/recovery/mini/core.ts", "run", "Vow"),
-	privateTypeRef("issue/src/recovery/mini/core.ts", "run", "Result"),
+	privateTypeRef("issue/src/recovery/mini/core.ts", "run", "Outcome"),
 	privateTypeRef("issue/src/recovery/mini/core.ts", "sync", "Result"),
 	privateTypeRef(
 		"issue/src/recovery/mini/promise.ts",
@@ -145,12 +152,12 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 		"PanicRuntime",
 	),
 	privateTypeRef("issue/src/recovery/mini/transform.ts", "andThen", "Vow"),
-	privateTypeRef("issue/src/recovery/mini/transform.ts", "andThen", "Result"),
+	privateTypeRef("issue/src/recovery/mini/transform.ts", "andThen", "Outcome"),
 	...(
 		[
 			["Recovery.prototype.run", "Vow"],
-			["Recovery.prototype.run", "Result"],
-			["Recovery.prototype.andThen", "Result"],
+			["Recovery.prototype.run", "Outcome"],
+			["Recovery.prototype.andThen", "Outcome"],
 			["sync", "Result"],
 		] as const
 	).map(([publicType, privateType]) => {

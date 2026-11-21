@@ -119,7 +119,9 @@ such gap. The fix belongs in gen-main, and is tracked under #98.
 
 ## A recovery is a typed repair
 
-A `Recovery<T, R, E>` wraps `(value: T) => Vow<Result<R, E>>`. Its type says
+A `Recovery<T, R, E>` wraps `(value: T) => Vow<Outcome<R, E, unknown>>`: it
+settles `Ok` with a residue, `Err` with an error, or `Panicked` with the
+payload of a bug (an `Outcome` is what a panic boundary returns). Its type says
 which issues it fits: those whose value is a `T` and whose residue is an `R`.
 So it never needs to look at an issue and decline at runtime; the compiler
 already checked that it applies.
@@ -129,9 +131,11 @@ A recovery can be sync or async. A sync one returns an already-resolved
 microtask. `sync`, `succeed` and `fail` build sync ones; `fromPromise` builds
 an async one, and carries a rejection as an `Err`, as `@sekhmet/vow`'s
 `fromPromise` does, so a rejection is never unhandled. A rejection with a
-`Panic` is a bug, not a failed repair: the panic runtime's hook reports it,
-and the recovery never finishes, like a panicked task, so `or` and `orElse`
-don't move past it and the issue stays unhandled.
+`Panic` is a bug, not a failed repair: the panic runtime's hook reports it
+once, and the recovery settles as `Panicked`. Every combinator stops there
+(`or` and `orElse` try no fallback, `firstOf` no further recovery, `retry` no
+further run), and `when` and the transforms pass it through. A synchronous
+throw from a repair is a bug too, and propagates to whoever ran it.
 
 Recoveries compose like `Result`s do, with Rust's and `@sekhmet/enum`'s
 naming: `or` takes the next recovery itself, and `orElse` builds it lazily
@@ -159,18 +163,19 @@ type-check: a union of residues couldn't be told apart again.
 - **`AlreadyHandled(residue)`:** the issue was handled before this attempt,
   or by another attempt that finished first;
 - **`Failed(error)`:** the recovery failed, and the issue stays unhandled;
-- **never settles:** the recovery panicked (a `Panic` in an async repair; see
-  `fromPromise`). The panic runtime's hook reports it, and the attempt's vow
-  stays pending for good, like a panicked task, with the issue unhandled.
-  `or`, `orElse`, `firstOf` and `retry` stop at that recovery too.
+- **`Panicked(payload)`:** the recovery panicked (a `Panic` in an async
+  repair; see `fromPromise`). The panic runtime's hook reported it once, and
+  the issue stays unhandled. It isn't `isResolved`, and every unwrap throws
+  the payload again. (A first cut left such an attempt pending for good; it
+  settles now, since a vow that never settles means no answer has come.)
 
 A handled issue doesn't run the recovery at all. An unhandled one runs it on
 its value and, when it settles, **reads the state again**. Between attempts
 running at the same time, the first to finish wins: a later success reports
 `AlreadyHandled` with the winner's residue, and so does a later failure,
 since the issue is handled either way. An attempt whose recovery panicked
-never reports at all, not even `AlreadyHandled` once another attempt has
-handled the issue.
+reports `Panicked` even once another attempt has handled the issue: a bug is
+never hidden behind `AlreadyHandled`.
 
 `handle(issue, residue)` is an attempt with no recovery: `Handled`, or
 `AlreadyHandled` if the issue already was.

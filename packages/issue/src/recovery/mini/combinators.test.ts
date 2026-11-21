@@ -1,6 +1,7 @@
 import { Some } from "@sekhmet/enum/option/mini";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import { Err as ResultErr, Ok as ResultOk } from "@sekhmet/enum/result/mini";
 import { Panic } from "@sekhmet/panic/mini/core";
+import { Err, Ok, type Outcome, Panicked } from "@sekhmet/panic/outcome/mini";
 import {
 	isPending,
 	resolved,
@@ -14,7 +15,7 @@ import { fail, Recovery, run, succeed, sync } from "./core.ts";
 
 /** A recovery that counts its runs and yields what `results` says next. */
 function scripted<R, E>(
-	results: readonly Result<R, E>[],
+	results: readonly Outcome<R, E>[],
 ): { recovery: Recovery<string, R, E>; runs: () => number } {
 	let count = 0;
 	const recovery = new Recovery((_: string) => {
@@ -75,7 +76,9 @@ Deno.test("orElse(): a failure builds the next recovery from its error", () => {
 	const seen: number[] = [];
 	const next = (status: number): Recovery<string, number, never> => {
 		seen.push(status);
-		return sync((path: string) => Ok<number, never>(path.length + status));
+		return sync((path: string) =>
+			ResultOk<number, never>(path.length + status),
+		);
 	};
 
 	// When: the composition is run
@@ -154,7 +157,7 @@ Deno.test("orElse() rejects an unrelated residue", () => {
 Deno.test("or(): a failure moves on to the next recovery, on the same value", () => {
 	// Given: a failing recovery, then one that reads the value
 	const readBackup: Recovery<string, number, string> = fail("no backup");
-	const byLength = sync((path: string) => Ok<number, never>(path.length));
+	const byLength = sync((path: string) => ResultOk<number, never>(path.length));
 
 	// When: the composition is run
 	const result = value(run(or(readBackup, byLength), "app.json"));
@@ -189,7 +192,7 @@ Deno.test("or(): when both fail, the second error is reported", () => {
 
 Deno.test("or(): an async failure moves on once it settles", async () => {
 	// Given: an async recovery that will fail, then a sync success
-	const { vow, resolve } = vowWithResolver<Result<number, string>>();
+	const { vow, resolve } = vowWithResolver<Outcome<number, string>>();
 	const remote = new Recovery((_: string) => vow);
 	const result = run(or(remote, succeed(8080)), "app.json");
 	const before = isPending(result);
@@ -300,8 +303,8 @@ Deno.test("retry(): times 0 runs the recovery once", () => {
 Deno.test("retry(): an async recovery runs again once each run settles", async () => {
 	// Given: an async recovery that fails once, then succeeds
 	const pending = [
-		vowWithResolver<Result<number, string>>(),
-		vowWithResolver<Result<number, string>>(),
+		vowWithResolver<Outcome<number, string>>(),
+		vowWithResolver<Outcome<number, string>>(),
 	];
 	let runs = 0;
 	const remote = new Recovery((_: string) => {
@@ -379,7 +382,7 @@ function laterFailing(): {
 	const recovery = new Recovery((_: string) => {
 		count += 1;
 		const failure = count;
-		const { vow, resolve } = vowWithResolver<Result<number, number>>();
+		const { vow, resolve } = vowWithResolver<Outcome<number, number>>();
 		queueMicrotask(() => resolve(Err(failure)));
 		return vow;
 	});
@@ -391,7 +394,7 @@ Deno.test("retry(): many sync retries loop without overflowing the stack", () =>
 	let runs = 0;
 	const failing = sync((_: string) => {
 		runs += 1;
-		return Err<number, number>(runs);
+		return ResultErr<number, number>(runs);
 	});
 
 	// When: it is retried ten thousand more times
@@ -449,4 +452,72 @@ Deno.test("firstOf(): a long async list settles without nesting the stack", asyn
 	// Then: each ran in turn, and the last error is the result
 	assertEquals(failing.runs(), 10_000);
 	assertEquals(result, Err(10_000));
+});
+
+/** A recovery whose outcome is Panicked, as fromPromise's is after a panic. */
+function panicked(payload: unknown): Recovery<string, number, string> {
+	return new Recovery((_: string) => {
+		return resolved(Panicked<number, string, unknown>(payload));
+	});
+}
+
+Deno.test("or(), orElse() and firstOf() stop at a Panicked outcome", () => {
+	// Given: a panicking recovery, and a counting fallback
+	const bug = new Error("bad cache");
+	const fallback = scripted([Ok<number, string>(8080)]);
+	let built = 0;
+
+	// When: each tries the fallback after the panicking one
+	const results = [
+		run(or(panicked(bug), fallback.recovery), "app.json"),
+		run(
+			orElse(panicked(bug), () => {
+				built += 1;
+				return fallback.recovery;
+			}),
+			"app.json",
+		),
+		run(firstOf([panicked(bug), fallback.recovery]), "app.json"),
+	].map(value);
+
+	// Then: each settles with the Panicked outcome, and no fallback ran
+	assertEquals(results, [
+		Some(Panicked(bug)),
+		Some(Panicked(bug)),
+		Some(Panicked(bug)),
+	]);
+	assertEquals(fallback.runs(), 0);
+	assertEquals(built, 0);
+});
+
+Deno.test("retry() doesn't retry a Panicked outcome", () => {
+	// Given: a recovery that panics on its first run
+	const bug = new Error("bad cache");
+	let runs = 0;
+	const once = new Recovery((_: string) => {
+		runs += 1;
+		return resolved(Panicked<number, string, unknown>(bug));
+	});
+
+	// When: it is retried
+	const result = value(run(retry(once, { times: 3 }), "app.json"));
+
+	// Then: it ran once, and settled with the Panicked outcome
+	assertEquals(runs, 1);
+	assertEquals(result, Some(Panicked(bug)));
+});
+
+Deno.test("when() passes a Panicked outcome through", () => {
+	// Given: a panicking recovery guarded by a test that accepts the value
+	const bug = new Error("bad cache");
+	const guarded = when(panicked(bug), {
+		test: () => true,
+		otherwise: "rejected",
+	});
+
+	// When: it is run
+	const result = value(run(guarded, "app.json"));
+
+	// Then: the Panicked outcome is the composite's
+	assertEquals(result, Some(Panicked(bug)));
 });

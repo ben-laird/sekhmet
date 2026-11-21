@@ -1,5 +1,11 @@
 import { assertEquals, assertStrictEquals } from "@std/assert";
-import { AlreadyHandled, type Attempt, Failed, Handled } from "./core.ts";
+import {
+	AlreadyHandled,
+	type Attempt,
+	Failed,
+	Handled,
+	Panicked,
+} from "./core.ts";
 import { inspect, inspectErr, map, mapErr } from "./transform.ts";
 
 const already: Attempt<number, string> = AlreadyHandled(1);
@@ -55,4 +61,31 @@ Deno.test("inspectErr() sees the error of Failed only and returns self", () => {
 	// Then: it saw the one error, and each attempt came back itself
 	assertEquals(seen, ["offline"]);
 	assertStrictEquals(returned[1], handled);
+});
+
+Deno.test("map(), mapErr() and the inspectors leave a Panicked attempt alone", () => {
+	// Given: a panicked attempt, and counting steps
+	const bug = new Error("bad cache");
+	const broken: Attempt<number, string> = Panicked(bug);
+	let calls = 0;
+	const count = (): void => {
+		calls += 1;
+	};
+
+	// When: each transform is applied
+	const mapped = map(broken, (port) => {
+		count();
+		return port + 1;
+	});
+	const mappedErr = mapErr(broken, (error) => {
+		count();
+		return error.length;
+	});
+
+	// Then: each is still Panicked with the payload, and no step ran
+	assertEquals(mapped, Panicked(bug));
+	assertEquals(mappedErr, Panicked(bug));
+	assertStrictEquals(inspect(broken, count), broken);
+	assertStrictEquals(inspectErr(broken, count), broken);
+	assertEquals(calls, 0);
 });

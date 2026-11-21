@@ -9,8 +9,14 @@
  */
 
 import { match, union } from "@sekhmet/enum/core/mini";
-import { Err, isOk, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { panic } from "@sekhmet/panic/mini/core";
+import {
+	Err,
+	isErr,
+	Ok,
+	type Outcome,
+	Panicked,
+} from "@sekhmet/panic/outcome/mini";
 import {
 	andThen,
 	isResolved,
@@ -32,8 +38,8 @@ interface TryInTurnOptions<T, R, E> {
 }
 
 /**
- * Runs recoveries in turn on one value until one succeeds or the last one
- * fails, with that result. It loops while each run's vow is already
+ * Runs recoveries in turn on one value until one succeeds, one panics, or
+ * the last one fails, with that outcome. It loops while each run's vow is already
  * resolved, and subscribes only to a pending one, resuming the loop when it
  * settles, so neither a long sync run nor a long async one nests the stack.
  */
@@ -41,16 +47,16 @@ function tryInTurn<T, R, E>({
 	value,
 	count,
 	recoveryAt,
-}: TryInTurnOptions<T, R, E>): Vow<Result<R, E>> {
-	const { vow, resolve } = vowWithResolver<Result<R, E>>();
+}: TryInTurnOptions<T, R, E>): Vow<Outcome<R, E, unknown>> {
+	const { vow, resolve } = vowWithResolver<Outcome<R, E, unknown>>();
 	const isFinal = ({
 		result,
 		index,
 	}: {
-		readonly result: Result<R, E>;
+		readonly result: Outcome<R, E, unknown>;
 		readonly index: number;
 	}): boolean => {
-		return isOk(result) || index === count - 1;
+		return !isErr(result) || index === count - 1;
 	};
 	const tryFrom = (start: number): void => {
 		for (let index = start; index < count; index += 1) {
@@ -87,8 +93,8 @@ function tryInTurn<T, R, E>({
  * `next`'s error. `next` never runs when `self` succeeds. To build the next
  * recovery from the error, use {@linkcode orElse}.
  *
- * A recovery that panics (see `fromPromise`) never settles, so the
- * composite stops there and never settles either: `next` never runs.
+ * A `Panicked` outcome (see `fromPromise`) is a bug, not a failure, so the
+ * composite stops there and settles with it: `next` never runs.
  *
  * The residue is the wider of the two, with no union: a recovery is
  * covariant in its residue, so a `fail` (residue `never`) followed by a
@@ -105,7 +111,7 @@ function tryInTurn<T, R, E>({
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { fail, or, run, succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -122,8 +128,9 @@ export function or<T, R, F>(
 	return new Recovery<T, R, F>((value) => {
 		return andThen(run(self, value), (result) => {
 			return match(result)({
-				Ok: (residue) => resolved(Ok<R, F>(residue)),
+				Ok: (residue) => resolved(Ok<R, F, unknown>(residue)),
 				Err: () => run(next, value),
+				Panicked: (payload) => resolved(Panicked<R, F, unknown>(payload)),
 			});
 		});
 	});
@@ -136,8 +143,8 @@ export function or<T, R, F>(
  * when `self` succeeds. To try a recovery already at hand, use
  * {@linkcode or}.
  *
- * A recovery that panics (see `fromPromise`) never settles, so the
- * composite stops there and never settles either: `next` is never called.
+ * A `Panicked` outcome (see `fromPromise`) is a bug, not a failure, so the
+ * composite stops there and settles with it: `next` is never called.
  *
  * The residue widens as `or`'s does, with no union: a `fail` (residue
  * `never`) whose `next` builds a `Recovery<T, Config, F>` is a
@@ -156,7 +163,7 @@ export function or<T, R, F>(
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { fail, orElse, run, succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -175,8 +182,9 @@ export function orElse<T, R, E, F>(
 	return new Recovery<T, R, F>((value) => {
 		return andThen(run(self, value), (result) => {
 			return match(result)({
-				Ok: (residue) => resolved(Ok<R, F>(residue)),
+				Ok: (residue) => resolved(Ok<R, F, unknown>(residue)),
 				Err: (error) => run(next(error), value),
+				Panicked: (payload) => resolved(Panicked<R, F, unknown>(payload)),
 			});
 		});
 	});
@@ -188,9 +196,9 @@ export function orElse<T, R, E, F>(
  * fails with the last one's error. The list can't be empty: `firstOf([])`
  * doesn't type-check, since with no recovery to try there would be no error
  * to fail with. The recoveries run in a loop that doesn't nest the stack, so
- * a long list is safe, sync or async. A recovery that panics (see
- * `fromPromise`) never settles, so the list stops there and the composite
- * never settles either.
+ * a long list is safe, sync or async. A `Panicked` outcome (see
+ * `fromPromise`) stops the list: the composite settles with it, and the
+ * recoveries after it never run.
  *
  * @template T The value of the issues they repair
  * @template R The residue they yield: the widest of the list's
@@ -201,7 +209,7 @@ export function orElse<T, R, E, F>(
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { fail, firstOf, run, succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -254,8 +262,8 @@ export interface RetryOptions {
  * to `times` more times. It succeeds with the first residue, or fails with
  * the last error. Each run starts once the previous one has settled. A sync
  * recovery's runs loop without nesting the stack, so `times` can be large.
- * A run that panics (see `fromPromise`) never settles, so no retry follows
- * and the composite never settles either.
+ * A run that panics (see `fromPromise`) is not retried: the composite
+ * settles with its `Panicked` outcome.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields
@@ -268,7 +276,8 @@ export interface RetryOptions {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { Err, Ok } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { retry, run, sync } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -316,7 +325,8 @@ export interface WhenOptions<T, F> {
 
 /**
  * Runs `self` only for values that pass `test`; for any other value, fails
- * with `otherwise` at once, without running `self`.
+ * with `otherwise` at once, without running `self`. `self`'s outcome,
+ * `Panicked` included, passes through as it is.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields
@@ -329,7 +339,7 @@ export interface WhenOptions<T, F> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { unwrap, unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { type Recovery, run, succeed, when } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -352,6 +362,6 @@ export function when<T, R, E, F>(
 	return new Recovery<T, R, E | F>((value) => {
 		if (test(value)) return run(self, value);
 
-		return resolved(Err<R, E | F>(otherwise));
+		return resolved(Err<R, E | F, unknown>(otherwise));
 	});
 }

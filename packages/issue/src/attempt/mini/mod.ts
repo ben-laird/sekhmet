@@ -1,8 +1,9 @@
 /**
  * Tree-shakable `Attempt`: how an attempt to handle an issue ended,
- * `AlreadyHandled(residue)`, `Handled(residue)` or `Failed(error)`. Every
- * operation is a free function taking the attempt first; for method
- * chaining, import `@sekhmet/issue/attempt` instead.
+ * `AlreadyHandled(residue)`, `Handled(residue)`, `Failed(error)` or
+ * `Panicked(payload)`. Every operation is a free function taking the
+ * attempt first; for method chaining, import `@sekhmet/issue/attempt`
+ * instead.
  *
  * @example
  * ```ts

@@ -9,15 +9,17 @@
  */
 
 import { unionKinds } from "@sekhmet/enum/core/mini";
+import { Err, unwrap } from "@sekhmet/enum/result/mini";
 import {
-	Err,
-	Ok,
-	type Result,
-	unwrap,
-	unwrapErr,
-} from "@sekhmet/enum/result/mini";
-import { Failed, Handled } from "@sekhmet/issue/attempt";
-import { isResolved, map as mapAttempt } from "@sekhmet/issue/attempt/mini";
+	Panicked as AttemptPanicked,
+	Failed,
+	Handled,
+} from "@sekhmet/issue/attempt";
+import {
+	isPanicked as isAttemptPanicked,
+	isResolved,
+	map as mapAttempt,
+} from "@sekhmet/issue/attempt/mini";
 import { toResult as attemptToResult } from "@sekhmet/issue/attempt/mini/accessors";
 import { AlreadyHandled } from "@sekhmet/issue/attempt/mini/core";
 import { isFailed } from "@sekhmet/issue/attempt/mini/predicates";
@@ -45,7 +47,14 @@ import { IssueState } from "@sekhmet/issue/state";
 import { isUnhandledAnd as isStateUnhandledAnd } from "@sekhmet/issue/state/mini";
 import { IssueState as MiniIssueState } from "@sekhmet/issue/state/mini/core";
 import { isHandled as isStateHandled } from "@sekhmet/issue/state/mini/predicates";
-import { definePanicRuntime } from "@sekhmet/panic";
+import { definePanicRuntime, panic } from "@sekhmet/panic";
+import {
+	isPanicked as isOutcomePanicked,
+	Ok,
+	type Outcome,
+	unwrap as unwrapOutcome,
+	unwrapErr as unwrapOutcomeErr,
+} from "@sekhmet/panic/outcome/mini";
 import { vowWithResolver, wait } from "@sekhmet/vow";
 import { expectEqual } from "../check.ts";
 
@@ -126,16 +135,42 @@ async function exerciseMini(): Promise<void> {
 	expectEqual({
 		label: "fromPromise carries fulfilment as Ok and a rejection as Err",
 		actual: [
-			unwrap(fetched),
-			unwrapErr(rejected) instanceof Error,
+			unwrapOutcome(fetched),
+			unwrapOutcomeErr(rejected) instanceof Error,
 			isResolved(remoteEnded),
 			unwrapResidue(viaRemote),
 		],
 		expected: [{ port: 9000 }, true, true, { port: 9000 }],
 	});
 
+	const reported: unknown[] = [];
+	panics.setHook(({ payload }) => reported.push(payload));
+	const buggy = fromPromise({
+		repair: async (_: string): Promise<Config> => {
+			await Promise.resolve();
+			return panic({ message: "bad cache", cause: null });
+		},
+		panics,
+	});
+	const panicked = notFound("app.json");
+	const panickedEnded = await wait(
+		attempt(panicked, or(buggy, succeed({ port: 1 }))),
+	);
+	const bugOutcome = await wait(run(buggy, "app.json"));
+	expectEqual({
+		label: "a panic settles as Panicked, reported once, and stops or",
+		actual: [
+			isAttemptPanicked(panickedEnded),
+			unionKinds(AttemptPanicked("x")),
+			isOutcomePanicked(bugOutcome),
+			reported.length,
+			isHandled(panicked),
+		],
+		expected: [true, "Panicked", true, 2, false],
+	});
+
 	const raced = notFound("app.json");
-	const slow = vowWithResolver<Result<Config, string>>();
+	const slow = vowWithResolver<Outcome<Config, string>>();
 	const first = attempt(raced, new MiniRecovery((_: string) => slow.vow));
 	handle(raced, { port: 1 });
 	slow.resolve(Ok({ port: 2 }));
@@ -191,7 +226,11 @@ async function exerciseMini(): Promise<void> {
 	);
 	expectEqual({
 		label: "recoverWith turns a handled Err into Ok; orElse reads the error",
-		actual: [unwrap(loaded), isHandled(recovered), unwrapResidue(rebuilt)],
+		actual: [
+			unwrapOutcome(loaded),
+			isHandled(recovered),
+			unwrapResidue(rebuilt),
+		],
 		expected: [{ port: 3 }, true, { port: 2 }],
 	});
 }

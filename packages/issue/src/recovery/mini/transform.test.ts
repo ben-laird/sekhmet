@@ -1,6 +1,12 @@
 import { Some } from "@sekhmet/enum/option/mini";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
-import { resolved, value, vowWithResolver, wait } from "@sekhmet/vow/mini";
+import { Err, Ok, type Outcome, Panicked } from "@sekhmet/panic/outcome/mini";
+import {
+	resolved,
+	type Vow,
+	value,
+	vowWithResolver,
+	wait,
+} from "@sekhmet/vow/mini";
 import { assertEquals } from "@std/assert";
 import { fail, Recovery, run, succeed } from "./core.ts";
 import {
@@ -53,7 +59,7 @@ Deno.test("andThen() runs the next step on the residue, and skips it on failure"
 	const checked = (recovery: Recovery<string, number, string>) => {
 		return andThen(recovery, (port) => {
 			seen.push(port);
-			return resolved<Result<string, string>>(
+			return resolved<Outcome<string, string>>(
 				port > 1024 ? Ok(`:${port}`) : Err("privileged port"),
 			);
 		});
@@ -73,7 +79,7 @@ Deno.test("andThen() runs the next step on the residue, and skips it on failure"
 
 Deno.test("andThen() waits for an async next step", async () => {
 	// Given: a next step that settles later
-	const { vow, resolve } = vowWithResolver<Result<number, string>>();
+	const { vow, resolve } = vowWithResolver<Outcome<number, string>>();
 	const chained = andThen(ok, () => vow);
 
 	// When: it is run, then the step settles
@@ -140,4 +146,42 @@ Deno.test("inspectErr() sees each error and passes the result on", () => {
 	// Then: it saw the one error, and both results are unchanged
 	assertEquals(seen, ["offline"]);
 	assertEquals(results, [Some(Ok(80)), Some(Err("offline"))]);
+});
+
+Deno.test("map(), mapErr(), andThen() and the inspectors pass a Panicked outcome through", () => {
+	// Given: a recovery whose outcome is Panicked, and counting steps
+	const bug = new Error("bad cache");
+	const broken = new Recovery((_: string) => {
+		return resolved(Panicked<number, string, unknown>(bug));
+	});
+	let calls = 0;
+	const count = (): void => {
+		calls += 1;
+	};
+
+	// When: each transform is run on it
+	const vows: Vow<Outcome<number, unknown, unknown>>[] = [
+		run(
+			map(broken, (port) => port + 1),
+			"app.json",
+		),
+		run(
+			mapErr(broken, (error) => error.length),
+			"app.json",
+		),
+		run(
+			andThen(broken, (port) => {
+				count();
+				return resolved(Ok<number, string, unknown>(port));
+			}),
+			"app.json",
+		),
+		run(inspect(broken, count), "app.json"),
+		run(inspectErr(broken, count), "app.json"),
+	];
+	const results = vows.map((vow) => value(vow));
+
+	// Then: each is the same Panicked outcome, and no step ran
+	assertEquals(results, Array(5).fill(Some(Panicked(bug))));
+	assertEquals(calls, 0);
 });

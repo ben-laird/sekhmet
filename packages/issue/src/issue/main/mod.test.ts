@@ -3,6 +3,7 @@
 import { Option } from "@sekhmet/enum/option";
 import { Result } from "@sekhmet/enum/result";
 import { Err, type Result as MiniResult } from "@sekhmet/enum/result/mini";
+import { Outcome } from "@sekhmet/panic/outcome";
 import { wait } from "@sekhmet/vow/mini";
 import {
 	assertEquals,
@@ -75,7 +76,7 @@ Deno.test("readers return main Option and Result, and wrap returns a main Issue"
 	assertEquals(subject.residueOr(80), 80);
 });
 
-Deno.test("recoverWith resolves with a main Result", async () => {
+Deno.test("recoverWith resolves with a main Outcome", async () => {
 	// Given: an Err holding an issue, and a recovery that fails
 	const subject = notFound();
 	const loaded: MiniResult<number, Issue<string, number>> = Err(subject);
@@ -83,7 +84,7 @@ Deno.test("recoverWith resolves with a main Result", async () => {
 	// When: it is recovered
 	const result = await wait(recoverWith(loaded, fail<string, string>("no")));
 
-	// Then: a main Result whose Err is the same issue, viewed as main
-	assertInstanceOf(result, Result);
+	// Then: a main Outcome whose Err is the same issue, viewed as main
+	assertInstanceOf(result, Outcome);
 	assertStrictEquals(result.unwrapErr(), subject);
 });

@@ -1,13 +1,14 @@
 /**
- * Tree-shakable `Recovery`: a typed repair, `(value: T) => Vow<Result<R,
- * E>>`, that handles an issue by yielding its residue. Every operation is a
+ * Tree-shakable `Recovery`: a typed repair, `(value: T) =>
+ * Vow<Outcome<R, E, unknown>>`, that handles an issue by yielding its
+ * residue. Every operation is a
  * free function taking the recovery first; for method chaining, import
  * `@sekhmet/issue/recovery` instead.
  *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Ok } from "@sekhmet/enum/result/mini";
+ * import { Ok } from "@sekhmet/panic/outcome/mini";
  * import { fail, map, or, run, succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *

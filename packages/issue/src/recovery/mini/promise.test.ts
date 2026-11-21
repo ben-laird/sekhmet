@@ -1,22 +1,21 @@
-import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
+import { union } from "@sekhmet/enum/core/mini";
 import { Panic, panic } from "@sekhmet/panic/mini/core";
 import { definePanicRuntime } from "@sekhmet/panic/mini/runtime";
-import { unwrapPanicked } from "@sekhmet/panic/outcome/mini";
-import { isPending, map, wait } from "@sekhmet/vow/mini";
-import { assert, assertEquals, assertInstanceOf } from "@std/assert";
+import { Ok, unwrapErr, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+import { isPending, map, resolved, wait } from "@sekhmet/vow/mini";
+import {
+	assert,
+	assertEquals,
+	assertInstanceOf,
+	assertThrows,
+} from "@std/assert";
+import { isPanicked as isAttemptPanicked } from "@/src/attempt/mini/predicates.ts";
 import { issue } from "@/src/issue/mini/core.ts";
 import { attempt } from "@/src/issue/mini/handling.ts";
 import { isUnhandled } from "@/src/issue/mini/predicates.ts";
 import { or } from "./combinators.ts";
-import { run, succeed } from "./core.ts";
+import { Recovery, run } from "./core.ts";
 import { fromPromise } from "./promise.ts";
-
-/** Resolves after every pending microtask, and a macrotask turn, have run. */
-function settled(): Promise<void> {
-	return new Promise((resolve) => {
-		setTimeout(resolve, 0);
-	});
-}
 
 /** A repair whose promise rejects with a Panic. */
 function panicking(_: string): Promise<number> {
@@ -82,21 +81,20 @@ Deno.test("fromPromise() reports a dependent that throws to the panic hook", asy
 	assertInstanceOf(reported[0], AggregateError);
 });
 
-Deno.test("fromPromise() reports a Panic rejection to the hook, not as Err", async () => {
+Deno.test("fromPromise() settles a Panic rejection as Panicked, reported once", async () => {
 	// Given: a panic runtime with a recording hook, and a repair that panics
 	const panics = definePanicRuntime();
 	const reported: unknown[] = [];
 	panics.setHook(({ payload }) => reported.push(payload));
 	const fetchRemote = fromPromise({ repair: panicking, panics });
 
-	// When: it is run, and every callback has had its turn
-	const result = run(fetchRemote, "app.json");
-	await settled();
+	// When: it is run and awaited
+	const result = await wait(run(fetchRemote, "app.json"));
 
-	// Then: the hook reported the Panic once, and the vow never resolves
-	assertEquals(reported.length, 1);
-	assertInstanceOf(reported[0], Panic);
-	assert(isPending(result));
+	// Then: it settled as Panicked with the Panic, which the hook saw once
+	const payload = unwrapPanicked(result);
+	assertInstanceOf(payload, Panic);
+	assertEquals(reported, [payload]);
 });
 
 Deno.test("fromPromise() keeps a rejection that isn't a Panic as Err", async () => {
@@ -119,29 +117,32 @@ Deno.test("fromPromise() keeps a rejection that isn't a Panic as Err", async () 
 	assertEquals(reported, []);
 });
 
-Deno.test("a panic in an async repair stops or, and the issue stays unhandled", async () => {
+Deno.test("a panic in an async repair stops or, and the attempt settles Panicked", async () => {
 	// Given: a panicking recovery with a fallback after it, and an issue
 	const panics = definePanicRuntime();
 	const reported: unknown[] = [];
 	panics.setHook(({ payload }) => reported.push(payload));
-	const recovery = or(
-		fromPromise({ repair: panicking, panics }),
-		succeed<string, number>(8080),
-	);
+	let fallbackRuns = 0;
+	const fallback = new Recovery((_: string) => {
+		fallbackRuns += 1;
+		return resolved(Ok<number, never, never>(8080));
+	});
+	const recovery = or(fromPromise({ repair: panicking, panics }), fallback);
 	const notFound = issue<string, number>({
 		value: "app.json",
 		code: "config/NotFound",
 		message: "No config file.",
 	});
 
-	// When: the issue is attempted, and every callback has had its turn
-	const ended = attempt(notFound, recovery);
-	await settled();
+	// When: the issue is attempted and the attempt awaited
+	const ended = await wait(attempt(notFound, recovery));
 
-	// Then: the fallback never ran, the attempt never ends, and the panic was reported
-	assert(isPending(ended));
+	// Then: it is Panicked with the reported payload, the fallback never ran,
+	// and the issue stays unhandled
+	assert(isAttemptPanicked(ended));
+	assertEquals(reported, [union(ended)]);
+	assertEquals(fallbackRuns, 0);
 	assert(isUnhandled(notFound));
-	assertEquals(reported.length, 1);
 });
 
 Deno.test("fromPromise() doesn't report a panic its runtime already reported", async () => {
@@ -161,11 +162,27 @@ Deno.test("fromPromise() doesn't report a panic its runtime already reported", a
 		panics,
 	});
 
-	// When: it is run, and every callback has had its turn
-	const result = run(fetchRemote, "app.json");
-	await settled();
+	// When: it is run and awaited
+	const result = await wait(run(fetchRemote, "app.json"));
 
-	// Then: the hook saw it once, from the inner boundary, and the vow is pending
-	assertEquals(reported.length, 1);
-	assert(isPending(result));
+	// Then: it settled Panicked, and the hook saw it once, from the inner boundary
+	assertEquals(reported, [unwrapPanicked(result)]);
+});
+
+Deno.test("fromPromise() lets a synchronous throw from repair propagate", () => {
+	// Given: a repair that throws before returning a promise
+	const panics = definePanicRuntime();
+	const reported: unknown[] = [];
+	panics.setHook(({ payload }) => reported.push(payload));
+	const broken = fromPromise({
+		repair: (_: string): Promise<number> => {
+			throw new TypeError("not a path");
+		},
+		panics,
+	});
+
+	// When: it is run
+	// Then: the throw reaches the caller, and nothing was reported
+	assertThrows(() => run(broken, "app.json"), TypeError, "not a path");
+	assertEquals(reported, []);
 });

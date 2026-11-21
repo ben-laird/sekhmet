@@ -58,6 +58,8 @@ already-resolved vow. Its type decides which issues it fits, so it never
 needs to decline at runtime. There is no `recovery()` helper: the owner
 removed it on purpose.
 
+_Refined by 18: the vow now carries an `Outcome<R, E, unknown>`._
+
 ### 5. Attempt: how an attempt ended
 
 `Attempt<out R, out E>` is `AlreadyHandled(residue) | Handled(residue) |
@@ -66,6 +68,8 @@ the recovery settles, the state is read again: if the issue is already
 handled, the result is `AlreadyHandled(thatResidue)` whatever this attempt's
 own result was; otherwise `Ok` switches the issue and gives `Handled`, and
 `Err` gives `Failed`. Between concurrent attempts, the first to finish wins.
+
+_Refined by 18: a fourth variant, `Panicked(payload)`._
 
 ### 6. `orElse` drops the first error
 
@@ -116,8 +120,8 @@ is built on it). The rejection is always handled, and a dependent that
 throws is reported to the panic runtime's hook. A synchronous throw from
 `repair` is a bug and propagates.
 
-_Refined by [18](#18-a-panic-in-an-async-repair-goes-to-the-panic-hook): a
-`Panic` rejection is reported, not an `Err`._
+_Refined by [18](#18-a-panic-in-an-async-repair-goes-to-the-panic-hook-and-settles-as-panicked):
+a `Panic` rejection is reported, and settles as `Panicked`, not as an `Err`._
 
 ### 11. `retry`'s `times` counts retries
 
@@ -198,7 +202,7 @@ narrow as before. gen-main learned to take such a narrowed receiver as a
 method's `this` parameter and to keep overloaded guards. `@sekhmet/enum`'s
 `…And` forms have the same hole, tracked in #104.
 
-### 18. A panic in an async repair goes to the panic hook
+### 18. A panic in an async repair goes to the panic hook, and settles as `Panicked`
 
 2026-11-21, the owner's call. `fromPromise` carried every rejection as
 `Err(reason)`, so a `Panic` thrown in an async repair was an ordinary
@@ -208,16 +212,43 @@ boundary around the `then` callback, the top of the async task, as vow's
 `fromPromise` treats a throwing dependent there; the hook reports it,
 unless this runtime already did. Every other rejection stays `Err`.
 
-After reporting, the recovery's vow stays pending for good, like a panicked
-task that never returns: a vow can't fail, an `Err` would let `orElse`
-carry on past the bug, and resolving with anything else would invent a
-value. So an attempt running it never settles, and its issue stays
-unhandled. Nothing rejects, so no unhandled rejection follows, unless the
-hook itself throws (see `@sekhmet/vow`'s `fromPromise`): the boundary then
-throws `Panic (PanicHook)` out of the `then` callback, by design. A
-`fromPromise` built directly on vow's would have turned the rejection into
-an `Err` first, so the recovery builds its vow itself, with the same
-boundaries.
+Reversed 2026-11-21, the owner's call: after reporting, the recovery's vow
+settles with the boundary's `Panicked(payload)`. _First cut: the vow stayed
+pending for good, like a panicked task that never returns. Reversed because
+a vow that never settles means no answer has come, not an error state, and
+because `@sekhmet/machine` settles a send whose handler panics as
+`Panicked`, reporting it once._ So:
+
+- A recovery's vow carries `Outcome<R, E, unknown>` (`Ok | Err | Panicked`,
+  what a panic boundary returns) instead of `Result<R, E>`: `Recovery<T, R,
+  E>` wraps `(value: T) => Vow<Outcome<R, E, unknown>>`, and `run` returns
+  that vow. `succeed`, `fail` and `sync` (which still takes a
+  `Result`-returning repair) give `Ok` and `Err`; only `fromPromise` gives
+  `Panicked`. A synchronous throw from a repair still propagates to whoever
+  ran it.
+- `or`, `orElse`, `firstOf` and `retry` stop at `Panicked`: no fallback and
+  no further runs, and they settle with it. `when`, `map`, `mapErr`,
+  `andThen` and the inspectors pass it through. `andThen`'s step returns a
+  vow of an `Outcome`, as a recovery does.
+- `Attempt` gains a fourth variant, `Panicked(payload)`, with `isPanicked`,
+  `isPanickedAnd` (the overload pair of 17) and `panicked()`. `isResolved`
+  stays true only for `AlreadyHandled` and `Handled`. `map` and `mapErr`
+  leave it alone. Every unwrap resumes it (throws the payload again), as
+  `Outcome`'s do, and so does `toResult`, which has no room for it; the new
+  `toOutcome` keeps it.
+- `attempt` settles a `Panicked` outcome as `Panicked(payload)` and leaves
+  the issue unhandled, even if another attempt handled it meanwhile: a bug
+  is never hidden behind `AlreadyHandled`.
+- `recoverWith` settles as `Outcome<R, Issue<T, R>, unknown>`: the panic
+  resurfaces as `Panicked` rather than being swallowed into an `Err`. Its
+  input stays a `Result`.
+
+The panic is reported exactly once, as before. Nothing rejects, so no
+unhandled rejection follows, unless the hook itself throws (see
+`@sekhmet/vow`'s `fromPromise`): the boundary then throws
+`Panic (PanicHook)` out of the `then` callback, by design. A `fromPromise`
+built directly on vow's would have turned the rejection into an `Err`
+first, so the recovery builds its vow itself, with the same boundaries.
 
 ### 19. The main classes leave a method-bivariance gap
 

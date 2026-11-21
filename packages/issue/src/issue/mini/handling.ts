@@ -7,7 +7,13 @@
  */
 
 import { match } from "@sekhmet/enum/core/mini";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import type { Result } from "@sekhmet/enum/result/mini";
+import {
+	type Outcome,
+	Err as OutcomeErr,
+	Ok as OutcomeOk,
+	Panicked as OutcomePanicked,
+} from "@sekhmet/panic/outcome/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { map, resolved, type Vow } from "@sekhmet/vow/mini";
 import {
@@ -15,6 +21,7 @@ import {
 	type Attempt,
 	Failed,
 	Handled,
+	Panicked,
 } from "@/src/attempt/mini/core.ts";
 import { type Recovery, run } from "@/src/recovery/mini/core.ts";
 import { IssueState } from "@/src/state/mini/core.ts";
@@ -53,9 +60,11 @@ function settle<T, R, E>({
  * was. Otherwise `Ok` switches the issue to `Handled` in place, and `Err`
  * leaves it unhandled and gives `Failed`.
  *
- * The vow is resolved at once when the recovery is sync. A recovery that
- * panics (see `fromPromise`) never settles, so neither does the attempt,
- * and the issue stays unhandled.
+ * A `Panicked` outcome (a bug in the repair; see `fromPromise`) gives
+ * `Panicked(payload)` and leaves the issue unhandled, even if another attempt
+ * handled it meanwhile: a bug is never hidden behind `AlreadyHandled`.
+ *
+ * The vow is resolved at once when the recovery is sync.
  *
  * @template T The typed facts about the problem
  * @template R The residue handling yields
@@ -94,6 +103,7 @@ export function attempt<T, R, E>(
 							Unhandled: () => Failed<R, E>(error),
 						});
 					},
+					Panicked: (payload) => Panicked<R, E>(payload),
 				});
 			});
 		},
@@ -129,22 +139,27 @@ export function handle<T, R>(self: Issue<T, R>, residue: R): Attempt<R, never> {
 }
 
 /**
- * Attempts the issue in a `Result`'s `Err` with a recovery. An `Ok` passes
- * through. An `Err` becomes `Ok(residue)` once its issue is handled, during
- * this attempt or before it; if the recovery fails, the `Err` stays, holding
- * the same, still unhandled issue, and the recovery's error is dropped.
+ * Attempts the issue in a `Result`'s `Err` with a recovery, settling as an
+ * `Outcome`. An `Ok` passes through. An `Err` becomes `Ok(residue)` once its
+ * issue is handled, during this attempt or before it; if the recovery
+ * fails, the `Err` stays, holding the same, still unhandled issue, and the
+ * recovery's error is dropped. If the recovery panics, the outcome is
+ * `Panicked(payload)`: the panic resurfaces rather than being swallowed into
+ * an `Err`, and the issue stays unhandled.
  *
  * @template T The typed facts about the problem
  * @template R The residue handling yields
  * @template E The error the recovery fails with
  * @param result A residue, or the issue that stands in for it
  * @param recovery The repair to run on the issue's value
- * @returns A vow of the residue, or of the issue that is still unhandled
+ * @returns A vow of the residue as `Ok`, the still unhandled issue as `Err`,
+ *   or a panic as `Panicked`
  *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Err, type Result, unwrap } from "@sekhmet/enum/result/mini";
+ * import { Err, type Result } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { type Issue, issue, recoverWith } from "@sekhmet/issue/issue/mini";
  * import { succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
@@ -159,15 +174,18 @@ export function handle<T, R>(self: Issue<T, R>, residue: R): Attempt<R, never> {
 export function recoverWith<T, R, E>(
 	result: Result<R, Issue<T, R>>,
 	recovery: Recovery<T, R, E>,
-): Vow<Result<R, Issue<T, R>>> {
+): Vow<Outcome<R, Issue<T, R>, unknown>> {
+	type Recovered = Outcome<R, Issue<T, R>, unknown>;
+
 	return match(result)({
-		Ok: (residue) => resolved(Ok<R, Issue<T, R>>(residue)),
+		Ok: (residue) => resolved<Recovered>(OutcomeOk(residue)),
 		Err: (self) => {
-			return map(attempt(self, recovery), (ended) => {
+			return map(attempt(self, recovery), (ended): Recovered => {
 				return match(ended)({
-					AlreadyHandled: (residue) => Ok<R, Issue<T, R>>(residue),
-					Handled: (residue) => Ok<R, Issue<T, R>>(residue),
-					Failed: () => Err<R, Issue<T, R>>(self),
+					AlreadyHandled: (residue) => OutcomeOk(residue),
+					Handled: (residue) => OutcomeOk(residue),
+					Failed: () => OutcomeErr(self),
+					Panicked: (payload) => OutcomePanicked(payload),
 				});
 			});
 		},

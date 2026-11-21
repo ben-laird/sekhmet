@@ -25,8 +25,9 @@
  * @module
  */
 
-import { Result } from "@sekhmet/enum/result";
-import type { Result as MiniResult } from "@sekhmet/enum/result/mini";
+import type { Result } from "@sekhmet/enum/result/mini";
+import { Outcome } from "@sekhmet/panic/outcome";
+import type { Outcome as MiniOutcome } from "@sekhmet/panic/outcome/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import type { Vow } from "@sekhmet/vow/mini";
 import { map as mapVow } from "@sekhmet/vow/mini/impl";
@@ -39,9 +40,12 @@ export type {
 } from "../mini/mod.ts";
 
 /**
- * A typed repair: `(value: T) => Vow<Result<R, E>>`. Given an issue's value,
- * it yields the residue that handles the issue, or the error it failed with.
- * It can be sync or async; a sync one returns an already-resolved vow.
+ * A typed repair: `(value: T) => Vow<Outcome<R, E, unknown>>`. Given an
+ * issue's value, it yields `Ok` with the residue that handles the issue,
+ * `Err` with the error it failed with, or `Panicked` with the payload of a
+ * bug it hit (only `fromPromise` makes one: the panic runtime's hook reports
+ * it, and every combinator stops there). It can be sync or async; a sync one
+ * returns an already-resolved vow.
  *
  * Its type decides which issues it fits (their value type `T` and residue
  * type `R`), so it never needs to decline at runtime. Build one with
@@ -56,12 +60,12 @@ export type {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { Ok, unwrap } from "@sekhmet/panic/outcome/mini";
  * import { Recovery } from "@sekhmet/issue/recovery";
  * import { resolved, wait } from "@sekhmet/vow/mini";
  *
  * const byName = new Recovery(({ path }: { readonly path: string }) => {
- * 	return resolved(Ok<number, never>(path === "dev.json" ? 3000 : 80));
+ * 	return resolved(Ok<number, never, never>(path === "dev.json" ? 3000 : 80));
  * });
  *
  * assertEquals(unwrap(await wait(byName.run({ path: "dev.json" }))), 3000);
@@ -86,8 +90,8 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * `next`'s error. `next` never runs when `self` succeeds. To build the next
 	 * recovery from the error, use {@linkcode orElse}.
 	 *
-	 * A recovery that panics (see `fromPromise`) never settles, so the
-	 * composite stops there and never settles either: `next` never runs.
+	 * A `Panicked` outcome (see `fromPromise`) is a bug, not a failure, so the
+	 * composite stops there and settles with it: `next` never runs.
 	 *
 	 * The residue is the wider of the two, with no union: a recovery is
 	 * covariant in its residue, so a `fail` (residue `never`) followed by a
@@ -102,7 +106,7 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import { unwrap } from "@sekhmet/panic/outcome/mini";
 	 * import { fail, succeed } from "@sekhmet/issue/recovery";
 	 * import { wait } from "@sekhmet/vow/mini";
 	 *
@@ -127,8 +131,8 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * when `self` succeeds. To try a recovery already at hand, use
 	 * {@linkcode or}.
 	 *
-	 * A recovery that panics (see `fromPromise`) never settles, so the
-	 * composite stops there and never settles either: `next` is never called.
+	 * A `Panicked` outcome (see `fromPromise`) is a bug, not a failure, so the
+	 * composite stops there and settles with it: `next` is never called.
 	 *
 	 * The residue widens as `or`'s does, with no union: a `fail` (residue
 	 * `never`) whose `next` builds a `Recovery<T, Config, F>` is a
@@ -145,7 +149,7 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import { unwrap } from "@sekhmet/panic/outcome/mini";
 	 * import { fail, succeed } from "@sekhmet/issue/recovery";
 	 * import { wait } from "@sekhmet/vow/mini";
 	 *
@@ -170,8 +174,8 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * to `times` more times. It succeeds with the first residue, or fails with
 	 * the last error. Each run starts once the previous one has settled. A sync
 	 * recovery's runs loop without nesting the stack, so `times` can be large.
-	 * A run that panics (see `fromPromise`) never settles, so no retry follows
-	 * and the composite never settles either.
+	 * A run that panics (see `fromPromise`) is not retried: the composite
+	 * settles with its `Panicked` outcome.
 	 *
 	 * @param options - How many more times to run it after a failure
 	 * @returns A recovery that yields the first residue, or fails with the last error
@@ -179,7 +183,8 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+	 * import { Err, Ok } from "@sekhmet/enum/result/mini";
+	 * import { unwrap } from "@sekhmet/panic/outcome/mini";
 	 * import { sync } from "@sekhmet/issue/recovery";
 	 * import { wait } from "@sekhmet/vow/mini";
 	 *
@@ -199,7 +204,8 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 
 	/**
 	 * Runs `self` only for values that pass `test`; for any other value, fails
-	 * with `otherwise` at once, without running `self`.
+	 * with `otherwise` at once, without running `self`. `self`'s outcome,
+	 * `Panicked` included, passes through as it is.
 	 *
 	 * @template F - The error for a value the test rejects
 	 * @param options - The test, and the error for a value it rejects
@@ -207,7 +213,7 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+	 * import { unwrap, unwrapErr } from "@sekhmet/panic/outcome/mini";
 	 * import { type Recovery, succeed } from "@sekhmet/issue/recovery";
 	 * import { wait } from "@sekhmet/vow/mini";
 	 *
@@ -230,11 +236,12 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * Runs a recovery on a value.
 	 *
 	 * @param value - The value to repair
-	 * @returns A vow of the residue, or of the error
+	 * @returns A vow of the residue as `Ok`, the error as `Err`, or a panic as
+	 * `Panicked`
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import { unwrap } from "@sekhmet/panic/outcome/mini";
 	 * import { succeed } from "@sekhmet/issue/recovery";
 	 * import { wait } from "@sekhmet/vow/mini";
 	 *
@@ -242,9 +249,9 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * ```
 	 * @see {@link mini.run}
 	 */
-	run(value: T): Vow<Result<R, E>> {
+	run(value: T): Vow<Outcome<R, E, unknown>> {
 		return mapVow(mini.run(this, value), ($value0) => {
-			return Result.fromMini($value0);
+			return Outcome.fromMini($value0);
 		});
 	}
 
@@ -257,7 +264,7 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import { unwrap } from "@sekhmet/panic/outcome/mini";
 	 * import { type Recovery, succeed } from "@sekhmet/issue/recovery";
 	 * import { wait } from "@sekhmet/vow/mini";
 	 *
@@ -281,7 +288,7 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { unwrapErr } from "@sekhmet/enum/result/mini";
+	 * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
 	 * import { fail, type Recovery } from "@sekhmet/issue/recovery";
 	 * import { wait } from "@sekhmet/vow/mini";
 	 *
@@ -298,8 +305,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 
 	/**
 	 * Chains a step that can fail onto a recovery's residue: when the recovery
-	 * succeeds, `next` runs on its residue, and its result is the composite's.
-	 * A failure passes through without running `next`.
+	 * succeeds, `next` runs on its residue, and its outcome is the composite's.
+	 * `next` returns a vow of an `Outcome`, as a recovery does (`run` of another
+	 * recovery, say). A failure or a panic passes through without running
+	 * `next`.
 	 *
 	 * @template U - The residue `next` yields
 	 * @param next - The step to run on its residue, sync or async
@@ -307,20 +316,22 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Err, Ok, type Result, unwrapErr } from "@sekhmet/enum/result/mini";
+	 * import { Err, Ok, type Outcome, unwrapErr } from "@sekhmet/panic/outcome/mini";
 	 * import { type Recovery, succeed } from "@sekhmet/issue/recovery";
 	 * import { resolved, wait } from "@sekhmet/vow/mini";
 	 *
 	 * const useDefault: Recovery<string, number, string> = succeed(80);
 	 * const checked = useDefault.andThen((port) => {
-	 * 	return resolved<Result<number, string>>(port > 1024 ? Ok(port) : Err("privileged port"));
+	 * 	return resolved<Outcome<number, string>>(port > 1024 ? Ok(port) : Err("privileged port"));
 	 * });
 	 *
 	 * assertEquals(unwrapErr(await wait(checked.run("app.json"))), "privileged port");
 	 * ```
 	 * @see {@link mini.andThen}
 	 */
-	andThen<U>(next: (residue: R) => Vow<MiniResult<U, E>>): Recovery<T, U, E> {
+	andThen<U>(
+		next: (residue: R) => Vow<MiniOutcome<U, E, unknown>>,
+	): Recovery<T, U, E> {
 		return Recovery.fromMini(mini.andThen(this, next));
 	}
 
@@ -335,7 +346,8 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
-	 * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
+	 * import { Ok } from "@sekhmet/enum/result/mini";
+	 * import { unwrap } from "@sekhmet/panic/outcome/mini";
 	 * import { sync } from "@sekhmet/issue/recovery";
 	 * import { wait } from "@sekhmet/vow/mini";
 	 *
@@ -405,9 +417,9 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
  * fails with the last one's error. The list can't be empty: `firstOf([])`
  * doesn't type-check, since with no recovery to try there would be no error
  * to fail with. The recoveries run in a loop that doesn't nest the stack, so
- * a long list is safe, sync or async. A recovery that panics (see
- * `fromPromise`) never settles, so the list stops there and the composite
- * never settles either.
+ * a long list is safe, sync or async. A `Panicked` outcome (see
+ * `fromPromise`) stops the list: the composite settles with it, and the
+ * recoveries after it never run.
  *
  * @template T - The value of the issues they repair
  * @template R - The residue they yield: the widest of the list's
@@ -417,7 +429,7 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { fail, firstOf, succeed } from "@sekhmet/issue/recovery";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -446,7 +458,7 @@ export function firstOf<T, R, E>(
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { succeed } from "@sekhmet/issue/recovery";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -469,7 +481,7 @@ export function succeed<T, R>(residue: R): Recovery<T, R, never> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { fail } from "@sekhmet/issue/recovery";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -481,8 +493,9 @@ export function fail<T, E>(error: E): Recovery<T, never, E> {
 }
 
 /**
- * A recovery from a synchronous repair: its `Result` is wrapped in an
- * already-resolved vow.
+ * A recovery from a synchronous repair: its `Result` becomes the `Ok` or
+ * `Err` outcome of an already-resolved vow. A throw from `repair` is a bug
+ * and propagates to whoever ran the recovery; no panic runtime catches it.
  *
  * @template T - The value of the issues it repairs
  * @template R - The residue it yields
@@ -492,7 +505,8 @@ export function fail<T, E>(error: E): Recovery<T, never, E> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { Err, Ok } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { sync } from "@sekhmet/issue/recovery";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -505,7 +519,7 @@ export function fail<T, E>(error: E): Recovery<T, never, E> {
  * ```
  */
 export function sync<T, R, E>(
-	repair: (value: T) => MiniResult<R, E>,
+	repair: (value: T) => Result<R, E>,
 ): Recovery<T, R, E> {
 	return Recovery.fromMini(mini.sync(repair));
 }
@@ -522,11 +536,11 @@ export function sync<T, R, E>(
  * recover, so it is not an `Err` that `or` or `firstOf` would move past.
  * It unwinds to a boundary of `panics` around the `then` callback, the top
  * of the async task, whose hook reports it (once: not again if this runtime
- * already reported it). Like a panicked task, the recovery never finishes:
- * its vow stays pending for good, so an attempt it runs in never settles
- * and its issue stays unhandled. Nothing rejects, so no unhandled rejection
- * follows, unless the hook itself throws (see `@sekhmet/vow`'s
- * `fromPromise`).
+ * already reported it), and the vow settles with that boundary's
+ * `Panicked(payload)`. Every combinator stops at it, and an attempt it runs
+ * in settles as `Panicked`, leaving its issue unhandled. Nothing rejects, so
+ * no unhandled rejection follows, unless the hook itself throws (see
+ * `@sekhmet/vow`'s `fromPromise`).
  *
  * The vow resolves inside the promise's `then` callback, under
  * `panics.catchUnwind`, so a dependent that throws is reported to the
@@ -539,12 +553,12 @@ export function sync<T, R, E>(
  * @template R - The residue the promise fulfils with
  * @param options - The repair, and the panic runtime that reports a panic and
  * a dependent that throws
- * @returns A recovery that yields the fulfilled residue, or fails with the
- * rejection reason, and never finishes after a panic
+ * @returns A recovery that yields the fulfilled residue, fails with the
+ * rejection reason, or settles as `Panicked` after a panic
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { unwrap, unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { definePanicRuntime } from "@sekhmet/panic";
  * import { fromPromise } from "@sekhmet/issue/recovery";
  * import { wait } from "@sekhmet/vow/mini";
@@ -563,24 +577,24 @@ export function sync<T, R, E>(
  * ```
  * @example
  * ```ts
- * import { assert, assertInstanceOf } from "@std/assert";
+ * import { assertEquals, assertInstanceOf } from "@std/assert";
  * import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
+ * import { unwrapPanicked } from "@sekhmet/panic/outcome/mini";
  * import { fromPromise } from "@sekhmet/issue/recovery";
- * import { isPending } from "@sekhmet/vow/mini";
+ * import { wait } from "@sekhmet/vow/mini";
  *
  * const panics = definePanicRuntime();
- * const reported = new Promise((resolve) => {
- * 	panics.setHook(({ payload }) => resolve(payload));
- * });
+ * const reported: unknown[] = [];
+ * panics.setHook(({ payload }) => reported.push(payload));
  * const fetchRemote = fromPromise({
  * 	repair: async (_: string): Promise<number> => panic({ message: "bad cache", cause: null }),
  * 	panics,
  * });
  *
- * const ran = fetchRemote.run("app.json");
+ * const payload = unwrapPanicked(await wait(fetchRemote.run("app.json")));
  *
- * assertInstanceOf(await reported, Panic); // reported, not an Err
- * assert(isPending(ran)); // and the recovery never finishes
+ * assertInstanceOf(payload, Panic); // settled as Panicked, not as an Err
+ * assertEquals(reported, [payload]); // and reported once
  * ```
  */
 export function fromPromise<T, R>(

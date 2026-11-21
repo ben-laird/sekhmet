@@ -5,14 +5,18 @@
  * @module
  */
 
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import type { Result } from "@sekhmet/enum/result/mini";
+import { Err, fromResult, Ok, type Outcome } from "@sekhmet/panic/outcome/mini";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import { resolved, type Vow } from "@sekhmet/vow/mini";
 
 /**
- * A typed repair: `(value: T) => Vow<Result<R, E>>`. Given an issue's value,
- * it yields the residue that handles the issue, or the error it failed with.
- * It can be sync or async; a sync one returns an already-resolved vow.
+ * A typed repair: `(value: T) => Vow<Outcome<R, E, unknown>>`. Given an
+ * issue's value, it yields `Ok` with the residue that handles the issue,
+ * `Err` with the error it failed with, or `Panicked` with the payload of a
+ * bug it hit (only `fromPromise` makes one: the panic runtime's hook reports
+ * it, and every combinator stops there). It can be sync or async; a sync one
+ * returns an already-resolved vow.
  *
  * Its type decides which issues it fits (their value type `T` and residue
  * type `R`), so it never needs to decline at runtime. Build one with
@@ -26,19 +30,19 @@ import { resolved, type Vow } from "@sekhmet/vow/mini";
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { Ok, unwrap } from "@sekhmet/panic/outcome/mini";
  * import { Recovery, run } from "@sekhmet/issue/recovery/mini";
  * import { resolved, wait } from "@sekhmet/vow/mini";
  *
  * const byName = new Recovery(({ path }: { readonly path: string }) => {
- * 	return resolved(Ok<number, never>(path === "dev.json" ? 3000 : 80));
+ * 	return resolved(Ok<number, never, never>(path === "dev.json" ? 3000 : 80));
  * });
  *
  * assertEquals(unwrap(await wait(run(byName, { path: "dev.json" }))), 3000);
  * ```
  */
 export class Recovery<T, out R, out E> extends Struct<
-	(value: T) => Vow<Result<R, E>>
+	(value: T) => Vow<Outcome<R, E, unknown>>
 > {}
 
 /**
@@ -49,12 +53,13 @@ export class Recovery<T, out R, out E> extends Struct<
  * @template E The error it fails with
  * @param self The recovery to run
  * @param value The value to repair
- * @returns A vow of the residue, or of the error
+ * @returns A vow of the residue as `Ok`, the error as `Err`, or a panic as
+ *   `Panicked`
  *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { run, succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -64,7 +69,7 @@ export class Recovery<T, out R, out E> extends Struct<
 export function run<T, R, E>(
 	self: Recovery<T, R, E>,
 	value: T,
-): Vow<Result<R, E>> {
+): Vow<Outcome<R, E, unknown>> {
 	return getStructParams(self)(value);
 }
 
@@ -79,7 +84,7 @@ export function run<T, R, E>(
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrap } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { run, succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -89,7 +94,9 @@ export function run<T, R, E>(
  * ```
  */
 export function succeed<T, R>(residue: R): Recovery<T, R, never> {
-	return new Recovery<T, R, never>(() => resolved(Ok<R, never>(residue)));
+	return new Recovery<T, R, never>(() => {
+		return resolved(Ok<R, never, unknown>(residue));
+	});
 }
 
 /**
@@ -103,7 +110,7 @@ export function succeed<T, R>(residue: R): Recovery<T, R, never> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { unwrapErr } from "@sekhmet/panic/outcome/mini";
  * import { fail, run } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -111,12 +118,15 @@ export function succeed<T, R>(residue: R): Recovery<T, R, never> {
  * ```
  */
 export function fail<T, E>(error: E): Recovery<T, never, E> {
-	return new Recovery<T, never, E>(() => resolved(Err<never, E>(error)));
+	return new Recovery<T, never, E>(() => {
+		return resolved(Err<never, E, unknown>(error));
+	});
 }
 
 /**
- * A recovery from a synchronous repair: its `Result` is wrapped in an
- * already-resolved vow.
+ * A recovery from a synchronous repair: its `Result` becomes the `Ok` or
+ * `Err` outcome of an already-resolved vow. A throw from `repair` is a bug
+ * and propagates to whoever ran the recovery; no panic runtime catches it.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields
@@ -127,7 +137,8 @@ export function fail<T, E>(error: E): Recovery<T, never, E> {
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+ * import { Err, Ok } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { run, sync } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
@@ -142,5 +153,5 @@ export function fail<T, E>(error: E): Recovery<T, never, E> {
 export function sync<T, R, E>(
 	repair: (value: T) => Result<R, E>,
 ): Recovery<T, R, E> {
-	return new Recovery<T, R, E>((value) => resolved(repair(value)));
+	return new Recovery<T, R, E>((value) => resolved(fromResult(repair(value))));
 }

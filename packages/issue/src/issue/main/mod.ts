@@ -31,6 +31,7 @@
 import { Option } from "@sekhmet/enum/option";
 import { Result } from "@sekhmet/enum/result";
 import type { Result as MiniResult } from "@sekhmet/enum/result/mini";
+import { Outcome } from "@sekhmet/panic/outcome";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import type { Vow } from "@sekhmet/vow/mini";
 import { map as mapVow } from "@sekhmet/vow/mini/impl";
@@ -263,9 +264,11 @@ export class Issue<in out T, in out R> extends mini.Issue<T, R> {
 	 * was. Otherwise `Ok` switches the issue to `Handled` in place, and `Err`
 	 * leaves it unhandled and gives `Failed`.
 	 *
-	 * The vow is resolved at once when the recovery is sync. A recovery that
-	 * panics (see `fromPromise`) never settles, so neither does the attempt,
-	 * and the issue stays unhandled.
+	 * A `Panicked` outcome (a bug in the repair; see `fromPromise`) gives
+	 * `Panicked(payload)` and leaves the issue unhandled, even if another attempt
+	 * handled it meanwhile: a bug is never hidden behind `AlreadyHandled`.
+	 *
+	 * The vow is resolved at once when the recovery is sync.
 	 *
 	 * @template E - The error the recovery fails with
 	 * @param recovery - The repair to run on its value
@@ -714,21 +717,26 @@ export function issue<T, R>(input: mini.IssueInput<T>): Issue<T, R> {
 }
 
 /**
- * Attempts the issue in a `Result`'s `Err` with a recovery. An `Ok` passes
- * through. An `Err` becomes `Ok(residue)` once its issue is handled, during
- * this attempt or before it; if the recovery fails, the `Err` stays, holding
- * the same, still unhandled issue, and the recovery's error is dropped.
+ * Attempts the issue in a `Result`'s `Err` with a recovery, settling as an
+ * `Outcome`. An `Ok` passes through. An `Err` becomes `Ok(residue)` once its
+ * issue is handled, during this attempt or before it; if the recovery
+ * fails, the `Err` stays, holding the same, still unhandled issue, and the
+ * recovery's error is dropped. If the recovery panics, the outcome is
+ * `Panicked(payload)`: the panic resurfaces rather than being swallowed into
+ * an `Err`, and the issue stays unhandled.
  *
  * @template T - The typed facts about the problem
  * @template R - The residue handling yields
  * @template E - The error the recovery fails with
  * @param result - A residue, or the issue that stands in for it
  * @param recovery - The repair to run on the issue's value
- * @returns A vow of the residue, or of the issue that is still unhandled
+ * @returns A vow of the residue as `Ok`, the still unhandled issue as `Err`,
+ * or a panic as `Panicked`
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { Err, type Result, unwrap } from "@sekhmet/enum/result/mini";
+ * import { Err, type Result } from "@sekhmet/enum/result/mini";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { type Issue, issue, recoverWith } from "@sekhmet/issue/issue";
  * import { succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
@@ -743,9 +751,9 @@ export function issue<T, R>(input: mini.IssueInput<T>): Issue<T, R> {
 export function recoverWith<T, R, E>(
 	result: MiniResult<R, mini.Issue<T, R>>,
 	recovery: Recovery<T, R, E>,
-): Vow<Result<R, Issue<T, R>>> {
+): Vow<Outcome<R, Issue<T, R>, unknown>> {
 	return mapVow(mini.recoverWith(result, recovery), ($value0) => {
-		return Result.fromMini($value0).mapErr(($value1) => {
+		return Outcome.fromMini($value0).mapErr(($value1) => {
 			return Issue.fromMini($value1);
 		});
 	});

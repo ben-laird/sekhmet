@@ -1,7 +1,9 @@
 /**
  * Getting a value out of an attempt: `expect`/`unwrap` return the residue
  * and panic on `Failed`, `expectFailed`/`unwrapFailed` return the error and
- * panic otherwise, and `unwrapOr` and `unwrapOrElse` take a fallback.
+ * panic otherwise, and `unwrapOr` and `unwrapOrElse` take a fallback. Each
+ * resumes a `Panicked` attempt, as `Outcome`'s unwraps do: the payload is
+ * thrown again, since no fallback can stand in for a bug.
  *
  * @module
  */
@@ -19,6 +21,7 @@ import type { Attempt } from "./core.ts";
  * @param message The panic's message if the attempt failed
  * @returns The residue of a `Handled` or `AlreadyHandled` attempt
  * @throws {Panic} With `message`, and the attempt as its cause, if it is `Failed`
+ * @throws The panic payload, resumed, if it is `Panicked`
  *
  * @example
  * ```ts
@@ -34,6 +37,9 @@ export function expect<R, E>(self: Attempt<R, E>, message: string): R {
 		AlreadyHandled: (value) => value,
 		Handled: (value) => value,
 		Failed: () => panic({ message, cause: self }),
+		Panicked: (payload): never => {
+			throw payload;
+		},
 	});
 }
 
@@ -46,6 +52,7 @@ export function expect<R, E>(self: Attempt<R, E>, message: string): R {
  * @param self The attempt to unwrap
  * @returns The residue of a `Handled` or `AlreadyHandled` attempt
  * @throws {Panic} "Attempt unwrap failed!", with the attempt as its cause, if it is `Failed`
+ * @throws The panic payload, resumed, if it is `Panicked`
  *
  * @example
  * ```ts
@@ -61,7 +68,8 @@ export function unwrap<R, E>(self: Attempt<R, E>): R {
 }
 
 /**
- * Returns the residue, or `fallback` if the recovery failed.
+ * Returns the residue, or `fallback` if the recovery failed. A `Panicked`
+ * attempt is resumed: its payload is thrown again.
  *
  * @template R The residue handling yields
  * @template E The error a failed recovery returned
@@ -85,11 +93,15 @@ export function unwrapOr<R, E>(self: Attempt<R, E>, fallback: R): R {
 		AlreadyHandled: (value) => value,
 		Handled: (value) => value,
 		Failed: () => fallback,
+		Panicked: (payload): never => {
+			throw payload;
+		},
 	});
 }
 
 /**
  * Returns the residue, or computes one from the error if the recovery failed.
+ * A `Panicked` attempt is resumed: its payload is thrown again.
  *
  * @template R The residue handling yields
  * @template E The error a failed recovery returned
@@ -115,6 +127,9 @@ export function unwrapOrElse<R, E>(
 		AlreadyHandled: (value) => value,
 		Handled: (value) => value,
 		Failed: fallback,
+		Panicked: (payload): never => {
+			throw payload;
+		},
 	});
 }
 
@@ -127,7 +142,8 @@ export function unwrapOrElse<R, E>(
  * @param self The attempt to unwrap
  * @param message The panic's message if the attempt did not fail
  * @returns The error of a `Failed` attempt
- * @throws {Panic} With `message`, and the attempt as its cause, unless it is `Failed`
+ * @throws {Panic} With `message`, and the attempt as its cause, if the issue ended up handled
+ * @throws The panic payload, resumed, if it is `Panicked`
  *
  * @example
  * ```ts
@@ -143,6 +159,9 @@ export function expectFailed<R, E>(self: Attempt<R, E>, message: string): E {
 		AlreadyHandled: () => panic({ message, cause: self }),
 		Handled: () => panic({ message, cause: self }),
 		Failed: (value) => value,
+		Panicked: (payload): never => {
+			throw payload;
+		},
 	});
 }
 
@@ -153,7 +172,8 @@ export function expectFailed<R, E>(self: Attempt<R, E>, message: string): E {
  * @template E The error a failed recovery returned
  * @param self The attempt to unwrap
  * @returns The error of a `Failed` attempt
- * @throws {Panic} "Attempt unwrap failed!", with the attempt as its cause, unless it is `Failed`
+ * @throws {Panic} "Attempt unwrap failed!", with the attempt as its cause, if the issue ended up handled
+ * @throws The panic payload, resumed, if it is `Panicked`
  *
  * @example
  * ```ts

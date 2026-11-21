@@ -24,6 +24,7 @@
 import type { Enum, Isolate } from "@sekhmet/enum/core/mini";
 import { Option } from "@sekhmet/enum/option";
 import { Result } from "@sekhmet/enum/result";
+import { Outcome } from "@sekhmet/panic/outcome";
 import { getStructParams, struct } from "@sekhmet/primordials/struct";
 import * as mini from "../mini/mod.ts";
 
@@ -37,6 +38,9 @@ export type { AttemptVariants } from "../mini/mod.ts";
  * - `Handled(residue)`: this attempt handled the issue, which switched in
  *   place to hold the residue.
  * - `Failed(error)`: the recovery failed, and the issue stays unhandled.
+ * - `Panicked(payload)`: the recovery panicked (a bug, not a failure to
+ *   recover); the panic runtime's hook reported the payload, and the issue
+ *   stays unhandled.
  *
  * An attempt is a plain value, so it is covariant in both type parameters.
  *
@@ -55,6 +59,7 @@ export type { AttemptVariants } from "../mini/mod.ts";
  * 	AlreadyHandled: (port) => `already on ${port}`,
  * 	Handled: (port) => `now on ${port}`,
  * 	Failed: (error) => `failed: ${error}`,
+ * 	Panicked: () => "a bug",
  * });
  *
  * assertEquals(line, "failed: offline");
@@ -116,11 +121,35 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	}
 
 	/**
+	 * The panic payload, if the recovery panicked. It is `unknown`, as a thrown
+	 * value is.
+	 *
+	 * @returns `Some(payload)` for `Panicked`, else `None`
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { isNone, unwrap as unwrapOption } from "@sekhmet/enum/option/mini";
+	 * import { Failed, Panicked } from "@sekhmet/issue/attempt";
+	 *
+	 * assertEquals(unwrapOption(Panicked("bad cache").panicked()), "bad cache");
+	 * assertEquals(isNone(Failed("offline").panicked()), true);
+	 * ```
+	 * @see {@link mini.panicked}
+	 */
+	panicked(): Option<unknown> {
+		return Option.fromMini(mini.panicked(this));
+	}
+
+	/**
 	 * The attempt as a `Result`: `Ok(residue)` when the issue ended up handled
 	 * (by this attempt or before it), `Err(error)` when the recovery failed.
-	 * Which of the two handled variants it was is dropped.
+	 * Which of the two handled variants it was is dropped. A `Result` has no
+	 * room for a panic, so a `Panicked` attempt is resumed: its payload is
+	 * thrown again, as `Outcome`'s `resume` does. Use {@linkcode toOutcome} to
+	 * keep it.
 	 *
 	 * @returns The residue as `Ok`, or the error as `Err`
+	 * @throws The panic payload, if the attempt is `Panicked`
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
@@ -134,6 +163,28 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	 */
 	toResult(): Result<R, E> {
 		return Result.fromMini(mini.toResult(this));
+	}
+
+	/**
+	 * The attempt as an `Outcome`: `Ok(residue)` when the issue ended up handled
+	 * (by this attempt or before it), `Err(error)` when the recovery failed, and
+	 * `Panicked(payload)` when it panicked. Which of the two handled variants it
+	 * was is dropped.
+	 *
+	 * @returns The residue as `Ok`, the error as `Err`, or the payload as `Panicked`
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { isPanicked, unwrapErr } from "@sekhmet/panic/outcome/mini";
+	 * import { Failed, Panicked } from "@sekhmet/issue/attempt";
+	 *
+	 * assertEquals(unwrapErr(Failed("offline").toOutcome()), "offline");
+	 * assertEquals((Panicked("bad cache").toOutcome()).isPanicked(), true);
+	 * ```
+	 * @see {@link mini.toOutcome}
+	 */
+	toOutcome(): Outcome<R, E, unknown> {
+		return Outcome.fromMini(mini.toOutcome(this));
 	}
 
 	/**
@@ -410,6 +461,69 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	}
 
 	/**
+	 * Checks whether an attempt's recovery panicked.
+	 *
+	 * Narrows the variant, so its payload can be read directly, and both type
+	 * parameters to `never`.
+	 *
+	 * @returns Whether it is `Panicked`
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Failed, Panicked } from "@sekhmet/issue/attempt";
+	 *
+	 * assertEquals(Panicked("bad cache").isPanicked(), true);
+	 * assertEquals(Failed("offline").isPanicked(), false);
+	 * ```
+	 * @see {@link mini.isPanicked}
+	 */
+	isPanicked(): this is Enum<Isolate<mini.AttemptVariants<R, E>, "Panicked">> &
+		Attempt<never, never> {
+		return mini.isPanicked(this);
+	}
+
+	/**
+	 * Checks whether an attempt's recovery panicked with a payload that
+	 * satisfies a predicate. The payload is `unknown`, as a thrown value is.
+	 *
+	 * On an attempt already narrowed to that variant, it returns a plain
+	 * boolean, so a failing predicate leaves the attempt as it was instead of
+	 * collapsing it to `never` in the false branch; otherwise it narrows the
+	 * variant, as the guard below does.
+	 *
+	 * @param predicate - Tests the payload
+	 * @returns Whether it is `Panicked` and the predicate holds
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Panicked } from "@sekhmet/issue/attempt";
+	 *
+	 * assertEquals(Panicked(new RangeError("too big")).isPanickedAnd((p) => p instanceof RangeError), true);
+	 * ```
+	 * @see {@link mini.isPanickedAnd}
+	 */
+	isPanickedAnd(
+		this: Enum<Isolate<mini.AttemptVariants<R, E>, "Panicked">> & Attempt<R, E>,
+		predicate: (payload: unknown) => boolean,
+	): boolean;
+	/**
+	 * Checks whether an attempt is `Panicked`, with a payload that satisfies a
+	 * predicate, narrowing the variant when it is: the form for an attempt not
+	 * yet narrowed to `Panicked`.
+	 *
+	 * @param predicate - Tests the payload
+	 * @returns Whether it is `Panicked` and the predicate holds
+	 * @see {@link mini.isPanickedAnd}
+	 */
+	isPanickedAnd(
+		predicate: (payload: unknown) => boolean,
+	): this is Enum<Isolate<mini.AttemptVariants<R, E>, "Panicked">> &
+		Attempt<never, never>;
+	isPanickedAnd(...args: unknown[]): unknown {
+		return Reflect.apply(mini.isPanickedAnd, undefined, [this, ...args]);
+	}
+
+	/**
 	 * Maps the residue of a handled attempt, keeping whether it was `Handled` or
 	 * `AlreadyHandled`. A `Failed` attempt passes through.
 	 *
@@ -498,6 +612,7 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	 * @param message - The panic's message if the attempt failed
 	 * @returns The residue of a `Handled` or `AlreadyHandled` attempt
 	 * @throws {Panic} With `message`, and the attempt as its cause, if it is `Failed`
+	 * @throws The panic payload, resumed, if it is `Panicked`
 	 * @example
 	 * ```ts
 	 * import { assertEquals, assertThrows } from "@std/assert";
@@ -518,6 +633,7 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	 *
 	 * @returns The residue of a `Handled` or `AlreadyHandled` attempt
 	 * @throws {Panic} "Attempt unwrap failed!", with the attempt as its cause, if it is `Failed`
+	 * @throws The panic payload, resumed, if it is `Panicked`
 	 * @example
 	 * ```ts
 	 * import { assertEquals, assertThrows } from "@std/assert";
@@ -533,7 +649,8 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	}
 
 	/**
-	 * Returns the residue, or `fallback` if the recovery failed.
+	 * Returns the residue, or `fallback` if the recovery failed. A `Panicked`
+	 * attempt is resumed: its payload is thrown again.
 	 *
 	 * @param fallback - The value to return if the attempt failed
 	 * @returns The residue, or `fallback`
@@ -555,6 +672,7 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 
 	/**
 	 * Returns the residue, or computes one from the error if the recovery failed.
+	 * A `Panicked` attempt is resumed: its payload is thrown again.
 	 *
 	 * @param fallback - Turns the error into a residue
 	 * @returns The residue, or `fallback`'s value
@@ -579,7 +697,8 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	 *
 	 * @param message - The panic's message if the attempt did not fail
 	 * @returns The error of a `Failed` attempt
-	 * @throws {Panic} With `message`, and the attempt as its cause, unless it is `Failed`
+	 * @throws {Panic} With `message`, and the attempt as its cause, if the issue ended up handled
+	 * @throws The panic payload, resumed, if it is `Panicked`
 	 * @example
 	 * ```ts
 	 * import { assertEquals, assertThrows } from "@std/assert";
@@ -598,7 +717,8 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	 * Returns the recovery's error, or panics if the issue ended up handled.
 	 *
 	 * @returns The error of a `Failed` attempt
-	 * @throws {Panic} "Attempt unwrap failed!", with the attempt as its cause, unless it is `Failed`
+	 * @throws {Panic} "Attempt unwrap failed!", with the attempt as its cause, if the issue ended up handled
+	 * @throws The panic payload, resumed, if it is `Panicked`
 	 * @example
 	 * ```ts
 	 * import { assertEquals, assertThrows } from "@std/assert";
@@ -670,4 +790,26 @@ export function Handled<R, E = never>(residue: R): Attempt<R, E> {
  */
 export function Failed<R = never, E = unknown>(error: E): Attempt<R, E> {
 	return Attempt.fromMini(mini.Failed(error));
+}
+
+/**
+ * An attempt whose recovery panicked, holding the panic payload. The panic
+ * runtime's hook has reported it; the issue stays unhandled.
+ *
+ * @template R - The residue type of the attempt it stands in for
+ * @template E - The error type of the attempt it stands in for
+ * @param payload - What the recovery panicked with
+ * @returns The `Panicked` attempt
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Panicked } from "@sekhmet/issue/attempt";
+ *
+ * assertEquals(Panicked(new Error("bad cache")).isPanicked(), true);
+ * ```
+ */
+export function Panicked<R = never, E = never>(
+	payload: unknown,
+): Attempt<R, E> {
+	return Attempt.fromMini(mini.Panicked(payload));
 }

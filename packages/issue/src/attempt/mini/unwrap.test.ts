@@ -1,6 +1,12 @@
 import { Panic } from "@sekhmet/panic/mini/core";
 import { assertEquals, assertStrictEquals, assertThrows } from "@std/assert";
-import { AlreadyHandled, type Attempt, Failed, Handled } from "./core.ts";
+import {
+	AlreadyHandled,
+	type Attempt,
+	Failed,
+	Handled,
+	Panicked,
+} from "./core.ts";
 import {
 	expect,
 	expectFailed,
@@ -86,5 +92,26 @@ Deno.test("expectFailed() and unwrapFailed() panic on either handled variant", (
 		// Then: they panic, carrying the attempt
 		assertStrictEquals(thrown.cause, attempt);
 		assertThrows(() => unwrapFailed(attempt), Panic, "Attempt unwrap failed!");
+	}
+});
+
+Deno.test("every unwrap resumes a Panicked attempt's payload", () => {
+	// Given: a panicked attempt
+	const bug = new Error("bad cache");
+	const broken: Attempt<number, string> = Panicked(bug);
+
+	// When: each unwrap is called on it
+	const calls = [
+		() => expect(broken, "should have been handled"),
+		() => unwrap(broken),
+		() => unwrapOr(broken, 80),
+		() => unwrapOrElse(broken, () => 80),
+		() => expectFailed(broken, "should have failed"),
+		() => unwrapFailed(broken),
+	];
+
+	// Then: each throws the payload itself again, not a new Panic
+	for (const call of calls) {
+		assertStrictEquals(assertThrows(call), bug);
 	}
 });

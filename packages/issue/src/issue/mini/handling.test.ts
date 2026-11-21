@@ -1,5 +1,10 @@
 import { isolate, match, union } from "@sekhmet/enum/core/mini";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import {
+	type Result,
+	Err as ResultErr,
+	Ok as ResultOk,
+} from "@sekhmet/enum/result/mini";
+import { Err, Ok, type Outcome, Panicked } from "@sekhmet/panic/outcome/mini";
 import {
 	isPending,
 	map,
@@ -10,7 +15,11 @@ import {
 	wait,
 } from "@sekhmet/vow/mini";
 import { assert, assertEquals, assertStrictEquals } from "@std/assert";
-import { AlreadyHandled, Handled } from "@/src/attempt/mini/core.ts";
+import {
+	AlreadyHandled,
+	Panicked as AttemptPanicked,
+	Handled,
+} from "@/src/attempt/mini/core.ts";
 import { or } from "@/src/recovery/mini/combinators.ts";
 import { fail, Recovery, succeed } from "@/src/recovery/mini/core.ts";
 import { state } from "./accessors.ts";
@@ -48,9 +57,9 @@ const readBackup: Recovery<Path, Config, string> = new Recovery(() => {
 /** A recovery that settles only when the test resolves it. */
 function deferred<E>(): {
 	recovery: Recovery<Path, Config, E>;
-	settle: (result: Result<Config, E>) => void;
+	settle: (result: Outcome<Config, E>) => void;
 } {
-	const { vow, resolve } = vowWithResolver<Result<Config, E>>();
+	const { vow, resolve } = vowWithResolver<Outcome<Config, E>>();
 	return { recovery: new Recovery(() => vow), settle: resolve };
 }
 
@@ -287,6 +296,7 @@ Deno.test("a cause is just part of the value", () => {
 					AlreadyHandled: (config) => Ok<Config, never>(config),
 					Handled: (config) => Ok<Config, never>(config),
 					Failed: (never) => never,
+					Panicked: (payload) => Panicked<Config, never, unknown>(payload),
 				});
 			});
 		},
@@ -347,7 +357,7 @@ Deno.test("recoverWith(): an Ok passes through without running the recovery", ()
 		runs += 1;
 		return resolved(Ok<Config, never>({ port: 1 }));
 	});
-	const loaded: Result<Config, Issue<Path, Config>> = Ok(DEFAULT_CONFIG);
+	const loaded: Result<Config, Issue<Path, Config>> = ResultOk(DEFAULT_CONFIG);
 
 	// When: it is recovered
 	const result = settled(recoverWith(loaded, counting));
@@ -360,7 +370,7 @@ Deno.test("recoverWith(): an Ok passes through without running the recovery", ()
 Deno.test("recoverWith(): an Err becomes Ok once the recovery handles its issue", () => {
 	// Given: an Err holding an unhandled issue
 	const notFoundIssue = notFound("app.json");
-	const loaded: Result<Config, Issue<Path, Config>> = Err(notFoundIssue);
+	const loaded: Result<Config, Issue<Path, Config>> = ResultErr(notFoundIssue);
 
 	// When: it is recovered with useDefault
 	const result = settled(recoverWith(loaded, useDefault));
@@ -374,7 +384,7 @@ Deno.test("recoverWith(): an Err whose issue was already handled becomes Ok", ()
 	// Given: an Err holding an issue handled before
 	const notFoundIssue = notFound("app.json");
 	handle(notFoundIssue, { port: 1 });
-	const loaded: Result<Config, Issue<Path, Config>> = Err(notFoundIssue);
+	const loaded: Result<Config, Issue<Path, Config>> = ResultErr(notFoundIssue);
 
 	// When: it is recovered with a recovery that would fail
 	const result = settled(recoverWith(loaded, readBackup));
@@ -386,7 +396,7 @@ Deno.test("recoverWith(): an Err whose issue was already handled becomes Ok", ()
 Deno.test("recoverWith(): a failed recovery keeps the same, unhandled issue", async () => {
 	// Given: an Err, and an async recovery that will fail
 	const notFoundIssue = notFound("app.json");
-	const loaded: Result<Config, Issue<Path, Config>> = Err(notFoundIssue);
+	const loaded: Result<Config, Issue<Path, Config>> = ResultErr(notFoundIssue);
 	const remote = deferred<string>();
 
 	// When: it is recovered, and the recovery fails
@@ -426,4 +436,55 @@ Deno.test("attempt() accepts fail and succeed recoveries of the issue's types", 
 	// Then: the first failed and the second handled it
 	assert(isolate(failed, "Failed"));
 	assertEquals(handled, Handled(DEFAULT_CONFIG));
+});
+
+/** A recovery whose outcome is Panicked, as fromPromise's is after a panic. */
+function panicking(payload: unknown): Recovery<Path, Config, string> {
+	return new Recovery((_: Path) => {
+		return resolved(Panicked<Config, string, unknown>(payload));
+	});
+}
+
+Deno.test("attempt(): a Panicked outcome settles Panicked and leaves the issue unhandled", () => {
+	// Given: an unhandled issue, and a recovery that panics
+	const notFoundIssue = notFound("app.json");
+	const bug = new Error("bad cache");
+
+	// When: it is attempted
+	const ended = settled(attempt(notFoundIssue, panicking(bug)));
+
+	// Then: the attempt is Panicked with the payload, and the issue unhandled
+	assertEquals(ended, AttemptPanicked(bug));
+	assert(isolate(state(notFoundIssue), "Unhandled"));
+});
+
+Deno.test("attempt(): a panic is reported even if another attempt handled the issue first", async () => {
+	// Given: an issue, and an async recovery that will panic
+	const notFoundIssue = notFound("app.json");
+	const { vow, resolve } = vowWithResolver<Outcome<Config, string, unknown>>();
+	const slow = new Recovery((_: Path) => vow);
+	const bug = new Error("bad cache");
+
+	// When: it is attempted, handled meanwhile, then the recovery panics
+	const pending = attempt(notFoundIssue, slow);
+	handle(notFoundIssue, { port: 1 });
+	resolve(Panicked(bug));
+	const ended = await wait(pending);
+
+	// Then: the attempt is Panicked, not AlreadyHandled
+	assertEquals(ended, AttemptPanicked(bug));
+});
+
+Deno.test("recoverWith(): a panicking recovery resurfaces as Panicked", () => {
+	// Given: an Err holding an unhandled issue, and a recovery that panics
+	const notFoundIssue = notFound("app.json");
+	const loaded: Result<Config, Issue<Path, Config>> = ResultErr(notFoundIssue);
+	const bug = new Error("bad cache");
+
+	// When: it is recovered
+	const result = settled(recoverWith(loaded, panicking(bug)));
+
+	// Then: the outcome is Panicked with the payload, and the issue unhandled
+	assertEquals(result, Panicked(bug));
+	assert(isolate(state(notFoundIssue), "Unhandled"));
 });

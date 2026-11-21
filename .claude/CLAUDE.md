@@ -108,9 +108,10 @@ Packages (`packages/`):
   `state` (`IssueState`, the immutable snapshot `Unhandled(value) |
   Handled(residue)` with narrowing predicates), `recovery`
   (`Recovery<T, R, E>`, a `Struct` wrapping
-  `(value: T) => Vow<Result<R, E>>`; `or`, `orElse`, `firstOf`,
+  `(value: T) => Vow<Outcome<R, E, unknown>>`; `or`, `orElse`, `firstOf`,
   `retry`, `when`, `fromPromise`) and `attempt` (the `Attempt<R, E>` enum:
-  `AlreadyHandled | Handled | Failed`). A cause lives in the value, not a
+  `AlreadyHandled | Handled | Failed | Panicked`; a panic in a repair is
+  reported once and settles as `Panicked`). A cause lives in the value, not a
   field. Its decision record is `docs/decisions/issue.md`
 - `@sekhmet/job`: named jobs run as a
   dependency graph on promises and `AbortSignal`: `defineJobs(factory)`

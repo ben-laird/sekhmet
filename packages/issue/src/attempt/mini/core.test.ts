@@ -1,6 +1,6 @@
 import { Enum, union, unionKinds } from "@sekhmet/enum/core/mini";
 import { assertEquals, assertInstanceOf, assertNotEquals } from "@std/assert";
-import { AlreadyHandled, Attempt, Failed, Handled } from "./core.ts";
+import { AlreadyHandled, Attempt, Failed, Handled, Panicked } from "./core.ts";
 
 Deno.test("AlreadyHandled() holds the residue the issue already had", () => {
 	// Given: a residue
@@ -56,4 +56,18 @@ Deno.test("Attempt is covariant: a narrow attempt fits a wider type", () => {
 
 	// Then: it is the same value
 	assertEquals(widened, handled);
+});
+
+Deno.test("Panicked() holds the payload a recovery panicked with", () => {
+	// Given: a panic payload
+	const payload = new Error("bad cache");
+
+	// When: building the attempt
+	const attempt = Panicked<number, string>(payload);
+
+	// Then: it is a Panicked Attempt, an Enum, holding the payload
+	assertInstanceOf(attempt, Attempt);
+	assertInstanceOf(attempt, Enum);
+	assertEquals(unionKinds(attempt), "Panicked");
+	assertEquals(union(attempt), payload);
 });

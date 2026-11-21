@@ -94,12 +94,12 @@ assertEquals(app.isUnhandled(), true);
 ## How to recover a wrapped issue through its cause
 
 A wrapped issue's value is `{ cause }`. Recover the cause, then hand its
-residue up: attempt the cause inside a recovery of the wrapper. `mapInput`
+residue up: attempt the cause inside a recovery of the wrapper, and turn how
+that attempt ended into the wrapper's outcome with `toOutcome`. `mapInput`
 adapts a recovery of the cause's value to the wrapper's.
 
 ```ts
-import { match } from "@sekhmet/enum/core/mini";
-import { Ok } from "@sekhmet/enum/result/mini";
+import { toOutcome } from "@sekhmet/issue/attempt/mini";
 import { attempt } from "@sekhmet/issue/issue/mini";
 import { issue, type Wrapped } from "@sekhmet/issue/issue";
 import { Recovery, succeed } from "@sekhmet/issue/recovery";
@@ -117,13 +117,7 @@ const loadFailed = notFound.wrap({
 });
 
 const viaCause = new Recovery(({ cause }: Wrapped<string, number>) => {
-	return map(attempt(cause, succeed(8080)), (ended) => {
-		return match(ended)({
-			AlreadyHandled: (port) => Ok<number, never>(port),
-			Handled: (port) => Ok<number, never>(port),
-			Failed: (never) => never,
-		});
-	});
+	return map(attempt(cause, succeed(8080)), toOutcome);
 });
 
 await wait(loadFailed.attempt(viaCause));
@@ -135,9 +129,9 @@ assertEquals(notFound.unwrapResidue(), 8080);
 ## How to recover the issue in an `Err`
 
 A function that can fail with an issue returns `Result<R, Issue<T, R>>`. Use
-`recoverWith` to attempt the issue: the `Err` becomes `Ok(residue)` once the
-issue is handled, and stays an `Err` with the same issue if the recovery
-fails.
+`recoverWith` to attempt the issue. It settles as an `Outcome`: the `Err`
+becomes `Ok(residue)` once the issue is handled, stays an `Err` with the same
+issue if the recovery fails, and is `Panicked` if the recovery panicked.
 
 ```ts
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
