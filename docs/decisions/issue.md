@@ -67,7 +67,10 @@ own result was; otherwise `Ok` switches the issue and gives `Handled`, and
 ### 6. `orElse` drops the first error
 
 `orElse(self, next)` tries `next` when `self` fails, and drops `self`'s error,
-like Rust's `Result::or_else`. `firstOf` and `retry` build on it.
+like Rust's `Result::or_else`. `firstOf` behaves as `orElse` folded over
+its list, and `retry` keeps the last error the same way. Both run their
+recoveries in one loop of their own (decision 16) rather than nesting
+`orElse`.
 
 ### 7. Severity is not on the issue
 
@@ -134,6 +137,16 @@ Error, …)` holds for both.
 
 As Option's `inspect` and Issue's do, rather than `void` as Result's do, so
 they chain in main.
+
+### 16. `firstOf` and `retry` loop instead of nesting
+
+Built as nested `orElse`/`andThen` vows, `retry(…, { times: 1000 })` and a
+`firstOf` list of about 10k overflowed the stack, since each sync run nested
+another vow (found in review, 2026-11-20). Both now run through one loop:
+it carries on while each run's vow is already resolved, and subscribes only
+to a pending one, resuming the loop when it settles. A sync run still
+settles at once, and neither a long sync nor a long async run nests the
+stack.
 
 ## Later
 

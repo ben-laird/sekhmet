@@ -61,8 +61,10 @@ an async one, and carries a rejection as an `Err`, as `@sekhmet/vow`'s
 `fromPromise` does, so a rejection is never unhandled.
 
 Recoveries compose like `Result`s do. `orElse` tries the next when one fails,
-and drops the first error, like Rust's `Result::or_else`. `firstOf` folds
-`orElse` over a list, and `retry` runs one again. `map`, `mapErr` and
+and drops the first error, like Rust's `Result::or_else`. `firstOf` behaves
+as `orElse` folded over a list, and `retry` runs one again, keeping the last
+error. Both run their recoveries in a loop that doesn't nest the stack, so a
+long list or a large `times` is safe, sync or async. `map`, `mapErr` and
 `andThen` change what it yields, and `mapInput` changes what it repairs.
 
 `orElse` keeps the residue type of the recovery it is called on. A recovery
