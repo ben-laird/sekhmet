@@ -26,3 +26,15 @@ Rules learned from corrections in this repo. Each carries a one-line _why_.
   package test on seven runtimes, and a green `deno task ci` doesn't prove
   it's portable. _Why: nine schema test files used `Deno.inspect` and failed
   compat on Node and Bun while preparing the 0.1.0 release (2026-11-18)._
+- **Prototype on a branch in the main checkout, not in `playground/`.** Commit
+  early and often, each commit on a green gate, and stub unfinished code with
+  `@sekhmet/workflow`'s `todo`/`unimplemented` (which also tests whether the
+  workflow library holds up). The gate's readiness check refuses `todo` in
+  package source, so list each stub in
+  `scripts/ci/src/readiness/allowlisted.ts` while prototyping and remove the
+  entries before the branch becomes a PR. If running the gate this often
+  gets too slow, make the pipeline faster rather than skipping it. Back out an approach you don't like with a revert
+  commit, never a reset, so the history stays linear and records what was
+  rejected. `playground/` is only for trying out an API while an agent builds
+  it in a worktree. _Why: the owner wants prototypes version-controlled so
+  earlier edits can be recovered (2026-11-21)._
