@@ -341,6 +341,7 @@ To give a new feature a generated main, add an entry to `FEATURES` in
 	mappers: ["map"], // optional: the main method mapping each type argument
 	wraps: [{ type: "Result", from: "../../result/main/mod.ts", mappers: ["map", "mapErr"] }], // optional
 	uncurry: [], // optional: curried functions whose method takes the inner parameters
+	constrained: [], // optional: self-first functions forced into the `this`-parameter form
 	omit: [], // optional: mini exports to leave out of main
 }
 ```
@@ -371,6 +372,23 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   parameters may share the class's names, since it uses none of the
   class's. A namespace method can't constrain its receiver; generation
   rejects one.
+- **Forcing the constrained form.** A plain receiver whose type argument the
+  class would fix, but which should be inferred from the receiver and the
+  arguments together, is listed in the feature's `constrained`. Its method
+  then keeps every type parameter and takes the receiver as `this`:
+  `or<A>(this: Box<A>, other: mini.Box<A>): Box<A>`, so a receiver typed
+  `Box<never>` widens to the argument's `A`. A listed name that isn't a
+  `self`-first function of the feature, or whose receiver isn't
+  `self: Primary<…>`, fails generation.
+- **Narrowed receivers.** `self: N & Primary<A, B>`, in either order (an
+  already-narrowed variant, such as `Enum<Isolate<…>> & IssueState<T, R>`),
+  becomes a method with the class's type parameters and the whole
+  intersection as its `this` parameter. With it, an overload can apply to
+  a narrowed receiver only: a guard can return `boolean` there, so its
+  false branch doesn't collapse a narrowed receiver to `never`, and narrow
+  `this` everywhere else. Overloaded type predicates are kept; overloaded
+  assertions are rejected. A namespace method can't take a narrowed
+  receiver; generation rejects one.
 - **Examples.** Every example copied into main (methods, constructors, the
   class) is rewritten for main: calls of any function that became a method
   move to method form, and imports from `<entrypoint>/mini` (or a mini

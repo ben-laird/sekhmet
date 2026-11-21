@@ -225,6 +225,7 @@ sekhmet/
 │   ├── dispatch/     # Typed one-shot signals (DispatchController, DispatchSignal)
 │   ├── effect/       # Effect system (effects, fibers, runtime, scheduler)
 │   ├── enum/         # Enum framework (core, option, result, either, latch, poll, ordering, control-flow)
+│   ├── issue/        # Issues that switch in place once handled, typed recoveries, attempts
 │   ├── job/          # CI-runner-style job graphs (plans, runIf conditions, typed outcomes)
 │   ├── lifetime/     # RAII: Resource (init/deinit) and Lifetime ownership trees
 │   ├── matrix/       # Cartesian-product test case generation
@@ -604,6 +605,7 @@ Use package names as scopes:
 - `@sekhmet/dispatch`
 - `@sekhmet/effect`
 - `@sekhmet/enum`
+- `@sekhmet/issue`
 - `@sekhmet/job`
 - `@sekhmet/lifetime`
 - `@sekhmet/matrix`

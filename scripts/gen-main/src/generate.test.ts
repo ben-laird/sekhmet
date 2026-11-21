@@ -1017,6 +1017,86 @@ Deno.test("generateMain declares a receiver repeating a type parameter as this",
 	assertStringIncludes(result.value, "same<A>(this: Pair<A, A>): boolean {");
 });
 
+/** `or<A>(self: Box<A>, other: Box<A>): Box<A>`, a plain receiver. */
+const OR = fn(
+	"or",
+	signature({
+		typeParams: ["A"],
+		params: [selfBox(), param("other", named("Box", [typeParam("A")]))],
+		returnType: named("Box", [typeParam("A")]),
+	}),
+);
+
+Deno.test("generateMain emits a plain receiver listed in constrained as this", () => {
+	// Given: or(self: Box<A>, other: Box<A>), a plain receiver, listed in
+	// the feature's `constrained`
+	const feature: Feature = { ...FEATURE, constrained: ["or"] };
+
+	// When: generating with and without the listing
+	const forced = source([OR], feature);
+	const plain = source([OR]);
+
+	// Then: listed, it keeps A as its own and takes the receiver as this,
+	// so A is inferred from both; unlisted, A is the class's
+	assertStringIncludes(
+		forced,
+		"or<A>(this: Box<A>, other: mini.Box<A>): Box<A> {",
+	);
+	assertStringIncludes(forced, "return Box.fromMini(mini.or(this, other));");
+	assertStringIncludes(plain, "or(other: mini.Box<T>): Box<T> {");
+});
+
+/** `Enum<A> & Box<A>`: a receiver already narrowed to a variant. */
+const NARROWED_BOX: TypeNode = {
+	kind: "intersection",
+	types: [named("Enum", [typeParam("A")]), named("Box", [typeParam("A")])],
+};
+
+Deno.test("generateMain rejects a constrained name whose receiver can't be constrained", () => {
+	// Given: test(self: Enum<A> & Box<A>), a narrowed receiver, listed in
+	// the feature's `constrained`
+	const test = fn(
+		"test",
+		signature({
+			typeParams: ["A"],
+			params: [param("self", NARROWED_BOX)],
+			returnType: keyword("boolean"),
+		}),
+	);
+
+	// When: generating
+	const error = rejection([test], { ...FEATURE, constrained: ["test"] });
+
+	// Then: generation fails, rather than leaving the listing unused
+	assertEquals(error.symbol, "test");
+	assertStringIncludes(error.message, "can't take the constrained form");
+});
+
+Deno.test("generateMain rejects a constrained name that isn't a self-first function", () => {
+	// Given: a feature listing a typo and a function that doesn't take self
+	const full = fn(
+		"full",
+		signature({
+			typeParams: ["A"],
+			params: [param("value", typeParam("A"))],
+			returnType: named("Box", [typeParam("A")]),
+		}),
+	);
+
+	// When: generating with each listed in constrained
+	const typo = rejection([OR], { ...FEATURE, constrained: ["orr"] });
+	const notSelfFirst = rejection([OR, full], {
+		...FEATURE,
+		constrained: ["full"],
+	});
+
+	// Then: each fails, naming the listed function
+	assertEquals(typo.symbol, "orr");
+	assertStringIncludes(typo.message, "`constrained`");
+	assertEquals(notSelfFirst.symbol, "full");
+	assertStringIncludes(notSelfFirst.message, "`self`-first");
+});
+
 Deno.test("generateMain rejects a method without a return type", () => {
 	// Given: a self-first function with no annotated return type
 	const untyped = fn(
@@ -1081,7 +1161,7 @@ Deno.test("generateMain rejects overloads that disagree on returning the primary
 	assertStringIncludes(error.message, "overloads must agree");
 });
 
-Deno.test("generateMain rejects overloaded type predicates", () => {
+Deno.test("generateMain keeps overloaded type predicates", () => {
 	// Given: two overloaded type guards on self
 	const guard = fn(
 		"guard",
@@ -1098,13 +1178,120 @@ Deno.test("generateMain rejects overloaded type predicates", () => {
 	);
 
 	// When: generating
-	const error = rejection([guard]);
+	const output = source([guard]);
 
-	// Then: generation fails
+	// Then: each overload narrows this, and one implementation forwards them
+	assertStringIncludes(output, "guard(): this is Box<never>;");
+	assertStringIncludes(output, "guard(strict: boolean): this is Box<never>;");
+	assertStringIncludes(output, "guard(...args: unknown[]): unknown {");
+});
+
+Deno.test("generateMain rejects overloaded assertion signatures", () => {
+	// Given: two overloaded assertions on self
+	const asserts: TypeNode = {
+		kind: "predicate",
+		asserts: true,
+		subject: "self",
+		type: named("Box", [keyword("never")]),
+	};
+	const check = fn(
+		"check",
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T")],
+			returnType: asserts,
+		}),
+		signature({
+			typeParams: ["T"],
+			params: [selfBox("T"), param("strict", keyword("boolean"))],
+			returnType: asserts,
+		}),
+	);
+
+	// When: generating
+	const error = rejection([check]);
+
+	// Then: generation fails, since an assertion must return void
 	assertEquals(error, {
-		symbol: "guard",
-		message: "overloaded type predicates are not supported",
+		symbol: "check",
+		message: "overloaded assertion signatures are not supported",
 	});
+});
+
+Deno.test("generateMain takes a narrowed receiver as this, keeping the class's parameters", () => {
+	// Given: test(self: Enum<A> & Box<A>, p): boolean overloading
+	// test(self: Box<A>, p): self is Enum<A> & Box<A>
+	const predicate = param("p", keyword("boolean"));
+	const test = fn(
+		"test",
+		signature({
+			typeParams: ["A"],
+			params: [param("self", NARROWED_BOX), predicate],
+			returnType: keyword("boolean"),
+		}),
+		signature({
+			typeParams: ["A"],
+			params: [selfBox(), predicate],
+			returnType: {
+				kind: "predicate",
+				asserts: false,
+				subject: "self",
+				type: NARROWED_BOX,
+			},
+		}),
+	);
+
+	// When: generating
+	const output = source([test]);
+
+	// Then: the narrowed overload declares the intersection as this (the
+	// primary member main), A becomes the class's T, and the other narrows this
+	assertStringIncludes(
+		output,
+		"test(this: Enum<T> & Box<T>, p: boolean): boolean;",
+	);
+	assertStringIncludes(output, "test(p: boolean): this is Enum<T> & Box<T>;");
+	assertStringIncludes(
+		output,
+		"return Reflect.apply(mini.test, undefined, [this, ...args]);",
+	);
+});
+
+Deno.test("generateMain takes a narrowed receiver in either order", () => {
+	// Given: single-signature functions taking Box<A> & Enum<A> and
+	// Enum<A> & Box<A>
+	const boxFirst = fn(
+		"boxFirst",
+		signature({
+			typeParams: ["A"],
+			params: [
+				param("self", {
+					kind: "intersection",
+					types: [
+						named("Box", [typeParam("A")]),
+						named("Enum", [typeParam("A")]),
+					],
+				}),
+			],
+			returnType: keyword("boolean"),
+		}),
+	);
+	const enumFirst = fn(
+		"enumFirst",
+		signature({
+			typeParams: ["A"],
+			params: [param("self", NARROWED_BOX)],
+			returnType: keyword("boolean"),
+		}),
+	);
+
+	// When: generating
+	const output = source([boxFirst, enumFirst]);
+
+	// Then: both are methods taking the intersection as this, in its order
+	assertStringIncludes(output, "boxFirst(this: Box<T> & Enum<T>): boolean {");
+	assertStringIncludes(output, "enumFirst(this: Enum<T> & Box<T>): boolean {");
+	assertEquals(output.includes("export function boxFirst"), false);
 });
 
 Deno.test("generateMain uses wrap targets only inside bodies", () => {
@@ -1682,6 +1869,30 @@ Deno.test("generateMain rejects a constrained receiver on a namespace", () => {
 	assert(!result.ok);
 	assertEquals(result.error.symbol, "wrap");
 	assertStringIncludes(result.error.message, "can't constrain");
+});
+
+Deno.test("generateMain rejects a narrowed receiver on a namespace", () => {
+	// Given: wrap(self: Enum<A> & Box<A>, label) borrowed onto the `.on` namespace
+	const narrowedWrap = fn(
+		"wrap",
+		signature({
+			typeParams: ["A"],
+			params: [param("self", NARROWED_BOX), param("label", keyword("string"))],
+			returnType: keyword("void"),
+		}),
+	);
+	const borrow: Borrow = {
+		...ON_SHELF,
+		methods: [{ name: "wrap", doc: METHOD_DOC }],
+	};
+
+	// When: generating
+	const result = borrowingWith({ borrow, borrowed: [narrowedWrap, LABEL] });
+
+	// Then: generation fails, since only a this parameter can take it
+	assert(!result.ok);
+	assertEquals(result.error.symbol, "wrap");
+	assertStringIncludes(result.error.message, "narrowed receiver");
 });
 
 Deno.test("generateMain leaves a namespace method's function examples alone", () => {

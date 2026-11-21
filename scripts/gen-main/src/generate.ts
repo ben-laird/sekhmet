@@ -380,8 +380,14 @@ type RefNode = Extract<TypeNode, { kind: "ref" }>;
  *   parameter of the function, which become the class's
  * - `constrained`: `self: Primary<…>` with any other arguments
  *   (`Option<Option<T>>`, `Poll<Result<T, E>>`), like a Rust impl block
- *   for that shape only: the method keeps every type parameter as its own
- *   and declares the shape as its `this` parameter
+ *   for that shape only, or a plain receiver the feature lists in
+ *   `constrained`: the method keeps every type parameter as its own and
+ *   declares the shape as its `this` parameter
+ * - `narrowed`: `self: N & Primary<A, B, C>`, with distinct, bare type
+ *   parameters as for `plain` and `N` any other type (an already-narrowed
+ *   variant, `Enum<Isolate<…>>`): the method takes the class's type
+ *   parameters and declares the whole intersection as its `this` parameter,
+ *   so one overload can apply to a narrowed receiver only
  * - `exact`: `self: S & Primary<A, B, C>` with `S extends Primary<A, B, C>`,
  *   keeping the receiver's exact type `S` (with views)
  * - `any`: `self: S` with `S extends` the views' `any` alias, as `S`
@@ -389,6 +395,11 @@ type RefNode = Extract<TypeNode, { kind: "ref" }>;
 type ReceiverForm =
 	| { readonly kind: "plain"; readonly type: RefNode }
 	| { readonly kind: "constrained"; readonly type: RefNode }
+	| {
+			readonly kind: "narrowed";
+			readonly type: RefNode;
+			readonly whole: TypeNode;
+	  }
 	| { readonly kind: "exact"; readonly type: RefNode; readonly param: string }
 	| { readonly kind: "any"; readonly param: string };
 // {}
@@ -455,6 +466,34 @@ function passesOwnParams({
 }
 
 /**
+ * The primary member of `N & Primary<A, B, C>` (in either order), when it
+ * passes distinct, bare type parameters and `N` is not a bare type
+ * parameter (that is the `exact` form).
+ */
+function narrowedPrimary({
+	feature,
+	signature,
+	type,
+}: {
+	feature: ClassFeature;
+	signature: FunctionDeclaration;
+	type: TypeNode | undefined;
+}): RefNode | undefined {
+	if (type?.kind !== "intersection" || type.types.length !== 2) {
+		return undefined;
+	}
+	const primary = type.types.find((member): member is RefNode => {
+		return namesClass(member, feature.primary);
+	});
+	if (primary === undefined) return undefined;
+	const other = type.types.find((member) => member !== primary);
+	if (ownTypeParam({ signature, type: other }) !== undefined) return undefined;
+	if (!passesOwnParams({ signature, type: primary })) return undefined;
+
+	return primary;
+}
+
+/**
  * Whether `typeParam` is constrained to the primary applied to exactly
  * `args` (`S extends Primary<A, B, C>`): it stands for a receiver.
  */
@@ -478,22 +517,34 @@ function constrainedToPrimary({
 	);
 }
 
-/** How a signature takes the receiver as `self`, or `undefined` if it doesn't. */
+/**
+ * How a signature takes the receiver as `self`, or `undefined` if it
+ * doesn't. With `name`, a plain receiver the feature lists in
+ * `constrained` takes the constrained form.
+ */
 function receiverFormOf({
 	feature,
 	signature,
+	name,
 }: {
 	feature: Feature;
 	signature: FunctionDeclaration;
+	name?: string;
 }): ReceiverForm | undefined {
 	if (!isClassFeature(feature)) return undefined;
 	const [param] = signature.params;
 	if (param?.kind !== "identifier" || param.name !== "self") return undefined;
 	const { type } = param;
 	if (namesClass(type, feature.primary)) {
-		const plain = passesOwnParams({ signature, type });
+		const forced =
+			name !== undefined && (feature.constrained?.includes(name) ?? false);
+		const plain = !forced && passesOwnParams({ signature, type });
 
 		return { kind: plain ? "plain" : "constrained", type };
+	}
+	const narrowed = narrowedPrimary({ feature, signature, type });
+	if (narrowed !== undefined && type !== undefined) {
+		return { kind: "narrowed", type: narrowed, whole: type };
 	}
 	if (feature.views === undefined) return undefined;
 
@@ -703,7 +754,7 @@ interface MethodHead {
 	readonly body: string;
 	readonly doc: string;
 	readonly conversion: Conversion;
-	readonly isPredicate: boolean;
+	readonly isAssertion: boolean;
 }
 
 /** The conversion context for rendering return types in `module`. */
@@ -756,7 +807,7 @@ function receiverRename({
 }): Generated<Map<string, string>> {
 	const { feature } = module;
 	const label = `\`${param?.name ?? "self"}\``;
-	const form = extra ? undefined : receiverFormOf({ feature, signature });
+	const form = extra ? undefined : receiverFormOf({ feature, signature, name });
 	if (form?.kind === "any") return ok(new Map([[form.param, selfType]]));
 	if (form?.kind === "constrained") return ok(new Map());
 
@@ -910,9 +961,18 @@ function methodHead({
 		});
 	}
 
-	const form =
-		field === undefined ? receiverFormOf({ feature, signature }) : undefined;
+	const ownForm = receiverFormOf({ feature, signature, name });
+	const form = field === undefined ? ownForm : undefined;
 	const constrained = form?.kind === "constrained" ? form.type : undefined;
+	const narrowedWhole = form?.kind === "narrowed" ? form.whole : undefined;
+	if (narrowedWhole !== undefined && receiver.self !== "this") {
+		return failure({
+			feature,
+			symbol: name,
+			message:
+				"a namespace method can't take a narrowed receiver, which only a `this` parameter of the primary can",
+		});
+	}
 	if (constrained !== undefined && receiver.self !== "this") {
 		return failure({
 			feature,
@@ -1000,10 +1060,11 @@ function methodHead({
 		context,
 		modifiers: modifiersOf(module, signature),
 	});
+	const thisType = constrained ?? narrowedWhole;
 	const thisParam =
-		constrained === undefined
+		thisType === undefined
 			? []
-			: [`this: ${renderWrapped({ module, type: constrained, context })}`];
+			: [`this: ${renderWrapped({ module, type: thisType, context })}`];
 	const paramList = [
 		...thisParam,
 		...methodParams.map((param) => renderParam({ param, context })),
@@ -1059,7 +1120,7 @@ function methodHead({
 			}),
 			doc,
 			conversion,
-			isPredicate: false,
+			isAssertion: false,
 		});
 	}
 
@@ -1075,7 +1136,7 @@ function methodHead({
 		body: finalReturn.asserts ? `${call};` : `return ${call};`,
 		doc,
 		conversion: { kind: "none" },
-		isPredicate: true,
+		isAssertion: finalReturn.asserts,
 	});
 }
 
@@ -1121,7 +1182,7 @@ function overloadImplementation({
 }: {
 	feature: Feature;
 	name: string;
-	heads: readonly { conversion: Conversion; isPredicate: boolean }[];
+	heads: readonly { conversion: Conversion; isAssertion: boolean }[];
 	receiver: string | undefined;
 	callee?: string;
 	identity: boolean;
@@ -1134,11 +1195,11 @@ function overloadImplementation({
 			message: "overloads must agree on whether they return the primary type",
 		});
 	}
-	if (heads.some((head) => head.isPredicate)) {
+	if (heads.some((head) => head.isAssertion)) {
 		return failure({
 			feature,
 			symbol: name,
-			message: "overloaded type predicates are not supported",
+			message: "overloaded assertion signatures are not supported",
 		});
 	}
 
@@ -1272,7 +1333,7 @@ function renderWrapper({
 		head: string;
 		doc: string;
 		conversion: Conversion;
-		isPredicate: boolean;
+		isAssertion: boolean;
 	}[] = [];
 
 	for (const declared of signatures) {
@@ -1331,7 +1392,7 @@ function renderWrapper({
 			head: `export function${generatorStar(conversion)} ${symbol.name}${typeParams}(${params}): ${text}`,
 			doc,
 			conversion,
-			isPredicate: false,
+			isAssertion: false,
 		});
 	}
 
@@ -2195,6 +2256,37 @@ export function generateMain(input: GenerateInput): Generated<string> {
 			(decl) => decl.kind === "other" && decl.typeOnly,
 		);
 		(typeOnly ? types : values).push(symbol.name);
+	}
+
+	const ownMethods = new Map(
+		methodSymbols.map((symbol) => [symbol.name, symbol] as const),
+	);
+	const listed = isClassFeature(feature) ? (feature.constrained ?? []) : [];
+	const strayConstrained = listed.find((name) => !ownMethods.has(name));
+	if (strayConstrained !== undefined) {
+		return failure({
+			feature,
+			symbol: strayConstrained,
+			message:
+				"`constrained` names a function that isn't a `self`-first function of this feature",
+		});
+	}
+	const unconstrainable = listed.find((name) => {
+		const symbol = ownMethods.get(name);
+		const signatures = symbol === undefined ? [] : signaturesOf(symbol);
+
+		return signatures.some((signature) => {
+			const form = receiverFormOf({ feature, signature, name });
+			return form?.kind !== "constrained";
+		});
+	});
+	if (unconstrainable !== undefined) {
+		return failure({
+			feature,
+			symbol: unconstrainable,
+			message:
+				"`constrained` names a function whose receiver isn't `self: Primary<…>`, so it can't take the constrained form",
+		});
 	}
 
 	const borrows = isClassFeature(feature) ? (feature.borrows ?? []) : [];

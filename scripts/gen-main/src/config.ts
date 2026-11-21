@@ -188,6 +188,16 @@ export interface ClassFeature extends FeatureBase {
 	readonly borrows?: readonly Borrow[];
 	/** How the primary carries views (only with `construct: "params"`). */
 	readonly views?: Views;
+	/**
+	 * `self`-first functions of this feature emitted in the receiver-
+	 * constrained form even though their receiver passes distinct, bare type
+	 * parameters: the method keeps every type parameter as its own and
+	 * declares the receiver as its `this` parameter, so a type argument the
+	 * class would fix (`R` in `fail(…).or(…)`) is inferred from the
+	 * receiver and the arguments together. Each name must be a `self`-first
+	 * function of the feature's mini barrel, or generation fails.
+	 */
+	readonly constrained?: readonly string[];
 }
 
 /**
@@ -206,6 +216,8 @@ export interface FunctionFeature extends FeatureBase {
 	readonly borrows?: never;
 	/** Absent: there is no primary class to carry views. */
 	readonly views?: never;
+	/** Absent: there is no primary class to constrain a receiver of. */
+	readonly constrained?: never;
 }
 
 /** One feature whose main entrypoint is generated from its mini barrel. */
@@ -831,6 +843,106 @@ export const FEATURES: readonly Feature[] = [
 			"",
 			"assertEquals(Succeeded(2).map((n) => n * 10).value().unwrap(), 20);",
 			'assertEquals(Blocked(["lint"]).toResult().isErr(), true);',
+		].join("\n"),
+	},
+	{
+		entrypoint: "@sekhmet/issue/attempt",
+		mini: "packages/issue/src/attempt/mini/mod.ts",
+		output: "packages/issue/src/attempt/main/mod.ts",
+		primary: "Attempt",
+		construct: "variant",
+		mappers: ["map", "mapErr"],
+		wraps: [ENUM_OPTION, ENUM_RESULT, PANIC_OUTCOME],
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { type Attempt, Failed, Handled } from "@sekhmet/issue/attempt";',
+			"",
+			'const failed: Attempt<number, string> = Failed("offline");',
+			"",
+			"assertEquals(Handled(8080).map((port) => port + 1).unwrap(), 8081);",
+			"assertEquals(failed.mapErr((e) => e.length).error().unwrap(), 7);",
+		].join("\n"),
+	},
+	{
+		entrypoint: "@sekhmet/issue/recovery",
+		mini: "packages/issue/src/recovery/mini/mod.ts",
+		output: "packages/issue/src/recovery/main/mod.ts",
+		primary: "Recovery",
+		construct: "params",
+		mappers: [undefined, "map", "mapErr"],
+		// The residue widens from the receiver and the built recovery together
+		constrained: ["orElse"],
+		wraps: [PANIC_OUTCOME],
+		carriers: [VOW],
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { fail, succeed } from "@sekhmet/issue/recovery";',
+			'import { wait } from "@sekhmet/vow";',
+			"",
+			'const recovery = fail("no backup")',
+			"\t.or(succeed(8080))",
+			"\t.map((port) => ({ port }));",
+			"// {}",
+			"",
+			'const result = await wait(recovery.run("app.json"));',
+			"assertEquals(result.unwrap(), { port: 8080 });",
+		].join("\n"),
+	},
+	{
+		entrypoint: "@sekhmet/issue/state",
+		mini: "packages/issue/src/state/mini/mod.ts",
+		output: "packages/issue/src/state/main/mod.ts",
+		primary: "IssueState",
+		construct: "variant",
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { union } from "@sekhmet/enum/core/mini";',
+			'import { issue } from "@sekhmet/issue/issue";',
+			"",
+			'const notFound = issue<string, number>({ value: "app.json", code: "config/NotFound", message: "No config file." });',
+			"const before = notFound.state();",
+			"notFound.handle(8080);",
+			"",
+			"assertEquals(notFound.state().isHandledAnd((port) => port > 1024), true);",
+			"if (before.isUnhandled()) {",
+			"\tconst path: string = union(before);",
+			'\tassertEquals(path, "app.json");',
+			"}",
+		].join("\n"),
+	},
+	{
+		entrypoint: "@sekhmet/issue/issue",
+		mini: "packages/issue/src/issue/mini/mod.ts",
+		output: "packages/issue/src/issue/main/mod.ts",
+		primary: "Issue",
+		construct: "params",
+		wraps: [
+			ENUM_OPTION,
+			ENUM_RESULT,
+			PANIC_OUTCOME,
+			{
+				type: "Attempt",
+				from: "../../attempt/main/mod.ts",
+				mappers: ["map", "mapErr"],
+			},
+			{ type: "IssueState", from: "../../state/main/mod.ts" },
+		],
+		carriers: [VOW],
+		example: [
+			'import { assertEquals } from "@std/assert";',
+			'import { issue } from "@sekhmet/issue/issue";',
+			'import { succeed } from "@sekhmet/issue/recovery/mini";',
+			'import { wait } from "@sekhmet/vow";',
+			"",
+			"const notFound = issue<{ readonly path: string }, number>({",
+			'\tvalue: { path: "app.json" },',
+			'\tcode: "config/NotFound",',
+			'\tmessage: "No config file at `app.json`.",',
+			"});",
+			"const ended = await wait(notFound.attempt(succeed(8080)));",
+			"",
+			"assertEquals(ended.isHandled(), true);",
+			"assertEquals(notFound.residue().unwrap(), 8080);",
 		].join("\n"),
 	},
 ];
