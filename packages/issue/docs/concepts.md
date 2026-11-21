@@ -95,7 +95,10 @@ A recovery can be sync or async. A sync one returns an already-resolved
 `Vow`, so attempting it settles at once, in the same call stack, with no
 microtask. `sync`, `succeed` and `fail` build sync ones; `fromPromise` builds
 an async one, and carries a rejection as an `Err`, as `@sekhmet/vow`'s
-`fromPromise` does, so a rejection is never unhandled.
+`fromPromise` does, so a rejection is never unhandled. A rejection with a
+`Panic` is a bug, not a failed repair: the panic runtime's hook reports it,
+and the recovery never finishes, like a panicked task, so `orElse` doesn't
+move past it and the issue stays unhandled.
 
 Recoveries compose like `Result`s do. `orElse` tries the next when one fails,
 and drops the first error, like Rust's `Result::or_else`. `firstOf` behaves

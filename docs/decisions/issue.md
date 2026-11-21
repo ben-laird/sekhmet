@@ -107,6 +107,9 @@ is built on it). The rejection is always handled, and a dependent that
 throws is reported to the panic runtime's hook. A synchronous throw from
 `repair` is a bug and propagates.
 
+_Refined by [18](#18-a-panic-in-an-async-repair-goes-to-the-panic-hook): a
+`Panic` rejection is reported, not an `Err`._
+
 ### 11. `retry`'s `times` counts retries
 
 `retry(self, { times })` runs `self` at most `times + 1` times: `times` is
@@ -175,6 +178,25 @@ parameter (owner's choice, 2026-11-21; the first cut returned a plain
 predicates. The main `Issue.state()` returns the main `IssueState`, so
 `notFound.state().isUnhandled()` narrows. Pre-1.0, the move is clean: the
 `issue` feature no longer exports `IssueState`.
+
+### 18. A panic in an async repair goes to the panic hook
+
+2026-11-21, the owner's call. `fromPromise` carried every rejection as
+`Err(reason)`, so a `Panic` thrown in an async repair was an ordinary
+failure that `orElse` and `firstOf` moved past. Now a rejection whose reason
+is a `Panic` (`instanceof Panic`) unwinds to a `panics.catchUnwind`
+boundary around the `then` callback, the top of the async task, as vow's
+`fromPromise` treats a throwing dependent there; the hook reports it,
+unless this runtime already did. Every other rejection stays `Err`.
+
+After reporting, the recovery's vow stays pending for good, like a panicked
+task that never returns: a vow can't fail, an `Err` would let `orElse`
+carry on past the bug, and resolving with anything else would invent a
+value. So an attempt running it never settles, and its issue stays
+unhandled. Nothing rejects, so no unhandled rejection follows. A
+`fromPromise` built directly on vow's would have turned the rejection into
+an `Err` first, so the recovery builds its vow itself, with the same
+boundaries.
 
 ## Later
 

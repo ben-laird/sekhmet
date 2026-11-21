@@ -456,6 +456,15 @@ export function sync<T, R, E>(
  * rejection always is (map it with `mapErr`). The rejection is always
  * handled, so it never surfaces as unhandled.
  *
+ * A rejection with a `Panic` is a bug in the repair, not a failure to
+ * recover, so it is not an `Err` that `orElse` or `firstOf` would move past.
+ * It unwinds to a boundary of `panics` around the `then` callback, the top
+ * of the async task, whose hook reports it (once: not again if this runtime
+ * already reported it). Like a panicked task, the recovery never finishes:
+ * its vow stays pending for good, so an attempt it runs in never settles
+ * and its issue stays unhandled. Nothing rejects, so no unhandled rejection
+ * follows.
+ *
  * The vow resolves inside the promise's `then` callback, under
  * `panics.catchUnwind`, so a dependent that throws is reported to the
  * runtime's hook rather than escaping as an unhandled rejection.
@@ -465,10 +474,10 @@ export function sync<T, R, E>(
  *
  * @template T - The value of the issues it repairs
  * @template R - The residue the promise fulfils with
- * @param options - The repair, and the panic runtime that reports a dependent
- * that throws
+ * @param options - The repair, and the panic runtime that reports a panic and
+ * a dependent that throws
  * @returns A recovery that yields the fulfilled residue, or fails with the
- * rejection reason
+ * rejection reason, and never finishes after a panic
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
@@ -488,6 +497,27 @@ export function sync<T, R, E>(
  *
  * assertEquals(unwrap(await wait(fetchRemote.run("app.json"))), { port: 9000 });
  * assertEquals(unwrapErr(await wait(fetchRemote.run("other.json"))), "offline");
+ * ```
+ * @example
+ * ```ts
+ * import { assert, assertInstanceOf } from "@std/assert";
+ * import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
+ * import { fromPromise } from "@sekhmet/issue/recovery";
+ * import { isPending } from "@sekhmet/vow/mini";
+ *
+ * const panics = definePanicRuntime();
+ * const reported = new Promise((resolve) => {
+ * 	panics.setHook(({ payload }) => resolve(payload));
+ * });
+ * const fetchRemote = fromPromise({
+ * 	repair: async (_: string): Promise<number> => panic({ message: "bad cache", cause: null }),
+ * 	panics,
+ * });
+ *
+ * const ran = fetchRemote.run("app.json");
+ *
+ * assertInstanceOf(await reported, Panic); // reported, not an Err
+ * assert(isPending(ran)); // and the recovery never finishes
  * ```
  */
 export function fromPromise<T, R>(
