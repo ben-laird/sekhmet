@@ -181,6 +181,31 @@ assertEquals(notFound.handle(3000).isAlreadyHandled(), true);
 assertEquals(notFound.unwrapResidue(), 8080);
 ```
 
+## How to narrow an issue's state
+
+Read the state with `state()` and narrow that, not the issue: the issue
+switches in place, but a state is a snapshot that never changes, so its
+`isUnhandled` and `isHandled` are type guards. Narrowed, the variant's value
+reads directly with enum's `union`.
+
+```ts
+import { union } from "@sekhmet/enum/core/mini";
+import { issue } from "@sekhmet/issue/issue";
+import { assertEquals } from "@std/assert";
+
+const notFound = issue<{ readonly path: string }, number>({
+	value: { path: "app.json" },
+	code: "config/NotFound",
+	message: "No config file.",
+});
+
+const current = notFound.state();
+if (current.isUnhandled()) {
+	const { path } = union(current);
+	assertEquals(path, "app.json");
+}
+```
+
 ## How to render an issue for a person
 
 Use `render`. It prints the code and message, the hint and docs when there

@@ -78,7 +78,7 @@ its `/mini` barrel (and `/mini/<module>`) for tree-shakable free functions.
 | `issue({ value, code, message, hint?, docs? })`     | a new, unhandled `Issue<T, R>`                                           |
 | `code`, `message`, `hint`, `docs`, `state`          | read the wording, and the current `IssueState`                           |
 | `value`, `residue`                                  | `Some` while unhandled, or once handled                                  |
-| `isUnhandled(And)`, `isHandled(And)`                | test the state                                                           |
+| `isUnhandled(And)`, `isHandled(And)`                | test the issue (a boolean) or its state snapshot (narrows the variant)   |
 | `attempt(issue, recovery)`                          | a `Vow<Attempt>`; switches the issue in place on success                 |
 | `handle(issue, residue)`                            | handles it directly: `Handled`, or `AlreadyHandled`                      |
 | `expectResidue`, `unwrapResidue`, `residueOr(Else)` | get the residue out; the first two panic while unhandled                 |
@@ -99,9 +99,10 @@ its `/mini` barrel (and `/mini/<module>`) for tree-shakable free functions.
 - **How-to guides:** [Recipes](./docs/recipes.md) for trying recoveries in
   order, retrying a flaky one, recovering only some values, recovering the
   cause of a wrapped issue, recovering an `Err`, handling an issue without a
-  recovery, and rendering an issue for a person.
+  recovery, narrowing an issue's state, and rendering an issue for a person.
 - **Explanation:** [Concepts](./docs/concepts.md) covers issues, residues and
-  the in-place switch, why an issue is invariant, why a cause lives in the
+  the in-place switch, why the predicates narrow the state and not the
+  issue, why an issue is invariant, why a cause lives in the
   value, how concurrent attempts settle, and why severity is not on the
   issue.
 - **Reference:** the [API reference on JSR](https://jsr.io/@sekhmet/issue/doc)

@@ -309,6 +309,10 @@ export class Issue<in out T, in out R> extends mini.Issue<T, R> {
 	/**
 	 * Checks whether the issue is still unhandled.
 	 *
+	 * Returns a boolean rather than narrowing: the issue changes in place, so a
+	 * narrowing on it could go stale after an `await`. To narrow, test the
+	 * snapshot `state` returns, with `@sekhmet/issue/state`'s `isUnhandled`.
+	 *
 	 * @returns Whether it is unhandled
 	 * @example
 	 * ```ts
@@ -321,6 +325,21 @@ export class Issue<in out T, in out R> extends mini.Issue<T, R> {
 	 * notFound.handle(8080);
 	 * assertEquals(notFound.isUnhandled(), false);
 	 * ```
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { union } from "@sekhmet/enum/core/mini";
+	 * import { issue } from "@sekhmet/issue/issue";
+	 * import { isUnhandled as isStateUnhandled } from "@sekhmet/issue/state/mini";
+	 *
+	 * const notFound = issue<string, number>({ value: "app.json", code: "config/NotFound", message: "No config file." });
+	 * const current = notFound.state();
+	 *
+	 * if (isStateUnhandled(current)) {
+	 * 	const path: string = union(current); // stays true: the snapshot never changes
+	 * 	assertEquals(path, "app.json");
+	 * }
+	 * ```
 	 * @see {@link mini.isUnhandled}
 	 */
 	isUnhandled(): boolean {
@@ -330,6 +349,10 @@ export class Issue<in out T, in out R> extends mini.Issue<T, R> {
 	/**
 	 * Checks whether the issue is still unhandled, with a value that satisfies
 	 * `predicate`.
+	 *
+	 * Returns a boolean rather than narrowing: the issue changes in place, so a
+	 * narrowing on it could go stale after an `await`. To narrow, test the
+	 * snapshot `state` returns, with `@sekhmet/issue/state`'s `isUnhandled`.
 	 *
 	 * @param predicate - Tests the value
 	 * @returns Whether it is unhandled and the predicate holds
@@ -351,6 +374,10 @@ export class Issue<in out T, in out R> extends mini.Issue<T, R> {
 	/**
 	 * Checks whether the issue has been handled.
 	 *
+	 * Returns a boolean rather than narrowing: the issue changes in place, so a
+	 * narrowing on it could go stale after an `await`. To narrow, test the
+	 * snapshot `state` returns, with `@sekhmet/issue/state`'s `isHandled`.
+	 *
 	 * @returns Whether it is handled
 	 * @example
 	 * ```ts
@@ -362,6 +389,22 @@ export class Issue<in out T, in out R> extends mini.Issue<T, R> {
 	 *
 	 * assertEquals(notFound.isHandled(), true);
 	 * ```
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { union } from "@sekhmet/enum/core/mini";
+	 * import { issue } from "@sekhmet/issue/issue";
+	 * import { isHandled as isStateHandled } from "@sekhmet/issue/state/mini";
+	 *
+	 * const notFound = issue<string, number>({ value: "app.json", code: "config/NotFound", message: "No config file." });
+	 * notFound.handle(8080);
+	 * const current = notFound.state();
+	 *
+	 * if (isStateHandled(current)) {
+	 * 	const port: number = union(current);
+	 * 	assertEquals(port, 8080);
+	 * }
+	 * ```
 	 * @see {@link mini.isHandled}
 	 */
 	isHandled(): boolean {
@@ -371,6 +414,10 @@ export class Issue<in out T, in out R> extends mini.Issue<T, R> {
 	/**
 	 * Checks whether the issue has been handled, with a residue that satisfies
 	 * `predicate`.
+	 *
+	 * Returns a boolean rather than narrowing: the issue changes in place, so a
+	 * narrowing on it could go stale after an `await`. To narrow, test the
+	 * snapshot `state` returns, with `@sekhmet/issue/state`'s `isHandled`.
 	 *
 	 * @param predicate - Tests the residue
 	 * @returns Whether it is handled and the predicate holds

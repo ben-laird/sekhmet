@@ -35,6 +35,42 @@ Handling drops the value: a handled issue holds its residue only. So
 once it is handled. `state()` reads a snapshot, which handling leaves as it
 was.
 
+## Narrow the state, not the issue
+
+`issue.isUnhandled()` and `issue.isHandled()` return a plain boolean, not a
+type guard. TypeScript keeps a narrowing on a `const` across `await`s and
+calls, but an attempt can switch the issue in between, so a guard on the
+issue would go stale and let you read a value it no longer holds.
+
+A state read with `state()` is an immutable `IssueState`: handling gives the
+issue a new state and never changes an old one. So the state's own
+`isUnhandled` and `isHandled` (from `@sekhmet/issue/state`) are type guards,
+and their narrowing stays true:
+
+```ts
+import { union } from "@sekhmet/enum/core/mini";
+import { issue } from "@sekhmet/issue/issue";
+import { assertEquals } from "@std/assert";
+
+const notFound = issue<string, number>({
+	value: "app.json",
+	code: "config/NotFound",
+	message: "No config file.",
+});
+const before = notFound.state();
+notFound.handle(8080);
+
+assertEquals(notFound.isHandled(), true);
+if (before.isUnhandled()) {
+	const path: string = union(before); // still true: the snapshot didn't change
+	assertEquals(path, "app.json");
+}
+```
+
+The `…And` forms (`isUnhandledAnd`, `isHandledAnd`) return a boolean on
+both: a state is invariant like its issue, so a type-guard predicate
+couldn't narrow `T` or `R`.
+
 ## Why an issue is invariant
 
 Most Sekhmet enums, like `Result` and `Attempt`, are covariant: an

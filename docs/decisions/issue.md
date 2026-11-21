@@ -83,6 +83,9 @@ issue.
 chaining) and a mini barrel. There is no root `.` export, because names like
 `map` clash across features, as in `@sekhmet/enum`.
 
+_Extended by [17](#17-issue-predicates-are-booleans-narrow-the-state-snapshot):
+`IssueState` is now a fourth feature, `state`._
+
 ## Decisions taken while building v1 (2026-11-20, for review)
 
 These weren't settled by the issue; each is open to the owner's review.
@@ -147,6 +150,29 @@ it carries on while each run's vow is already resolved, and subscribes only
 to a pending one, resuming the loop when it settles. A sync run still
 settles at once, and neither a long sync nor a long async run nests the
 stack.
+
+### 17. Issue predicates are booleans; narrow the state snapshot
+
+2026-11-20. `isUnhandled`, `isHandled` and their `…And` forms on an `Issue`
+return a plain `boolean`, not a type guard. Handling replaces the issue's
+state in place, and TypeScript keeps a narrowing on a `const` across
+`await`s and calls, so a guard on the issue would go stale once an attempt
+switched it in between. Invariance in `R` also rules out a guard such as
+`self is Issue<T, never>`.
+
+A state read with `state()` is an immutable snapshot (handling assigns a new
+`IssueState`, never mutates one), so narrowing it is sound. `IssueState` and
+`IssueStateVariants` moved to their own main/mini feature, `state`
+(`@sekhmet/issue/state`), whose `isUnhandled` and `isHandled` are type
+guards in the shape of `isSome`/`isOk` and Attempt's predicates
+(`self is Enum<Isolate<IssueStateVariants<T, R>, "Unhandled">> &
+IssueState<T, R>`). They narrow the variant only: the type parameters stay,
+since a state is invariant. Its `isUnhandledAnd` and `isHandledAnd` return a
+boolean, because a type-guard predicate couldn't narrow an invariant
+parameter. A separate feature keeps the names, which clash with Issue's
+predicates. The main `Issue.state()` returns the main `IssueState`, so
+`notFound.state().isUnhandled()` narrows. Pre-1.0, the move is clean: the
+`issue` feature no longer exports `IssueState`.
 
 ## Later
 
