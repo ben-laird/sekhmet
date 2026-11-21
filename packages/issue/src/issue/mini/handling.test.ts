@@ -11,7 +11,7 @@ import {
 } from "@sekhmet/vow/mini";
 import { assert, assertEquals, assertStrictEquals } from "@std/assert";
 import { AlreadyHandled, Handled } from "@/src/attempt/mini/core.ts";
-import { orElse } from "@/src/recovery/mini/combinators.ts";
+import { or } from "@/src/recovery/mini/combinators.ts";
 import { fail, Recovery, succeed } from "@/src/recovery/mini/core.ts";
 import { state } from "./accessors.ts";
 import { type Issue, issue } from "./core.ts";
@@ -125,10 +125,10 @@ Deno.test("a recovery reads the issue's value", () => {
 	assertEquals(union(ended), { port: 3000 });
 });
 
-Deno.test("orElse: a failure moves on to the next recovery", () => {
+Deno.test("or: a failure moves on to the next recovery", () => {
 	// Given: readBackup, which fails, then useDefault
 	const notFoundIssue = notFound("app.json");
-	const recovery = orElse(readBackup, useDefault);
+	const recovery = or(readBackup, useDefault);
 
 	// When: the composed recovery is attempted
 	const ended = settled(attempt(notFoundIssue, recovery));
@@ -138,7 +138,7 @@ Deno.test("orElse: a failure moves on to the next recovery", () => {
 	assertEquals(union(ended), DEFAULT_CONFIG);
 });
 
-Deno.test("orElse: a success doesn't run the next recovery", () => {
+Deno.test("or: a success doesn't run the next recovery", () => {
 	// Given: useDefault, then a recovery that counts its runs
 	const notFoundIssue = notFound("app.json");
 	let runs = 0;
@@ -148,14 +148,14 @@ Deno.test("orElse: a success doesn't run the next recovery", () => {
 	});
 
 	// When: the composition is attempted
-	const ended = settled(attempt(notFoundIssue, orElse(useDefault, counting)));
+	const ended = settled(attempt(notFoundIssue, or(useDefault, counting)));
 
 	// Then: the first one handled it, and the second never ran
 	assert(isolate(ended, "Handled"));
 	assertEquals(runs, 0);
 });
 
-Deno.test("orElse: when both fail, the last error is the one reported", () => {
+Deno.test("or: when both fail, the last error is the one reported", () => {
 	// Given: two recoveries that both fail
 	const notFoundIssue = notFound("app.json");
 	const askUser = new Recovery((_: Path) => {
@@ -163,7 +163,7 @@ Deno.test("orElse: when both fail, the last error is the one reported", () => {
 	});
 
 	// When: they are composed and attempted
-	const ended = settled(attempt(notFoundIssue, orElse(readBackup, askUser)));
+	const ended = settled(attempt(notFoundIssue, or(readBackup, askUser)));
 
 	// Then: it failed with the second error, and the issue is still unhandled
 	assert(isolate(ended, "Failed"));
@@ -251,11 +251,11 @@ Deno.test("concurrent attempts: an early failure reports Failed, and the issue w
 	assert(isolate(state(notFoundIssue), "Handled"));
 });
 
-Deno.test("orElse: an async failure moves on to a sync recovery", async () => {
+Deno.test("or: an async failure moves on to a sync recovery", async () => {
 	// Given: an async recovery that will fail, then useDefault
 	const notFoundIssue = notFound("app.json");
 	const remote = deferred<string>();
-	const pending = attempt(notFoundIssue, orElse(remote.recovery, useDefault));
+	const pending = attempt(notFoundIssue, or(remote.recovery, useDefault));
 	assert(isPending(pending));
 
 	// When: the async one fails

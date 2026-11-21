@@ -84,7 +84,8 @@ switches back.
 
 ## 3. Try a backup first
 
-Recoveries compose. `orElse` tries the next one when the first fails. Here
+Recoveries compose. `or` tries the next one when the first fails (and
+`orElse` builds the next one from the error). Here
 reading a backup fails, so the default handles the issue. A failed
 recovery yields no residue, so the composite takes the default's `Config`.
 
@@ -107,9 +108,7 @@ const notFound = issue<Path, Config>({
 	message: "No config file at `app.json`.",
 });
 
-const recovery = fail("`app.bak` can't be read.").orElse(
-	succeed({ port: 8080 }),
-);
+const recovery = fail("`app.bak` can't be read.").or(succeed({ port: 8080 }));
 
 const ended = await wait(notFound.attempt(recovery));
 

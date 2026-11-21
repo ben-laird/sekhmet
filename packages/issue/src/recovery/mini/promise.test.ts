@@ -7,7 +7,7 @@ import { assert, assertEquals, assertInstanceOf } from "@std/assert";
 import { issue } from "@/src/issue/mini/core.ts";
 import { attempt } from "@/src/issue/mini/handling.ts";
 import { isUnhandled } from "@/src/issue/mini/predicates.ts";
-import { orElse } from "./combinators.ts";
+import { or } from "./combinators.ts";
 import { run, succeed } from "./core.ts";
 import { fromPromise } from "./promise.ts";
 
@@ -119,12 +119,12 @@ Deno.test("fromPromise() keeps a rejection that isn't a Panic as Err", async () 
 	assertEquals(reported, []);
 });
 
-Deno.test("a panic in an async repair stops orElse, and the issue stays unhandled", async () => {
+Deno.test("a panic in an async repair stops or, and the issue stays unhandled", async () => {
 	// Given: a panicking recovery with a fallback after it, and an issue
 	const panics = definePanicRuntime();
 	const reported: unknown[] = [];
 	panics.setHook(({ payload }) => reported.push(payload));
-	const recovery = orElse(
+	const recovery = or(
 		fromPromise({ repair: panicking, panics }),
 		succeed<string, number>(8080),
 	);

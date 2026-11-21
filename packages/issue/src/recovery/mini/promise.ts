@@ -39,7 +39,7 @@ export interface FromPromiseOptions<T, R> {
  * handled, so it never surfaces as unhandled.
  *
  * A rejection with a `Panic` is a bug in the repair, not a failure to
- * recover, so it is not an `Err` that `orElse` or `firstOf` would move past.
+ * recover, so it is not an `Err` that `or` or `firstOf` would move past.
  * It unwinds to a boundary of `panics` around the `then` callback, the top
  * of the async task, whose hook reports it (once: not again if this runtime
  * already reported it). Like a panicked task, the recovery never finishes:

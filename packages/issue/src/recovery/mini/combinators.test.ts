@@ -9,7 +9,7 @@ import {
 	wait,
 } from "@sekhmet/vow/mini";
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import { firstOf, orElse, retry, when } from "./combinators.ts";
+import { firstOf, or, orElse, retry, when } from "./combinators.ts";
 import { fail, Recovery, run, succeed, sync } from "./core.ts";
 
 /** A recovery that counts its runs and yields what `results` says next. */
@@ -30,14 +30,14 @@ interface Config {
 	readonly port: number;
 }
 
-Deno.test("orElse() and firstOf() take the wider residue, with no union", () => {
+Deno.test("or() and firstOf() take the wider residue, with no union", () => {
 	// Given: a fail (residue never) and a recovery yielding a Config
 	const readBackup = fail<string, string>("no backup");
 	const useDefault = succeed<string, Config>({ port: 8080 });
 
 	// When: they are composed in either order, with no annotation
-	const backupFirst = orElse(readBackup, useDefault);
-	const defaultFirst = orElse(useDefault, readBackup);
+	const backupFirst = or(readBackup, useDefault);
+	const defaultFirst = or(useDefault, readBackup);
 	const listed = firstOf([readBackup, useDefault]);
 
 	// Then: each is a Config recovery, and runs to the default
@@ -52,7 +52,7 @@ Deno.test("orElse() and firstOf() take the wider residue, with no union", () => 
 	);
 });
 
-Deno.test("orElse() and firstOf() reject unrelated residues", () => {
+Deno.test("or() and firstOf() reject unrelated residues", () => {
 	// Given: recoveries yielding a number and a Config
 	const asNumber = succeed<string, number>(8080);
 	const asConfig = succeed<string, Config>({ port: 8080 });
@@ -60,7 +60,7 @@ Deno.test("orElse() and firstOf() reject unrelated residues", () => {
 	// When: composing them is written (never run)
 	const misuses = (): void => {
 		// @ts-expect-error: number and Config have no wider residue but a union
-		orElse(asNumber, asConfig);
+		or(asNumber, asConfig);
 		// @ts-expect-error: the same holds across firstOf's list
 		firstOf([asNumber, asConfig]);
 	};
@@ -69,47 +69,129 @@ Deno.test("orElse() and firstOf() reject unrelated residues", () => {
 	assert(typeof misuses === "function");
 });
 
-Deno.test("orElse(): a failure moves on to the next recovery, on the same value", () => {
+Deno.test("orElse(): a failure builds the next recovery from its error", () => {
+	// Given: a recovery failing with a status, and a builder that reads it
+	const readBackup = fail<string, number>(503);
+	const seen: number[] = [];
+	const next = (status: number): Recovery<string, number, never> => {
+		seen.push(status);
+		return sync((path: string) => Ok<number, never>(path.length + status));
+	};
+
+	// When: the composition is run
+	const result = value(run(orElse(readBackup, next), "app.json"));
+
+	// Then: the builder got the error, and its recovery ran on the same value
+	assertEquals(seen, [503]);
+	assertEquals(result, Some(Ok(511)));
+});
+
+Deno.test("orElse(): a success never builds the next recovery", () => {
+	// Given: a recovery that succeeds, and a builder that counts its calls
+	let built = 0;
+	const next = (_: never): Recovery<string, number, never> => {
+		built += 1;
+		return succeed(2);
+	};
+
+	// When: the composition is run
+	const result = value(
+		run(orElse(succeed<string, number>(1), next), "app.json"),
+	);
+
+	// Then: the first residue is kept, and nothing was built
+	assertEquals(result, Some(Ok(1)));
+	assertEquals(built, 0);
+});
+
+Deno.test("orElse(): the built recovery's error is the one reported", () => {
+	// Given: a failing recovery whose builder returns another failure
+	const first = fail<string, string>("no backup");
+
+	// When: the composition is run
+	const result = value(
+		run(
+			orElse(first, (error) => fail(`${error}, no remote`)),
+			"app.json",
+		),
+	);
+
+	// Then: the built recovery's error is reported
+	assertEquals(result, Some(Err("no backup, no remote")));
+});
+
+Deno.test("orElse() takes the wider residue in either order, with no union", () => {
+	// Given: a fail (residue never) and a recovery yielding a Config
+	const readBackup = fail<string, string>("no backup");
+	const useDefault = succeed<string, Config>({ port: 8080 });
+
+	// When: they are composed in either order, with no annotation
+	const backupFirst = orElse(readBackup, () => useDefault);
+	const defaultFirst = orElse(useDefault, () => readBackup);
+
+	// Then: each is a Config recovery
+	const asConfig: Recovery<string, Config, never> = backupFirst;
+	const asConfigToo: Recovery<string, Config, string> = defaultFirst;
+	assertEquals(value(run(asConfig, "app.json")), Some(Ok({ port: 8080 })));
+	assertEquals(value(run(asConfigToo, "app.json")), Some(Ok({ port: 8080 })));
+});
+
+Deno.test("orElse() rejects an unrelated residue", () => {
+	// Given: recoveries yielding a number and a Config
+	const asNumber = succeed<string, number>(8080);
+	const asConfig = succeed<string, Config>({ port: 8080 });
+
+	// When: composing them is written (never run)
+	const misuse = (): void => {
+		// @ts-expect-error: number and Config have no wider residue but a union
+		orElse(asNumber, () => asConfig);
+	};
+
+	// Then: it doesn't type-check
+	assert(typeof misuse === "function");
+});
+
+Deno.test("or(): a failure moves on to the next recovery, on the same value", () => {
 	// Given: a failing recovery, then one that reads the value
 	const readBackup: Recovery<string, number, string> = fail("no backup");
 	const byLength = sync((path: string) => Ok<number, never>(path.length));
 
 	// When: the composition is run
-	const result = value(run(orElse(readBackup, byLength), "app.json"));
+	const result = value(run(or(readBackup, byLength), "app.json"));
 
 	// Then: the second one's residue came from the same value
 	assertEquals(result, Some(Ok(8)));
 });
 
-Deno.test("orElse(): a success never runs the next recovery", () => {
+Deno.test("or(): a success never runs the next recovery", () => {
 	// Given: a recovery that succeeds, then a counting one
 	const next = scripted<number, string>([Err("unreachable")]);
 
 	// When: the composition is run
-	const result = value(run(orElse(succeed(1), next.recovery), "app.json"));
+	const result = value(run(or(succeed(1), next.recovery), "app.json"));
 
 	// Then: the first residue stands, and the second never ran
 	assertEquals(result, Some(Ok(1)));
 	assertEquals(next.runs(), 0);
 });
 
-Deno.test("orElse(): when both fail, the second error is reported", () => {
+Deno.test("or(): when both fail, the second error is reported", () => {
 	// Given: two failing recoveries with different error types
 	const first: Recovery<string, number, string> = fail("no backup");
 	const second: Recovery<string, number, number> = fail(130);
 
 	// When: the composition is run
-	const result = value(run(orElse(first, second), "app.json"));
+	const result = value(run(or(first, second), "app.json"));
 
 	// Then: the first error was dropped
 	assertEquals(result, Some(Err(130)));
 });
 
-Deno.test("orElse(): an async failure moves on once it settles", async () => {
+Deno.test("or(): an async failure moves on once it settles", async () => {
 	// Given: an async recovery that will fail, then a sync success
 	const { vow, resolve } = vowWithResolver<Result<number, string>>();
 	const remote = new Recovery((_: string) => vow);
-	const result = run(orElse(remote, succeed(8080)), "app.json");
+	const result = run(or(remote, succeed(8080)), "app.json");
 	const before = isPending(result);
 
 	// When: the async one fails

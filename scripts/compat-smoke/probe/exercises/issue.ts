@@ -33,7 +33,7 @@ import { render } from "@sekhmet/issue/issue/mini/render";
 import { wrap } from "@sekhmet/issue/issue/mini/transform";
 import { unwrapResidue } from "@sekhmet/issue/issue/mini/unwrap";
 import { fail, succeed } from "@sekhmet/issue/recovery";
-import { firstOf, orElse } from "@sekhmet/issue/recovery/mini";
+import { firstOf, or, orElse } from "@sekhmet/issue/recovery/mini";
 import { retry } from "@sekhmet/issue/recovery/mini/combinators";
 import {
 	Recovery as MiniRecovery,
@@ -70,7 +70,7 @@ async function exerciseMain(): Promise<void> {
 	});
 	const before = subject.state();
 	const ended = await wait(
-		subject.attempt(fail("no backup").orElse(succeed({ port: 8080 }))),
+		subject.attempt(fail("no backup").or(succeed({ port: 8080 }))),
 	);
 	expectEqual({
 		label: "main Issue attempts a main Recovery, and switches in place",
@@ -181,11 +181,18 @@ async function exerciseMini(): Promise<void> {
 		),
 	);
 	const recovered = notFound("app.json");
-	await wait(attempt(recovered, orElse(fail("no"), succeed({ port: 4 }))));
+	await wait(attempt(recovered, or(fail("no"), succeed({ port: 4 }))));
+	const rebuilt = notFound("app.json");
+	await wait(
+		attempt(
+			rebuilt,
+			orElse(fail("no"), (error) => succeed({ port: error.length })),
+		),
+	);
 	expectEqual({
-		label: "recoverWith turns a handled Err into Ok",
-		actual: [unwrap(loaded), isHandled(recovered)],
-		expected: [{ port: 3 }, true],
+		label: "recoverWith turns a handled Err into Ok; orElse reads the error",
+		actual: [unwrap(loaded), isHandled(recovered), unwrapResidue(rebuilt)],
+		expected: [{ port: 3 }, true, { port: 2 }],
 	});
 }
 

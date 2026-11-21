@@ -75,6 +75,9 @@ its list, and `retry` keeps the last error the same way. Both run their
 recoveries in one loop of their own (decision 16) rather than nesting
 `orElse`.
 
+_Renamed by [21](#21-or-takes-a-recovery-orelse-builds-one-from-the-error):
+this combinator is now `or`, and `orElse` builds the next from the error._
+
 _Refined by [20](#20-orelse-and-firstof-take-the-wider-residue-without-a-union):
 the composite takes the wider residue._
 
@@ -233,7 +236,27 @@ annotated. Mini `orElse` now takes `self: Recovery<T, R, unknown>`, since
 `orElse<T, R, F>(this: Recovery<T, R, unknown>, next: mini.Recovery<T, R,
 F>): Recovery<T, R, F>`. Both orders now infer, with no annotation.
 `firstOf` needed no change: its tuple already infers the widest residue,
-and rejects unrelated ones.
+and rejects unrelated ones. (`orElse` here is today's `or`; see 21.)
+
+### 21. `or` takes a recovery, `orElse` builds one from the error
+
+2026-11-21, the owner's call. Recovery follows Rust's and `@sekhmet/enum`'s
+`or`/`orElse` convention: `or` takes the next value itself, and `orElse`
+produces it lazily from what failed. So the eager combinator of 6 and 20 is
+renamed `or(self, next: Recovery<T, R, F>)`, with its typing unchanged
+(pre-1.0, no alias), and a new `orElse(self, next: (error: E) =>
+Recovery<T, R, F>)` builds the next recovery from `self`'s error, as
+`Result.orElse` does. It passes the error only, not the value: the built
+recovery already receives the value when it runs, and choosing by value is
+`when`'s job.
+
+`orElse` widens the residue the same way, with no union, in mini and main.
+Its receiver passes distinct type parameters (`Recovery<T, R, E>`, since
+`E` feeds the callback), which gen-main would make the class's, fixing `R`.
+So gen-main gained a per-feature `constrained` list that forces the
+`this`-parameter form, and recovery lists `orElse`:
+`orElse<T, R, E, F>(this: Recovery<T, R, E>, next: (error: E) =>
+mini.Recovery<T, R, F>): Recovery<T, R, F>`. `firstOf` stays an eager list.
 
 ## Later
 

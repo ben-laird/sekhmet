@@ -10,7 +10,7 @@
  * import { assertEquals } from "@std/assert";
  * import { Handled } from "@sekhmet/issue/attempt/mini";
  * import { attempt, issue, unwrapResidue } from "@sekhmet/issue/issue/mini";
- * import { fail, orElse, succeed } from "@sekhmet/issue/recovery/mini";
+ * import { fail, or, succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
  * interface Config {
@@ -26,7 +26,7 @@
  * const readBackup = fail<{ readonly path: string }, string>("`app.bak` can't be read.");
  * const useDefault = succeed<{ readonly path: string }, Config>({ port: 8080 });
  *
- * assertEquals(await wait(attempt(notFound, orElse(readBackup, useDefault))), Handled({ port: 8080 }));
+ * assertEquals(await wait(attempt(notFound, or(readBackup, useDefault))), Handled({ port: 8080 }));
  * assertEquals(unwrapResidue(notFound), { port: 8080 });
  * ```
  *

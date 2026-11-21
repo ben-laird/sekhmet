@@ -101,12 +101,14 @@ Packages (`packages/`):
   scheduler)
 - `@sekhmet/enum`: enum framework plus `option`, `result`, `either`, `latch`,
   `poll`, `ordering` and `control-flow` built on it
-- `@sekhmet/issue`: issues and typed recoveries, three main/mini features
+- `@sekhmet/issue`: issues and typed recoveries, four main/mini features
   with no root export: `issue` (`Issue<in out T, in out R>`, invariant: a
-  code, message, optional hint and docs, and a state `Unhandled(value) |
-  Handled(residue)` that switches in place, once; `attempt`, `handle`,
-  `wrap`, `render`, `recoverWith`), `recovery` (`Recovery<T, R, E>`, a
-  `Struct` wrapping `(value: T) => Vow<Result<R, E>>`; `orElse`, `firstOf`,
+  code, message, optional hint and docs, and a state that switches in
+  place, once; `attempt`, `handle`, `wrap`, `render`, `recoverWith`),
+  `state` (`IssueState`, the immutable snapshot `Unhandled(value) |
+  Handled(residue)` with narrowing predicates), `recovery`
+  (`Recovery<T, R, E>`, a `Struct` wrapping
+  `(value: T) => Vow<Result<R, E>>`; `or`, `orElse`, `firstOf`,
   `retry`, `when`, `fromPromise`) and `attempt` (the `Attempt<R, E>` enum:
   `AlreadyHandled | Handled | Failed`). A cause lives in the value, not a
   field. Its decision record is `docs/decisions/issue.md`

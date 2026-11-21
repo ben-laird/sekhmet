@@ -193,7 +193,7 @@ export interface ClassFeature extends FeatureBase {
 	 * constrained form even though their receiver passes distinct, bare type
 	 * parameters: the method keeps every type parameter as its own and
 	 * declares the receiver as its `this` parameter, so a type argument the
-	 * class would fix (`R` in `fail(…).orElse(…)`) is inferred from the
+	 * class would fix (`R` in `fail(…).or(…)`) is inferred from the
 	 * receiver and the arguments together. Each name must be a `self`-first
 	 * function of the feature's mini barrel, or generation fails.
 	 */
@@ -870,6 +870,8 @@ export const FEATURES: readonly Feature[] = [
 		primary: "Recovery",
 		construct: "params",
 		mappers: [undefined, "map", "mapErr"],
+		// The residue widens from the receiver and the built recovery together
+		constrained: ["orElse"],
 		wraps: [ENUM_RESULT],
 		carriers: [VOW],
 		example: [
@@ -878,7 +880,7 @@ export const FEATURES: readonly Feature[] = [
 			'import { wait } from "@sekhmet/vow";',
 			"",
 			'const recovery = fail("no backup")',
-			"\t.orElse(succeed(8080))",
+			"\t.or(succeed(8080))",
 			"\t.map((port) => ({ port }));",
 			"// {}",
 			"",

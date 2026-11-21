@@ -14,7 +14,7 @@
  * import { wait } from "@sekhmet/vow";
  *
  * const recovery = fail("no backup")
- * 	.orElse(succeed(8080))
+ * 	.or(succeed(8080))
  * 	.map((port) => ({ port }));
  * // {}
  *
@@ -82,8 +82,9 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 
 	/**
 	 * Tries `self`; if it fails, tries `next` on the same value instead. `self`'s
-	 * error is dropped, like Rust's `Result::or_else`, so the composite fails
-	 * with `next`'s error. `next` never runs when `self` succeeds.
+	 * error is dropped, like Rust's `Result::or`, so the composite fails with
+	 * `next`'s error. `next` never runs when `self` succeeds. To build the next
+	 * recovery from the error, use {@linkcode orElse}.
 	 *
 	 * The residue is the wider of the two, with no union: a recovery is
 	 * covariant in its residue, so a `fail` (residue `never`) followed by a
@@ -105,13 +106,55 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * const readBackup = fail<string, string>("`app.bak` can't be read.");
 	 * const useDefault = succeed<string, number>(8080);
 	 *
-	 * assertEquals(unwrap(await wait(readBackup.orElse(useDefault).run("app.json"))), 8080);
+	 * assertEquals(unwrap(await wait(readBackup.or(useDefault).run("app.json"))), 8080);
+	 * ```
+	 * @see {@link mini.or}
+	 */
+	or<T, R, F>(
+		this: Recovery<T, R, unknown>,
+		next: mini.Recovery<T, R, F>,
+	): Recovery<T, R, F> {
+		return Recovery.fromMini(mini.or(this, next));
+	}
+
+	/**
+	 * Tries `self`; if it fails, builds the next recovery from `self`'s error
+	 * and tries it on the same value, like Rust's `Result::or_else`. The
+	 * composite fails with that recovery's error, and `next` is never called
+	 * when `self` succeeds. To try a recovery already at hand, use
+	 * {@linkcode or}.
+	 *
+	 * The residue widens as `or`'s does, with no union: a `fail` (residue
+	 * `never`) whose `next` builds a `Recovery<T, Config, F>` is a
+	 * `Recovery<T, Config, F>`, in either order. Unrelated residues (`number`
+	 * and `Config`) don't type-check.
+	 *
+	 * @template T - The value of the issues they repair
+	 * @template R - The residue they yield: the wider of the two
+	 * @template E - The error `self` fails with, which `next` receives
+	 * @template F - The error the built recovery fails with
+	 * @param next - Builds the recovery to try from `self`'s error
+	 * @returns A recovery that yields the first residue, or fails with the
+	 * built recovery's error
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { unwrap } from "@sekhmet/enum/result/mini";
+	 * import { fail, succeed } from "@sekhmet/issue/recovery";
+	 * import { wait } from "@sekhmet/vow/mini";
+	 *
+	 * const readBackup = fail<string, number>(503);
+	 * const recovery = readBackup.orElse((status) => {
+	 * 	return succeed<string, number>(status === 503 ? 8080 : 80);
+	 * });
+	 *
+	 * assertEquals(unwrap(await wait(recovery.run("app.json"))), 8080);
 	 * ```
 	 * @see {@link mini.orElse}
 	 */
-	orElse<T, R, F>(
-		this: Recovery<T, R, unknown>,
-		next: mini.Recovery<T, R, F>,
+	orElse<T, R, E, F>(
+		this: Recovery<T, R, E>,
+		next: (error: E) => mini.Recovery<T, R, F>,
 	): Recovery<T, R, F> {
 		return Recovery.fromMini(mini.orElse(this, next));
 	}
@@ -350,14 +393,14 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 
 /**
  * Tries each recovery in order, on the same value, until one succeeds: it
- * behaves as {@linkcode orElse} folded over the list. When all fail, it
+ * behaves as {@linkcode or} folded over the list. When all fail, it
  * fails with the last one's error. The list can't be empty: `firstOf([])`
  * doesn't type-check, since with no recovery to try there would be no error
  * to fail with. The recoveries run in a loop that doesn't nest the stack, so
  * a long list is safe, sync or async.
  *
  * @template T - The value of the issues they repair
- * @template R - The residue they yield
+ * @template R - The residue they yield: the widest of the list's
  * @template E - The error they fail with
  * @param recoveries - The recoveries to try, in order (at least one)
  * @returns A recovery that yields the first residue, or fails with the last error
@@ -466,7 +509,7 @@ export function sync<T, R, E>(
  * handled, so it never surfaces as unhandled.
  *
  * A rejection with a `Panic` is a bug in the repair, not a failure to
- * recover, so it is not an `Err` that `orElse` or `firstOf` would move past.
+ * recover, so it is not an `Err` that `or` or `firstOf` would move past.
  * It unwinds to a boundary of `panics` around the `then` callback, the top
  * of the async task, whose hook reports it (once: not again if this runtime
  * already reported it). Like a panicked task, the recovery never finishes:

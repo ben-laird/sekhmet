@@ -8,12 +8,12 @@
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { Ok } from "@sekhmet/enum/result/mini";
- * import { fail, map, orElse, run, succeed } from "@sekhmet/issue/recovery/mini";
+ * import { fail, map, or, run, succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
  * const readBackup = fail<string, string>("`app.bak` can't be read.");
  * const useDefault = map(succeed<string, number>(8080), (port) => ({ port }));
- * const recovery = orElse(readBackup, useDefault);
+ * const recovery = or(readBackup, useDefault);
  *
  * assertEquals(await wait(run(recovery, "app.json")), Ok({ port: 8080 }));
  * ```

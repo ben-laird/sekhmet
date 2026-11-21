@@ -121,19 +121,22 @@ microtask. `sync`, `succeed` and `fail` build sync ones; `fromPromise` builds
 an async one, and carries a rejection as an `Err`, as `@sekhmet/vow`'s
 `fromPromise` does, so a rejection is never unhandled. A rejection with a
 `Panic` is a bug, not a failed repair: the panic runtime's hook reports it,
-and the recovery never finishes, like a panicked task, so `orElse` doesn't
-move past it and the issue stays unhandled.
+and the recovery never finishes, like a panicked task, so `or` and `orElse`
+don't move past it and the issue stays unhandled.
 
-Recoveries compose like `Result`s do. `orElse` tries the next when one fails,
-and drops the first error, like Rust's `Result::or_else`. `firstOf` behaves
-as `orElse` folded over a list, and `retry` runs one again, keeping the last
+Recoveries compose like `Result`s do, with Rust's and `@sekhmet/enum`'s
+naming: `or` takes the next recovery itself, and `orElse` builds it lazily
+from what failed. `or` tries the next when one fails and drops the first
+error, like `Result::or`; `orElse` hands the error to a function that
+returns the recovery to try, like `Result::or_else`. `firstOf` behaves as
+`or` folded over a list, and `retry` runs one again, keeping the last
 error. Both run their recoveries in a loop that doesn't nest the stack, so a
 long list or a large `times` is safe, sync or async. `map`, `mapErr` and
 `andThen` change what it yields, and `mapInput` changes what it repairs.
 
-`orElse` and `firstOf` take the wider residue of the recoveries they join,
-with no union. A recovery is covariant in its residue, and one built with
-`fail` yields none (`never`), so `fail("…").orElse(succeed(config))` is a
+`or`, `orElse` and `firstOf` take the wider residue of the recoveries they
+join, with no union. A recovery is covariant in its residue, and one built with
+`fail` yields none (`never`), so `fail("…").or(succeed(config))` is a
 `Config` recovery with no annotation, and so is the reverse order. Residues
 with no wider one but a union, such as `number` and `Config`, don't
 type-check: a union of residues couldn't be told apart again.

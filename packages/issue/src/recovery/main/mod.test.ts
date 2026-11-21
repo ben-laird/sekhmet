@@ -22,15 +22,52 @@ interface Config {
 	readonly port: number;
 }
 
-Deno.test("orElse takes the wider residue in either direction", async () => {
+Deno.test("or takes the wider residue in either direction", async () => {
 	// Given: a fail (residue never) and a recovery yielding a Config
 	const useDefault = succeed<string, Config>({ port: 8080 });
 
 	// When: they are chained either way, with no annotation
-	const backupFirst = fail("no backup").orElse(useDefault);
-	const defaultFirst = useDefault.orElse(fail("no backup"));
+	const backupFirst = fail("no backup").or(useDefault);
+	const defaultFirst = useDefault.or(fail("no backup"));
 
 	// Then: both are main Config recoveries
+	const asConfig: Recovery<string, Config, never> = backupFirst;
+	const asConfigToo: Recovery<string, Config, string> = defaultFirst;
+	assertInstanceOf(backupFirst, Recovery);
+	assertEquals((await wait(asConfig.run("app.json"))).unwrap(), {
+		port: 8080,
+	});
+	assertEquals((await wait(asConfigToo.run("app.json"))).unwrap(), {
+		port: 8080,
+	});
+});
+
+Deno.test("or rejects an unrelated residue", () => {
+	// Given: recoveries yielding a number and a Config
+	const asNumber = succeed<string, number>(8080);
+	const asConfig = succeed<string, Config>({ port: 8080 });
+
+	// When: chaining them is written (never run)
+	const misuse = (): void => {
+		// @ts-expect-error: number and Config have no wider residue but a union
+		asNumber.or(asConfig);
+	};
+
+	// Then: it doesn't type-check
+	assertEquals(typeof misuse, "function");
+});
+
+Deno.test("orElse builds the next from the error, widening either way", async () => {
+	// Given: a fail with a status code, and a recovery yielding a Config
+	const useDefault = succeed<string, Config>({ port: 8080 });
+
+	// When: chained either way, the builder reading the error
+	const backupFirst = fail(503).orElse((status) => {
+		return succeed({ port: status === 503 ? 8080 : 80 });
+	});
+	const defaultFirst = useDefault.orElse(() => fail("no backup"));
+
+	// Then: both are main Config recoveries, with no annotation
 	const asConfig: Recovery<string, Config, never> = backupFirst;
 	const asConfigToo: Recovery<string, Config, string> = defaultFirst;
 	assertInstanceOf(backupFirst, Recovery);
@@ -50,7 +87,7 @@ Deno.test("orElse rejects an unrelated residue", () => {
 	// When: chaining them is written (never run)
 	const misuse = (): void => {
 		// @ts-expect-error: number and Config have no wider residue but a union
-		asNumber.orElse(asConfig);
+		asNumber.orElse(() => asConfig);
 	};
 
 	// Then: it doesn't type-check
@@ -63,7 +100,7 @@ Deno.test("methods chain, and run resolves with a main Result", async () => {
 
 	// When: composing it with methods and running it
 	const recovery = readBackup
-		.orElse(succeed(8080))
+		.or(succeed(8080))
 		.map((port) => ({ port }))
 		.retry({ times: 1 });
 	// {}
