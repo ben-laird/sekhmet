@@ -69,6 +69,99 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	),
 	privateTypeRef("effect/src/scheduler/scheduler.ts", "SchedulerState", "Enum"),
 	privateTypeRef("enum/src/core/mini/core.ts", "Enum", "Struct"),
+	privateTypeRef("issue/src/attempt/mini/core.ts", "Variants", "Split"),
+	privateTypeRef("issue/src/attempt/mini/core.ts", "Attempt", "Enum"),
+	privateTypeRef("issue/src/attempt/mini/accessors.ts", "residue", "Option"),
+	privateTypeRef("issue/src/attempt/mini/accessors.ts", "error", "Option"),
+	privateTypeRef("issue/src/attempt/mini/accessors.ts", "toResult", "Result"),
+	...[
+		"isAlreadyHandled",
+		"isAlreadyHandledAnd",
+		"isHandled",
+		"isHandledAnd",
+		"isFailed",
+		"isFailedAnd",
+		"isResolved",
+		"isResolvedAnd",
+	].flatMap((predicate) => {
+		return [
+			privateTypeRef("issue/src/attempt/mini/predicates.ts", predicate, "Enum"),
+			privateTypeRef(
+				"issue/src/attempt/mini/predicates.ts",
+				predicate,
+				"Isolate",
+			),
+		];
+	}),
+	...(
+		[
+			["Attempt.prototype.residue", "Option"],
+			["Attempt.prototype.toResult", "Result"],
+			["Attempt.prototype.isAlreadyHandled", "Enum"],
+			["Attempt.prototype.isAlreadyHandled", "Isolate"],
+		] as const
+	).map(([publicType, privateType]) => {
+		return privateTypeRef(
+			"issue/src/attempt/main/mod.ts",
+			publicType,
+			privateType,
+		);
+	}),
+	privateTypeRef("issue/src/issue/mini/core.ts", "Variants", "Split"),
+	privateTypeRef("issue/src/issue/mini/core.ts", "IssueState", "Enum"),
+	privateTypeRef("issue/src/issue/mini/core.ts", "Issue", "Struct"),
+	privateTypeRef("issue/src/issue/mini/accessors.ts", "value", "Option"),
+	privateTypeRef("issue/src/issue/mini/accessors.ts", "residue", "Option"),
+	privateTypeRef("issue/src/issue/mini/handling.ts", "attempt", "Vow"),
+	privateTypeRef("issue/src/issue/mini/handling.ts", "recoverWith", "Result"),
+	privateTypeRef("issue/src/issue/mini/handling.ts", "recoverWith", "Vow"),
+	privateTypeRef("issue/src/issue/mini/transform.ts", "toResult", "Result"),
+	...(
+		[
+			["Issue.prototype.value", "Option"],
+			["Issue.prototype.attempt", "Vow"],
+			["Issue.prototype.toResult", "Result"],
+			["recoverWith", "Result"],
+			["recoverWith", "Vow"],
+		] as const
+	).map(([publicType, privateType]) => {
+		return privateTypeRef(
+			"issue/src/issue/main/mod.ts",
+			publicType,
+			privateType,
+		);
+	}),
+	...["Struct", "Vow", "Result"].map((privateType) => {
+		return privateTypeRef(
+			"issue/src/recovery/mini/core.ts",
+			"Recovery",
+			privateType,
+		);
+	}),
+	privateTypeRef("issue/src/recovery/mini/core.ts", "run", "Vow"),
+	privateTypeRef("issue/src/recovery/mini/core.ts", "run", "Result"),
+	privateTypeRef("issue/src/recovery/mini/core.ts", "sync", "Result"),
+	privateTypeRef(
+		"issue/src/recovery/mini/promise.ts",
+		'FromPromiseOptions["panics"]',
+		"PanicRuntime",
+	),
+	privateTypeRef("issue/src/recovery/mini/transform.ts", "andThen", "Vow"),
+	privateTypeRef("issue/src/recovery/mini/transform.ts", "andThen", "Result"),
+	...(
+		[
+			["Recovery.prototype.run", "Vow"],
+			["Recovery.prototype.run", "Result"],
+			["Recovery.prototype.andThen", "Result"],
+			["sync", "Result"],
+		] as const
+	).map(([publicType, privateType]) => {
+		return privateTypeRef(
+			"issue/src/recovery/main/mod.ts",
+			publicType,
+			privateType,
+		);
+	}),
 	privateTypeRef("job/src/event.ts", "JobEvent", "Enum"),
 	privateTypeRef("job/src/graph-error.ts", "GraphError", "Enum"),
 	privateTypeRef("job/src/job.ts", "Job", "Struct"),

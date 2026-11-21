@@ -13,6 +13,7 @@ export const EXERCISES: Exercises = {
 	"@sekhmet/dispatch": () => import("./dispatch.ts"),
 	"@sekhmet/effect": () => import("./effect.ts"),
 	"@sekhmet/enum": () => import("./enum.ts"),
+	"@sekhmet/issue": () => import("./issue.ts"),
 	"@sekhmet/job": () => import("./job.ts"),
 	"@sekhmet/lifetime": () => import("./lifetime.ts"),
 	"@sekhmet/matrix": () => import("./matrix.ts"),
