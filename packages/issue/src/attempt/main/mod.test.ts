@@ -2,7 +2,7 @@
 
 import { Option } from "@sekhmet/enum/option";
 import { Result } from "@sekhmet/enum/result";
-import { assertEquals, assertInstanceOf } from "@std/assert";
+import { assert, assertEquals, assertInstanceOf } from "@std/assert";
 import * as mini from "../mini/mod.ts";
 import { AlreadyHandled, Attempt, Failed, Handled } from "./mod.ts";
 
@@ -39,4 +39,20 @@ Deno.test("methods chain, and convert to main Option and Result", () => {
 	assertEquals(result.unwrap(), 2);
 	assertEquals(failed.unwrapOr(0), 0);
 	assertEquals(failed.isResolved(), false);
+});
+
+Deno.test("main …And methods keep a narrowed attempt in their false branch", () => {
+	// Given: a main attempt already narrowed to AlreadyHandled
+	const already: Attempt<number, string> = AlreadyHandled(8080);
+	assert(already.isAlreadyHandled());
+
+	// When: isAlreadyHandledAnd's predicate fails on it
+	// Then: the false branch still holds the narrowed attempt, not never
+	if (!already.isAlreadyHandledAnd((port) => port < 1024)) {
+		// @ts-expect-error: the narrowed attempt isn't collapsed to never
+		const _gone: never = already;
+		assertEquals(already.unwrap(), 8080);
+	} else {
+		assert(false, "8080 isn't a low port");
+	}
 });

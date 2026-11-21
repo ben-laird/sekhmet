@@ -185,7 +185,17 @@ predicate, since a type-guard predicate couldn't narrow an invariant
 parameter (owner's choice, 2026-11-21; the first cut returned a plain
 `boolean`). A separate feature keeps the names, which clash with Issue's
 predicates. The main `Issue.state()` returns the main `IssueState`, so
-`notFound.state().isUnhandled()` narrows. Pre-1.0, the move is clean: the
+`notFound.state().isUnhandled()` narrows.
+
+Refined 2026-11-21 (the owner's call, #104): a guard's false branch
+removes the guarded type, so an `…And` guard collapsed an already-narrowed
+state to `never` when its predicate failed, though it was still a live
+`Unhandled` state. IssueState's and Attempt's `…And` forms are now
+overloaded: on a value already narrowed to their variant they return a
+plain `boolean`, keeping it in both branches; on any other value they
+narrow as before. gen-main learned to take such a narrowed receiver as a
+method's `this` parameter and to keep overloaded guards. `@sekhmet/enum`'s
+`…And` forms have the same hole, tracked in #104. Pre-1.0, the move is clean: the
 `issue` feature no longer exports `IssueState`.
 
 ### 18. A panic in an async repair goes to the panic hook

@@ -162,9 +162,12 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 
 	/**
 	 * Checks whether an attempt found the issue already handled, with a residue
-	 * that satisfies a predicate (which may be a type guard).
+	 * that satisfies a predicate (which may be a type guard). *
+	 * On an attempt already narrowed to that variant, it returns a plain
+	 * boolean, so a failing predicate leaves the attempt as it was instead of
+	 * collapsing it to `never` in the false branch; otherwise it narrows the
+	 * variant and the type parameters, as the guard below does.
 	 *
-	 * @template U - The residue type a type-guard predicate guards
 	 * @param predicate - Tests the residue
 	 * @returns Whether it is `AlreadyHandled` and the predicate holds
 	 * @example
@@ -177,11 +180,28 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	 * ```
 	 * @see {@link mini.isAlreadyHandledAnd}
 	 */
+	isAlreadyHandledAnd(
+		this: Enum<Isolate<mini.AttemptVariants<R, E>, "AlreadyHandled">> &
+			Attempt<R, E>,
+		predicate: (residue: R) => boolean,
+	): boolean;
+	/**
+	 * Checks whether an attempt is `AlreadyHandled`, with a residue that
+	 * satisfies a predicate (which may be a type guard), narrowing the variant
+	 * and the type parameters when it is: the form for an attempt not yet
+	 * narrowed to `AlreadyHandled`.
+	 *
+	 * @template U - The residue type a type-guard predicate guards
+	 * @param predicate - Tests the residue
+	 * @returns Whether it is `AlreadyHandled` and the predicate holds
+	 * @see {@link mini.isAlreadyHandledAnd}
+	 */
 	isAlreadyHandledAnd<U extends R>(
 		predicate: ((residue: R) => residue is U) | ((residue: R) => boolean),
 	): this is Enum<Isolate<mini.AttemptVariants<U, E>, "AlreadyHandled">> &
-		Attempt<U, never> {
-		return mini.isAlreadyHandledAnd(this, predicate);
+		Attempt<U, never>;
+	isAlreadyHandledAnd(...args: unknown[]): unknown {
+		return Reflect.apply(mini.isAlreadyHandledAnd, undefined, [this, ...args]);
 	}
 
 	/**
@@ -208,9 +228,12 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 
 	/**
 	 * Checks whether this attempt handled the issue with a residue that
-	 * satisfies a predicate (which may be a type guard).
+	 * satisfies a predicate (which may be a type guard). *
+	 * On an attempt already narrowed to that variant, it returns a plain
+	 * boolean, so a failing predicate leaves the attempt as it was instead of
+	 * collapsing it to `never` in the false branch; otherwise it narrows the
+	 * variant and the type parameters, as the guard below does.
 	 *
-	 * @template U - The residue type a type-guard predicate guards
 	 * @param predicate - Tests the residue
 	 * @returns Whether it is `Handled` and the predicate holds
 	 * @example
@@ -222,11 +245,27 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	 * ```
 	 * @see {@link mini.isHandledAnd}
 	 */
+	isHandledAnd(
+		this: Enum<Isolate<mini.AttemptVariants<R, E>, "Handled">> & Attempt<R, E>,
+		predicate: (residue: R) => boolean,
+	): boolean;
+	/**
+	 * Checks whether an attempt is `Handled`, with a residue that
+	 * satisfies a predicate (which may be a type guard), narrowing the variant
+	 * and the type parameters when it is: the form for an attempt not yet
+	 * narrowed to `Handled`.
+	 *
+	 * @template U - The residue type a type-guard predicate guards
+	 * @param predicate - Tests the residue
+	 * @returns Whether it is `Handled` and the predicate holds
+	 * @see {@link mini.isHandledAnd}
+	 */
 	isHandledAnd<U extends R>(
 		predicate: ((residue: R) => residue is U) | ((residue: R) => boolean),
 	): this is Enum<Isolate<mini.AttemptVariants<U, E>, "Handled">> &
-		Attempt<U, never> {
-		return mini.isHandledAnd(this, predicate);
+		Attempt<U, never>;
+	isHandledAnd(...args: unknown[]): unknown {
+		return Reflect.apply(mini.isHandledAnd, undefined, [this, ...args]);
 	}
 
 	/**
@@ -253,9 +292,12 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 
 	/**
 	 * Checks whether an attempt's recovery failed with an error that satisfies a
-	 * predicate (which may be a type guard).
+	 * predicate (which may be a type guard). *
+	 * On an attempt already narrowed to that variant, it returns a plain
+	 * boolean, so a failing predicate leaves the attempt as it was instead of
+	 * collapsing it to `never` in the false branch; otherwise it narrows the
+	 * variant and the type parameters, as the guard below does.
 	 *
-	 * @template F - The error type a type-guard predicate guards
 	 * @param predicate - Tests the error
 	 * @returns Whether it is `Failed` and the predicate holds
 	 * @example
@@ -267,11 +309,27 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	 * ```
 	 * @see {@link mini.isFailedAnd}
 	 */
+	isFailedAnd(
+		this: Enum<Isolate<mini.AttemptVariants<R, E>, "Failed">> & Attempt<R, E>,
+		predicate: (error: E) => boolean,
+	): boolean;
+	/**
+	 * Checks whether an attempt is `Failed`, with an error that
+	 * satisfies a predicate (which may be a type guard), narrowing the variant
+	 * and the type parameters when it is: the form for an attempt not yet
+	 * narrowed to `Failed`.
+	 *
+	 * @template F - The error type a type-guard predicate guards
+	 * @param predicate - Tests the error
+	 * @returns Whether it is `Failed` and the predicate holds
+	 * @see {@link mini.isFailedAnd}
+	 */
 	isFailedAnd<F extends E>(
 		predicate: ((error: E) => error is F) | ((error: E) => boolean),
 	): this is Enum<Isolate<mini.AttemptVariants<R, F>, "Failed">> &
-		Attempt<never, F> {
-		return mini.isFailedAnd(this, predicate);
+		Attempt<never, F>;
+	isFailedAnd(...args: unknown[]): unknown {
+		return Reflect.apply(mini.isFailedAnd, undefined, [this, ...args]);
 	}
 
 	/**
@@ -302,9 +360,12 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 
 	/**
 	 * Checks whether the issue ended up handled, by this attempt or before it,
-	 * with a residue that satisfies a predicate (which may be a type guard).
+	 * with a residue that satisfies a predicate (which may be a type guard). *
+	 * On an attempt already narrowed to that variant, it returns a plain
+	 * boolean, so a failing predicate leaves the attempt as it was instead of
+	 * collapsing it to `never` in the false branch; otherwise it narrows the
+	 * variant and the type parameters, as the guard below does.
 	 *
-	 * @template U - The residue type a type-guard predicate guards
 	 * @param predicate - Tests the residue
 	 * @returns Whether it is `Handled` or `AlreadyHandled`, and the predicate holds
 	 * @example
@@ -316,13 +377,32 @@ export class Attempt<out R, out E> extends mini.Attempt<R, E> {
 	 * ```
 	 * @see {@link mini.isResolvedAnd}
 	 */
+	isResolvedAnd(
+		this: Enum<
+			Isolate<mini.AttemptVariants<R, E>, "AlreadyHandled" | "Handled">
+		> &
+			Attempt<R, E>,
+		predicate: (residue: R) => boolean,
+	): boolean;
+	/**
+	 * Checks whether an attempt is `Handled` or `AlreadyHandled`, with a residue that
+	 * satisfies a predicate (which may be a type guard), narrowing the variant
+	 * and the type parameters when it is: the form for an attempt not yet
+	 * narrowed to `Handled` or `AlreadyHandled`.
+	 *
+	 * @template U - The residue type a type-guard predicate guards
+	 * @param predicate - Tests the residue
+	 * @returns Whether it is `Handled` or `AlreadyHandled` and the predicate holds
+	 * @see {@link mini.isResolvedAnd}
+	 */
 	isResolvedAnd<U extends R>(
 		predicate: ((residue: R) => residue is U) | ((residue: R) => boolean),
 	): this is Enum<
 		Isolate<mini.AttemptVariants<U, E>, "AlreadyHandled" | "Handled">
 	> &
-		Attempt<U, never> {
-		return mini.isResolvedAnd(this, predicate);
+		Attempt<U, never>;
+	isResolvedAnd(...args: unknown[]): unknown {
+		return Reflect.apply(mini.isResolvedAnd, undefined, [this, ...args]);
 	}
 
 	/**

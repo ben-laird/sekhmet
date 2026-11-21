@@ -54,9 +54,12 @@ export function isUnhandled<T, R>(
  * Checks whether the state is `Unhandled`, with a value that satisfies
  * `predicate`.
  *
- * Narrows the variant, as {@linkcode isUnhandled} does. The predicate is a
- * plain boolean test, not a type guard: a state is invariant in its value,
- * so `T` can't be narrowed.
+ * Narrows the variant, as {@linkcode isUnhandled} does, unless the state is
+ * already narrowed to `Unhandled`: then it returns a plain boolean, so a
+ * failing predicate leaves the state as it was instead of collapsing it to
+ * `never` in the false branch. The predicate is a plain boolean test, not a
+ * type guard: a state is invariant in its value, so `T` can't be
+ * narrowed.
  *
  * @template T The typed facts about the problem
  * @template R The residue handling yields
@@ -79,10 +82,29 @@ export function isUnhandled<T, R>(
  * ```
  */
 export function isUnhandledAnd<T, R>(
+	self: Enum<Isolate<IssueStateVariants<T, R>, "Unhandled">> & IssueState<T, R>,
+	predicate: (value: T) => boolean,
+): boolean;
+/**
+ * Checks whether the state is `Unhandled`, with a value that satisfies
+ * `predicate`, narrowing the variant when it is: the form for a state not
+ * yet narrowed to `Unhandled`.
+ *
+ * @template T The typed facts about the problem
+ * @template R The residue handling yields
+ * @param self The state to check
+ * @param predicate Tests the value
+ * @returns Whether it is `Unhandled` and the predicate holds
+ */
+export function isUnhandledAnd<T, R>(
 	self: IssueState<T, R>,
 	predicate: (value: T) => boolean,
 ): self is Enum<Isolate<IssueStateVariants<T, R>, "Unhandled">> &
-	IssueState<T, R> {
+	IssueState<T, R>;
+export function isUnhandledAnd<T, R>(
+	self: IssueState<T, R>,
+	predicate: (value: T) => boolean,
+): boolean {
 	return isolateAnd(self, "Unhandled", predicate);
 }
 
@@ -122,9 +144,12 @@ export function isHandled<T, R>(
  * Checks whether the state is `Handled`, with a residue that satisfies
  * `predicate`.
  *
- * Narrows the variant, as {@linkcode isHandled} does. The predicate is a
- * plain boolean test, not a type guard: a state is invariant in its
- * residue, so `R` can't be narrowed.
+ * Narrows the variant, as {@linkcode isHandled} does, unless the state is
+ * already narrowed to `Handled`: then it returns a plain boolean, so a
+ * failing predicate leaves the state as it was instead of collapsing it to
+ * `never` in the false branch. The predicate is a plain boolean test, not a
+ * type guard: a state is invariant in its residue, so `R` can't be
+ * narrowed.
  *
  * @template T The typed facts about the problem
  * @template R The residue handling yields
@@ -147,9 +172,28 @@ export function isHandled<T, R>(
  * ```
  */
 export function isHandledAnd<T, R>(
+	self: Enum<Isolate<IssueStateVariants<T, R>, "Handled">> & IssueState<T, R>,
+	predicate: (residue: R) => boolean,
+): boolean;
+/**
+ * Checks whether the state is `Handled`, with a residue that satisfies
+ * `predicate`, narrowing the variant when it is: the form for a state not
+ * yet narrowed to `Handled`.
+ *
+ * @template T The typed facts about the problem
+ * @template R The residue handling yields
+ * @param self The state to check
+ * @param predicate Tests the residue
+ * @returns Whether it is `Handled` and the predicate holds
+ */
+export function isHandledAnd<T, R>(
 	self: IssueState<T, R>,
 	predicate: (residue: R) => boolean,
 ): self is Enum<Isolate<IssueStateVariants<T, R>, "Handled">> &
-	IssueState<T, R> {
+	IssueState<T, R>;
+export function isHandledAnd<T, R>(
+	self: IssueState<T, R>,
+	predicate: (residue: R) => boolean,
+): boolean {
 	return isolateAnd(self, "Handled", predicate);
 }

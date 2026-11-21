@@ -100,3 +100,30 @@ Deno.test("isHandled narrows a state to its Handled variant", () => {
 		assert(false, "a Handled state narrows");
 	}
 });
+
+Deno.test("the …And forms keep a narrowed state in their false branch", () => {
+	// Given: states already narrowed to their variant
+	const unhandledState: IssueState<string, number> = unhandled;
+	const handledState: IssueState<string, number> = handled;
+	assert(isUnhandled(unhandledState));
+	assert(isHandled(handledState));
+
+	// When: an …And form's predicate fails on each
+	// Then: the false branch still holds the narrowed state, not never
+	if (!isUnhandledAnd(unhandledState, (path) => path.endsWith(".toml"))) {
+		const path: string = union(unhandledState);
+		// @ts-expect-error: the narrowed state isn't collapsed to never
+		const _gone: never = unhandledState;
+		assertEquals(path, "app.json");
+	} else {
+		assert(false, "app.json isn't a .toml path");
+	}
+	if (!isHandledAnd(handledState, (port) => port < 1024)) {
+		const port: number = union(handledState);
+		// @ts-expect-error: the narrowed state isn't collapsed to never
+		const _gone: never = handledState;
+		assertEquals(port, 8080);
+	} else {
+		assert(false, "8080 isn't a low port");
+	}
+});

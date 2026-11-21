@@ -81,3 +81,35 @@ Deno.test("the predicates narrow the variant and the type parameters", () => {
 		assertEquals(port, 8080);
 	}
 });
+
+Deno.test("the …And forms keep a narrowed attempt in their false branch", () => {
+	// Given: attempts already narrowed to their variant
+	const resolvedAttempt: Attempt<number, string> = Handled(8080);
+	const failedAttempt: Attempt<number, string> = Failed("offline");
+	assert(isHandled(resolvedAttempt));
+	assert(isFailed(failedAttempt));
+
+	// When: an …And form's predicate fails on each
+	// Then: the false branch still holds the narrowed attempt, not never
+	if (!isHandledAnd(resolvedAttempt, (port) => port < 1024)) {
+		const port: number = union(resolvedAttempt);
+		// @ts-expect-error: the narrowed attempt isn't collapsed to never
+		const _gone: never = resolvedAttempt;
+		assertEquals(port, 8080);
+	} else {
+		assert(false, "8080 isn't a low port");
+	}
+	if (!isResolvedAnd(resolvedAttempt, (port) => port < 1024)) {
+		// @ts-expect-error: the narrowed attempt isn't collapsed to never
+		const _gone: never = resolvedAttempt;
+		assertEquals(union(resolvedAttempt), 8080);
+	}
+	if (!isFailedAnd(failedAttempt, (error) => error === "timeout")) {
+		const error: string = union(failedAttempt);
+		// @ts-expect-error: the narrowed attempt isn't collapsed to never
+		const _gone: never = failedAttempt;
+		assertEquals(error, "offline");
+	} else {
+		assert(false, "offline isn't a timeout");
+	}
+});

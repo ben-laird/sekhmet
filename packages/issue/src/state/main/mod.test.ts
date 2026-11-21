@@ -84,3 +84,20 @@ Deno.test("main state methods narrow the snapshot from state()", () => {
 		assert(false, "the later snapshot holds a high port");
 	}
 });
+
+Deno.test("main …And methods keep a narrowed state in their false branch", () => {
+	// Given: a main state already narrowed to Unhandled
+	const current = new IssueState<string, number>("Unhandled", "app.json");
+	assert(current.isUnhandled());
+
+	// When: isUnhandledAnd's predicate fails on it
+	// Then: the false branch still holds the narrowed state, not never
+	if (!current.isUnhandledAnd((path) => path.endsWith(".toml"))) {
+		const path: string = union(current);
+		// @ts-expect-error: the narrowed state isn't collapsed to never
+		const _gone: never = current;
+		assertEquals(path, "app.json");
+	} else {
+		assert(false, "app.json isn't a .toml path");
+	}
+});

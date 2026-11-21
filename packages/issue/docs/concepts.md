@@ -72,6 +72,15 @@ a boolean on the issue, and on the state a guard that narrows the variant.
 Their predicate is a plain boolean test, since a state is invariant like
 its issue, so `T` and `R` can't be narrowed.
 
+A guard's false branch removes the guarded type, so on a state already
+narrowed to `Unhandled`, a guard `isUnhandledAnd` whose predicate fails
+would leave `never`, though the state is still `Unhandled`. So the `…And`
+forms are overloaded: on a state already narrowed to their variant they
+return a plain boolean, and the state stays as it was in both branches;
+on any other state they narrow. The narrowing of the true branch stays
+true, as the snapshot never changes; the false branch says only that the
+whole test failed. Attempt's `…And` forms work the same way.
+
 ## Why an issue is invariant
 
 Most Sekhmet enums, like `Result` and `Attempt`, are covariant: an

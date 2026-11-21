@@ -43,11 +43,14 @@ export function isAlreadyHandled<R, E>(
 
 /**
  * Checks whether an attempt found the issue already handled, with a residue
- * that satisfies a predicate (which may be a type guard).
+ * that satisfies a predicate (which may be a type guard). *
+ * On an attempt already narrowed to that variant, it returns a plain
+ * boolean, so a failing predicate leaves the attempt as it was instead of
+ * collapsing it to `never` in the false branch; otherwise it narrows the
+ * variant and the type parameters, as the guard below does.
  *
  * @template R The residue handling yields
  * @template E The error a failed recovery returned
- * @template U The residue type a type-guard predicate guards
  * @param self The attempt to check
  * @param predicate Tests the residue
  * @returns Whether it is `AlreadyHandled` and the predicate holds
@@ -61,11 +64,32 @@ export function isAlreadyHandled<R, E>(
  * assertEquals(isAlreadyHandledAnd(AlreadyHandled(80), (port) => port > 1024), false);
  * ```
  */
+export function isAlreadyHandledAnd<R, E>(
+	self: Enum<Isolate<AttemptVariants<R, E>, "AlreadyHandled">> & Attempt<R, E>,
+	predicate: (residue: R) => boolean,
+): boolean;
+/**
+ * Checks whether an attempt is `AlreadyHandled`, with a residue that
+ * satisfies a predicate (which may be a type guard), narrowing the variant
+ * and the type parameters when it is: the form for an attempt not yet
+ * narrowed to `AlreadyHandled`.
+ *
+ * @template R The residue handling yields
+ * @template E The error a failed recovery returned
+ * @template U The residue type a type-guard predicate guards
+ * @param self The attempt to check
+ * @param predicate Tests the residue
+ * @returns Whether it is `AlreadyHandled` and the predicate holds
+ */
 export function isAlreadyHandledAnd<R, E, U extends R>(
 	self: Attempt<R, E>,
 	predicate: ((residue: R) => residue is U) | ((residue: R) => boolean),
 ): self is Enum<Isolate<AttemptVariants<U, E>, "AlreadyHandled">> &
-	Attempt<U, never> {
+	Attempt<U, never>;
+export function isAlreadyHandledAnd<R, E, U extends R>(
+	self: Attempt<R, E>,
+	predicate: ((residue: R) => residue is U) | ((residue: R) => boolean),
+): boolean {
 	return isolateAnd(self, "AlreadyHandled", predicate);
 }
 
@@ -97,11 +121,14 @@ export function isHandled<R, E>(
 
 /**
  * Checks whether this attempt handled the issue with a residue that
- * satisfies a predicate (which may be a type guard).
+ * satisfies a predicate (which may be a type guard). *
+ * On an attempt already narrowed to that variant, it returns a plain
+ * boolean, so a failing predicate leaves the attempt as it was instead of
+ * collapsing it to `never` in the false branch; otherwise it narrows the
+ * variant and the type parameters, as the guard below does.
  *
  * @template R The residue handling yields
  * @template E The error a failed recovery returned
- * @template U The residue type a type-guard predicate guards
  * @param self The attempt to check
  * @param predicate Tests the residue
  * @returns Whether it is `Handled` and the predicate holds
@@ -114,10 +141,31 @@ export function isHandled<R, E>(
  * assertEquals(isHandledAnd(Handled(8080), (port) => port > 1024), true);
  * ```
  */
+export function isHandledAnd<R, E>(
+	self: Enum<Isolate<AttemptVariants<R, E>, "Handled">> & Attempt<R, E>,
+	predicate: (residue: R) => boolean,
+): boolean;
+/**
+ * Checks whether an attempt is `Handled`, with a residue that
+ * satisfies a predicate (which may be a type guard), narrowing the variant
+ * and the type parameters when it is: the form for an attempt not yet
+ * narrowed to `Handled`.
+ *
+ * @template R The residue handling yields
+ * @template E The error a failed recovery returned
+ * @template U The residue type a type-guard predicate guards
+ * @param self The attempt to check
+ * @param predicate Tests the residue
+ * @returns Whether it is `Handled` and the predicate holds
+ */
 export function isHandledAnd<R, E, U extends R>(
 	self: Attempt<R, E>,
 	predicate: ((residue: R) => residue is U) | ((residue: R) => boolean),
-): self is Enum<Isolate<AttemptVariants<U, E>, "Handled">> & Attempt<U, never> {
+): self is Enum<Isolate<AttemptVariants<U, E>, "Handled">> & Attempt<U, never>;
+export function isHandledAnd<R, E, U extends R>(
+	self: Attempt<R, E>,
+	predicate: ((residue: R) => residue is U) | ((residue: R) => boolean),
+): boolean {
 	return isolateAnd(self, "Handled", predicate);
 }
 
@@ -149,11 +197,14 @@ export function isFailed<R, E>(
 
 /**
  * Checks whether an attempt's recovery failed with an error that satisfies a
- * predicate (which may be a type guard).
+ * predicate (which may be a type guard). *
+ * On an attempt already narrowed to that variant, it returns a plain
+ * boolean, so a failing predicate leaves the attempt as it was instead of
+ * collapsing it to `never` in the false branch; otherwise it narrows the
+ * variant and the type parameters, as the guard below does.
  *
  * @template R The residue handling yields
  * @template E The error a failed recovery returned
- * @template F The error type a type-guard predicate guards
  * @param self The attempt to check
  * @param predicate Tests the error
  * @returns Whether it is `Failed` and the predicate holds
@@ -166,10 +217,31 @@ export function isFailed<R, E>(
  * assertEquals(isFailedAnd(Failed("offline"), (e) => e === "offline"), true);
  * ```
  */
+export function isFailedAnd<R, E>(
+	self: Enum<Isolate<AttemptVariants<R, E>, "Failed">> & Attempt<R, E>,
+	predicate: (error: E) => boolean,
+): boolean;
+/**
+ * Checks whether an attempt is `Failed`, with an error that
+ * satisfies a predicate (which may be a type guard), narrowing the variant
+ * and the type parameters when it is: the form for an attempt not yet
+ * narrowed to `Failed`.
+ *
+ * @template R The residue handling yields
+ * @template E The error a failed recovery returned
+ * @template F The error type a type-guard predicate guards
+ * @param self The attempt to check
+ * @param predicate Tests the error
+ * @returns Whether it is `Failed` and the predicate holds
+ */
 export function isFailedAnd<R, E, F extends E>(
 	self: Attempt<R, E>,
 	predicate: ((error: E) => error is F) | ((error: E) => boolean),
-): self is Enum<Isolate<AttemptVariants<R, F>, "Failed">> & Attempt<never, F> {
+): self is Enum<Isolate<AttemptVariants<R, F>, "Failed">> & Attempt<never, F>;
+export function isFailedAnd<R, E, F extends E>(
+	self: Attempt<R, E>,
+	predicate: ((error: E) => error is F) | ((error: E) => boolean),
+): boolean {
 	return isolateAnd(self, "Failed", predicate);
 }
 
@@ -204,11 +276,14 @@ export function isResolved<R, E>(
 
 /**
  * Checks whether the issue ended up handled, by this attempt or before it,
- * with a residue that satisfies a predicate (which may be a type guard).
+ * with a residue that satisfies a predicate (which may be a type guard). *
+ * On an attempt already narrowed to that variant, it returns a plain
+ * boolean, so a failing predicate leaves the attempt as it was instead of
+ * collapsing it to `never` in the false branch; otherwise it narrows the
+ * variant and the type parameters, as the guard below does.
  *
  * @template R The residue handling yields
  * @template E The error a failed recovery returned
- * @template U The residue type a type-guard predicate guards
  * @param self The attempt to check
  * @param predicate Tests the residue
  * @returns Whether it is `Handled` or `AlreadyHandled`, and the predicate holds
@@ -221,11 +296,33 @@ export function isResolved<R, E>(
  * assertEquals(isResolvedAnd(AlreadyHandled(8080), (port) => port > 1024), true);
  * ```
  */
+export function isResolvedAnd<R, E>(
+	self: Enum<Isolate<AttemptVariants<R, E>, "AlreadyHandled" | "Handled">> &
+		Attempt<R, E>,
+	predicate: (residue: R) => boolean,
+): boolean;
+/**
+ * Checks whether an attempt is `Handled` or `AlreadyHandled`, with a residue that
+ * satisfies a predicate (which may be a type guard), narrowing the variant
+ * and the type parameters when it is: the form for an attempt not yet
+ * narrowed to `Handled` or `AlreadyHandled`.
+ *
+ * @template R The residue handling yields
+ * @template E The error a failed recovery returned
+ * @template U The residue type a type-guard predicate guards
+ * @param self The attempt to check
+ * @param predicate Tests the residue
+ * @returns Whether it is `Handled` or `AlreadyHandled` and the predicate holds
+ */
 export function isResolvedAnd<R, E, U extends R>(
 	self: Attempt<R, E>,
 	predicate: ((residue: R) => residue is U) | ((residue: R) => boolean),
 ): self is Enum<Isolate<AttemptVariants<U, E>, "AlreadyHandled" | "Handled">> &
-	Attempt<U, never> {
+	Attempt<U, never>;
+export function isResolvedAnd<R, E, U extends R>(
+	self: Attempt<R, E>,
+	predicate: ((residue: R) => residue is U) | ((residue: R) => boolean),
+): boolean {
 	return (
 		isolateAnd(self, "AlreadyHandled", predicate) ||
 		isolateAnd(self, "Handled", predicate)
