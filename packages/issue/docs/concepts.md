@@ -134,8 +134,15 @@ an async one, and carries a rejection as an `Err`, as `@sekhmet/vow`'s
 `Panic` is a bug, not a failed repair: the panic runtime's hook reports it
 once, and the recovery settles as `Panicked`. Every combinator stops there
 (`or` and `orElse` try no fallback, `firstOf` no further recovery, `retry` no
-further run), and `when` and the transforms pass it through. A synchronous
-throw from a repair is a bug too, and propagates to whoever ran it.
+further run), and `when` and the transforms pass it through.
+
+A throw from a callback (a repair, or a step, builder, test or mapping a
+combinator runs) is a bug too, and nothing turns it into an outcome. In a
+chain that is still sync, it propagates to whoever ran the recovery. Once an
+async recovery has run before it, as when `or` runs a `sync` fallback after
+a `fromPromise` recovery fails, the callback runs inside a vow dependent: the
+throw reaches the panic hook, wrapped in an `AggregateError`, and that
+attempt never settles.
 
 Recoveries compose like `Result`s do, with Rust's and `@sekhmet/enum`'s
 naming: `or` takes the next recovery itself, and `orElse` builds it lazily
@@ -164,8 +171,9 @@ type-check: a union of residues couldn't be told apart again.
   or by another attempt that finished first;
 - **`Failed(error)`:** the recovery failed, and the issue stays unhandled;
 - **`Panicked(payload)`:** the recovery panicked (a `Panic` in an async
-  repair; see `fromPromise`). The panic runtime's hook reported it once, and
-  the issue stays unhandled. It isn't `isResolved`, and every unwrap throws
+  repair; see `fromPromise`, whose hook reports it once; a hand-built
+  `Panicked` outcome is not reported), and this attempt didn't handle the
+  issue (another attempt may have). It isn't `isResolved`, and every unwrap throws
   the payload again. (A first cut left such an attempt pending for good; it
   settles now, since a vow that never settles means no answer has come.)
 

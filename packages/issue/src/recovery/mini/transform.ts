@@ -28,6 +28,10 @@ import { Recovery, run } from "./core.ts";
 /**
  * Maps the residue a recovery yields. A failure passes through.
  *
+ * A throw from `mapping` is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
+ *
  * @template T The value of the issues it repairs
  * @template R The residue it yields
  * @template E The error it fails with
@@ -60,6 +64,10 @@ export function map<T, R, E, U>(
 
 /**
  * Maps the error a recovery fails with. A success passes through.
+ *
+ * A throw from `mapping` is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields
@@ -99,6 +107,10 @@ export function mapErr<T, R, E, F>(
  * `next` returns a vow of an `Outcome`, as a recovery does (`run` of another
  * recovery, say). A failure or a panic passes through without running
  * `next`.
+ *
+ * A throw from `next` is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields
@@ -143,6 +155,10 @@ export function andThen<T, R, E, U>(
  * the one the recovery repairs. Use it, for example, to recover a wrapped
  * issue from the value of its cause.
  *
+ * A throw from `adapt` is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
+ *
  * @template T The value the recovery repairs
  * @template R The residue it yields
  * @template E The error it fails with
@@ -175,6 +191,10 @@ export function mapInput<T, R, E, U>(
 /**
  * Calls `inspector` with the residue each time the recovery succeeds, then
  * passes its result on unchanged.
+ *
+ * A throw from `inspector` is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields
@@ -211,6 +231,10 @@ export function inspect<T, R, E>(
 /**
  * Calls `inspector` with the error each time the recovery fails, then
  * passes its result on unchanged.
+ *
+ * A throw from `inspector` is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields

@@ -44,7 +44,7 @@ export interface FromPromiseOptions<T, R> {
  * of the async task, whose hook reports it (once: not again if this runtime
  * already reported it), and the vow settles with that boundary's
  * `Panicked(payload)`. Every combinator stops at it, and an attempt it runs
- * in settles as `Panicked`, leaving its issue unhandled. Nothing rejects, so
+ * in settles as `Panicked`, without handling its issue. Nothing rejects, so
  * no unhandled rejection follows, unless the hook itself throws (see
  * `@sekhmet/vow`'s `fromPromise`).
  *
@@ -53,7 +53,9 @@ export interface FromPromiseOptions<T, R> {
  * runtime's hook rather than escaping as an unhandled rejection.
  *
  * `repair` is called as the recovery runs. A synchronous throw from it (not
- * a rejection) is a bug, and propagates to whoever ran the recovery.
+ * a rejection) is a bug, and follows `Recovery`'s rule for throws: it
+ * propagates in a sync chain, and reaches the panic hook in an async one,
+ * where the attempt never settles.
  *
  * @template T The value of the issues it repairs
  * @template R The residue the promise fulfils with

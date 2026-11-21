@@ -31,8 +31,9 @@ export type { Variants as AttemptVariants };
  *   place to hold the residue.
  * - `Failed(error)`: the recovery failed, and the issue stays unhandled.
  * - `Panicked(payload)`: the recovery panicked (a bug, not a failure to
- *   recover); the panic runtime's hook reported the payload, and the issue
- *   stays unhandled.
+ *   recover), and this attempt didn't handle the issue (another attempt
+ *   may have). A `fromPromise` panic is reported to the panic runtime's
+ *   hook; a hand-built `Panicked` outcome is not.
  *
  * An attempt is a plain value, so it is covariant in both type parameters.
  *
@@ -120,8 +121,10 @@ export function Failed<R = never, E = unknown>(error: E): Attempt<R, E> {
 }
 
 /**
- * An attempt whose recovery panicked, holding the panic payload. The panic
- * runtime's hook has reported it; the issue stays unhandled.
+ * An attempt whose recovery panicked, holding the panic payload. This
+ * attempt didn't handle the issue (another attempt may have). A
+ * `fromPromise` panic is reported to the panic runtime's hook; a hand-built
+ * `Panicked` outcome is not.
  *
  * @template R The residue type of the attempt it stands in for
  * @template E The error type of the attempt it stands in for

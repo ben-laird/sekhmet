@@ -43,9 +43,19 @@ export type {
  * A typed repair: `(value: T) => Vow<Outcome<R, E, unknown>>`. Given an
  * issue's value, it yields `Ok` with the residue that handles the issue,
  * `Err` with the error it failed with, or `Panicked` with the payload of a
- * bug it hit (only `fromPromise` makes one: the panic runtime's hook reports
- * it, and every combinator stops there). It can be sync or async; a sync one
- * returns an already-resolved vow.
+ * bug it hit. `fromPromise` makes one for a `Panic` its promise rejects with,
+ * and the panic runtime's hook reports it; a hand-built `Panicked` (from
+ * `new Recovery`) is not reported. Every combinator stops at it. A recovery
+ * can be sync or async; a sync one returns an already-resolved vow.
+ *
+ * A throw from a callback (a repair, or a step, builder, test or mapping a
+ * combinator runs) is a bug, and nothing turns it into an outcome. Where it
+ * lands depends on whether the chain is still sync when the callback runs.
+ * In a sync chain, it propagates to whoever ran the recovery. Once an async
+ * recovery has run before it (say a `sync` repair that `or` runs after a
+ * `fromPromise` one fails), the callback runs inside a vow dependent: the
+ * throw reaches the panic hook, wrapped in an `AggregateError` (see
+ * `@sekhmet/vow`'s `fromPromise`), and that attempt never settles.
  *
  * Its type decides which issues it fits (their value type `T` and residue
  * type `R`), so it never needs to decline at runtime. Build one with
@@ -98,6 +108,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * `Recovery<T, Config, F>` is a `Recovery<T, Config, F>`, in either order.
 	 * Unrelated residues (`number` and `Config`) don't type-check.
 	 *
+	 * A throw from `next`'s repair is a bug, and follows {@linkcode Recovery}'s rule for
+	 * throws: it propagates in a sync chain, and reaches the panic hook in an
+	 * async one, where the attempt never settles.
+	 *
 	 * @template T - The value of the issues they repair
 	 * @template R - The residue they yield: the wider of the two
 	 * @template F - The error `next` fails with
@@ -139,6 +153,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * `Recovery<T, Config, F>`, in either order. Unrelated residues (`number`
 	 * and `Config`) don't type-check.
 	 *
+	 * A throw from `next` or the recovery it builds is a bug, and follows {@linkcode Recovery}'s rule for
+	 * throws: it propagates in a sync chain, and reaches the panic hook in an
+	 * async one, where the attempt never settles.
+	 *
 	 * @template T - The value of the issues they repair
 	 * @template R - The residue they yield: the wider of the two
 	 * @template E - The error `self` fails with, which `next` receives
@@ -177,6 +195,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * A run that panics (see `fromPromise`) is not retried: the composite
 	 * settles with its `Panicked` outcome.
 	 *
+	 * A throw from `self`'s repair is a bug, and follows {@linkcode Recovery}'s rule for
+	 * throws: it propagates in a sync chain, and reaches the panic hook in an
+	 * async one, where the attempt never settles.
+	 *
 	 * @param options - How many more times to run it after a failure
 	 * @returns A recovery that yields the first residue, or fails with the last error
 	 * @throws {Panic} If `times` is not a non-negative integer
@@ -206,6 +228,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * Runs `self` only for values that pass `test`; for any other value, fails
 	 * with `otherwise` at once, without running `self`. `self`'s outcome,
 	 * `Panicked` included, passes through as it is.
+	 *
+	 * A throw from `test` is a bug, and follows {@linkcode Recovery}'s rule for
+	 * throws: it propagates in a sync chain, and reaches the panic hook in an
+	 * async one, where the attempt never settles.
 	 *
 	 * @template F - The error for a value the test rejects
 	 * @param options - The test, and the error for a value it rejects
@@ -258,6 +284,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	/**
 	 * Maps the residue a recovery yields. A failure passes through.
 	 *
+	 * A throw from `mapping` is a bug, and follows {@linkcode Recovery}'s rule for
+	 * throws: it propagates in a sync chain, and reaches the panic hook in an
+	 * async one, where the attempt never settles.
+	 *
 	 * @template U - The mapped residue
 	 * @param mapping - Turns the residue into another
 	 * @returns A recovery that yields the mapped residue
@@ -281,6 +311,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 
 	/**
 	 * Maps the error a recovery fails with. A success passes through.
+	 *
+	 * A throw from `mapping` is a bug, and follows {@linkcode Recovery}'s rule for
+	 * throws: it propagates in a sync chain, and reaches the panic hook in an
+	 * async one, where the attempt never settles.
 	 *
 	 * @template F - The mapped error
 	 * @param mapping - Turns the error into another
@@ -309,6 +343,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * `next` returns a vow of an `Outcome`, as a recovery does (`run` of another
 	 * recovery, say). A failure or a panic passes through without running
 	 * `next`.
+	 *
+	 * A throw from `next` is a bug, and follows {@linkcode Recovery}'s rule for
+	 * throws: it propagates in a sync chain, and reaches the panic hook in an
+	 * async one, where the attempt never settles.
 	 *
 	 * @template U - The residue `next` yields
 	 * @param next - The step to run on its residue, sync or async
@@ -340,6 +378,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * the one the recovery repairs. Use it, for example, to recover a wrapped
 	 * issue from the value of its cause.
 	 *
+	 * A throw from `adapt` is a bug, and follows {@linkcode Recovery}'s rule for
+	 * throws: it propagates in a sync chain, and reaches the panic hook in an
+	 * async one, where the attempt never settles.
+	 *
 	 * @template U - The value the adapted recovery repairs
 	 * @param adapt - Turns the new value into the one `self` repairs
 	 * @returns A recovery of `U` values
@@ -366,6 +408,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * Calls `inspector` with the residue each time the recovery succeeds, then
 	 * passes its result on unchanged.
 	 *
+	 * A throw from `inspector` is a bug, and follows {@linkcode Recovery}'s rule for
+	 * throws: it propagates in a sync chain, and reaches the panic hook in an
+	 * async one, where the attempt never settles.
+	 *
 	 * @param inspector - Looks at the residue
 	 * @returns A recovery with the same results
 	 * @example
@@ -389,6 +435,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	/**
 	 * Calls `inspector` with the error each time the recovery fails, then
 	 * passes its result on unchanged.
+	 *
+	 * A throw from `inspector` is a bug, and follows {@linkcode Recovery}'s rule for
+	 * throws: it propagates in a sync chain, and reaches the panic hook in an
+	 * async one, where the attempt never settles.
 	 *
 	 * @param inspector - Looks at the error
 	 * @returns A recovery with the same results
@@ -420,6 +470,10 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
  * a long list is safe, sync or async. A `Panicked` outcome (see
  * `fromPromise`) stops the list: the composite settles with it, and the
  * recoveries after it never run.
+ *
+ * A throw from a recovery's repair is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
  *
  * @template T - The value of the issues they repair
  * @template R - The residue they yield: the widest of the list's
@@ -494,8 +548,10 @@ export function fail<T, E>(error: E): Recovery<T, never, E> {
 
 /**
  * A recovery from a synchronous repair: its `Result` becomes the `Ok` or
- * `Err` outcome of an already-resolved vow. A throw from `repair` is a bug
- * and propagates to whoever ran the recovery; no panic runtime catches it.
+ * `Err` outcome of an already-resolved vow. A throw from `repair` is a bug,
+ * and follows {@linkcode Recovery}'s rule for throws: it propagates in a
+ * sync chain, and reaches the panic hook in an async one, where the attempt
+ * never settles.
  *
  * @template T - The value of the issues it repairs
  * @template R - The residue it yields
@@ -538,7 +594,7 @@ export function sync<T, R, E>(
  * of the async task, whose hook reports it (once: not again if this runtime
  * already reported it), and the vow settles with that boundary's
  * `Panicked(payload)`. Every combinator stops at it, and an attempt it runs
- * in settles as `Panicked`, leaving its issue unhandled. Nothing rejects, so
+ * in settles as `Panicked`, without handling its issue. Nothing rejects, so
  * no unhandled rejection follows, unless the hook itself throws (see
  * `@sekhmet/vow`'s `fromPromise`).
  *
@@ -547,7 +603,9 @@ export function sync<T, R, E>(
  * runtime's hook rather than escaping as an unhandled rejection.
  *
  * `repair` is called as the recovery runs. A synchronous throw from it (not
- * a rejection) is a bug, and propagates to whoever ran the recovery.
+ * a rejection) is a bug, and follows `Recovery`'s rule for throws: it
+ * propagates in a sync chain, and reaches the panic hook in an async one,
+ * where the attempt never settles.
  *
  * @template T - The value of the issues it repairs
  * @template R - The residue the promise fulfils with

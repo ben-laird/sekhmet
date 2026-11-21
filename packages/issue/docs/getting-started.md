@@ -124,7 +124,7 @@ issue would still be unhandled, ready for another attempt.
 A recovery can be async. `fromPromise` builds one from a function that
 returns a promise: fulfilment is the residue, and a rejection is the error.
 It takes a panic runtime, which reports a bug: a `Panic` the promise rejects
-with (the attempt then ends `Panicked`, and the issue stays unhandled), or
+with (the attempt then ends `Panicked`, without handling the issue), or
 code that throws when the recovery settles.
 
 ```ts

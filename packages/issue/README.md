@@ -71,23 +71,23 @@ Import a feature: `@sekhmet/issue/issue`, `@sekhmet/issue/state`,
 `@sekhmet/issue/recovery` or `@sekhmet/issue/attempt` for method chaining, or
 its `/mini` barrel (and `/mini/<module>`) for tree-shakable free functions.
 
-| Export                                              | Does                                                                     |
-| --------------------------------------------------- | ------------------------------------------------------------------------ |
-| `issue({ value, code, message, hint?, docs? })`     | a new, unhandled `Issue<T, R>`                                           |
-| `code`, `message`, `hint`, `docs`, `state`          | read the wording, and the current `IssueState`                           |
-| `value`, `residue`                                  | `Some` while unhandled, or once handled                                  |
-| `isUnhandled(And)`, `isHandled(And)`                | test the issue (a boolean) or its state snapshot (narrows the variant)   |
-| `attempt(issue, recovery)`                          | a `Vow<Attempt>`; switches the issue in place on success                 |
-| `handle(issue, residue)`                            | handles it directly: `Handled`, or `AlreadyHandled`                      |
-| `expectResidue`, `unwrapResidue`, `residueOr(Else)` | get the residue out; the first two panic while unhandled                 |
-| `toResult`, `wrap`, `render`, `recoverWith`         | as a `Result`; as a new issue's cause; as text; recover an `Err`'s issue |
-| `new Recovery(fn)`, `succeed`, `fail`, `sync`       | build a recovery, `(value: T) => Vow<Outcome<R, E>>`                     |
-| `fromPromise({ repair, panics })`                   | a recovery from a promise; a rejection is `Err`, a `Panic` is reported   |
-| `run`, `or`, `orElse`, `firstOf`, `retry`, `when`   | run and compose recoveries; `orElse` builds the next from the error      |
-| `map`, `mapErr`, `andThen`, `mapInput`, `inspect*`  | transform a recovery's residue, error, or the value it repairs           |
-| `AlreadyHandled`, `Handled`, `Failed`, `Panicked`   | the `Attempt<R, E>` variants                                             |
-| `isAlreadyHandled`, `isFailed`, `isPanicked`, …     | test an attempt; `isResolved` is either handled variant                  |
-| `residue`, `toOutcome`, `toResult`, `unwrap`, …     | read and unwrap an attempt; an unwrap rethrows a panic                   |
+| Export                                              | Does                                                                          |
+| --------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `issue({ value, code, message, hint?, docs? })`     | a new, unhandled `Issue<T, R>`                                                |
+| `code`, `message`, `hint`, `docs`, `state`          | read the wording, and the current `IssueState`                                |
+| `value`, `residue`                                  | `Some` while unhandled, or once handled                                       |
+| `isUnhandled(And)`, `isHandled(And)`                | test the issue (a boolean) or its state snapshot (narrows the variant)        |
+| `attempt(issue, recovery)`                          | a `Vow<Attempt>`; switches the issue in place on success                      |
+| `handle(issue, residue)`                            | handles it directly: `Handled`, or `AlreadyHandled`                           |
+| `expectResidue`, `unwrapResidue`, `residueOr(Else)` | get the residue out; the first two panic while unhandled                      |
+| `toResult`, `wrap`, `render`, `recoverWith`         | as a `Result`; as a new issue's cause; as text; recover an `Err`'s issue      |
+| `new Recovery(fn)`, `succeed`, `fail`, `sync`       | build a recovery, `(value: T) => Vow<Outcome<R, E, unknown>>`                 |
+| `fromPromise({ repair, panics })`                   | a recovery from a promise; a rejection is `Err`, a `Panic` settles `Panicked` |
+| `run`, `or`, `orElse`, `firstOf`, `retry`, `when`   | run and compose recoveries; `orElse` builds the next from the error           |
+| `map`, `mapErr`, `andThen`, `mapInput`, `inspect*`  | transform a recovery's residue, error, or the value it repairs                |
+| `AlreadyHandled`, `Handled`, `Failed`, `Panicked`   | the `Attempt<R, E>` variants                                                  |
+| `isAlreadyHandled`, `isFailed`, `isPanicked`, …     | test an attempt; `isResolved` is either handled variant                       |
+| `residue`, `toOutcome`, `toResult`, `unwrap`, …     | read and unwrap an attempt; an unwrap rethrows a panic                        |
 
 ## Learn more
 

@@ -14,9 +14,19 @@ import { resolved, type Vow } from "@sekhmet/vow/mini";
  * A typed repair: `(value: T) => Vow<Outcome<R, E, unknown>>`. Given an
  * issue's value, it yields `Ok` with the residue that handles the issue,
  * `Err` with the error it failed with, or `Panicked` with the payload of a
- * bug it hit (only `fromPromise` makes one: the panic runtime's hook reports
- * it, and every combinator stops there). It can be sync or async; a sync one
- * returns an already-resolved vow.
+ * bug it hit. `fromPromise` makes one for a `Panic` its promise rejects with,
+ * and the panic runtime's hook reports it; a hand-built `Panicked` (from
+ * `new Recovery`) is not reported. Every combinator stops at it. A recovery
+ * can be sync or async; a sync one returns an already-resolved vow.
+ *
+ * A throw from a callback (a repair, or a step, builder, test or mapping a
+ * combinator runs) is a bug, and nothing turns it into an outcome. Where it
+ * lands depends on whether the chain is still sync when the callback runs.
+ * In a sync chain, it propagates to whoever ran the recovery. Once an async
+ * recovery has run before it (say a `sync` repair that `or` runs after a
+ * `fromPromise` one fails), the callback runs inside a vow dependent: the
+ * throw reaches the panic hook, wrapped in an `AggregateError` (see
+ * `@sekhmet/vow`'s `fromPromise`), and that attempt never settles.
  *
  * Its type decides which issues it fits (their value type `T` and residue
  * type `R`), so it never needs to decline at runtime. Build one with
@@ -125,8 +135,10 @@ export function fail<T, E>(error: E): Recovery<T, never, E> {
 
 /**
  * A recovery from a synchronous repair: its `Result` becomes the `Ok` or
- * `Err` outcome of an already-resolved vow. A throw from `repair` is a bug
- * and propagates to whoever ran the recovery; no panic runtime catches it.
+ * `Err` outcome of an already-resolved vow. A throw from `repair` is a bug,
+ * and follows {@linkcode Recovery}'s rule for throws: it propagates in a
+ * sync chain, and reaches the panic hook in an async one, where the attempt
+ * never settles.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields

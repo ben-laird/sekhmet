@@ -74,9 +74,10 @@ Deno.test("sync() wraps a Result-returning repair in a resolved vow", () => {
 	// Given: a synchronous parser
 	const parsePort = sync((text: string): Result<number, string> => {
 		const port = Number(text);
-		return Number.isInteger(port)
-			? ResultOk(port)
-			: ResultErr(`not a port: ${text}`);
+		if (Number.isInteger(port)) {
+			return ResultOk(port);
+		}
+		return ResultErr(`not a port: ${text}`);
 	});
 
 	// When: it is run on good and bad input

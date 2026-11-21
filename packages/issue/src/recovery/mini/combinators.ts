@@ -101,6 +101,10 @@ function tryInTurn<T, R, E>({
  * `Recovery<T, Config, F>` is a `Recovery<T, Config, F>`, in either order.
  * Unrelated residues (`number` and `Config`) don't type-check.
  *
+ * A throw from `next`'s repair is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
+ *
  * @template T The value of the issues they repair
  * @template R The residue they yield: the wider of the two
  * @template F The error `next` fails with
@@ -151,6 +155,10 @@ export function or<T, R, F>(
  * `Recovery<T, Config, F>`, in either order. Unrelated residues (`number`
  * and `Config`) don't type-check.
  *
+ * A throw from `next` or the recovery it builds is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
+ *
  * @template T The value of the issues they repair
  * @template R The residue they yield: the wider of the two
  * @template E The error `self` fails with, which `next` receives
@@ -199,6 +207,10 @@ export function orElse<T, R, E, F>(
  * a long list is safe, sync or async. A `Panicked` outcome (see
  * `fromPromise`) stops the list: the composite settles with it, and the
  * recoveries after it never run.
+ *
+ * A throw from a recovery's repair is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
  *
  * @template T The value of the issues they repair
  * @template R The residue they yield: the widest of the list's
@@ -265,6 +277,10 @@ export interface RetryOptions {
  * A run that panics (see `fromPromise`) is not retried: the composite
  * settles with its `Panicked` outcome.
  *
+ * A throw from `self`'s repair is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
+ *
  * @template T The value of the issues it repairs
  * @template R The residue it yields
  * @template E The error it fails with
@@ -327,6 +343,10 @@ export interface WhenOptions<T, F> {
  * Runs `self` only for values that pass `test`; for any other value, fails
  * with `otherwise` at once, without running `self`. `self`'s outcome,
  * `Panicked` included, passes through as it is.
+ *
+ * A throw from `test` is a bug, and follows {@linkcode Recovery}'s rule for
+ * throws: it propagates in a sync chain, and reaches the panic hook in an
+ * async one, where the attempt never settles.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields

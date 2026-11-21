@@ -224,8 +224,12 @@ because `@sekhmet/machine` settles a send whose handler panics as
   E>` wraps `(value: T) => Vow<Outcome<R, E, unknown>>`, and `run` returns
   that vow. `succeed`, `fail` and `sync` (which still takes a
   `Result`-returning repair) give `Ok` and `Err`; only `fromPromise` gives
-  `Panicked`. A synchronous throw from a repair still propagates to whoever
-  ran it.
+  `Panicked`. A throw from a callback (a repair, or a step, builder, test or
+  mapping a combinator runs) is still a bug that no outcome carries: in a
+  sync chain it propagates to whoever ran the recovery; in an async chain it
+  runs inside a vow dependent, reaches the panic hook wrapped in an
+  `AggregateError`, and that attempt never settles. Whether to change that
+  is an open question for the owner.
 - `or`, `orElse`, `firstOf` and `retry` stop at `Panicked`: no fallback and
   no further runs, and they settle with it. `when`, `map`, `mapErr`,
   `andThen` and the inspectors pass it through. `andThen`'s step returns a
@@ -236,12 +240,14 @@ because `@sekhmet/machine` settles a send whose handler panics as
   leave it alone. Every unwrap resumes it (throws the payload again), as
   `Outcome`'s do, and so does `toResult`, which has no room for it; the new
   `toOutcome` keeps it.
-- `attempt` settles a `Panicked` outcome as `Panicked(payload)` and leaves
-  the issue unhandled, even if another attempt handled it meanwhile: a bug
-  is never hidden behind `AlreadyHandled`.
+- `attempt` settles a `Panicked` outcome as `Panicked(payload)`, without
+  handling the issue, and reports it even if another attempt handled the
+  issue meanwhile: a bug is never hidden behind `AlreadyHandled`.
 - `recoverWith` settles as `Outcome<R, Issue<T, R>, unknown>`: the panic
   resurfaces as `Panicked` rather than being swallowed into an `Err`. Its
-  input stays a `Result`.
+  input stays a `Result`. So when the panicking attempt raced one that
+  handled the issue, `recoverWith` still gives `Panicked`, with no residue,
+  even though the issue holds one.
 
 The panic is reported exactly once, as before. Nothing rejects, so no
 unhandled rejection follows, unless the hook itself throws (see

@@ -61,8 +61,9 @@ function settle<T, R, E>({
  * leaves it unhandled and gives `Failed`.
  *
  * A `Panicked` outcome (a bug in the repair; see `fromPromise`) gives
- * `Panicked(payload)` and leaves the issue unhandled, even if another attempt
- * handled it meanwhile: a bug is never hidden behind `AlreadyHandled`.
+ * `Panicked(payload)`: this attempt doesn't handle the issue, and it reports
+ * `Panicked` even if another attempt handled the issue meanwhile, so a bug
+ * is never hidden behind `AlreadyHandled`.
  *
  * The vow is resolved at once when the recovery is sync.
  *
@@ -145,7 +146,8 @@ export function handle<T, R>(self: Issue<T, R>, residue: R): Attempt<R, never> {
  * fails, the `Err` stays, holding the same, still unhandled issue, and the
  * recovery's error is dropped. If the recovery panics, the outcome is
  * `Panicked(payload)`: the panic resurfaces rather than being swallowed into
- * an `Err`, and the issue stays unhandled.
+ * an `Err`, and this attempt didn't handle the issue. (If a racing attempt
+ * handled it, the outcome is still `Panicked`, with no residue.)
  *
  * @template T The typed facts about the problem
  * @template R The residue handling yields

@@ -458,7 +458,7 @@ Deno.test("attempt(): a Panicked outcome settles Panicked and leaves the issue u
 	assert(isolate(state(notFoundIssue), "Unhandled"));
 });
 
-Deno.test("attempt(): a panic is reported even if another attempt handled the issue first", async () => {
+Deno.test("attempt(): a panic settles Panicked even if another attempt handled the issue first", async () => {
 	// Given: an issue, and an async recovery that will panic
 	const notFoundIssue = notFound("app.json");
 	const { vow, resolve } = vowWithResolver<Outcome<Config, string, unknown>>();
