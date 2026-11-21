@@ -75,6 +75,9 @@ its list, and `retry` keeps the last error the same way. Both run their
 recoveries in one loop of their own (decision 16) rather than nesting
 `orElse`.
 
+_Refined by [20](#20-orelse-and-firstof-take-the-wider-residue-without-a-union):
+the composite takes the wider residue._
+
 ### 7. Severity is not on the issue
 
 Whether to panic, log or fail is a property of the place that treats the
@@ -215,6 +218,22 @@ contravariantly), not in this package, and is tracked under
 [#98](https://github.com/ben-laird/sekhmet/issues/98). Until then the docs
 say to pass the class, not a structural view, and the mini free functions,
 which take the class, have no such gap.
+
+### 20. `orElse` and `firstOf` take the wider residue, without a union
+
+2026-11-21, the owner's call. A recovery is covariant in its residue, so the
+composite's residue is the wider of its parts', never `R | S`: a union of
+residues couldn't be untangled again. Mini `orElse` and `firstOf` already
+inferred it (`orElse(fail("x"), useDefault)` is a `Config` recovery, and
+`number` with `Config` is a type error), but the main `orElse` method fixed
+`R` from its class, so `fail("x").orElse(useDefault)` needed the `fail`
+annotated. Mini `orElse` now takes `self: Recovery<T, R, unknown>`, since
+`self`'s error is dropped anyway, and gen-main emits that receiver as a
+`this` parameter (as for enum's receiver-constrained methods, #76):
+`orElse<T, R, F>(this: Recovery<T, R, unknown>, next: mini.Recovery<T, R,
+F>): Recovery<T, R, F>`. Both orders now infer, with no annotation.
+`firstOf` needed no change: its tuple already infers the widest residue,
+and rejects unrelated ones.
 
 ## Later
 

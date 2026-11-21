@@ -862,11 +862,10 @@ export const FEATURES: readonly Feature[] = [
 		carriers: [VOW],
 		example: [
 			'import { assertEquals } from "@std/assert";',
-			'import { fail, type Recovery, succeed } from "@sekhmet/issue/recovery";',
+			'import { fail, succeed } from "@sekhmet/issue/recovery";',
 			'import { wait } from "@sekhmet/vow";',
 			"",
-			'const readBackup: Recovery<string, number, string> = fail("no backup");',
-			"const recovery = readBackup",
+			'const recovery = fail("no backup")',
 			"\t.orElse(succeed(8080))",
 			"\t.map((port) => ({ port }));",
 			"// {}",

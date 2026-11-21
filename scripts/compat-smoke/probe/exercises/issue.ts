@@ -32,7 +32,7 @@ import { isHandled } from "@sekhmet/issue/issue/mini/predicates";
 import { render } from "@sekhmet/issue/issue/mini/render";
 import { wrap } from "@sekhmet/issue/issue/mini/transform";
 import { unwrapResidue } from "@sekhmet/issue/issue/mini/unwrap";
-import { fail, type Recovery, succeed } from "@sekhmet/issue/recovery";
+import { fail, succeed } from "@sekhmet/issue/recovery";
 import { firstOf, orElse } from "@sekhmet/issue/recovery/mini";
 import { retry } from "@sekhmet/issue/recovery/mini/combinators";
 import {
@@ -69,9 +69,8 @@ async function exerciseMain(): Promise<void> {
 		message: "No config file.",
 	});
 	const before = subject.state();
-	const readBackup: Recovery<string, Config, string> = fail("no backup");
 	const ended = await wait(
-		subject.attempt(readBackup.orElse(succeed({ port: 8080 }))),
+		subject.attempt(fail("no backup").orElse(succeed({ port: 8080 }))),
 	);
 	expectEqual({
 		label: "main Issue attempts a main Recovery, and switches in place",
@@ -181,9 +180,8 @@ async function exerciseMini(): Promise<void> {
 			]),
 		),
 	);
-	const failing: Recovery<string, Config, string> = fail("no");
 	const recovered = notFound("app.json");
-	await wait(attempt(recovered, orElse(failing, succeed({ port: 4 }))));
+	await wait(attempt(recovered, orElse(fail("no"), succeed({ port: 4 }))));
 	expectEqual({
 		label: "recoverWith turns a handled Err into Ok",
 		actual: [unwrap(loaded), isHandled(recovered)],

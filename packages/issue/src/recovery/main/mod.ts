@@ -10,11 +10,10 @@
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
- * import { fail, type Recovery, succeed } from "@sekhmet/issue/recovery";
+ * import { fail, succeed } from "@sekhmet/issue/recovery";
  * import { wait } from "@sekhmet/vow";
  *
- * const readBackup: Recovery<string, number, string> = fail("no backup");
- * const recovery = readBackup
+ * const recovery = fail("no backup")
  * 	.orElse(succeed(8080))
  * 	.map((port) => ({ port }));
  * // {}
@@ -86,6 +85,13 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * error is dropped, like Rust's `Result::or_else`, so the composite fails
 	 * with `next`'s error. `next` never runs when `self` succeeds.
 	 *
+	 * The residue is the wider of the two, with no union: a recovery is
+	 * covariant in its residue, so a `fail` (residue `never`) followed by a
+	 * `Recovery<T, Config, F>` is a `Recovery<T, Config, F>`, in either order.
+	 * Unrelated residues (`number` and `Config`) don't type-check.
+	 *
+	 * @template T - The value of the issues they repair
+	 * @template R - The residue they yield: the wider of the two
 	 * @template F - The error `next` fails with
 	 * @param next - The recovery to try when `self` fails
 	 * @returns A recovery that yields the first residue, or fails with `next`'s error
@@ -93,17 +99,20 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
 	 * import { unwrap } from "@sekhmet/enum/result/mini";
-	 * import { fail, type Recovery, succeed } from "@sekhmet/issue/recovery";
+	 * import { fail, succeed } from "@sekhmet/issue/recovery";
 	 * import { wait } from "@sekhmet/vow/mini";
 	 *
-	 * const readBackup: Recovery<string, number, string> = fail("`app.bak` can't be read.");
-	 * const useDefault: Recovery<string, number, never> = succeed(8080);
+	 * const readBackup = fail<string, string>("`app.bak` can't be read.");
+	 * const useDefault = succeed<string, number>(8080);
 	 *
 	 * assertEquals(unwrap(await wait(readBackup.orElse(useDefault).run("app.json"))), 8080);
 	 * ```
 	 * @see {@link mini.orElse}
 	 */
-	orElse<F>(next: mini.Recovery<T, R, F>): Recovery<T, R, F> {
+	orElse<T, R, F>(
+		this: Recovery<T, R, unknown>,
+		next: mini.Recovery<T, R, F>,
+	): Recovery<T, R, F> {
 		return Recovery.fromMini(mini.orElse(this, next));
 	}
 

@@ -26,6 +26,49 @@ function scripted<R, E>(
 	return { recovery, runs: () => count };
 }
 
+interface Config {
+	readonly port: number;
+}
+
+Deno.test("orElse() and firstOf() take the wider residue, with no union", () => {
+	// Given: a fail (residue never) and a recovery yielding a Config
+	const readBackup = fail<string, string>("no backup");
+	const useDefault = succeed<string, Config>({ port: 8080 });
+
+	// When: they are composed in either order, with no annotation
+	const backupFirst = orElse(readBackup, useDefault);
+	const defaultFirst = orElse(useDefault, readBackup);
+	const listed = firstOf([readBackup, useDefault]);
+
+	// Then: each is a Config recovery, and runs to the default
+	const asConfig: Recovery<string, Config, never> = backupFirst;
+	const asConfigToo: Recovery<string, Config, string> = defaultFirst;
+	const asConfigListed: Recovery<string, Config, string> = listed;
+	assertEquals(value(run(asConfig, "app.json")), Some(Ok({ port: 8080 })));
+	assertEquals(value(run(asConfigToo, "app.json")), Some(Ok({ port: 8080 })));
+	assertEquals(
+		value(run(asConfigListed, "app.json")),
+		Some(Ok({ port: 8080 })),
+	);
+});
+
+Deno.test("orElse() and firstOf() reject unrelated residues", () => {
+	// Given: recoveries yielding a number and a Config
+	const asNumber = succeed<string, number>(8080);
+	const asConfig = succeed<string, Config>({ port: 8080 });
+
+	// When: composing them is written (never run)
+	const misuses = (): void => {
+		// @ts-expect-error: number and Config have no wider residue but a union
+		orElse(asNumber, asConfig);
+		// @ts-expect-error: the same holds across firstOf's list
+		firstOf([asNumber, asConfig]);
+	};
+
+	// Then: it doesn't type-check
+	assert(typeof misuses === "function");
+});
+
 Deno.test("orElse(): a failure moves on to the next recovery, on the same value", () => {
 	// Given: a failing recovery, then one that reads the value
 	const readBackup: Recovery<string, number, string> = fail("no backup");

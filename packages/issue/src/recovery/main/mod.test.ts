@@ -18,9 +18,48 @@ Deno.test("main Recovery is a mini one, and fromMini views a mini one", () => {
 	assertInstanceOf(main, mini.Recovery);
 });
 
+interface Config {
+	readonly port: number;
+}
+
+Deno.test("orElse takes the wider residue in either direction", async () => {
+	// Given: a fail (residue never) and a recovery yielding a Config
+	const useDefault = succeed<string, Config>({ port: 8080 });
+
+	// When: they are chained either way, with no annotation
+	const backupFirst = fail("no backup").orElse(useDefault);
+	const defaultFirst = useDefault.orElse(fail("no backup"));
+
+	// Then: both are main Config recoveries
+	const asConfig: Recovery<string, Config, never> = backupFirst;
+	const asConfigToo: Recovery<string, Config, string> = defaultFirst;
+	assertInstanceOf(backupFirst, Recovery);
+	assertEquals((await wait(asConfig.run("app.json"))).unwrap(), {
+		port: 8080,
+	});
+	assertEquals((await wait(asConfigToo.run("app.json"))).unwrap(), {
+		port: 8080,
+	});
+});
+
+Deno.test("orElse rejects an unrelated residue", () => {
+	// Given: recoveries yielding a number and a Config
+	const asNumber = succeed<string, number>(8080);
+	const asConfig = succeed<string, Config>({ port: 8080 });
+
+	// When: chaining them is written (never run)
+	const misuse = (): void => {
+		// @ts-expect-error: number and Config have no wider residue but a union
+		asNumber.orElse(asConfig);
+	};
+
+	// Then: it doesn't type-check
+	assertEquals(typeof misuse, "function");
+});
+
 Deno.test("methods chain, and run resolves with a main Result", async () => {
-	// Given: a failing recovery, typed for the residue it stands in for
-	const readBackup: Recovery<string, number, string> = fail("no backup");
+	// Given: a failing recovery
+	const readBackup = fail<string, string>("no backup");
 
 	// When: composing it with methods and running it
 	const recovery = readBackup

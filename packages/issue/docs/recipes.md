@@ -12,7 +12,8 @@ issues behave as they do, see the [concepts](./concepts.md).
 
 Use `firstOf` with the recoveries in the order to try them. It stops at the
 first success; when all fail, it fails with the last one's error. The list
-can't be empty.
+can't be empty. Its residue is the widest of the list's, with no union, so
+a `fail` needs no annotation.
 
 ```ts
 import { issue } from "@sekhmet/issue/issue";
@@ -26,11 +27,7 @@ const notFound = issue<string, number>({
 	message: "No config file.",
 });
 
-const recovery = firstOf([
-	fail<string, string>("no backup"),
-	fail<string, string>("no remote"),
-	succeed<string, number>(8080),
-]);
+const recovery = firstOf([fail("no backup"), fail("no remote"), succeed(8080)]);
 
 assertEquals((await wait(notFound.attempt(recovery))).unwrap(), 8080);
 ```

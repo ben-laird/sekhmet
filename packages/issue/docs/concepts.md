@@ -131,11 +131,12 @@ error. Both run their recoveries in a loop that doesn't nest the stack, so a
 long list or a large `times` is safe, sync or async. `map`, `mapErr` and
 `andThen` change what it yields, and `mapInput` changes what it repairs.
 
-`orElse` keeps the residue type of the recovery it is called on. A recovery
-built with `fail` yields no residue (`never`), so give it the residue type it
-stands in for, as in
-`const readBackup: Recovery<Path, Config, string> = fail("…")`, before
-calling `.orElse(succeed(config))` on it.
+`orElse` and `firstOf` take the wider residue of the recoveries they join,
+with no union. A recovery is covariant in its residue, and one built with
+`fail` yields none (`never`), so `fail("…").orElse(succeed(config))` is a
+`Config` recovery with no annotation, and so is the reverse order. Residues
+with no wider one but a union, such as `number` and `Config`, don't
+type-check: a union of residues couldn't be told apart again.
 
 ## How an attempt ends
 

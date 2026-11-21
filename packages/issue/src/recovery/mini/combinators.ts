@@ -84,11 +84,15 @@ function tryInTurn<T, R, E>({
  * error is dropped, like Rust's `Result::or_else`, so the composite fails
  * with `next`'s error. `next` never runs when `self` succeeds.
  *
+ * The residue is the wider of the two, with no union: a recovery is
+ * covariant in its residue, so a `fail` (residue `never`) followed by a
+ * `Recovery<T, Config, F>` is a `Recovery<T, Config, F>`, in either order.
+ * Unrelated residues (`number` and `Config`) don't type-check.
+ *
  * @template T The value of the issues they repair
- * @template R The residue they yield
- * @template E The error `self` fails with, which is dropped
+ * @template R The residue they yield: the wider of the two
  * @template F The error `next` fails with
- * @param self The recovery to try first
+ * @param self The recovery to try first; its error is dropped
  * @param next The recovery to try when `self` fails
  * @returns A recovery that yields the first residue, or fails with `next`'s error
  *
@@ -96,17 +100,17 @@ function tryInTurn<T, R, E>({
  * ```ts
  * import { assertEquals } from "@std/assert";
  * import { unwrap } from "@sekhmet/enum/result/mini";
- * import { fail, orElse, type Recovery, run, succeed } from "@sekhmet/issue/recovery/mini";
+ * import { fail, orElse, run, succeed } from "@sekhmet/issue/recovery/mini";
  * import { wait } from "@sekhmet/vow/mini";
  *
- * const readBackup: Recovery<string, number, string> = fail("`app.bak` can't be read.");
- * const useDefault: Recovery<string, number, never> = succeed(8080);
+ * const readBackup = fail<string, string>("`app.bak` can't be read.");
+ * const useDefault = succeed<string, number>(8080);
  *
  * assertEquals(unwrap(await wait(run(orElse(readBackup, useDefault), "app.json"))), 8080);
  * ```
  */
-export function orElse<T, R, E, F>(
-	self: Recovery<T, R, E>,
+export function orElse<T, R, F>(
+	self: Recovery<T, R, unknown>,
 	next: Recovery<T, R, F>,
 ): Recovery<T, R, F> {
 	return new Recovery<T, R, F>((value) => {

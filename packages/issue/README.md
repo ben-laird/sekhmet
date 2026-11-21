@@ -33,7 +33,7 @@ bunx jsr add @sekhmet/issue     # bun
 
 ```ts
 import { issue } from "@sekhmet/issue/issue";
-import { fail, type Recovery, succeed } from "@sekhmet/issue/recovery";
+import { fail, succeed } from "@sekhmet/issue/recovery";
 import { wait } from "@sekhmet/vow";
 import { assertEquals } from "@std/assert";
 
@@ -48,10 +48,9 @@ const notFound = issue<{ readonly path: string }, Config>({
 	hint: "Create one, or run with the default config.",
 });
 
-const readBackup: Recovery<{ readonly path: string }, Config, string> = fail(
-	"`app.bak` can't be read.",
+const useDefault = fail("`app.bak` can't be read.").orElse(
+	succeed({ port: 8080 }),
 );
-const useDefault = readBackup.orElse(succeed({ port: 8080 }));
 
 const ended = await wait(notFound.attempt(useDefault));
 
