@@ -27,7 +27,11 @@
 		"./recovery/mini/combinators": "./src/recovery/mini/combinators.ts",
 		"./recovery/mini/core": "./src/recovery/mini/core.ts",
 		"./recovery/mini/promise": "./src/recovery/mini/promise.ts",
-		"./recovery/mini/transform": "./src/recovery/mini/transform.ts"
+		"./recovery/mini/transform": "./src/recovery/mini/transform.ts",
+
+		"./state": "./src/state/main/mod.ts",
+		"./state/mini": "./src/state/mini/mod.ts",
+		"./state/mini/core": "./src/state/mini/core.ts"
 	},
 
 	"imports": {

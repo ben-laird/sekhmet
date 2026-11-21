@@ -9,8 +9,9 @@ import {
 	assertInstanceOf,
 } from "@std/assert";
 import { Recovery } from "@/src/recovery/mini/core.ts";
+import { IssueState } from "@/src/state/mini/core.ts";
 import { state } from "./accessors.ts";
-import { Issue, IssueState, issue } from "./core.ts";
+import { Issue, issue } from "./core.ts";
 import { attempt } from "./handling.ts";
 
 interface Config {

@@ -69,9 +69,9 @@ assertEquals(
 ## API
 
 There is no root export, since names like `map` clash across features.
-Import a feature: `@sekhmet/issue/issue`, `@sekhmet/issue/recovery` or
-`@sekhmet/issue/attempt` for method chaining, or its `/mini` barrel (and
-`/mini/<module>`) for tree-shakable free functions.
+Import a feature: `@sekhmet/issue/issue`, `@sekhmet/issue/state`,
+`@sekhmet/issue/recovery` or `@sekhmet/issue/attempt` for method chaining, or
+its `/mini` barrel (and `/mini/<module>`) for tree-shakable free functions.
 
 | Export                                              | Does                                                                     |
 | --------------------------------------------------- | ------------------------------------------------------------------------ |

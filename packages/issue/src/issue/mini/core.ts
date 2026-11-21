@@ -1,57 +1,11 @@
 /**
- * The {@linkcode Issue} class, its {@linkcode IssueState}, and the
- * {@linkcode issue} constructor.
+ * The {@linkcode Issue} class and the {@linkcode issue} constructor.
  *
  * @module
  */
 
-import { Enum, type Split } from "@sekhmet/enum/core/mini";
 import { Struct } from "@sekhmet/primordials/struct";
-
-/**
- * The variants of an {@linkcode IssueState}, for type-level work on them.
- *
- * @template T The typed facts about the problem
- * @template R The residue handling yields
- */
-type Variants<T, R> = Split<{
-	Unhandled: [value: T];
-	Handled: [residue: R];
-}>;
-
-export type { Variants as IssueStateVariants };
-
-/**
- * Where an issue stands: `Unhandled(value)`, holding the typed facts about
- * the problem, or `Handled(residue)`, holding what handling yielded. Read it
- * with {@linkcode state}'s result and enum's `match`.
- *
- * Its issue switches it in place, so it is invariant in both type
- * parameters (see #98): a widened view can't write the wrong residue.
- *
- * @template T The typed facts about the problem
- * @template R The residue handling yields
- *
- * @example
- * ```ts
- * import { assertEquals } from "@std/assert";
- * import { match } from "@sekhmet/enum/core/mini";
- * import { issue, state } from "@sekhmet/issue/issue/mini";
- *
- * const notFound = issue<{ readonly path: string }, number>({
- * 	value: { path: "app.json" },
- * 	code: "config/NotFound",
- * 	message: "No config file at `app.json`.",
- * });
- * const line = match(state(notFound))({
- * 	Unhandled: ({ path }) => `missing ${path}`,
- * 	Handled: (port) => `using port ${port}`,
- * });
- *
- * assertEquals(line, "missing app.json");
- * ```
- */
-export class IssueState<in out T, in out R> extends Enum<Variants<T, R>> {}
+import { IssueState } from "@/src/state/mini/core.ts";
 
 /**
  * The words that describe an issue to a person: a permanent `code`, a

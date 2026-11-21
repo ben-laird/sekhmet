@@ -36,16 +36,15 @@ import type { Vow } from "@sekhmet/vow/mini";
 import { map as mapVow } from "@sekhmet/vow/mini/impl";
 import type { Recovery } from "@/src/recovery/mini/core.ts";
 import { Attempt } from "../../attempt/main/mod.ts";
+import { IssueState } from "../../state/main/mod.ts";
 import * as mini from "../mini/mod.ts";
 
 export type {
 	IssueInput,
 	IssueParams,
-	IssueStateVariants,
 	IssueWording,
 	Wrapped,
 } from "../mini/mod.ts";
-export { IssueState } from "../mini/mod.ts";
 
 /**
  * One occurrence of something going wrong. It has a permanent `code`, a
@@ -197,8 +196,8 @@ export class Issue<in out T, in out R> extends mini.Issue<T, R> {
 	 * ```
 	 * @see {@link mini.state}
 	 */
-	state(): mini.IssueState<T, R> {
-		return mini.state(this);
+	state(): IssueState<T, R> {
+		return IssueState.fromMini(mini.state(this));
 	}
 
 	/**

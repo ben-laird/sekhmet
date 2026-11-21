@@ -8,7 +8,8 @@
 import { match } from "@sekhmet/enum/core/mini";
 import { None, type Option, Some } from "@sekhmet/enum/option/mini";
 import { getStructParams } from "@sekhmet/primordials/struct";
-import type { Issue, IssueState } from "./core.ts";
+import type { IssueState } from "@/src/state/mini/core.ts";
+import type { Issue } from "./core.ts";
 
 /**
  * The issue's permanent name, such as `config/NotFound`.

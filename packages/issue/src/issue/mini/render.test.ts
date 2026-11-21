@@ -1,6 +1,7 @@
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals } from "@std/assert";
-import { type Issue, IssueState, issue } from "./core.ts";
+import { IssueState } from "@/src/state/mini/core.ts";
+import { type Issue, issue } from "./core.ts";
 import { handle } from "./handling.ts";
 import { render } from "./render.ts";
 import { wrap } from "./transform.ts";

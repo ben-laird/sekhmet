@@ -17,7 +17,8 @@ import {
 	Handled,
 } from "@/src/attempt/mini/core.ts";
 import { type Recovery, run } from "@/src/recovery/mini/core.ts";
-import { type Issue, IssueState } from "./core.ts";
+import { IssueState } from "@/src/state/mini/core.ts";
+import type { Issue } from "./core.ts";
 
 /**
  * Switches an unhandled issue to `Handled(residue)` in place, or reports the

@@ -41,6 +41,8 @@ import {
 } from "@sekhmet/issue/recovery/mini/core";
 import { fromPromise } from "@sekhmet/issue/recovery/mini/promise";
 import { map as mapRecovery } from "@sekhmet/issue/recovery/mini/transform";
+import { IssueState } from "@sekhmet/issue/state";
+import { IssueState as MiniIssueState } from "@sekhmet/issue/state/mini/core";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { vowWithResolver, wait } from "@sekhmet/vow";
 import { expectEqual } from "../check.ts";
@@ -64,6 +66,7 @@ async function exerciseMain(): Promise<void> {
 		code: "config/NotFound",
 		message: "No config file.",
 	});
+	const before = subject.state();
 	const readBackup: Recovery<string, Config, string> = fail("no backup");
 	const ended = await wait(
 		subject.attempt(readBackup.orElse(succeed({ port: 8080 }))),
@@ -83,6 +86,16 @@ async function exerciseMain(): Promise<void> {
 				.unwrap(),
 		],
 		expected: [true, { port: 8080 }, true, 2, 7],
+	});
+	expectEqual({
+		label: "main state() is a main IssueState snapshot, left as it was",
+		actual: [
+			before instanceof IssueState,
+			before instanceof MiniIssueState,
+			unionKinds(before),
+			unionKinds(subject.state()),
+		],
+		expected: [true, true, "Unhandled", "Handled"],
 	});
 }
 

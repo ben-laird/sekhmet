@@ -107,8 +107,6 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 			privateType,
 		);
 	}),
-	privateTypeRef("issue/src/issue/mini/core.ts", "Variants", "Split"),
-	privateTypeRef("issue/src/issue/mini/core.ts", "IssueState", "Enum"),
 	privateTypeRef("issue/src/issue/mini/core.ts", "Issue", "Struct"),
 	privateTypeRef("issue/src/issue/mini/accessors.ts", "value", "Option"),
 	privateTypeRef("issue/src/issue/mini/accessors.ts", "residue", "Option"),
@@ -162,6 +160,8 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 			privateType,
 		);
 	}),
+	privateTypeRef("issue/src/state/mini/core.ts", "Variants", "Split"),
+	privateTypeRef("issue/src/state/mini/core.ts", "IssueState", "Enum"),
 	privateTypeRef("job/src/event.ts", "JobEvent", "Enum"),
 	privateTypeRef("job/src/graph-error.ts", "GraphError", "Enum"),
 	privateTypeRef("job/src/job.ts", "Job", "Struct"),
