@@ -45,7 +45,8 @@ export interface FromPromiseOptions<T, R> {
  * already reported it). Like a panicked task, the recovery never finishes:
  * its vow stays pending for good, so an attempt it runs in never settles
  * and its issue stays unhandled. Nothing rejects, so no unhandled rejection
- * follows.
+ * follows, unless the hook itself throws (see `@sekhmet/vow`'s
+ * `fromPromise`).
  *
  * The vow resolves inside the promise's `then` callback, under
  * `panics.catchUnwind`, so a dependent that throws is reported to the

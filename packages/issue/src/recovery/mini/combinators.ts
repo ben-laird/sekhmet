@@ -87,6 +87,9 @@ function tryInTurn<T, R, E>({
  * `next`'s error. `next` never runs when `self` succeeds. To build the next
  * recovery from the error, use {@linkcode orElse}.
  *
+ * A recovery that panics (see `fromPromise`) never settles, so the
+ * composite stops there and never settles either: `next` never runs.
+ *
  * The residue is the wider of the two, with no union: a recovery is
  * covariant in its residue, so a `fail` (residue `never`) followed by a
  * `Recovery<T, Config, F>` is a `Recovery<T, Config, F>`, in either order.
@@ -132,6 +135,9 @@ export function or<T, R, F>(
  * composite fails with that recovery's error, and `next` is never called
  * when `self` succeeds. To try a recovery already at hand, use
  * {@linkcode or}.
+ *
+ * A recovery that panics (see `fromPromise`) never settles, so the
+ * composite stops there and never settles either: `next` is never called.
  *
  * The residue widens as `or`'s does, with no union: a `fail` (residue
  * `never`) whose `next` builds a `Recovery<T, Config, F>` is a
@@ -182,7 +188,9 @@ export function orElse<T, R, E, F>(
  * fails with the last one's error. The list can't be empty: `firstOf([])`
  * doesn't type-check, since with no recovery to try there would be no error
  * to fail with. The recoveries run in a loop that doesn't nest the stack, so
- * a long list is safe, sync or async.
+ * a long list is safe, sync or async. A recovery that panics (see
+ * `fromPromise`) never settles, so the list stops there and the composite
+ * never settles either.
  *
  * @template T The value of the issues they repair
  * @template R The residue they yield: the widest of the list's
@@ -246,6 +254,8 @@ export interface RetryOptions {
  * to `times` more times. It succeeds with the first residue, or fails with
  * the last error. Each run starts once the previous one has settled. A sync
  * recovery's runs loop without nesting the stack, so `times` can be large.
+ * A run that panics (see `fromPromise`) never settles, so no retry follows
+ * and the composite never settles either.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields

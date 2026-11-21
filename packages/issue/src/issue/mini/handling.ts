@@ -53,7 +53,9 @@ function settle<T, R, E>({
  * was. Otherwise `Ok` switches the issue to `Handled` in place, and `Err`
  * leaves it unhandled and gives `Failed`.
  *
- * The vow is resolved at once when the recovery is sync.
+ * The vow is resolved at once when the recovery is sync. A recovery that
+ * panics (see `fromPromise`) never settles, so neither does the attempt,
+ * and the issue stays unhandled.
  *
  * @template T The typed facts about the problem
  * @template R The residue handling yields

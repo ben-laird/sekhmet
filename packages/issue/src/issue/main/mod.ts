@@ -263,7 +263,9 @@ export class Issue<in out T, in out R> extends mini.Issue<T, R> {
 	 * was. Otherwise `Ok` switches the issue to `Handled` in place, and `Err`
 	 * leaves it unhandled and gives `Failed`.
 	 *
-	 * The vow is resolved at once when the recovery is sync.
+	 * The vow is resolved at once when the recovery is sync. A recovery that
+	 * panics (see `fromPromise`) never settles, so neither does the attempt,
+	 * and the issue stays unhandled.
 	 *
 	 * @template E - The error the recovery fails with
 	 * @param recovery - The repair to run on its value

@@ -202,7 +202,9 @@ After reporting, the recovery's vow stays pending for good, like a panicked
 task that never returns: a vow can't fail, an `Err` would let `orElse`
 carry on past the bug, and resolving with anything else would invent a
 value. So an attempt running it never settles, and its issue stays
-unhandled. Nothing rejects, so no unhandled rejection follows. A
+unhandled. Nothing rejects, so no unhandled rejection follows, unless the
+hook itself throws (see `@sekhmet/vow`'s `fromPromise`): the boundary then
+throws `Panic (PanicHook)` out of the `then` callback, by design. A
 `fromPromise` built directly on vow's would have turned the rejection into
 an `Err` first, so the recovery builds its vow itself, with the same
 boundaries.
