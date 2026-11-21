@@ -466,9 +466,9 @@ function passesOwnParams({
 }
 
 /**
- * The primary member of `N & Primary<A, B, C>`, when it passes distinct,
- * bare type parameters and `N` is not a bare type parameter (that is the
- * `exact` form).
+ * The primary member of `N & Primary<A, B, C>` (in either order), when it
+ * passes distinct, bare type parameters and `N` is not a bare type
+ * parameter (that is the `exact` form).
  */
 function narrowedPrimary({
 	feature,
@@ -482,12 +482,15 @@ function narrowedPrimary({
 	if (type?.kind !== "intersection" || type.types.length !== 2) {
 		return undefined;
 	}
-	const [first, second] = type.types;
-	if (!namesClass(second, feature.primary)) return undefined;
-	if (ownTypeParam({ signature, type: first }) !== undefined) return undefined;
-	if (!passesOwnParams({ signature, type: second })) return undefined;
+	const primary = type.types.find((member): member is RefNode => {
+		return namesClass(member, feature.primary);
+	});
+	if (primary === undefined) return undefined;
+	const other = type.types.find((member) => member !== primary);
+	if (ownTypeParam({ signature, type: other }) !== undefined) return undefined;
+	if (!passesOwnParams({ signature, type: primary })) return undefined;
 
-	return second;
+	return primary;
 }
 
 /**
@@ -2255,7 +2258,9 @@ export function generateMain(input: GenerateInput): Generated<string> {
 		(typeOnly ? types : values).push(symbol.name);
 	}
 
-	const ownMethods = new Set(methodSymbols.map((symbol) => symbol.name));
+	const ownMethods = new Map(
+		methodSymbols.map((symbol) => [symbol.name, symbol] as const),
+	);
 	const listed = isClassFeature(feature) ? (feature.constrained ?? []) : [];
 	const strayConstrained = listed.find((name) => !ownMethods.has(name));
 	if (strayConstrained !== undefined) {
@@ -2264,6 +2269,23 @@ export function generateMain(input: GenerateInput): Generated<string> {
 			symbol: strayConstrained,
 			message:
 				"`constrained` names a function that isn't a `self`-first function of this feature",
+		});
+	}
+	const unconstrainable = listed.find((name) => {
+		const symbol = ownMethods.get(name);
+		const signatures = symbol === undefined ? [] : signaturesOf(symbol);
+
+		return signatures.some((signature) => {
+			const form = receiverFormOf({ feature, signature, name });
+			return form?.kind !== "constrained";
+		});
+	});
+	if (unconstrainable !== undefined) {
+		return failure({
+			feature,
+			symbol: unconstrainable,
+			message:
+				"`constrained` names a function whose receiver isn't `self: Primary<…>`, so it can't take the constrained form",
 		});
 	}
 

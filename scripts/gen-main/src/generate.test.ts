@@ -1046,6 +1046,32 @@ Deno.test("generateMain emits a plain receiver listed in constrained as this", (
 	assertStringIncludes(plain, "or(other: mini.Box<T>): Box<T> {");
 });
 
+/** `Enum<A> & Box<A>`: a receiver already narrowed to a variant. */
+const NARROWED_BOX: TypeNode = {
+	kind: "intersection",
+	types: [named("Enum", [typeParam("A")]), named("Box", [typeParam("A")])],
+};
+
+Deno.test("generateMain rejects a constrained name whose receiver can't be constrained", () => {
+	// Given: test(self: Enum<A> & Box<A>), a narrowed receiver, listed in
+	// the feature's `constrained`
+	const test = fn(
+		"test",
+		signature({
+			typeParams: ["A"],
+			params: [param("self", NARROWED_BOX)],
+			returnType: keyword("boolean"),
+		}),
+	);
+
+	// When: generating
+	const error = rejection([test], { ...FEATURE, constrained: ["test"] });
+
+	// Then: generation fails, rather than leaving the listing unused
+	assertEquals(error.symbol, "test");
+	assertStringIncludes(error.message, "can't take the constrained form");
+});
+
 Deno.test("generateMain rejects a constrained name that isn't a self-first function", () => {
 	// Given: a feature listing a typo and a function that doesn't take self
 	const full = fn(
@@ -1192,12 +1218,6 @@ Deno.test("generateMain rejects overloaded assertion signatures", () => {
 	});
 });
 
-/** `Enum<A> & Box<A>`: a receiver already narrowed to a variant. */
-const NARROWED_BOX: TypeNode = {
-	kind: "intersection",
-	types: [named("Enum", [typeParam("A")]), named("Box", [typeParam("A")])],
-};
-
 Deno.test("generateMain takes a narrowed receiver as this, keeping the class's parameters", () => {
 	// Given: test(self: Enum<A> & Box<A>, p): boolean overloading
 	// test(self: Box<A>, p): self is Enum<A> & Box<A>
@@ -1235,6 +1255,43 @@ Deno.test("generateMain takes a narrowed receiver as this, keeping the class's p
 		output,
 		"return Reflect.apply(mini.test, undefined, [this, ...args]);",
 	);
+});
+
+Deno.test("generateMain takes a narrowed receiver in either order", () => {
+	// Given: single-signature functions taking Box<A> & Enum<A> and
+	// Enum<A> & Box<A>
+	const boxFirst = fn(
+		"boxFirst",
+		signature({
+			typeParams: ["A"],
+			params: [
+				param("self", {
+					kind: "intersection",
+					types: [
+						named("Box", [typeParam("A")]),
+						named("Enum", [typeParam("A")]),
+					],
+				}),
+			],
+			returnType: keyword("boolean"),
+		}),
+	);
+	const enumFirst = fn(
+		"enumFirst",
+		signature({
+			typeParams: ["A"],
+			params: [param("self", NARROWED_BOX)],
+			returnType: keyword("boolean"),
+		}),
+	);
+
+	// When: generating
+	const output = source([boxFirst, enumFirst]);
+
+	// Then: both are methods taking the intersection as this, in its order
+	assertStringIncludes(output, "boxFirst(this: Box<T> & Enum<T>): boolean {");
+	assertStringIncludes(output, "enumFirst(this: Enum<T> & Box<T>): boolean {");
+	assertEquals(output.includes("export function boxFirst"), false);
 });
 
 Deno.test("generateMain uses wrap targets only inside bodies", () => {
@@ -1812,6 +1869,30 @@ Deno.test("generateMain rejects a constrained receiver on a namespace", () => {
 	assert(!result.ok);
 	assertEquals(result.error.symbol, "wrap");
 	assertStringIncludes(result.error.message, "can't constrain");
+});
+
+Deno.test("generateMain rejects a narrowed receiver on a namespace", () => {
+	// Given: wrap(self: Enum<A> & Box<A>, label) borrowed onto the `.on` namespace
+	const narrowedWrap = fn(
+		"wrap",
+		signature({
+			typeParams: ["A"],
+			params: [param("self", NARROWED_BOX), param("label", keyword("string"))],
+			returnType: keyword("void"),
+		}),
+	);
+	const borrow: Borrow = {
+		...ON_SHELF,
+		methods: [{ name: "wrap", doc: METHOD_DOC }],
+	};
+
+	// When: generating
+	const result = borrowingWith({ borrow, borrowed: [narrowedWrap, LABEL] });
+
+	// Then: generation fails, since only a this parameter can take it
+	assert(!result.ok);
+	assertEquals(result.error.symbol, "wrap");
+	assertStringIncludes(result.error.message, "narrowed receiver");
 });
 
 Deno.test("generateMain leaves a namespace method's function examples alone", () => {
