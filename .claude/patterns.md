@@ -379,6 +379,13 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   `or<A>(this: Box<A>, other: mini.Box<A>): Box<A>`, so a receiver typed
   `Box<never>` widens to the argument's `A`. A listed name that isn't a
   `self`-first function of the feature fails generation.
+- **Narrowed receivers.** `self: N & Primary<A, B>` (an already-narrowed
+  variant, such as `Enum<Isolate<…>> & IssueState<T, R>`) becomes a method
+  with the class's type parameters and the whole intersection as its `this`
+  parameter. With it, an overload can apply to a narrowed receiver only:
+  a guard can return `boolean` there, so its false branch doesn't collapse
+  a narrowed receiver to `never`, and narrow `this` everywhere else. Overloaded type
+  predicates are kept; overloaded assertions are rejected.
 - **Examples.** Every example copied into main (methods, constructors, the
   class) is rewritten for main: calls of any function that became a method
   move to method form, and imports from `<entrypoint>/mini` (or a mini
