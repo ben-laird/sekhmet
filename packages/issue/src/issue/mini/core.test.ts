@@ -89,9 +89,10 @@ Deno.test("an issue can't be widened, so nothing writes the wrong residue", () =
 
 	// When: widening it, or recovering it with a number, is written (never run)
 	const misuses = (): void => {
-		// @ts-expect-error: Issue is invariant in its residue type
+		// @ts-expect-error: widening R is rejected, so Issue isn't covariant in R
 		const _widened: Issue<Path, unknown> = notFoundIssue;
-		// @ts-expect-error: NotFound's residue is a Config, not a number
+		// @ts-expect-error: a plain type mismatch, not a variance check: the
+		// recovery must yield NotFound's residue type, Config
 		attempt(notFoundIssue, toNumber);
 	};
 
@@ -110,12 +111,31 @@ Deno.test("an issue can't be narrowed either: it is invariant in its value", () 
 
 	// When: narrowing its value type is written (never run)
 	const misuse = (): void => {
-		// @ts-expect-error: Issue is invariant in its value type
+		// @ts-expect-error: narrowing T is rejected, so Issue isn't contravariant in T
 		const _narrowed: Issue<string, Config> = wide;
-		// @ts-expect-error: and widening the value is rejected too
+		// @ts-expect-error: widening T is rejected, so it isn't covariant either
 		const _widened: Issue<unknown, Config> = wide;
 	};
 
 	// Then: it doesn't type-check
+	assert(typeof misuse === "function");
+});
+
+Deno.test("an issue's residue can't be narrowed either: it is invariant in R", () => {
+	// Given: an issue whose residue is a Config or a number
+	const wide = issue<Path, Config | number>({
+		value: { path: "app.json" },
+		code: "config/NotFound",
+		message: "No config file.",
+	});
+
+	// When: narrowing its residue type is written (never run)
+	const misuse = (): void => {
+		// @ts-expect-error: narrowing R is rejected, so Issue isn't contravariant in R
+		const _narrowed: Issue<Path, Config> = wide;
+	};
+
+	// Then: it doesn't type-check; with the widening test above, an
+	// accidental `in R` or `out R` fails the suite
 	assert(typeof misuse === "function");
 });

@@ -228,6 +228,29 @@ Deno.test("concurrent attempts: a late failure still reports the handling", asyn
 	assertEquals(union(ended), DEFAULT_CONFIG);
 });
 
+Deno.test("concurrent attempts: an early failure reports Failed, and the issue waits for the winner", async () => {
+	// Given: a failing and a succeeding recovery, both in flight
+	const notFoundIssue = notFound("app.json");
+	const failing = deferred<string>();
+	const winning = deferred<never>();
+	const lost = attempt(notFoundIssue, failing.recovery);
+	const won = attempt(notFoundIssue, winning.recovery);
+
+	// When: the failing one settles first, then the winner
+	failing.settle(Err("timed out"));
+	const between = state(notFoundIssue);
+	const failed = await wait(lost);
+	winning.settle(Ok({ port: 9000 }));
+
+	// Then: the failure is Failed, the issue stayed unhandled until the winner
+	// settled, and the winner handled it
+	assert(isolate(failed, "Failed"));
+	assertEquals(union(failed), "timed out");
+	assert(isolate(between, "Unhandled"));
+	assertEquals(await wait(won), Handled({ port: 9000 }));
+	assert(isolate(state(notFoundIssue), "Handled"));
+});
+
 Deno.test("orElse: an async failure moves on to a sync recovery", async () => {
 	// Given: an async recovery that will fail, then useDefault
 	const notFoundIssue = notFound("app.json");
