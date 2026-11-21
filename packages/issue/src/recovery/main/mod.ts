@@ -110,7 +110,8 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 	/**
 	 * Runs `self`, and runs it again on the same value each time it fails, up
 	 * to `times` more times. It succeeds with the first residue, or fails with
-	 * the last error. Each run starts once the previous one has settled.
+	 * the last error. Each run starts once the previous one has settled. A sync
+	 * recovery's runs loop without nesting the stack, so `times` can be large.
 	 *
 	 * @param options - How many more times to run it after a failure
 	 * @returns A recovery that yields the first residue, or fails with the last error
@@ -339,10 +340,12 @@ export class Recovery<T, out R, out E> extends mini.Recovery<T, R, E> {
 }
 
 /**
- * Tries each recovery in order, on the same value, until one succeeds: the
- * fold of {@linkcode orElse}. When all fail, it fails with the last one's
- * error. The list can't be empty: `firstOf([])` doesn't type-check, since
- * with no recovery to try there would be no error to fail with.
+ * Tries each recovery in order, on the same value, until one succeeds: it
+ * behaves as {@linkcode orElse} folded over the list. When all fail, it
+ * fails with the last one's error. The list can't be empty: `firstOf([])`
+ * doesn't type-check, since with no recovery to try there would be no error
+ * to fail with. The recoveries run in a loop that doesn't nest the stack, so
+ * a long list is safe, sync or async.
  *
  * @template T - The value of the issues they repair
  * @template R - The residue they yield

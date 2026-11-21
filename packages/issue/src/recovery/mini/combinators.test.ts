@@ -244,3 +244,84 @@ Deno.test("when(): a failure of the recovery itself passes through", () => {
 	// Then: its own error is the result
 	assertEquals(result, Some(Err(404)));
 });
+
+/** A recovery that fails with its run count, settling on a later microtask. */
+function laterFailing(): {
+	recovery: Recovery<string, number, number>;
+	runs: () => number;
+} {
+	let count = 0;
+	const recovery = new Recovery((_: string) => {
+		count += 1;
+		const failure = count;
+		const { vow, resolve } = vowWithResolver<Result<number, number>>();
+		queueMicrotask(() => resolve(Err(failure)));
+		return vow;
+	});
+	return { recovery, runs: () => count };
+}
+
+Deno.test("retry(): many sync retries loop without overflowing the stack", () => {
+	// Given: a sync recovery that always fails with its run count
+	let runs = 0;
+	const failing = sync((_: string) => {
+		runs += 1;
+		return Err<number, number>(runs);
+	});
+
+	// When: it is retried ten thousand more times
+	const result = value(run(retry(failing, { times: 10_000 }), "app.json"));
+
+	// Then: it ran every time, settled at once, and kept the last error
+	assertEquals(runs, 10_001);
+	assertEquals(result, Some(Err(10_001)));
+});
+
+Deno.test("retry(): many async retries settle without nesting the stack", async () => {
+	// Given: an async recovery that always fails with its run count
+	const failing = laterFailing();
+
+	// When: it is retried ten thousand more times
+	const result = await wait(
+		run(retry(failing.recovery, { times: 10_000 }), "app.json"),
+	);
+
+	// Then: it ran every time, and kept the last error
+	assertEquals(failing.runs(), 10_001);
+	assertEquals(result, Err(10_001));
+});
+
+Deno.test("firstOf(): a long sync list loops without overflowing the stack", () => {
+	// Given: twenty thousand and one failing recoveries, then one that succeeds
+	const failures: Recovery<string, number, number>[] = Array.from(
+		{ length: 20_000 },
+		(_, index) => fail(index),
+	);
+	const recovery = firstOf<string, number, number>([
+		fail(-2),
+		...failures,
+		succeed(-1),
+	]);
+
+	// When: it is run
+	const result = value(run(recovery, "app.json"));
+
+	// Then: it reached the success at the end, at once
+	assertEquals(result, Some(Ok(-1)));
+});
+
+Deno.test("firstOf(): a long async list settles without nesting the stack", async () => {
+	// Given: ten thousand async recoveries that all fail
+	const failing = laterFailing();
+	const recovery = firstOf([
+		failing.recovery,
+		...Array.from({ length: 9_999 }, () => failing.recovery),
+	]);
+
+	// When: it is run
+	const result = await wait(run(recovery, "app.json"));
+
+	// Then: each ran in turn, and the last error is the result
+	assertEquals(failing.runs(), 10_000);
+	assertEquals(result, Err(10_000));
+});

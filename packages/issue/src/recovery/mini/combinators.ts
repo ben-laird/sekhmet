@@ -6,11 +6,78 @@
  * @module
  */
 
-import { match } from "@sekhmet/enum/core/mini";
-import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import { match, union } from "@sekhmet/enum/core/mini";
+import { Err, isOk, Ok, type Result } from "@sekhmet/enum/result/mini";
 import { panic } from "@sekhmet/panic/mini/core";
-import { andThen, resolved, type Vow } from "@sekhmet/vow/mini";
+import {
+	andThen,
+	isResolved,
+	map,
+	resolved,
+	type Vow,
+	vowWithResolver,
+} from "@sekhmet/vow/mini";
 import { Recovery, run } from "./core.ts";
+
+/** What {@linkcode tryInTurn} takes. */
+interface TryInTurnOptions<T, R, E> {
+	/** The value every recovery runs on */
+	readonly value: T;
+	/** How many recoveries there are to try (at least one) */
+	readonly count: number;
+	/** The recovery to try at a position */
+	readonly recoveryAt: (index: number) => Recovery<T, R, E>;
+}
+
+/**
+ * Runs recoveries in turn on one value until one succeeds or the last one
+ * fails, with that result. It loops while each run's vow is already
+ * resolved, and subscribes only to a pending one, resuming the loop when it
+ * settles, so neither a long sync run nor a long async one nests the stack.
+ */
+function tryInTurn<T, R, E>({
+	value,
+	count,
+	recoveryAt,
+}: TryInTurnOptions<T, R, E>): Vow<Result<R, E>> {
+	const { vow, resolve } = vowWithResolver<Result<R, E>>();
+	const isFinal = ({
+		result,
+		index,
+	}: {
+		readonly result: Result<R, E>;
+		readonly index: number;
+	}): boolean => {
+		return isOk(result) || index === count - 1;
+	};
+	const tryFrom = (start: number): void => {
+		for (let index = start; index < count; index += 1) {
+			const running = run(recoveryAt(index), value);
+
+			if (!isResolved(running)) {
+				map(running, (result) => {
+					if (isFinal({ result, index })) {
+						resolve(result);
+						return;
+					}
+
+					tryFrom(index + 1);
+				});
+				return;
+			}
+
+			const result = union(running);
+			if (isFinal({ result, index })) {
+				resolve(result);
+				return;
+			}
+		}
+	};
+
+	tryFrom(0);
+
+	return vow;
+}
 
 /**
  * Tries `self`; if it fails, tries `next` on the same value instead. `self`'s
@@ -53,10 +120,12 @@ export function orElse<T, R, E, F>(
 }
 
 /**
- * Tries each recovery in order, on the same value, until one succeeds: the
- * fold of {@linkcode orElse}. When all fail, it fails with the last one's
- * error. The list can't be empty: `firstOf([])` doesn't type-check, since
- * with no recovery to try there would be no error to fail with.
+ * Tries each recovery in order, on the same value, until one succeeds: it
+ * behaves as {@linkcode orElse} folded over the list. When all fail, it
+ * fails with the last one's error. The list can't be empty: `firstOf([])`
+ * doesn't type-check, since with no recovery to try there would be no error
+ * to fail with. The recoveries run in a loop that doesn't nest the stack, so
+ * a long list is safe, sync or async.
  *
  * @template T The value of the issues they repair
  * @template R The residue they yield
@@ -84,8 +153,24 @@ export function firstOf<T, R, E>(
 	recoveries: readonly [Recovery<T, R, E>, ...Recovery<T, R, E>[]],
 ): Recovery<T, R, E> {
 	const [first, ...rest] = recoveries;
+	const all = [first, ...rest];
 
-	return rest.reduce((tried, next) => orElse(tried, next), first);
+	return new Recovery<T, R, E>((value) => {
+		return tryInTurn({
+			value,
+			count: all.length,
+			recoveryAt: (index) => {
+				return (
+					all[index] ??
+					panic({
+						name: "Unreachable",
+						message: `firstOf has no recovery at ${index}`,
+						cause: index,
+					})
+				);
+			},
+		});
+	});
 }
 
 /**
@@ -102,7 +187,8 @@ export interface RetryOptions {
 /**
  * Runs `self`, and runs it again on the same value each time it fails, up
  * to `times` more times. It succeeds with the first residue, or fails with
- * the last error. Each run starts once the previous one has settled.
+ * the last error. Each run starts once the previous one has settled. A sync
+ * recovery's runs loop without nesting the stack, so `times` can be large.
  *
  * @template T The value of the issues it repairs
  * @template R The residue it yields
@@ -142,20 +228,9 @@ export function retry<T, R, E>(
 		});
 	}
 
-	const attempt = (value: T, left: number): Vow<Result<R, E>> => {
-		return andThen(run(self, value), (result) => {
-			return match(result)({
-				Ok: (residue) => resolved(Ok<R, E>(residue)),
-				Err: (error) => {
-					if (left === 0) return resolved(Err<R, E>(error));
-
-					return attempt(value, left - 1);
-				},
-			});
-		});
-	};
-
-	return new Recovery<T, R, E>((value) => attempt(value, times));
+	return new Recovery<T, R, E>((value) => {
+		return tryInTurn({ value, count: times + 1, recoveryAt: () => self });
+	});
 }
 
 /**
