@@ -82,7 +82,7 @@ its `/mini` barrel (and `/mini/<module>`) for tree-shakable free functions.
 | `toResult`, `wrap`, `render`, `recoverWith`         | as a `Result`; as a new issue's cause; as text; recover an `Err`'s issue |
 | `new Recovery(fn)`, `succeed`, `fail`, `sync`       | build a recovery, `(value: T) => Vow<Result<R, E>>`                      |
 | `fromPromise({ repair, panics })`                   | a recovery from a promise; a rejection is `Err`, a `Panic` is reported   |
-| `run`, `or(Else)`, `firstOf`, `retry`, `when`       | run and compose recoveries; `orElse` builds the next from the error      |
+| `run`, `or`, `orElse`, `firstOf`, `retry`, `when`   | run and compose recoveries; `orElse` builds the next from the error      |
 | `map`, `mapErr`, `andThen`, `mapInput`, `inspect*`  | transform a recovery's residue, error, or the value it repairs           |
 | `AlreadyHandled`, `Handled`, `Failed`               | the `Attempt<R, E>` variants                                             |
 | `isAlreadyHandled`, `isHandled`, `isFailed`, …      | test an attempt; `isResolved` is either handled variant                  |

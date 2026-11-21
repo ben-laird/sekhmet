@@ -43,7 +43,8 @@ export function isAlreadyHandled<R, E>(
 
 /**
  * Checks whether an attempt found the issue already handled, with a residue
- * that satisfies a predicate (which may be a type guard). *
+ * that satisfies a predicate (which may be a type guard).
+ *
  * On an attempt already narrowed to that variant, it returns a plain
  * boolean, so a failing predicate leaves the attempt as it was instead of
  * collapsing it to `never` in the false branch; otherwise it narrows the
@@ -121,7 +122,8 @@ export function isHandled<R, E>(
 
 /**
  * Checks whether this attempt handled the issue with a residue that
- * satisfies a predicate (which may be a type guard). *
+ * satisfies a predicate (which may be a type guard).
+ *
  * On an attempt already narrowed to that variant, it returns a plain
  * boolean, so a failing predicate leaves the attempt as it was instead of
  * collapsing it to `never` in the false branch; otherwise it narrows the
@@ -197,7 +199,8 @@ export function isFailed<R, E>(
 
 /**
  * Checks whether an attempt's recovery failed with an error that satisfies a
- * predicate (which may be a type guard). *
+ * predicate (which may be a type guard).
+ *
  * On an attempt already narrowed to that variant, it returns a plain
  * boolean, so a failing predicate leaves the attempt as it was instead of
  * collapsing it to `never` in the false branch; otherwise it narrows the
@@ -276,7 +279,8 @@ export function isResolved<R, E>(
 
 /**
  * Checks whether the issue ended up handled, by this attempt or before it,
- * with a residue that satisfies a predicate (which may be a type guard). *
+ * with a residue that satisfies a predicate (which may be a type guard).
+ *
  * On an attempt already narrowed to that variant, it returns a plain
  * boolean, so a failing predicate leaves the attempt as it was instead of
  * collapsing it to `never` in the false branch; otherwise it narrows the
