@@ -42,7 +42,9 @@ import {
 import { fromPromise } from "@sekhmet/issue/recovery/mini/promise";
 import { map as mapRecovery } from "@sekhmet/issue/recovery/mini/transform";
 import { IssueState } from "@sekhmet/issue/state";
+import { isUnhandledAnd as isStateUnhandledAnd } from "@sekhmet/issue/state/mini";
 import { IssueState as MiniIssueState } from "@sekhmet/issue/state/mini/core";
+import { isHandled as isStateHandled } from "@sekhmet/issue/state/mini/predicates";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { vowWithResolver, wait } from "@sekhmet/vow";
 import { expectEqual } from "../check.ts";
@@ -94,8 +96,12 @@ async function exerciseMain(): Promise<void> {
 			before instanceof MiniIssueState,
 			unionKinds(before),
 			unionKinds(subject.state()),
+			before.isUnhandled(),
+			subject.state().isHandledAnd((c) => c.port === 8080),
+			isStateUnhandledAnd(before, (path) => path === "app.json"),
+			isStateHandled(subject.state()),
 		],
-		expected: [true, true, "Unhandled", "Handled"],
+		expected: [true, true, "Unhandled", "Handled", true, true, true, true],
 	});
 }
 

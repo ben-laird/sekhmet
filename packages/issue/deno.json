@@ -31,7 +31,8 @@
 
 		"./state": "./src/state/main/mod.ts",
 		"./state/mini": "./src/state/mini/mod.ts",
-		"./state/mini/core": "./src/state/mini/core.ts"
+		"./state/mini/core": "./src/state/mini/core.ts",
+		"./state/mini/predicates": "./src/state/mini/predicates.ts"
 	},
 
 	"imports": {

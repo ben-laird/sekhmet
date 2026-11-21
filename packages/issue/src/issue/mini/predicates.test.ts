@@ -1,6 +1,11 @@
-import { assertEquals } from "@std/assert";
+import { union } from "@sekhmet/enum/core/mini";
+import { wait } from "@sekhmet/vow/mini";
+import { assert, assertEquals } from "@std/assert";
+import { succeed } from "@/src/recovery/mini/core.ts";
+import * as stateGuards from "@/src/state/mini/predicates.ts";
+import { state } from "./accessors.ts";
 import { type Issue, issue } from "./core.ts";
-import { handle } from "./handling.ts";
+import { attempt, handle } from "./handling.ts";
 import {
 	isHandled,
 	isHandledAnd,
@@ -62,4 +67,22 @@ Deno.test("isHandledAnd tests the residue once handled", () => {
 	// Then: it holds only once handled and the residue passes
 	assertEquals(before, false);
 	assertEquals(after, [true, false]);
+});
+
+Deno.test("a state snapshot keeps its narrowing after the issue is handled", async () => {
+	// Given: an unhandled issue, and its state read and narrowed before an attempt
+	const subject = notFound();
+	const snapshot = state(subject);
+	assert(stateGuards.isUnhandled(snapshot));
+
+	// When: an attempt handles the issue
+	await wait(attempt(subject, succeed(8080)));
+
+	// Then: the issue reads handled, but the snapshot is unchanged, so its
+	// narrowing still holds
+	assertEquals(isHandled(subject), true);
+	assertEquals(stateGuards.isUnhandled(snapshot), true);
+	const path: string = union(snapshot);
+	assertEquals(path, "app.json");
+	assertEquals(stateGuards.isHandled(state(subject)), true);
 });

@@ -1,7 +1,8 @@
 /** The main IssueState, and the main Issue's `state()`. */
 
-import { unionKinds } from "@sekhmet/enum/core/mini";
+import { union, unionKinds } from "@sekhmet/enum/core/mini";
 import {
+	assert,
 	assertEquals,
 	assertInstanceOf,
 	assertStrictEquals,
@@ -42,4 +43,40 @@ Deno.test("main Issue's state() returns a main IssueState", () => {
 	assertInstanceOf(after, IssueState);
 	assertEquals(unionKinds(before), "Unhandled");
 	assertEquals(unionKinds(after), "Handled");
+});
+
+Deno.test("main state methods narrow the snapshot from state()", () => {
+	// Given: a main issue and its state, read before handling
+	const notFound = issue<string, number>({
+		value: "app.json",
+		code: "config/NotFound",
+		message: "No config file.",
+	});
+	const before = notFound.state();
+
+	// When: the issue is handled, and both states are asked
+	notFound.handle(8080);
+	const after = notFound.state();
+
+	// Then: each method narrows its own snapshot, so the value reads directly
+	if (before.isUnhandled()) {
+		const path: string = union(before);
+		assertEquals(path, "app.json");
+	} else {
+		assert(false, "the earlier snapshot stays Unhandled");
+	}
+	if (after.isHandled()) {
+		const port: number = union(after);
+		assertEquals(port, 8080);
+	} else {
+		assert(false, "the later snapshot is Handled");
+	}
+	assertEquals(
+		before.isUnhandledAnd((path) => path === "app.json"),
+		true,
+	);
+	assertEquals(
+		after.isHandledAnd((port) => port > 1024),
+		true,
+	);
 });
