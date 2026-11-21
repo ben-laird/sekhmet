@@ -341,6 +341,7 @@ To give a new feature a generated main, add an entry to `FEATURES` in
 	mappers: ["map"], // optional: the main method mapping each type argument
 	wraps: [{ type: "Result", from: "../../result/main/mod.ts", mappers: ["map", "mapErr"] }], // optional
 	uncurry: [], // optional: curried functions whose method takes the inner parameters
+	constrained: [], // optional: self-first functions forced into the `this`-parameter form
 	omit: [], // optional: mini exports to leave out of main
 }
 ```
@@ -371,6 +372,13 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   parameters may share the class's names, since it uses none of the
   class's. A namespace method can't constrain its receiver; generation
   rejects one.
+- **Forcing the constrained form.** A plain receiver whose type argument the
+  class would fix, but which should be inferred from the receiver and the
+  arguments together, is listed in the feature's `constrained`. Its method
+  then keeps every type parameter and takes the receiver as `this`:
+  `or<A>(this: Box<A>, other: mini.Box<A>): Box<A>`, so a receiver typed
+  `Box<never>` widens to the argument's `A`. A listed name that isn't a
+  `self`-first function of the feature fails generation.
 - **Examples.** Every example copied into main (methods, constructors, the
   class) is rewritten for main: calls of any function that became a method
   move to method form, and imports from `<entrypoint>/mini` (or a mini

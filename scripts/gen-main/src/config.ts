@@ -188,6 +188,16 @@ export interface ClassFeature extends FeatureBase {
 	readonly borrows?: readonly Borrow[];
 	/** How the primary carries views (only with `construct: "params"`). */
 	readonly views?: Views;
+	/**
+	 * `self`-first functions of this feature emitted in the receiver-
+	 * constrained form even though their receiver passes distinct, bare type
+	 * parameters: the method keeps every type parameter as its own and
+	 * declares the receiver as its `this` parameter, so a type argument the
+	 * class would fix (`R` in `fail(…).orElse(…)`) is inferred from the
+	 * receiver and the arguments together. Each name must be a `self`-first
+	 * function of the feature's mini barrel, or generation fails.
+	 */
+	readonly constrained?: readonly string[];
 }
 
 /**
@@ -206,6 +216,8 @@ export interface FunctionFeature extends FeatureBase {
 	readonly borrows?: never;
 	/** Absent: there is no primary class to carry views. */
 	readonly views?: never;
+	/** Absent: there is no primary class to constrain a receiver of. */
+	readonly constrained?: never;
 }
 
 /** One feature whose main entrypoint is generated from its mini barrel. */

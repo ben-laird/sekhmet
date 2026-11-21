@@ -1017,6 +1017,60 @@ Deno.test("generateMain declares a receiver repeating a type parameter as this",
 	assertStringIncludes(result.value, "same<A>(this: Pair<A, A>): boolean {");
 });
 
+/** `or<A>(self: Box<A>, other: Box<A>): Box<A>`, a plain receiver. */
+const OR = fn(
+	"or",
+	signature({
+		typeParams: ["A"],
+		params: [selfBox(), param("other", named("Box", [typeParam("A")]))],
+		returnType: named("Box", [typeParam("A")]),
+	}),
+);
+
+Deno.test("generateMain emits a plain receiver listed in constrained as this", () => {
+	// Given: or(self: Box<A>, other: Box<A>), a plain receiver, listed in
+	// the feature's `constrained`
+	const feature: Feature = { ...FEATURE, constrained: ["or"] };
+
+	// When: generating with and without the listing
+	const forced = source([OR], feature);
+	const plain = source([OR]);
+
+	// Then: listed, it keeps A as its own and takes the receiver as this,
+	// so A is inferred from both; unlisted, A is the class's
+	assertStringIncludes(
+		forced,
+		"or<A>(this: Box<A>, other: mini.Box<A>): Box<A> {",
+	);
+	assertStringIncludes(forced, "return Box.fromMini(mini.or(this, other));");
+	assertStringIncludes(plain, "or(other: mini.Box<T>): Box<T> {");
+});
+
+Deno.test("generateMain rejects a constrained name that isn't a self-first function", () => {
+	// Given: a feature listing a typo and a function that doesn't take self
+	const full = fn(
+		"full",
+		signature({
+			typeParams: ["A"],
+			params: [param("value", typeParam("A"))],
+			returnType: named("Box", [typeParam("A")]),
+		}),
+	);
+
+	// When: generating with each listed in constrained
+	const typo = rejection([OR], { ...FEATURE, constrained: ["orr"] });
+	const notSelfFirst = rejection([OR, full], {
+		...FEATURE,
+		constrained: ["full"],
+	});
+
+	// Then: each fails, naming the listed function
+	assertEquals(typo.symbol, "orr");
+	assertStringIncludes(typo.message, "`constrained`");
+	assertEquals(notSelfFirst.symbol, "full");
+	assertStringIncludes(notSelfFirst.message, "`self`-first");
+});
+
 Deno.test("generateMain rejects a method without a return type", () => {
 	// Given: a self-first function with no annotated return type
 	const untyped = fn(

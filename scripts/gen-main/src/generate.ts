@@ -380,8 +380,9 @@ type RefNode = Extract<TypeNode, { kind: "ref" }>;
  *   parameter of the function, which become the class's
  * - `constrained`: `self: Primary<…>` with any other arguments
  *   (`Option<Option<T>>`, `Poll<Result<T, E>>`), like a Rust impl block
- *   for that shape only: the method keeps every type parameter as its own
- *   and declares the shape as its `this` parameter
+ *   for that shape only, or a plain receiver the feature lists in
+ *   `constrained`: the method keeps every type parameter as its own and
+ *   declares the shape as its `this` parameter
  * - `exact`: `self: S & Primary<A, B, C>` with `S extends Primary<A, B, C>`,
  *   keeping the receiver's exact type `S` (with views)
  * - `any`: `self: S` with `S extends` the views' `any` alias, as `S`
@@ -478,20 +479,28 @@ function constrainedToPrimary({
 	);
 }
 
-/** How a signature takes the receiver as `self`, or `undefined` if it doesn't. */
+/**
+ * How a signature takes the receiver as `self`, or `undefined` if it
+ * doesn't. With `name`, a plain receiver the feature lists in
+ * `constrained` takes the constrained form.
+ */
 function receiverFormOf({
 	feature,
 	signature,
+	name,
 }: {
 	feature: Feature;
 	signature: FunctionDeclaration;
+	name?: string;
 }): ReceiverForm | undefined {
 	if (!isClassFeature(feature)) return undefined;
 	const [param] = signature.params;
 	if (param?.kind !== "identifier" || param.name !== "self") return undefined;
 	const { type } = param;
 	if (namesClass(type, feature.primary)) {
-		const plain = passesOwnParams({ signature, type });
+		const forced =
+			name !== undefined && (feature.constrained?.includes(name) ?? false);
+		const plain = !forced && passesOwnParams({ signature, type });
 
 		return { kind: plain ? "plain" : "constrained", type };
 	}
@@ -756,7 +765,7 @@ function receiverRename({
 }): Generated<Map<string, string>> {
 	const { feature } = module;
 	const label = `\`${param?.name ?? "self"}\``;
-	const form = extra ? undefined : receiverFormOf({ feature, signature });
+	const form = extra ? undefined : receiverFormOf({ feature, signature, name });
 	if (form?.kind === "any") return ok(new Map([[form.param, selfType]]));
 	if (form?.kind === "constrained") return ok(new Map());
 
@@ -910,8 +919,8 @@ function methodHead({
 		});
 	}
 
-	const form =
-		field === undefined ? receiverFormOf({ feature, signature }) : undefined;
+	const ownForm = receiverFormOf({ feature, signature, name });
+	const form = field === undefined ? ownForm : undefined;
 	const constrained = form?.kind === "constrained" ? form.type : undefined;
 	if (constrained !== undefined && receiver.self !== "this") {
 		return failure({
@@ -2195,6 +2204,18 @@ export function generateMain(input: GenerateInput): Generated<string> {
 			(decl) => decl.kind === "other" && decl.typeOnly,
 		);
 		(typeOnly ? types : values).push(symbol.name);
+	}
+
+	const ownMethods = new Set(methodSymbols.map((symbol) => symbol.name));
+	const listed = isClassFeature(feature) ? (feature.constrained ?? []) : [];
+	const strayConstrained = listed.find((name) => !ownMethods.has(name));
+	if (strayConstrained !== undefined) {
+		return failure({
+			feature,
+			symbol: strayConstrained,
+			message:
+				"`constrained` names a function that isn't a `self`-first function of this feature",
+		});
 	}
 
 	const borrows = isClassFeature(feature) ? (feature.borrows ?? []) : [];
