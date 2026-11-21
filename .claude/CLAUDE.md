@@ -101,6 +101,15 @@ Packages (`packages/`):
   scheduler)
 - `@sekhmet/enum`: enum framework plus `option`, `result`, `either`, `latch`,
   `poll`, `ordering` and `control-flow` built on it
+- `@sekhmet/issue`: issues and typed recoveries, three main/mini features
+  with no root export: `issue` (`Issue<in out T, in out R>`, invariant: a
+  code, message, optional hint and docs, and a state `Unhandled(value) |
+  Handled(residue)` that switches in place, once; `attempt`, `handle`,
+  `wrap`, `render`, `recoverWith`), `recovery` (`Recovery<T, R, E>`, a
+  `Struct` wrapping `(value: T) => Vow<Result<R, E>>`; `orElse`, `firstOf`,
+  `retry`, `when`, `fromPromise`) and `attempt` (the `Attempt<R, E>` enum:
+  `AlreadyHandled | Handled | Failed`). A cause lives in the value, not a
+  field. Its decision record is `docs/decisions/issue.md`
 - `@sekhmet/job`: named jobs run as a
   dependency graph on promises and `AbortSignal`: `defineJobs(factory)`
   (a context factory building each job's `ctx` from the run's `meta`, with
@@ -310,7 +319,7 @@ fix(@sekhmet/primordials): correct Struct type inference
 **Types**: `feat`, `fix`, `test`, `refactor`, `docs`, `chore`, `perf`
 
 **Scopes**: Use package names: `@sekhmet/dispatch`, `@sekhmet/effect`, `@sekhmet/enum`,
-`@sekhmet/job`, `@sekhmet/lifetime`, `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/schema`,
+`@sekhmet/issue`, `@sekhmet/job`, `@sekhmet/lifetime`, `@sekhmet/matrix`, `@sekhmet/panic`, `@sekhmet/primordials`, `@sekhmet/schema`,
 `@sekhmet/vow`, `@sekhmet/workflow`, and `@sekhmet/add`, `@sekhmet/ci`, `@sekhmet/compat`, `@sekhmet/compat-smoke`,
 `@sekhmet/dv`, `@sekhmet/dv-plugin`, `@sekhmet/gen-main`, `@sekhmet/playground`,
 `@sekhmet/release` for scripts

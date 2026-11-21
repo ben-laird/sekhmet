@@ -17,6 +17,7 @@ with TypeScript's strictest settings, including `isolatedDeclarations`.
 | [`@sekhmet/dispatch`](packages/dispatch/README.md)       | A typed one-shot signal: `AbortController`/`AbortSignal` with a typed value instead of `reason: any`                   |
 | [`@sekhmet/job`](packages/job/README.md)                 | Named jobs run as a dependency graph, like GitHub Actions: `runIf` conditions and typed outcomes                       |
 | [`@sekhmet/lifetime`](packages/lifetime/README.md)       | RAII: a `Resource` acquires and releases, a `Lifetime` owns the value and guarantees its teardown                      |
+| [`@sekhmet/issue`](packages/issue/README.md)             | Issues that describe a problem and switch in place once handled, and typed recoveries, sync or async, that handle them |
 | [`@sekhmet/vow`](packages/vow/README.md)                 | `Vow`, a promise-like value that resolves synchronously                                                                |
 | [`@sekhmet/matrix`](packages/matrix/README.md)           | `matrix()`, every combination of a set of values, for parameterized tests                                              |
 | [`@sekhmet/panic`](https://jsr.io/@sekhmet/panic)        | Rust-style panics: a reporting hook, a catchUnwind boundary and `Outcome`, with no global state                        |
