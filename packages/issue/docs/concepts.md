@@ -84,6 +84,30 @@ would read something that isn't a `Config`. So `Issue` is invariant in both
 makes `&mut T` invariant for the same reason; see #98 for the same hole in
 `Option` and `Latch`.
 
+The main `Issue` has one gap left. TypeScript checks a method's parameters
+bivariantly, so a structural type with a wider residue still accepts a main
+issue, and handling through it writes the wrong residue:
+
+```ts
+import { issue } from "@sekhmet/issue/issue";
+import { assertEquals } from "@std/assert";
+
+const notFound = issue<string, { readonly port: number }>({
+	value: "app.json",
+	code: "config/NotFound",
+	message: "No config file.",
+});
+const view: { handle(residue: unknown): unknown } = notFound; // type-checks
+view.handle("not a config");
+
+const port: number = notFound.unwrapResidue().port; // typed number…
+assertEquals(port, undefined); // …but the residue is a string
+```
+
+So don't hand an issue around as a structural type with its methods; pass
+the `Issue` class, or use the mini free functions, which take it and have no
+such gap. The fix belongs in gen-main, and is tracked under #98.
+
 ## A recovery is a typed repair
 
 A `Recovery<T, R, E>` wraps `(value: T) => Vow<Result<R, E>>`. Its type says

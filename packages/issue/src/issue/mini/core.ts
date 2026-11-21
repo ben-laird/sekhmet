@@ -55,6 +55,14 @@ export interface IssueParams<T, R> extends IssueWording {
  * see `attempt` and `handle`. That makes an issue invariant in `T` and `R`
  * (see #98), since a widened view could otherwise write the wrong residue.
  *
+ * The main `Issue` (from `@sekhmet/issue/issue`) has a gap: TypeScript
+ * checks a method's parameters bivariantly, so a structural type with a
+ * wider residue, such as `{ handle(residue: unknown): unknown }`, accepts a
+ * main `Issue<T, Config>`, and calling `handle` through it writes a residue
+ * that isn't a `Config`. Don't view an issue through a structural type; the
+ * free functions here, which take the `Issue` class, have no such gap. The
+ * fix belongs in gen-main, tracked under #98.
+ *
  * A cause is not a field: an issue caused by another holds it in its value,
  * as in `Issue<{ readonly cause: Issue<Path, Config> }, Config>`. `wrap`
  * builds that shape, and `render` follows it.

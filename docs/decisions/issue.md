@@ -41,6 +41,9 @@ widened view could otherwise write the wrong residue
 ([#98](https://github.com/ben-laird/sekhmet/issues/98)). A `@ts-expect-error`
 test keeps it so.
 
+_Limited by [19](#19-the-main-classes-leave-a-method-bivariance-gap): a
+structural view of the main class can still widen `R`._
+
 ### 3. A cause is part of `T`, not a field
 
 An issue caused by another holds it in its value, as in
@@ -197,6 +200,21 @@ unhandled. Nothing rejects, so no unhandled rejection follows. A
 `fromPromise` built directly on vow's would have turned the rejection into
 an `Err` first, so the recovery builds its vow itself, with the same
 boundaries.
+
+### 19. The main classes leave a method-bivariance gap
+
+2026-11-21. Mini `Issue<in out T, in out R>` is invariant, and so is the
+generated main class, but TypeScript checks a method's parameters
+bivariantly. A structural type with a wider residue, such as
+`{ handle(residue: unknown): unknown }`, therefore accepts a main
+`Issue<T, Config>`, and `view.handle("not a config")` type-checks, then
+leaves the issue holding a string as its `Config`. The variance annotation
+can't close it, since it governs only instantiations of the class itself.
+The fix belongs in gen-main (emitting writers in a form checked
+contravariantly), not in this package, and is tracked under
+[#98](https://github.com/ben-laird/sekhmet/issues/98). Until then the docs
+say to pass the class, not a structural view, and the mini free functions,
+which take the class, have no such gap.
 
 ## Later
 
