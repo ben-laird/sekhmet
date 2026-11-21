@@ -185,8 +185,9 @@ assertEquals(notFound.unwrapResidue(), 8080);
 
 Read the state with `state()` and narrow that, not the issue: the issue
 switches in place, but a state is a snapshot that never changes, so its
-`isUnhandled` and `isHandled` are type guards. Narrowed, the variant's value
-reads directly with enum's `union`.
+`isUnhandled` and `isHandled` are type guards, and so are `isUnhandledAnd`
+and `isHandledAnd`, which also test the value or residue. Narrowed, the
+variant's value reads directly with enum's `union`.
 
 ```ts
 import { union } from "@sekhmet/enum/core/mini";

@@ -67,9 +67,10 @@ if (before.isUnhandled()) {
 }
 ```
 
-The `…And` forms (`isUnhandledAnd`, `isHandledAnd`) return a boolean on
-both: a state is invariant like its issue, so a type-guard predicate
-couldn't narrow `T` or `R`.
+The `…And` forms (`isUnhandledAnd`, `isHandledAnd`) follow the same split:
+a boolean on the issue, and on the state a guard that narrows the variant.
+Their predicate is a plain boolean test, since a state is invariant like
+its issue, so `T` and `R` can't be narrowed.
 
 ## Why an issue is invariant
 

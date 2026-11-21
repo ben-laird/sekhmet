@@ -71,12 +71,16 @@ Deno.test("main state methods narrow the snapshot from state()", () => {
 	} else {
 		assert(false, "the later snapshot is Handled");
 	}
-	assertEquals(
-		before.isUnhandledAnd((path) => path === "app.json"),
-		true,
-	);
-	assertEquals(
-		after.isHandledAnd((port) => port > 1024),
-		true,
-	);
+	if (before.isUnhandledAnd((path) => path === "app.json")) {
+		const path: string = union(before);
+		assertEquals(path, "app.json");
+	} else {
+		assert(false, "the earlier snapshot holds app.json");
+	}
+	if (after.isHandledAnd((port) => port > 1024)) {
+		const port: number = union(after);
+		assertEquals(port, 8080);
+	} else {
+		assert(false, "the later snapshot holds a high port");
+	}
 });

@@ -41,6 +41,32 @@ Deno.test("the …And forms also test the value held", () => {
 	assertFalse(isHandledAnd(unhandled, highPort));
 });
 
+Deno.test("the …And forms narrow a state to their variant", () => {
+	// Given: states typed as either variant
+	const unhandledState: IssueState<string, number> = unhandled;
+	const handledState: IssueState<string, number> = handled;
+
+	// When: each is narrowed with its …And form
+	// Then: the value reads directly, typed as the variant's, and the type
+	// parameters stay as they were
+	if (isUnhandledAnd(unhandledState, (path) => path.endsWith(".json"))) {
+		const path: string = union(unhandledState);
+		const same: IssueState<string, number> = unhandledState;
+		assertEquals(path, "app.json");
+		assertEquals(same, unhandledState);
+	} else {
+		assert(false, "an Unhandled state with a .json path narrows");
+	}
+	if (isHandledAnd(handledState, (port) => port > 1024)) {
+		const port: number = union(handledState);
+		const line = match(handledState)({ Handled: (held) => `port ${held}` });
+		assertEquals(port, 8080);
+		assertEquals(line, "port 8080");
+	} else {
+		assert(false, "a Handled state with a high port narrows");
+	}
+});
+
 Deno.test("isUnhandled narrows a state to its Unhandled variant", () => {
 	// Given: a state typed as either variant
 	const current: IssueState<string, number> = unhandled;

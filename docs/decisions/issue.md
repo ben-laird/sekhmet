@@ -167,9 +167,11 @@ A state read with `state()` is an immutable snapshot (handling assigns a new
 guards in the shape of `isSome`/`isOk` and Attempt's predicates
 (`self is Enum<Isolate<IssueStateVariants<T, R>, "Unhandled">> &
 IssueState<T, R>`). They narrow the variant only: the type parameters stay,
-since a state is invariant. Its `isUnhandledAnd` and `isHandledAnd` return a
-boolean, because a type-guard predicate couldn't narrow an invariant
-parameter. A separate feature keeps the names, which clash with Issue's
+since a state is invariant. Its `isUnhandledAnd` and `isHandledAnd` are
+guards of the same type: they narrow the variant, and take a plain boolean
+predicate, since a type-guard predicate couldn't narrow an invariant
+parameter (owner's choice, 2026-11-21; the first cut returned a plain
+`boolean`). A separate feature keeps the names, which clash with Issue's
 predicates. The main `Issue.state()` returns the main `IssueState`, so
 `notFound.state().isUnhandled()` narrows. Pre-1.0, the move is clean: the
 `issue` feature no longer exports `IssueState`.

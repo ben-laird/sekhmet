@@ -162,16 +162,18 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	}),
 	privateTypeRef("issue/src/state/mini/core.ts", "Variants", "Split"),
 	privateTypeRef("issue/src/state/mini/core.ts", "IssueState", "Enum"),
-	...["isUnhandled", "isHandled"].flatMap((predicate) => {
-		return [
-			privateTypeRef("issue/src/state/mini/predicates.ts", predicate, "Enum"),
-			privateTypeRef(
-				"issue/src/state/mini/predicates.ts",
-				predicate,
-				"Isolate",
-			),
-		];
-	}),
+	...["isUnhandled", "isUnhandledAnd", "isHandled", "isHandledAnd"].flatMap(
+		(predicate) => {
+			return [
+				privateTypeRef("issue/src/state/mini/predicates.ts", predicate, "Enum"),
+				privateTypeRef(
+					"issue/src/state/mini/predicates.ts",
+					predicate,
+					"Isolate",
+				),
+			];
+		},
+	),
 	...["Enum", "Isolate"].map((privateType) => {
 		return privateTypeRef(
 			"issue/src/state/main/mod.ts",

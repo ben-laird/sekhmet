@@ -117,24 +117,31 @@ export class IssueState<in out T, in out R> extends mini.IssueState<T, R> {
 	 * Checks whether the state is `Unhandled`, with a value that satisfies
 	 * `predicate`.
 	 *
-	 * Returns a boolean rather than narrowing: a state is invariant in its
-	 * value, so a type-guard predicate couldn't narrow `T`. Use
-	 * {@linkcode isUnhandled} to narrow the variant.
+	 * Narrows the variant, as {@linkcode isUnhandled} does. The predicate is a
+	 * plain boolean test, not a type guard: a state is invariant in its value,
+	 * so `T` can't be narrowed.
 	 *
 	 * @param predicate - Tests the value
 	 * @returns Whether it is `Unhandled` and the predicate holds
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
+	 * import { union } from "@sekhmet/enum/core/mini";
 	 * import { IssueState } from "@sekhmet/issue/state";
 	 *
 	 * const current = new IssueState<string, number>("Unhandled", "app.json");
 	 *
-	 * assertEquals(current.isUnhandledAnd((path) => path.endsWith(".json")), true);
+	 * if (current.isUnhandledAnd((path) => path.endsWith(".json"))) {
+	 * 	const path: string = union(current);
+	 * 	assertEquals(path, "app.json");
+	 * }
 	 * ```
 	 * @see {@link mini.isUnhandledAnd}
 	 */
-	isUnhandledAnd(predicate: (value: T) => boolean): boolean {
+	isUnhandledAnd(
+		predicate: (value: T) => boolean,
+	): this is Enum<Isolate<mini.IssueStateVariants<T, R>, "Unhandled">> &
+		IssueState<T, R> {
 		return mini.isUnhandledAnd(this, predicate);
 	}
 
@@ -169,24 +176,31 @@ export class IssueState<in out T, in out R> extends mini.IssueState<T, R> {
 	 * Checks whether the state is `Handled`, with a residue that satisfies
 	 * `predicate`.
 	 *
-	 * Returns a boolean rather than narrowing: a state is invariant in its
-	 * residue, so a type-guard predicate couldn't narrow `R`. Use
-	 * {@linkcode isHandled} to narrow the variant.
+	 * Narrows the variant, as {@linkcode isHandled} does. The predicate is a
+	 * plain boolean test, not a type guard: a state is invariant in its
+	 * residue, so `R` can't be narrowed.
 	 *
 	 * @param predicate - Tests the residue
 	 * @returns Whether it is `Handled` and the predicate holds
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
+	 * import { union } from "@sekhmet/enum/core/mini";
 	 * import { IssueState } from "@sekhmet/issue/state";
 	 *
 	 * const current = new IssueState<string, number>("Handled", 8080);
 	 *
-	 * assertEquals(current.isHandledAnd((port) => port > 1024), true);
+	 * if (current.isHandledAnd((port) => port > 1024)) {
+	 * 	const port: number = union(current);
+	 * 	assertEquals(port, 8080);
+	 * }
 	 * ```
 	 * @see {@link mini.isHandledAnd}
 	 */
-	isHandledAnd(predicate: (residue: R) => boolean): boolean {
+	isHandledAnd(
+		predicate: (residue: R) => boolean,
+	): this is Enum<Isolate<mini.IssueStateVariants<T, R>, "Handled">> &
+		IssueState<T, R> {
 		return mini.isHandledAnd(this, predicate);
 	}
 }
