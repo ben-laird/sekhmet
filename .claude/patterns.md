@@ -8,23 +8,17 @@ Recurring implementation patterns found throughout Sekhmet.
 
 ```ts ignore
 import { isolate, union } from "@sekhmet/enum/core/mini";
+import type { Result } from "@sekhmet/enum/result/mini";
 
-type Result = Split<{
-	Ok: [value: number];
-	Err: [error: string];
-}>;
-
-class ResultEnum extends Enum<Result> {}
-
-function processResult(result: ResultEnum): void {
+function processResult(result: Result<number, string>): void {
 	// Type guard narrows the enum type
 	if (isolate(result, "Ok")) {
-		// result is now Enum<Isolate<Result, "Ok">>
+		// result is now Enum<Isolate<ResultVariants<number, string>, "Ok">>
 		const value = union(result); // type: number
 		console.log(`Success: ${value}`);
 	} else {
-		// result is narrowed to Enum<Eliminate<Result, "Ok">>
-		// which is Enum<[kind: "Err", error: string]>
+		// result is narrowed to Enum<Eliminate<ResultVariants<number, string>, "Ok">>
+		// which is Enum<[kind: "Err", err: string]>
 		const error = union(result); // type: string
 		console.log(`Error: ${error}`);
 	}
@@ -36,11 +30,11 @@ function processResult(result: ResultEnum): void {
 ```ts ignore
 import { assertIsolated, union } from "@sekhmet/enum/core/mini";
 
-function mustBeSuccess(result: ResultEnum): number {
+function mustBeSuccess(result: Result<number, string>): number {
 	// Throws if not "Ok", otherwise narrows type
 	assertIsolated(result, "Ok", "Expected successful result");
 
-	// result is asserted to be Enum<Isolate<Result, "Ok">>
+	// result is asserted to be Enum<Isolate<ResultVariants<number, string>, "Ok">>
 	return union(result); // type: number
 }
 ```
@@ -50,11 +44,11 @@ function mustBeSuccess(result: ResultEnum): number {
 ```ts ignore
 import { eliminate, union } from "@sekhmet/enum/core/mini";
 
-function isNotPending(result: ResultEnum): boolean {
-	// Returns true if NOT "Pending"
-	if (eliminate(result, "Pending")) {
-		// result is Enum<Eliminate<Result, "Pending">>
-		// Could be "Ok" or "Err" but definitely not "Pending"
+function isSettled(status: Status): boolean {
+	// Returns true if NOT "Loading"
+	if (eliminate(status, "Loading")) {
+		// status is Enum<Eliminate<StatusVariants, "Loading">>
+		// Could be "Success" or "Failed" but definitely not "Loading"
 		return true;
 	}
 	return false;
@@ -66,7 +60,7 @@ function isNotPending(result: ResultEnum): boolean {
 ```ts ignore
 import { inspectIsolated } from "@sekhmet/enum/core/mini";
 
-function logIfError(result: ResultEnum): void {
+function logIfError(result: Result<number, string>): void {
 	// Only runs callback if the variant matches
 	inspectIsolated(result, "Err", (error) => {
 		// error has type: string
@@ -80,7 +74,7 @@ function logIfError(result: ResultEnum): void {
 ```ts ignore
 import { iterIsolated } from "@sekhmet/enum/core/mini";
 
-function processSuccesses(results: ResultEnum[]): number[] {
+function processSuccesses(results: Result<number, string>[]): number[] {
 	const values: number[] = [];
 
 	for (const result of results) {
@@ -100,21 +94,16 @@ function processSuccesses(results: ResultEnum[]): number[] {
 
 ```ts ignore
 import { match } from "@sekhmet/enum/core/mini";
+// Status: an enum with Loading, Success(data) and Failed(error) variants,
+// structured as in "Every enum is structured like Option and Result"
+import type { Status } from "./status/mini/core.ts";
 
-type Status = Split<{
-	Loading: [];
-	Success: [data: string];
-	Error: [error: Error];
-}>;
-
-class StatusEnum extends Enum<Status> {}
-
-function renderStatus(status: StatusEnum): string {
+function renderStatus(status: Status): string {
 	// All arms must be present - TypeScript enforces exhaustiveness
 	return match(status)({
 		Loading: () => "Loading...",
 		Success: (data) => `Success: ${data}`,
-		Error: (error) => `Error: ${error.message}`,
+		Failed: (error) => `Failed: ${error.message}`,
 	});
 }
 ```
@@ -124,7 +113,7 @@ function renderStatus(status: StatusEnum): string {
 ```ts ignore
 import { unionKinds, union } from "@sekhmet/enum/core/mini";
 
-function manualMatch(status: StatusEnum): string {
+function manualMatch(status: Status): string {
 	const kind = unionKinds(status);
 
 	switch (kind) {
@@ -134,9 +123,9 @@ function manualMatch(status: StatusEnum): string {
 			const data = union(status);
 			return `Success: ${data}`;
 		}
-		case "Error": {
+		case "Failed": {
 			const error = union(status);
-			return `Error: ${error.message}`;
+			return `Failed: ${error.message}`;
 		}
 		default:
 			// Exhaustiveness check
@@ -230,8 +219,12 @@ value.
 
 **Use flat structure (no main/mini) when:**
 
-- The feature has only one implementation file (e.g. `continuation`, `runtime`)
+- The feature has only one implementation file (e.g. `runtime`)
 - The feature has a small, cohesive set of exports that don't need individual splitting (e.g. `scheduler`)
+
+An enum is never flat: it always gets a mini core and a generated main, even
+in a flat feature or package (see "Every enum is structured like `Option` and
+`Result`" below).
 
 **Flat feature structure:**
 
@@ -253,9 +246,9 @@ feature/
 
 **Real examples in `@sekhmet/effect`:**
 
-- `continuation/` — flat (single file, no tree-shaking benefit)
+- `continuation/` — flat today, but its `Continuation` is an enum, so it moves to the `Option` shape (#110)
 - `runtime/` — flat (single file, no tree-shaking benefit)
-- `scheduler/` — flat (cohesive scheduler + schedules, no benefit to splitting further)
+- `scheduler/` — flat (cohesive scheduler + schedules, no benefit to splitting further); its `SchedulerState` enum moves to the `Option` shape (#110)
 - `effect/` — main/mini split: `./effect` → generated method-chaining `Effect` class; `./effect/mini` → functional API
 - `fiber/` — main/mini split: `./fiber` → generated method-chaining `Fiber` class; `./fiber/mini` → functional API
 
@@ -272,7 +265,84 @@ form until it gets one.
 
 Handing out mini values leaves the caller with no methods, and values from two
 packages stop comparing equal: a main `Outcome` and a mini `Outcome` holding
-the same variant fail `assertEquals`. Decided 2026-11-24 (#109).
+the same variant fail `assertEquals`. Decided 2026-11-24 (#109). How an enum's
+own definition is built is the next section's rule: from mini enums only.
+
+### Every enum is structured like `Option` and `Result`
+
+**Every enum has the shape of `Option` and `Result` in `@sekhmet/enum`, whether
+or not its package has a main/mini split.** Its variants are values as well as
+types, and every enum gets the same predicates, unwraps and main/mini interop.
+Decided 2026-11-24 (#110).
+
+**Mini** (`option/mini/core.ts` holds the first three; the functions live in
+sibling files such as `predicates.ts` and `unwrap.ts`):
+
+- a `Variants` type built with `Split`, exported under the enum's name
+  (`export type { Variants as OptionVariants }`);
+- a class extending `Enum<Variants>` with an empty body
+  (`export class Option<out T> extends Enum<Variants<T>> {}`);
+- a constructor function per variant, named after it and returning the class
+  (`Some(value)`, `None()`; `Ok(value)`, `Err(err)`);
+- predicates (`isSome`, `isSomeAnd`, `isNone`), accessors and unwraps
+  (`expect`, `unwrap`, `unwrapOr`) as free functions taking `self` first.
+
+```ts ignore
+// status/mini/core.ts
+import { Enum, type Split } from "@sekhmet/enum/core/mini";
+
+/** Constructs a Status that is still loading. */
+export function Loading(): Status {
+	return new Status("Loading");
+}
+
+/** Constructs a Status holding its data. */
+export function Success(data: string): Status {
+	return new Status("Success", data);
+}
+
+/** Constructs a Status holding the error that ended the load. */
+export function Failed(error: Error): Status {
+	return new Status("Failed", error);
+}
+
+type Variants = Split<{
+	Loading: [];
+	Success: [data: string];
+	Failed: [error: Error];
+}>;
+
+export type { Variants as StatusVariants };
+
+/** A load that is still running, succeeded with its data, or failed. */
+export class Status extends Enum<Variants> {}
+
+// status/mini/predicates.ts
+import { type Enum, type Isolate, isolate } from "@sekhmet/enum/core/mini";
+import type { Status, StatusVariants } from "./core.ts";
+
+/** Whether the Status is Success, narrowing it to that variant. */
+export function isSuccess(
+	self: Status,
+): self is Enum<Isolate<StatusVariants, "Success">> & Status {
+	return isolate(self, "Success");
+}
+```
+
+**Main** is a class extending the mini one, with a method per `self`-first
+function, a static `fromMini`, and the variant constructors re-declared to
+return it. It is generated, never hand-written: give the enum a `FEATURES`
+entry with `construct: "variant"` and run `deno task gen:main` (see "Main is
+generated from mini" below).
+
+**An enum's own definition is built only from mini enums.** That covers its
+variants and anything they hold: a variant holding an `Option` holds the mini
+`Option`. The mini core then never depends on a main module, and main
+converts across types through `wraps`.
+
+A flat enum (a bare `class X extends Enum<…> {}` with no constructors,
+predicates or main class) is the retired pattern, tracked in
+[legacy.md](rules/legacy.md).
 
 ### Granular exports in deno.json
 
@@ -598,11 +668,10 @@ type ValueOfA = Values<Isolate<MyVariants, "A">>; // string
 
 ```ts ignore
 import type { InferEnum } from "@sekhmet/enum/core/mini";
-
-class MyEnum extends Enum<MyVariants> {}
+import type { Option } from "@sekhmet/enum/option/mini";
 
 // Extract the variant type from an Enum class
-type ExtractedVariants = InferEnum<MyEnum>; // MyVariants
+type ExtractedVariants = InferEnum<Option<number>>; // OptionVariants<number>
 ```
 
 ### Split helper for ergonomic variants
@@ -635,7 +704,7 @@ import { assertType, type IsExact } from "@std/testing/types";
 
 Deno.test("validates type inference", () => {
 	// Given
-	const input = new MyEnum("Success", "data");
+	const input: Status = Success("data");
 
 	// When
 	if (isolate(input, "Success")) {
@@ -702,32 +771,19 @@ Deno.test("complex feature behavior", async (t) => {
 
 ### Using enums for result types
 
+Use `Result` from `@sekhmet/enum/result` rather than hand-rolling one; a new
+enum of your own follows "Every enum is structured like `Option` and
+`Result`".
+
 ```ts ignore
-import { Enum, type Split } from "@sekhmet/enum/core/mini";
 import { match } from "@sekhmet/enum/core/mini";
+import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
 
-type Result<T, E = Error> = Split<{
-	Ok: [value: T];
-	Err: [error: E];
-}>;
-
-class ResultEnum<T, E = Error> extends Enum<Result<T, E>> {}
-
-// Factory functions
-function ok<T>(value: T): ResultEnum<T, never> {
-	return new ResultEnum("Ok", value);
-}
-
-function err<E>(error: E): ResultEnum<never, E> {
-	return new ResultEnum("Err", error);
-}
-
-// Usage
-function divide(a: number, b: number): ResultEnum<number, string> {
+function divide(a: number, b: number): Result<number, string> {
 	if (b === 0) {
-		return err("Division by zero");
+		return Err("Division by zero");
 	}
-	return ok(a / b);
+	return Ok(a / b);
 }
 
 // Pattern match on result
@@ -762,11 +818,11 @@ const combined: Enum<VariantA | VariantB> = either;
 ```ts ignore
 import { isolate, union, eliminate } from "@sekhmet/enum/core/mini";
 
-function processChain(input: ResultEnum): string | null {
+function processChain(input: Status): string | null {
 	// Chain guards and extractions
-	if (eliminate(input, "Pending")) {
-		if (isolate(input, "Ok")) {
-			return union(input).toString();
+	if (eliminate(input, "Loading")) {
+		if (isolate(input, "Success")) {
+			return union(input);
 		}
 	}
 	return null;
