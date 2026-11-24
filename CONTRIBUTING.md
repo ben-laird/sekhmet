@@ -307,7 +307,7 @@ passes anywhere a mini value is accepted. See
 [patterns.md](.claude/patterns.md) (#109).
 
 **Every enum is structured like `Option` and `Result`**, whether or not its
-package has a main/mini split. Mini holds an exported `…Variants` type, a class
+package has a main/mini split and whether or not it is exported. Mini holds an exported `…Variants` type, a class
 extending `Enum` with an empty body, a constructor function per variant
 (`Some`, `None`), and predicates, accessors and unwraps as `self`-first
 functions; main is a class extending the mini one, with methods and

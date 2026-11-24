@@ -270,7 +270,8 @@ own definition is built is the next section's rule: from mini enums only.
 ### Every enum is structured like `Option` and `Result`
 
 **Every enum has the shape of `Option` and `Result` in `@sekhmet/enum`, whether
-or not its package has a main/mini split.** Its variants are values as well as
+or not its package has a main/mini split, and whether or not it is exported.**
+A private enum follows the rule too. Its variants are values as well as
 types, and every enum gets the same predicates, unwraps and main/mini interop.
 Decided 2026-11-24 (#110).
 

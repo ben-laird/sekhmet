@@ -113,7 +113,7 @@ Deno.test("function throws on invalid input", () => {
 ## Enum Definition
 
 Every enum has the shape of `Option` and `Result`, whether or not its package
-has a main/mini split (#110; patterns.md, "Every enum is structured like
+has a main/mini split and whether or not it is exported (#110; patterns.md, "Every enum is structured like
 `Option` and `Result`").
 
 ### Mini core
