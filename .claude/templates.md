@@ -110,41 +110,69 @@ Deno.test("function throws on invalid input", () => {
 });
 ```
 
-## Enum Variant Definition
+## Enum Definition
 
-### Basic variant types
+Every enum has the shape of `Option` and `Result`, whether or not its package
+has a main/mini split and whether or not it is exported (#110; patterns.md, "Every enum is structured like
+`Option` and `Result`").
+
+### Mini core
+
+**File**: `packages/package-name/src/my-enum/mini/core.ts`
 
 ```ts ignore
 import { Enum, type Split } from "@sekhmet/enum/core/mini";
 
-// Using Split for ergonomic variant definition
-type MyVariants = Split<{
+/** Constructs a MyEnum holding its value. */
+export function Success(value: string): MyEnum {
+	return new MyEnum("Success", value);
+}
+
+/** Constructs a MyEnum holding its error. */
+export function Failed(error: Error): MyEnum {
+	return new MyEnum("Failed", error);
+}
+
+/** Constructs a MyEnum that is still pending. */
+export function Pending(): MyEnum {
+	return new MyEnum("Pending");
+}
+
+type Variants = Split<{
 	Success: [value: string];
-	Error: [error: Error];
+	Failed: [error: Error];
 	Pending: []; // No value variant
 }>;
 
-// Create a custom enum class
-class MyEnum extends Enum<MyVariants> {}
+export type { Variants as MyEnumVariants };
 
-// Usage
-const success = new MyEnum("Success", "Hello!");
-const error = new MyEnum("Error", new Error("Failed"));
-const pending = new MyEnum("Pending");
+/** What MyEnum represents. */
+export class MyEnum extends Enum<Variants> {}
 ```
 
-### Manual variant definition (without Split)
+### Predicates, accessors and unwraps
+
+**File**: `packages/package-name/src/my-enum/mini/predicates.ts`
 
 ```ts ignore
-import { Enum, type SomeVariant } from "@sekhmet/enum/core/mini";
+import { type Enum, type Isolate, isolate } from "@sekhmet/enum/core/mini";
+import type { MyEnum, MyEnumVariants } from "./core.ts";
 
-type MyVariants =
-	| [kind: "Success", value: string]
-	| [kind: "Error", error: Error]
-	| [kind: "Pending"];
-
-class MyEnum extends Enum<MyVariants> {}
+/** Whether the MyEnum is Success, narrowing it to that variant. */
+export function isSuccess(
+	self: MyEnum,
+): self is Enum<Isolate<MyEnumVariants, "Success">> & MyEnum {
+	return isolate(self, "Success");
+}
 ```
+
+### Main
+
+Add the enum to `FEATURES` in `scripts/gen-main/src/config.ts` with
+`primary: "MyEnum"` and `construct: "variant"`, then run `deno task gen:main`.
+It writes `packages/package-name/src/my-enum/main/mod.ts`: a `MyEnum` extending
+the mini one, with a method per `self`-first function, `fromMini`, and the
+constructors returning it.
 
 ## Working with Struct
 
@@ -204,15 +232,9 @@ controller.start(); // "MyController started"
 
 ```ts ignore
 import { match, unionKinds } from "@sekhmet/enum/core/mini";
+import { Ok, type Result } from "@sekhmet/enum/result/mini";
 
-type Result = Split<{
-	Ok: [value: number];
-	Err: [error: string];
-}>;
-
-class ResultEnum extends Enum<Result> {}
-
-const result = new ResultEnum("Ok", 42);
+const result: Result<number, string> = Ok(42);
 
 // Pattern matching with match()
 const message = match(result)({
