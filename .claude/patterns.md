@@ -122,7 +122,7 @@ function renderStatus(status: StatusEnum): string {
 ### Manual pattern matching
 
 ```ts ignore
-import { unionKinds, union } from "@sekhmet/enum/core/mini";
+import { union, unionKinds } from "@sekhmet/enum/core/mini";
 
 function manualMatch(status: StatusEnum): string {
 	const kind = unionKinds(status);
@@ -151,7 +151,7 @@ function manualMatch(status: StatusEnum): string {
 ### Private data with public methods
 
 ```ts ignore
-import { Struct, getStructParams } from "@sekhmet/primordials/struct";
+import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 
 interface CounterData {
 	value: number;
@@ -188,7 +188,7 @@ console.log(data.value); // 11
 ### Immutable wrapper pattern
 
 ```ts ignore
-import { Struct, getStructParams } from "@sekhmet/primordials/struct";
+import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 
 interface Point {
 	x: number;
@@ -218,20 +218,23 @@ class ImmutablePoint extends Struct<Point> {
 
 ### When to use main/mini split vs. flat structure
 
-The standard package structure uses a `main/`/`mini/` split to support both kitchen-sink
-and tree-shakable imports. However, **small features with only one or two files don't
-benefit from this split** — the overhead of the extra barrel files adds complexity with no
-value.
+The standard package structure uses a `main/`/`mini/` split to support both
+kitchen-sink and tree-shakable imports. However, **small features with only one
+or two files don't benefit from this split** — the overhead of the extra barrel
+files adds complexity with no value.
 
 **Use main/mini split when:**
 
-- The feature has multiple independently tree-shakable exports (e.g. `isolate`, `eliminate`, `exit` in `@sekhmet/enum/core`)
-- The feature has a meaningful difference between "kitchen sink" and "individual function" bundles
+- The feature has multiple independently tree-shakable exports (e.g. `isolate`,
+  `eliminate`, `exit` in `@sekhmet/enum/core`)
+- The feature has a meaningful difference between "kitchen sink" and "individual
+  function" bundles
 
 **Use flat structure (no main/mini) when:**
 
 - The feature has only one implementation file (e.g. `continuation`, `runtime`)
-- The feature has a small, cohesive set of exports that don't need individual splitting (e.g. `scheduler`)
+- The feature has a small, cohesive set of exports that don't need individual
+  splitting (e.g. `scheduler`)
 
 **Flat feature structure:**
 
@@ -255,9 +258,27 @@ feature/
 
 - `continuation/` — flat (single file, no tree-shaking benefit)
 - `runtime/` — flat (single file, no tree-shaking benefit)
-- `scheduler/` — flat (cohesive scheduler + schedules, no benefit to splitting further)
-- `effect/` — main/mini split: `./effect` → generated method-chaining `Effect` class; `./effect/mini` → functional API
-- `fiber/` — main/mini split: `./fiber` → generated method-chaining `Fiber` class; `./fiber/mini` → functional API
+- `scheduler/` — flat (cohesive scheduler + schedules, no benefit to splitting
+  further)
+- `effect/` — main/mini split: `./effect` → generated method-chaining `Effect`
+  class; `./effect/mini` → functional API
+- `fiber/` — main/mini split: `./fiber` → generated method-chaining `Fiber`
+  class; `./fiber/mini` → functional API
+
+### A package with no main/mini split hands out main values
+
+A split package lets the caller choose between main and mini. A package with no
+split chooses for them, and its callers aren't tree-shaking it, so **it hands
+out main values**: every `Option`, `Result`, `Outcome`, `Vow` or `Recovery` it
+returns is the method-chaining main form, imported from the main entrypoint
+(`@sekhmet/enum/option`, not `@sekhmet/enum/option/mini`). A main value
+subclasses the mini one, so it still passes anywhere a mini value is accepted. A
+type with no main class yet (on main today, `Vow`) is returned as its mini form
+until it gets one.
+
+Handing out mini values leaves the caller with no methods, and values from two
+packages stop comparing equal: a main `Outcome` and a mini `Outcome` holding the
+same variant fail `assertEquals`. Decided 2026-11-24 (#109).
 
 ### Granular exports in deno.json
 
@@ -325,8 +346,7 @@ The workflow:
 3. Commit the mini change and the regenerated main modules together.
 
 `deno task gen:main --check` regenerates in memory and exits non-zero, listing
-each stale file, when a checked-in main module differs from what mini
-produces.
+each stale file, when a checked-in main module differs from what mini produces.
 
 To give a new feature a generated main, add an entry to `FEATURES` in
 `scripts/gen-main/src/config.ts`:
@@ -348,48 +368,46 @@ To give a new feature a generated main, add an entry to `FEATURES` in
 ### What the generator produces
 
 For `class Option<T> extends Enum<…>` in mini, main gets one plain class,
-`class Option<T> extends mini.Option<T>`, holding only that type's own
-functions as methods. Mini `Option` still extends mini `Enum`, so a main
-`Option` is `instanceof` both mini classes and every mini function accepts it.
+`class Option<T> extends mini.Option<T>`, holding only that type's own functions
+as methods. Mini `Option` still extends mini `Enum`, so a main `Option` is
+`instanceof` both mini classes and every mini function accepts it.
 
 - **Methods.** Every exported mini function whose first parameter is
-  `self: <Primary>` becomes a method. `self` becomes `this`, `self is X`
-  becomes `this is X`, `asserts self is X` becomes `asserts this is X`, and
-  overloads are kept. Type parameters that `self`'s type fixes become the
-  class's; the rest stay on the method (`filter<T, U extends T>` becomes
+  `self: <Primary>` becomes a method. `self` becomes `this`, `self is X` becomes
+  `this is X`, `asserts self is X` becomes `asserts this is X`, and overloads
+  are kept. Type parameters that `self`'s type fixes become the class's; the
+  rest stay on the method (`filter<T, U extends T>` becomes
   `filter<U extends T>`). JSDoc is copied without `@param self`, and
   `@see {@link mini.fn}` is added.
 - **Receiver-constrained methods.** When `self`'s type arguments are not
   distinct type parameters of the function (`self: Option<Option<T>>`,
-  `self: Poll<Result<T, E>>`, `self: Pair<A, A>`), the function is Rust's
-  method on a constrained impl block (`impl<T> Option<Option<T>>`). Its
-  method declares that shape as a `this` parameter and keeps every type
-  parameter as its own: `flatten<T>(this: Option<mini.Option<T>>): Option<T>`.
-  The outer class is spelled main, the arguments mini (like any parameter).
-  A call on a receiver of another shape fails to type-check, though
-  autocomplete still lists the method on every receiver. The method's type
-  parameters may share the class's names, since it uses none of the
-  class's. A namespace method can't constrain its receiver; generation
-  rejects one.
+  `self: Poll<Result<T, E>>`, `self: Pair<A, A>`), the function is Rust's method
+  on a constrained impl block (`impl<T> Option<Option<T>>`). Its method declares
+  that shape as a `this` parameter and keeps every type parameter as its own:
+  `flatten<T>(this: Option<mini.Option<T>>): Option<T>`. The outer class is
+  spelled main, the arguments mini (like any parameter). A call on a receiver of
+  another shape fails to type-check, though autocomplete still lists the method
+  on every receiver. The method's type parameters may share the class's names,
+  since it uses none of the class's. A namespace method can't constrain its
+  receiver; generation rejects one.
 - **Examples.** Every example copied into main (methods, constructors, the
-  class) is rewritten for main: calls of any function that became a method
-  move to method form, and imports from `<entrypoint>/mini` (or a mini
-  subpath) move to `<entrypoint>`, dropping the names that are now methods.
-  So write mini examples against the mini entrypoint with explicit imports;
-  `deno test --doc` then checks both forms.
-- **Chaining.** A method whose mini return type is the primary type (at the
-  top level) returns the main class. The result goes through the class's
-  static `fromMini`, which returns the value unchanged when it already is a
-  main instance (so methods that return `self` keep its identity) and
-  otherwise returns a main view built from the mini instance's struct params
-  (Struct-based classes pass the params to the constructor; Enum-based ones
-  are built from the variant and then rebound to the same params through the
-  `struct` symbol). Most views share the params object, so a change through
-  either is visible through both. A class whose constructor builds its own
-  params object, such as schema's `Schema` (whose constructor takes a
-  `SchemaInit` and fills in its defaults), copies them instead: the view holds
-  the same `parse`, `node` and `annotations`, and since these are immutable
-  the copy can't be observed.
+  class) is rewritten for main: calls of any function that became a method move
+  to method form, and imports from `<entrypoint>/mini` (or a mini subpath) move
+  to `<entrypoint>`, dropping the names that are now methods. So write mini
+  examples against the mini entrypoint with explicit imports; `deno test --doc`
+  then checks both forms.
+- **Chaining.** A method whose mini return type is the primary type (at the top
+  level) returns the main class. The result goes through the class's static
+  `fromMini`, which returns the value unchanged when it already is a main
+  instance (so methods that return `self` keep its identity) and otherwise
+  returns a main view built from the mini instance's struct params (Struct-based
+  classes pass the params to the constructor; Enum-based ones are built from the
+  variant and then rebound to the same params through the `struct` symbol). Most
+  views share the params object, so a change through either is visible through
+  both. A class whose constructor builds its own params object, such as schema's
+  `Schema` (whose constructor takes a `SchemaInit` and fills in its defaults),
+  copies them instead: the view holds the same `parse`, `node` and
+  `annotations`, and since these are immutable the copy can't be observed.
 - **Rule: conversions to another feature's type return that feature's main
   class.** In main, chaining never drops back to mini, even across types:
   `Some(1).okOr("e")` is a main `Result`, `Ok(1).ok()` a main `Option`,
@@ -399,31 +417,31 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
 - **Where conversion applies.** Every position of a return type that a caller
   receives a value from:
   - the return type itself (`Option<T>`);
-  - a wrap target nested in a wrap target's type arguments
-    (`transpose` returns `Result<Option<T>, E>`), converted through the outer
-    class's mapper for that argument, declared as `mappers` in the config
-    (`["map", "mapErr"]` for `Result`). The outer value is then a new instance
-    produced by that mapper rather than a view of the mini one;
+  - a wrap target nested in a wrap target's type arguments (`transpose` returns
+    `Result<Option<T>, E>`), converted through the outer class's mapper for that
+    argument, declared as `mappers` in the config (`["map", "mapErr"]` for
+    `Result`). The outer value is then a new instance produced by that mapper
+    rather than a view of the mini one;
   - the plain elements of a returned tuple (`unzip` returns
     `[first: Option<T>, second: Option<U>]`);
-  - the yielded values of a returned `Generator`/`IterableIterator` whose
-    return type is `void`; the method becomes a generator that re-yields each
-    value, so it stays lazy (`Enum.iterAnyIsolated`);
+  - the yielded values of a returned `Generator`/`IterableIterator` whose return
+    type is `void`; the method becomes a generator that re-yields each value, so
+    it stays lazy (`Enum.iterAnyIsolated`);
   - the fulfilled value of a `Promise` in any of these positions
     (`promiseResult` returns `Promise<Result<T, E>>`), converted through
     `.then`, which settles one microtask later than the mini promise;
   - the return value of a non-generic function type in any of these positions
     (`fallible` returns `(...args: A) => Result<U, E>`, and `fallibleAsync`
     `(...args: A) => Promise<Result<U, E>>`). The wrapper binds the mini
-    function to a name, so the mini call still runs once, and returns a
-    function whose every call converts; a curried function is bound the same
-    way at every level. It forwards arguments but not `this`.
+    function to a name, so the mini call still runs once, and returns a function
+    whose every call converts; a curried function is bound the same way at every
+    level. It forwards arguments but not `this`.
 
-  Parameters keep their mini types (they accept main and mini values alike),
-  as do positions the generator can't convert without changing behaviour:
-  unions, tuples with optional elements, generators with a non-`void` return
-  value, generic function types (their wrapper couldn't stay generic),
-  `PromiseLike`s other than `Promise`, and other generic containers.
+  Parameters keep their mini types (they accept main and mini values alike), as
+  do positions the generator can't convert without changing behaviour: unions,
+  tuples with optional elements, generators with a non-`void` return value,
+  generic function types (their wrapper couldn't stay generic), `PromiseLike`s
+  other than `Promise`, and other generic containers.
 - **Import cycles.** Because of that rule, main modules that convert to each
   other import each other (`option/main` ↔ `result/main`; `latch/main` imports
   both). The cycle is safe because a generated module uses another feature's
@@ -434,53 +452,52 @@ functions as methods. Mini `Option` still extends mini `Enum`, so a main
   converts to (and theirs), so `@sekhmet/enum/option` also loads
   `@sekhmet/enum/result`'s main module. Use the mini entrypoints when bundle
   size matters.
-- **Views (`views` in the config).** A Struct-based primary can carry
-  _views_: own properties holding the children a value was built from
-  (schema's `object(…).shape`; see the schema design's "Typed sub-schemas
-  (#37)"). Its config entry sets `views: { any: "AnySchema" }`, naming the
-  mini alias every value is assignable to, and each wrap target of it sets
-  `views: true`. Then:
+- **Views (`views` in the config).** A Struct-based primary can carry _views_:
+  own properties holding the children a value was built from (schema's
+  `object(…).shape`; see the schema design's "Typed sub-schemas (#37)"). Its
+  config entry sets `views: { any: "AnySchema" }`, naming the mini alias every
+  value is assignable to, and each wrap target of it sets `views: true`. Then:
   - main gets a static `fromMiniView`, which builds a main instance over the
-    same params and copies the value's own properties (the view) onto it.
-    It always copies (a main receiver's view comes along too) and panics
-    with a `TypeError` on any other prototype than mini's or main's class,
-    since a subclass would lose its behaviour in the copy;
+    same params and copies the value's own properties (the view) onto it. It
+    always copies (a main receiver's view comes along too) and panics with a
+    `TypeError` on any other prototype than mini's or main's class, since a
+    subclass would lose its behaviour in the copy;
   - a returned intersection naming exactly one wrap target
-    (`Schema<I, O, E> & ObjectView<S>`) spells the target as main and
-    converts through `fromMiniView`; a second wrap target, or one whose type
-    arguments convert, fails generation;
-  - two more receiver forms keep the receiver's exact type, rendered
-    `this`: `self: S & Schema<A, B, C>` with `S extends Schema<A, B, C>`,
-    and `self: S` with `S extends AnySchema` (`annotate` returns `this`);
-    an options type parameter constrained to `Schema<A, B, C>` that a field
-    method's receiver fills (`array`'s `item`) is `this` too;
-  - a namespace class (`SchemaWith`) gets a `Self` type parameter bounded by
-    the _mini_ primary, which its getter fills with `this`; its methods
-    render the exact receiver as `Self`. The bound must stay mini: holding
-    the main class makes TypeScript's variance measurement circular (#31).
-- **Enum narrowings.** A returned intersection of one wrap target that has
-  no views with enum's own `Enum`s only (imported from `@sekhmet/enum/core`
-  or one of its subpaths) (`catchFailure` returns
+    (`Schema<I, O, E> & ObjectView<S>`) spells the target as main and converts
+    through `fromMiniView`; a second wrap target, or one whose type arguments
+    convert, fails generation;
+  - two more receiver forms keep the receiver's exact type, rendered `this`:
+    `self: S & Schema<A, B, C>` with `S extends Schema<A, B, C>`, and `self: S`
+    with `S extends AnySchema` (`annotate` returns `this`); an options type
+    parameter constrained to `Schema<A, B, C>` that a field method's receiver
+    fills (`array`'s `item`) is `this` too;
+  - a namespace class (`SchemaWith`) gets a `Self` type parameter bounded by the
+    _mini_ primary, which its getter fills with `this`; its methods render the
+    exact receiver as `Self`. The bound must stay mini: holding the main class
+    makes TypeScript's variance measurement circular (#31).
+- **Enum narrowings.** A returned intersection of one wrap target that has no
+  views with enum's own `Enum`s only (imported from `@sekhmet/enum/core` or one
+  of its subpaths) (`catchFailure` returns
   `Enum<Eliminate<JobEndVariants<Result<T, unknown>>, "Failed">> &
-  JobEnd<Result<T, unknown>>`) is a narrowing of the target's variants.
-  Main spells the target as its main class with its type arguments as they
-  are (the narrowing names them in mini, so they are not converted), and
-  converts through `Object.assign(Target.fromMini(value), value)`, which
-  keeps the narrowing's type with no cast. Any other member beside a target
-  without views still fails generation.
-- **Functions that return their receiver.** A mini function that returns
-  its first argument itself, retyped (`brand`), is declared in the config:
-  `identities: ["brand"]` on its feature, `identity: true` on a borrowed
-  method. Main then returns a value that is already the main class (a
-  subclass included) as is and converts only a mini one, since
-  `fromMiniView` panics on a subclass and the receiver's identity is the
-  point. Generation fails if such a function returns no converted value.
+  JobEnd<Result<T, unknown>>`)
+  is a narrowing of the target's variants. Main spells the target as its main
+  class with its type arguments as they are (the narrowing names them in mini,
+  so they are not converted), and converts through
+  `Object.assign(Target.fromMini(value), value)`, which keeps the narrowing's
+  type with no cast. Any other member beside a target without views still fails
+  generation.
+- **Functions that return their receiver.** A mini function that returns its
+  first argument itself, retyped (`brand`), is declared in the config:
+  `identities: ["brand"]` on its feature, `identity: true` on a borrowed method.
+  Main then returns a value that is already the main class (a subclass included)
+  as is and converts only a mini one, since `fromMiniView` panics on a subclass
+  and the receiver's identity is the point. Generation fails if such a function
+  returns no converted value.
 - **Constructors and other free functions.** A function without `self` whose
-  return needs converting (`Some`, `None`, `maybe`,
-  `compareNumbers`, `fork`, `fallible`, `fallibleAsync`, `promiseResult`) is
-  re-declared in main as a wrapper that returns main classes, so
-  `Some(1).map(…)` chains. Everything else mini exports is re-exported
-  unchanged.
+  return needs converting (`Some`, `None`, `maybe`, `compareNumbers`, `fork`,
+  `fallible`, `fallibleAsync`, `promiseResult`) is re-declared in main as a
+  wrapper that returns main classes, so `Some(1).map(…)` chains. Everything else
+  mini exports is re-exported unchanged.
 
 ```ts ignore
 // mini/transform.ts
@@ -517,22 +534,22 @@ methods.
 - Name the receiver `self` and type it as the primary class with each of the
   class's type parameters passed as a distinct function type parameter
   (`self: Latch<A, I>`). Don't name another type parameter after one of the
-  class's, nor `Self` on a namespace method. For a method that exists only
-  for one shape of receiver, type `self` as that shape
-  (`self: Option<Option<T>>`); it becomes a `this` parameter.
+  class's, nor `Self` on a namespace method. For a method that exists only for
+  one shape of receiver, type `self` as that shape (`self: Option<Option<T>>`);
+  it becomes a `this` parameter.
 - To return a view of the receiver, capture it exactly:
   `self: S & Schema<I, O, E>` with `S extends Schema<I, O, E>` (TypeScript
   infers both), never a generic `S extends AnySchema` with `Input<S>` in the
   return (the conditional defers when `S` is `this`), and never a view type
-  parameter over an intersection (`self: Schema<I, O, E> & V` infers `V` as
-  the whole argument); only `fromMiniView` uses that form.
+  parameter over an intersection (`self: Schema<I, O, E> & V` infers `V` as the
+  whole argument); only `fromMiniView` uses that form.
 - Annotate every return type (`isolatedDeclarations` already requires it).
 - Use plain or rest parameters; destructured or defaulted parameters are
   rejected.
-- Don't start a parameter name with `$`: generated code reserves that prefix
-  for its own locals (`$converted`, `$item`, `$element0`, `$value0`,
-  `$args0`), so they never collide with a parameter, and generation rejects a
-  parameter that uses it.
+- Don't start a parameter name with `$`: generated code reserves that prefix for
+  its own locals (`$converted`, `$item`, `$element0`, `$value0`, `$args0`), so
+  they never collide with a parameter, and generation rejects a parameter that
+  uses it.
 - If generation fails, `deno task gen:main` names the feature, the symbol and
   the reason.
 
@@ -543,8 +560,7 @@ Functions with more than one parameter take a single object parameter
 name every argument. The one exception is a self-first mini function the
 generator turns into a main method: `map(self, mapping)` keeps its positional
 `self`, because its main form is the one-argument method `value.map(mapping)`
-and every package shares that convention. _Confirmed by the owner,
-2026-11-16._
+and every package shares that convention. _Confirmed by the owner, 2026-11-16._
 
 ## Type Utility Patterns
 
@@ -552,10 +568,10 @@ and every package shares that convention. _Confirmed by the owner,
 
 ```ts ignore
 import type {
+	Eliminate,
+	Isolate,
 	Kinds,
 	Values,
-	Isolate,
-	Eliminate,
 } from "@sekhmet/enum/core/mini";
 
 type MyVariants =
@@ -745,7 +761,7 @@ const combined: Enum<VariantA | VariantB> = either;
 ### Chaining operations
 
 ```ts ignore
-import { isolate, union, eliminate } from "@sekhmet/enum/core/mini";
+import { eliminate, isolate, union } from "@sekhmet/enum/core/mini";
 
 function processChain(input: ResultEnum): string | null {
 	// Chain guards and extractions
@@ -782,7 +798,7 @@ import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { eliminate } from "@sekhmet/enum/core/mini/eliminate";
 
 // ✅ Good - import from mini barrel
-import { isolate, eliminate } from "@sekhmet/enum/core/mini";
+import { eliminate, isolate } from "@sekhmet/enum/core/mini";
 
 // ⚠️ Acceptable - import from main (larger bundle; methods on the Enum class)
 import { Enum } from "@sekhmet/enum/core";

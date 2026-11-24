@@ -109,9 +109,9 @@ Before contributing:
 `playground/` at the repository root is gitignored and never checked by
 `deno task ci`, so keep scratch scripts, tests and notebooks there. Your editor
 still covers it: the Deno language server (hovers, completions, type errors,
-Deno's lint) and Biome (formatting, lint, organize imports) both see the
-folder. Imports of `@sekhmet/*` resolve to the checked-out source, so you are
-always playing with the current branch (or, after `deno task play:link`, with a
+Deno's lint) and Biome (formatting, lint, organize imports) both see the folder.
+Imports of `@sekhmet/*` resolve to the checked-out source, so you are always
+playing with the current branch (or, after `deno task play:link`, with a
 worktree's):
 
 ```bash
@@ -122,17 +122,17 @@ deno lint playground/              # Deno's lint rules
 deno task fmt playground/          # format and lint-fix it with Biome
 ```
 
-Playground tests are ordinary `Deno.test` files (`playground/try.test.ts`)
-that import `@std/assert`, `@std/testing` and `@sekhmet/*` as the packages'
-own tests do; `deno test playground/try.test.ts` runs one. They are scratch, so
-the Given/When/Then comments the gate requires elsewhere are up to you.
+Playground tests are ordinary `Deno.test` files (`playground/try.test.ts`) that
+import `@std/assert`, `@std/testing` and `@sekhmet/*` as the packages' own tests
+do; `deno test playground/try.test.ts` runs one. They are scratch, so the
+Given/When/Then comments the gate requires elsewhere are up to you.
 
 The gate stays off it in two ways: Biome, `deno check`, `deno lint` and
-`deno test` run over the paths git does not ignore
-(`scripts/ci/gate-files.ts`; `deno test` gets the top-level directories they
-live in, so its own discovery and the `deno.json` excludes still apply inside
-them), and the publish-readiness scans skip it. `deno.json` excludes nothing
-for it, so the commands above, and the editor, treat it like any other folder.
+`deno test` run over the paths git does not ignore (`scripts/ci/gate-files.ts`;
+`deno test` gets the top-level directories they live in, so its own discovery
+and the `deno.json` excludes still apply inside them), and the publish-readiness
+scans skip it. `deno.json` excludes nothing for it, so the commands above, and
+the editor, treat it like any other folder.
 
 - **`deno task play:notebook`** copies a starter notebook to
   `playground/start.ipynb` (it never overwrites yours). Open it in VS Code with
@@ -147,8 +147,8 @@ for it, so the commands above, and the editor, treat it like any other folder.
 Your editor's `playground/` lives in the main checkout, but the branch you want
 to try often lives in a worktree (`.claude/worktrees/…`). `play:link` writes a
 `playground/deno.json` that links every `@sekhmet/*` package to that tree, so
-hovers, completions and the `deno` commands in `playground/` use its source
-(see "Which commands follow the link" below):
+hovers, completions and the `deno` commands in `playground/` use its source (see
+"Which commands follow the link" below):
 
 ```bash
 deno task play:link refactor/schema-declarative  # the worktree on that branch
@@ -158,11 +158,11 @@ deno task play:link                              # what is linked, and is it sti
 deno task play:link off                          # back to the root workspace
 ```
 
-- **A target** is `main` (or `checkout`) for this clone's own checkout, a
-  branch name for the worktree that has it checked out (it lists the branches
-  that have one when yours does not), or a path starting with `/`, `.` or `~`.
-  It works the same run from the main checkout or from any worktree, and always
-  writes the main checkout's `playground/deno.json`.
+- **A target** is `main` (or `checkout`) for this clone's own checkout, a branch
+  name for the worktree that has it checked out (it lists the branches that have
+  one when yours does not), or a path starting with `/`, `.` or `~`. It works
+  the same run from the main checkout or from any worktree, and always writes
+  the main checkout's `playground/deno.json`.
 - **The file is not a workspace member**, so Deno treats `playground/` as a
   standalone project and prints
   `Warning: config file …/playground/deno.json is not a member of the workspace … Ignoring the parent workspace config.`
@@ -170,20 +170,20 @@ deno task play:link off                          # back to the root workspace
   there, so `play:link` copies the target root `deno.json`'s other `imports`
   (`@std/assert`, `@std/testing`, `@~/`, …) into the file, rebasing relative
   paths onto `playground/`.
-- **It owns what it writes**: the `@sekhmet/*` entries of `imports` (one
-  `jsr:` specifier per package, which `links` overrides, so unpublished
-  packages work too), the root imports it copied, `links` (every package of the
-  target, relative to `playground/`), and `compilerOptions` (copied from the
-  target's root `deno.json`, so strictness matches). It records the root
-  imports it copied under a `playLink` key, so a relink or `off` removes
-  exactly those. An import you set yourself keeps your value and is never
-  recorded, and every other key you add is kept on relink and on `off`; `off`
-  deletes the file only when nothing of yours is left in it.
-- **Which commands follow the link** depends on where Deno looks for a
-  config. `deno test`, `deno check` and `deno info` start from the current
-  directory; `deno run` and `deno lint` start from the file. So run from inside
-  the playground (`cd playground && deno test`), where every command uses the
-  link. From the repository root, `deno run playground/try.ts` and
+- **It owns what it writes**: the `@sekhmet/*` entries of `imports` (one `jsr:`
+  specifier per package, which `links` overrides, so unpublished packages work
+  too), the root imports it copied, `links` (every package of the target,
+  relative to `playground/`), and `compilerOptions` (copied from the target's
+  root `deno.json`, so strictness matches). It records the root imports it
+  copied under a `playLink` key, so a relink or `off` removes exactly those. An
+  import you set yourself keeps your value and is never recorded, and every
+  other key you add is kept on relink and on `off`; `off` deletes the file only
+  when nothing of yours is left in it.
+- **Which commands follow the link** depends on where Deno looks for a config.
+  `deno test`, `deno check` and `deno info` start from the current directory;
+  `deno run` and `deno lint` start from the file. So run from inside the
+  playground (`cd playground && deno test`), where every command uses the link.
+  From the repository root, `deno run playground/try.ts` and
   `deno lint playground/` use the link, but `deno test playground/` and
   `deno check playground/try.ts` use the root workspace (this checkout's
   packages) unless you pass `--config playground/deno.json`.
@@ -299,6 +299,13 @@ If you have multiple related `mod.ts` files written like this, refactor to the
 medium-sized configuration. Then, if you have big enough features, refactor to
 the big package configuration.
 
+**A package with no main/mini split hands out main values.** Every `Option`,
+`Result`, `Outcome`, `Vow` or `Recovery` it returns is the method-chaining main
+form (import `@sekhmet/enum/option`, not `@sekhmet/enum/option/mini`); a type
+with no main class yet is returned as its mini form until it gets one. A main
+value subclasses the mini one, so it passes anywhere a mini value is accepted.
+See [patterns.md](.claude/patterns.md) (#109).
+
 ## Coding Standards
 
 ### TypeScript Configuration
@@ -373,8 +380,8 @@ module re-declares each function returning a `wraps` target so it returns that
 target's main class, and re-exports the rest.
 
 Mini functions that operate on a primary class instance name their first
-parameter `self`. That is the signal that the function becomes a method on
-the main class:
+parameter `self`. That is the signal that the function becomes a method on the
+main class:
 
 ```ts ignore
 // mini: free function with self
@@ -387,34 +394,33 @@ export class Fiber<I, T, E> extends mini.Fiber<I, T, E> {
 ```
 
 Functions whose first parameter is typed as a _different_ class (e.g. `fork`
-takes `self: Runtime`, not `self: Fiber`) are not methods. When such a
-function, or a method, returns the primary type, main returns the main class
-(converted with its static `fromMini`), so calls keep chaining. See
+takes `self: Runtime`, not `self: Fiber`) are not methods. When such a function,
+or a method, returns the primary type, main returns the main class (converted
+with its static `fromMini`), so calls keep chaining. See
 [patterns.md](.claude/patterns.md) for the full contract.
 
-A class feature can also take methods from another feature's mini barrel
-with `borrows` in its config entry, for a function that belongs to that
-feature but reads best chained (`@sekhmet/schema`'s `Schema` takes
-`optional`, `nullable` and `array` from composites). A borrowed function
-takes `self` first, like any method's, or names the `field` of its single
-options object that the receiver fills (`array({ item })` becomes
-`.array()`, a method with no arguments). The generated module imports the
-barrel as a namespace, and borrowed examples are rewritten to method form.
-When the function's prose talks about parameters the method doesn't take, a
-borrow can give the method its own `doc` (description, params, returns,
-example).
+A class feature can also take methods from another feature's mini barrel with
+`borrows` in its config entry, for a function that belongs to that feature but
+reads best chained (`@sekhmet/schema`'s `Schema` takes `optional`, `nullable`
+and `array` from composites). A borrowed function takes `self` first, like any
+method's, or names the `field` of its single options object that the receiver
+fills (`array({ item })` becomes `.array()`, a method with no arguments). The
+generated module imports the barrel as a namespace, and borrowed examples are
+rewritten to method form. When the function's prose talks about parameters the
+method doesn't take, a borrow can give the method its own `doc` (description,
+params, returns, example).
 
-A field method can also take one argument: `argument` names the other field
-of the options object that it fills (`or({ left, right })` with
-`field: "left", argument: "right"` becomes `.or(right)`). The argument is
-typed by indexing the options type (`OrOptions<I, O, E, J, P, F>["right"]`),
-whose type parameters past the class's become the method's own, so they are
-inferred from the argument. A borrow with a `property` (`name`, `className`,
-`doc`) puts its methods on a generated namespace class instead of the
-primary: the primary gets a getter `name` returning a `className` that
-holds the instance (`schema.with.or(other)`). Every namespace method needs
-its own `doc`, since the function's examples aren't rewritten for it, and
-gen-main rejects a getter, class or method name that is already taken.
+A field method can also take one argument: `argument` names the other field of
+the options object that it fills (`or({ left, right })` with
+`field: "left", argument: "right"` becomes `.or(right)`). The argument is typed
+by indexing the options type (`OrOptions<I, O, E, J, P, F>["right"]`), whose
+type parameters past the class's become the method's own, so they are inferred
+from the argument. A borrow with a `property` (`name`, `className`, `doc`) puts
+its methods on a generated namespace class instead of the primary: the primary
+gets a getter `name` returning a `className` that holds the instance
+(`schema.with.or(other)`). Every namespace method needs its own `doc`, since the
+function's examples aren't rewritten for it, and gen-main rejects a getter,
+class or method name that is already taken.
 
 ### Infrastructure Code Conventions
 
@@ -478,13 +484,12 @@ Deno.test("myFunction handles basic case", () => {
 });
 ```
 
-`deno task ci` enforces this (the Publish Readiness step): every `Deno.test`
-and every `t.step` must be covered by `// Given:`, `// When:` and `// Then:`
+`deno task ci` enforces this (the Publish Readiness step): every `Deno.test` and
+every `t.step` must be covered by `// Given:`, `// When:` and `// Then:`
 comments (a bare `// Given` also counts, and `// When/Then:` names two). A
-marker covers the block it is written in and every step nested inside it, and
-a test is also covered by a marker that each of its steps has. So a test's
-shared `// Given:` covers its steps, but a step never borrows a sibling's
-markers.
+marker covers the block it is written in and every step nested inside it, and a
+test is also covered by a marker that each of its steps has. So a test's shared
+`// Given:` covers its steps, but a step never borrows a sibling's markers.
 
 For complex tests with multiple assertions, use nested steps:
 
@@ -520,12 +525,12 @@ Deno.test("Feature behaves correctly", async (t) => {
 
 #### Type tests: exact, rejection and variance
 
-A public generic type (and every API whose safety rests on its types) gets
-three kinds of type test, not just the first. `IsExact` checks a type in
-isolation; soundness bugs live in the relationships between types, which only
-the other two kinds see. _Why: two reviews of `@sekhmet/schema` (2026-11-16)
-found a forgeable typed key and an order-dependent variance bug that 600+
-passing tests, nearly all `IsExact`, had missed._
+A public generic type (and every API whose safety rests on its types) gets three
+kinds of type test, not just the first. `IsExact` checks a type in isolation;
+soundness bugs live in the relationships between types, which only the other two
+kinds see. _Why: two reviews of `@sekhmet/schema` (2026-11-16) found a forgeable
+typed key and an order-dependent variance bug that 600+ passing tests, nearly
+all `IsExact`, had missed._
 
 1. **Exact**: what a construct infers, with `assertType<IsExact<…>>(true)`.
 2. **Rejection**: what must _not_ compile, with `// @ts-expect-error` on the
@@ -638,72 +643,73 @@ deno task hooks
   `deno task hooks` installs a small shim for `pre-commit` and
   `pre-merge-commit` into the clone's shared hooks directory
   (`$(git rev-parse --git-common-dir)/hooks`, i.e. `.git/hooks/`), which every
-  worktree runs. The shim runs the committing worktree's own
-  `.githooks/<hook>`, so each worktree is gated by its own branch's hooks; a
-  branch without `.githooks/<hook>` is not gated. Rerunning it is harmless.
+  worktree runs. The shim runs the committing worktree's own `.githooks/<hook>`,
+  so each worktree is gated by its own branch's hooks; a branch without
+  `.githooks/<hook>` is not gated. Rerunning it is harmless.
 - **`core.hooksPath` must stay unset:** while it is set, git ignores
-  `.git/hooks/`. `deno task hooks` unsets the old `.githooks` setting
-  (relative or absolute) and refuses any other value, as it refuses to
-  replace a hook in `.git/hooks/` that it did not install. The old setting
-  was one value for every worktree, and Claude Code's worktree setup rewrites
-  a relative one to the main checkout's absolute path, so every worktree ran
-  whatever hooks the main checkout's branch had.
-- `deno task ci` prints a one-line warning while a shim is missing or
-  outdated, or `core.hooksPath` is set.
+  `.git/hooks/`. `deno task hooks` unsets the old `.githooks` setting (relative
+  or absolute) and refuses any other value, as it refuses to replace a hook in
+  `.git/hooks/` that it did not install. The old setting was one value for every
+  worktree, and Claude Code's worktree setup rewrites a relative one to the main
+  checkout's absolute path, so every worktree ran whatever hooks the main
+  checkout's branch had.
+- `deno task ci` prints a one-line warning while a shim is missing or outdated,
+  or `core.hooksPath` is set.
 
 - **Recording:** when every step passes, `deno task ci` records the staged
   tree's id (`git write-tree`) in `$(git rev-parse --git-path ci-green)`, one
   marker per worktree. The gate checks the working tree, not the index, so it
-  records only when the two hold the same files: no unstaged change to a
-  tracked file and no untracked, unignored file, both before the first step
-  and after the last. A failed, blocked or interrupted run records nothing.
-- **Checking:** `.githooks/pre-commit` refuses a commit whose staged tree is
-  not the recorded one.
+  records only when the two hold the same files: no unstaged change to a tracked
+  file and no untracked, unignored file, both before the first step and after
+  the last. A failed, blocked or interrupted run records nothing.
+- **Checking:** `.githooks/pre-commit` refuses a commit whose staged tree is not
+  the recorded one.
 - **Markdown exemption:** a commit that changes only `*.md` files (a rename
   counts both its paths) is exempt, unless its staged diff adds, removes or
   changes a line inside a code block that `deno test --doc` runs, in either
   `HEAD`'s or the staged version. The refusal then names those files. As in
   Deno, such a block is a backtick fence (three or more, `~~~` does not count)
   whose first info word is exactly `ts`, `tsx`, `typescript`, `mts`, `cts`,
-  `js`, `jsx`, `javascript`, `mjs` or `cjs`, without an `ignore` word
-  (`no-eval` is still type-checked). Its fence lines count, so dropping an
-  `ignore` is a code change.
+  `js`, `jsx`, `javascript`, `mjs` or `cjs`, without an `ignore` word (`no-eval`
+  is still type-checked). Its fence lines count, so dropping an `ignore` is a
+  code change.
 - **The workflow:** stage everything (`git add`), run `deno task ci`, then
   commit. Any edit or `git add` after the run needs a new run.
-- **Merges:** changes reach `main` only through a pull request merged on
-  GitHub (see [Pull Request Process](#pull-request-process)), so the hook
-  never sees that merge. Locally, `.githooks/pre-merge-commit` holds a merge
-  commit (say, `main` merged into your branch) to the same rule. When `git merge --no-ff` is refused, the merge stays staged: run
-  `deno task ci`, then `git commit`. Or start with `git merge --no-commit`.
-  A fast-forward makes no commit, so nothing is checked.
+- **Merges:** changes reach `main` only through a pull request merged on GitHub
+  (see [Pull Request Process](#pull-request-process)), so the hook never sees
+  that merge. Locally, `.githooks/pre-merge-commit` holds a merge commit (say,
+  `main` merged into your branch) to the same rule. When `git merge --no-ff` is
+  refused, the merge stays staged: run `deno task ci`, then `git commit`. Or
+  start with `git merge --no-commit`. A fast-forward makes no commit, so nothing
+  is checked.
 - **Escape hatch:** `git commit --no-verify` skips the hook. It is for human
   emergencies only; agents must never use it.
 
 ### `todo` stays out of published packages
 
 `@sekhmet/workflow`'s `todo` is a placeholder, so it must not ship. The
-publish-readiness step of `deno task ci` fails when a package's non-test
-source (its `src/` and its top-level modules alike) reaches `todo` through:
+publish-readiness step of `deno task ci` fails when a package's non-test source
+(its `src/` and its top-level modules alike) reaches `todo` through:
 
 - a value import binding `todo`, under any alias or quoted name;
 - a re-export of `todo`, or an `export *` of a module holding it;
-- `ns.todo`, `ns?.todo` or `ns["todo"]` through a namespace import of a
-  module holding it;
+- `ns.todo`, `ns?.todo` or `ns["todo"]` through a namespace import of a module
+  holding it;
 - a dynamic `import()` of a module holding `todo`, with a literal specifier.
 
 A named import is flagged whatever is done with the binding afterwards
 (`f = todo; f()`, `todo.call`). A namespace import is flagged only by those
-three member forms, so destructuring it (`const { todo } = wf`), a computed
-key (`wf[key]`) or passing the namespace to a function goes unflagged.
+three member forms, so destructuring it (`const { todo } = wf`), a computed key
+(`wf[key]`) or passing the namespace to a function goes unflagged.
 
 The package is recognized by every specifier form: bare, `jsr:` (with a
 version), `@jsr/sekhmet__workflow` with or without `npm:`,
 `https://jsr.io/@sekhmet/workflow/…` URLs, and relative or `@/` paths into
-`packages/workflow`. Tests, the playground, `scripts/` and
-`@sekhmet/workflow` itself may use `todo` freely. `unimplemented`,
-`unreachable` and the invariant checks are meant to ship and are never
-flagged. To fix a finding, finish the work, or replace the `todo` with
-`unimplemented` if the path will stay unsupported.
+`packages/workflow`. Tests, the playground, `scripts/` and `@sekhmet/workflow`
+itself may use `todo` freely. `unimplemented`, `unreachable` and the invariant
+checks are meant to ship and are never flagged. To fix a finding, finish the
+work, or replace the `todo` with `unimplemented` if the path will stay
+unsupported.
 
 ## Pull Request Process
 
@@ -717,8 +723,8 @@ resolved, and these checks pass:
 - `ci` (`ci.yml`: `deno task ci`)
 - `validate` (`dv-validate.yml`: dv Records and the dv plugin)
 - the seven `compat` suite jobs (`compat.yml`): `suite (node, Node 24)`,
-  `suite (node, Node 26)`, `suite (bun)`, `suite (chromium)`,
-  `suite (firefox)`, `suite (webkit)` and `suite (workerd)`
+  `suite (node, Node 26)`, `suite (bun)`, `suite (chromium)`, `suite (firefox)`,
+  `suite (webkit)` and `suite (workerd)`
 
 No approval is required. Repository admins can bypass the ruleset.
 
@@ -775,14 +781,14 @@ No approval is required. Repository admins can bypass the ruleset.
   `release` workflow over GitHub OIDC, and the description and runtime
   compatibility are package settings on jsr.io (JSR does not read them from
   `deno.json`), so set them in each package's settings page.
-- **Examples are tests.** `deno test --doc` (part of `deno task ci`)
-  type-checks and runs every `ts` code block in JSDoc and in markdown files,
-  so write examples with explicit imports from the public entrypoint (e.g.
-  `@sekhmet/enum/option/mini`) and assert their claims with `@std/assert`.
-  Fence a block as `ts ignore` only when it cannot run.
+- **Examples are tests.** `deno test --doc` (part of `deno task ci`) type-checks
+  and runs every `ts` code block in JSDoc and in markdown files, so write
+  examples with explicit imports from the public entrypoint (e.g.
+  `@sekhmet/enum/option/mini`) and assert their claims with `@std/assert`. Fence
+  a block as `ts ignore` only when it cannot run.
 - **Mini examples feed main.** `deno task gen:main` copies mini examples into
-  the generated main modules, rewriting calls to method form and imports to
-  the main entrypoint, so both forms are checked.
+  the generated main modules, rewriting calls to method form and imports to the
+  main entrypoint, so both forms are checked.
 - **Guides** live flat in each package's `docs/` folder, and each serves one
   [Diátaxis](https://diataxis.fr) need, declared in frontmatter at the top of
   the page (#54):
@@ -797,37 +803,35 @@ No approval is required. Repository admins can bypass the ruleset.
 
   `kind` is one of `tutorial`, `how-to`, `explanation` or `reference`; the
   frontmatter is flat `key: value` lines, and an unknown kind fails
-  `deno task docs:build`, naming the file. The site gives each package's
-  sidebar the Overview (its README), then any untagged pages, then a group
-  per kind that has pages: Tutorials, How-to guides, Explanation and
-  Reference. Reference always links the package's API docs on JSR, which are
-  generated from its JSDoc. Within a group, `getting-started` leads and the
-  rest sort by their `#` title, which is also the sidebar label. Untagged
-  pages stay listed until they are converted; `kind` is not yet required.
-  Biome keeps the frontmatter intact only because `biome.json` sets
-  `markdown.parser.frontmatter`; without it, `deno task fmt` rewrites the
-  block into a rule and a `## kind: …` heading. GitHub shows the frontmatter
-  as a table above the page.
-  `deno task docs:dev` serves the site that assembles them with every README;
-  `deno task docs:build` builds it. To see an edit while `docs:dev` runs,
-  re-run `deno task docs:assemble --include-unpublished`: it writes only the
-  pages whose text changed and removes stale ones, so the server hot-updates
-  those pages instead of restarting. The built site, which
+  `deno task docs:build`, naming the file. The site gives each package's sidebar
+  the Overview (its README), then any untagged pages, then a group per kind that
+  has pages: Tutorials, How-to guides, Explanation and Reference. Reference
+  always links the package's API docs on JSR, which are generated from its
+  JSDoc. Within a group, `getting-started` leads and the rest sort by their `#`
+  title, which is also the sidebar label. Untagged pages stay listed until they
+  are converted; `kind` is not yet required. Biome keeps the frontmatter intact
+  only because `biome.json` sets `markdown.parser.frontmatter`; without it,
+  `deno task fmt` rewrites the block into a rule and a `## kind: …` heading.
+  GitHub shows the frontmatter as a table above the page. `deno task docs:dev`
+  serves the site that assembles them with every README; `deno task docs:build`
+  builds it. To see an edit while `docs:dev` runs, re-run
+  `deno task docs:assemble --include-unpublished`: it writes only the pages
+  whose text changed and removes stale ones, so the server hot-updates those
+  pages instead of restarting. The built site, which
   `.github/workflows/docs.yml` deploys, leaves out unpublished packages
   (`"publish": false`): they have no JSR page, and links to them point at
-  GitHub. `docs:dev` previews them locally: it passes
-  `--include-unpublished` to `deno task docs:assemble`, so an unpublished
-  package gets its pages and kind-grouped sidebar like any other, without
-  the JSR API link, and each of its pages opens with a "Prototype" warning
-  that it isn't on JSR. Relative links to source files, such as `../mod.ts`,
-  point at the file on GitHub.
+  GitHub. `docs:dev` previews them locally: it passes `--include-unpublished` to
+  `deno task docs:assemble`, so an unpublished package gets its pages and
+  kind-grouped sidebar like any other, without the JSR API link, and each of its
+  pages opens with a "Prototype" warning that it isn't on JSR. Relative links to
+  source files, such as `../mod.ts`, point at the file on GitHub.
 - **Decision logs** are project records, not guides: a package's log lives at
   `docs/decisions/<package>.md` at the repo root (e.g.
-  `docs/decisions/schema.md`), outside `packages/`, so neither the docs site
-  nor JSR presents it (#54, owner decision 2026-11-18). Before a log moves
-  there, lift any user-facing reference it alone holds into JSDoc or a guide.
-  Link it from the package README's design-record line with an absolute
-  GitHub URL, since JSR renders the README:
+  `docs/decisions/schema.md`), outside `packages/`, so neither the docs site nor
+  JSR presents it (#54, owner decision 2026-11-18). Before a log moves there,
+  lift any user-facing reference it alone holds into JSDoc or a guide. Link it
+  from the package README's design-record line with an absolute GitHub URL,
+  since JSR renders the README:
   `https://github.com/ben-laird/sekhmet/blob/main/docs/decisions/<package>.md`.
 
 ### PR Checklist
@@ -839,12 +843,13 @@ No approval is required. Repository admins can bypass the ruleset.
 - [ ] `isolatedDeclarations` compatibility maintained
 - [ ] No external dependencies added
 - [ ] CI checks passing
-- [ ] A dv Record for each user-visible package change (see [Releasing](#releasing))
+- [ ] A dv Record for each user-visible package change (see
+      [Releasing](#releasing))
 
 ## Releasing
 
-Every PR merged to `main` can release. There is no release branch or release
-PR: the Records a PR carries decide what ships.
+Every PR merged to `main` can release. There is no release branch or release PR:
+the Records a PR carries decide what ships.
 
 ### Adding a Record
 
@@ -860,49 +865,47 @@ While a package is `0.x`, breaking changes bump the minor version. Refactors,
 tests and docs need no Record. `deno task dv status` previews the bumps, and the
 `dv-validate` check rejects malformed Records or unknown packages.
 
-`deno task dv` runs the dv version CI uses: `jsr:@dv-cli/dv` is pinned
-exactly in `scripts/dv/deno.json`, its dependencies are locked in `deno.lock`,
-and the task runs with `--frozen`. CI puts the same launcher on `PATH` as `dv`
-(`.github/actions/setup-dv`). To bump dv, change the pin and run
-`deno install` to update the lockfile.
+`deno task dv` runs the dv version CI uses: `jsr:@dv-cli/dv` is pinned exactly
+in `scripts/dv/deno.json`, its dependencies are locked in `deno.lock`, and the
+task runs with `--frozen`. CI puts the same launcher on `PATH` as `dv`
+(`.github/actions/setup-dv`). To bump dv, change the pin and run `deno install`
+to update the lockfile.
 
 ### What happens on merge
 
-`.github/workflows/release.yml` first runs the full gate (`deno task ci`);
-a red tree stops the job before anything is versioned or published. It then
-runs `scripts/release/main.ts`, which only proceeds from the commit `main`
-points at:
+`.github/workflows/release.yml` first runs the full gate (`deno task ci`); a red
+tree stops the job before anything is versioned or published. It then runs
+`scripts/release/main.ts`, which only proceeds from the commit `main` points at:
 
-1. `dv version` consumes pending Records: it bumps each `deno.json`, writes
-   each package's `CHANGELOG.md`, and commits `chore(release): …` to `main`.
+1. `dv version` consumes pending Records: it bumps each `deno.json`, writes each
+   package's `CHANGELOG.md`, and commits `chore(release): …` to `main`.
 2. `dv release` tags each untagged version as `<package>@<version>` and runs
-   `deno publish` per package, dependencies first (primordials before enum,
-   and so on). JSR authenticates the workflow over GitHub OIDC, so no token
-   is stored. Then it pushes the tags.
+   `deno publish` per package, dependencies first (primordials before enum, and
+   so on). JSR authenticates the workflow over GitHub OIDC, so no token is
+   stored. Then it pushes the tags.
 3. Each package uploaded to JSR gets a GitHub Release with its changelog
    section.
 
 The release bot is the one pusher to `main` outside a PR. It pushes the
-`chore(release): …` commit and the tags with `DV_PAT`, the owner's
-fine-grained token (this repository only, `contents: write` and
-`workflows: write`), which has the ruleset's admin bypass. That push runs
-`ci`, `compat` and the docs deploy again on the bump commit; the `release`
-run it starts skips itself, so releases never recurse.
+`chore(release): …` commit and the tags with `DV_PAT`, the owner's fine-grained
+token (this repository only, `contents: write` and `workflows: write`), which
+has the ruleset's admin bypass. That push runs `ci`, `compat` and the docs
+deploy again on the bump commit; the `release` run it starts skips itself, so
+releases never recurse.
 
-An untagged version is released even without a Record, which is how the
-first run publishes every package at its current `0.1.0`. A merge with no
-Records and nothing untagged releases nothing. If a publish fails (or takes
-longer than five minutes), the job fails after the other packages publish;
-rerun the `release` workflow on `main` from the Actions tab with **force**
-checked. Versions already on JSR are skipped, and the recovered packages get
-their GitHub Releases.
+An untagged version is released even without a Record, which is how the first
+run publishes every package at its current `0.1.0`. A merge with no Records and
+nothing untagged releases nothing. If a publish fails (or takes longer than five
+minutes), the job fails after the other packages publish; rerun the `release`
+workflow on `main` from the Actions tab with **force** checked. Versions already
+on JSR are skipped, and the recovered packages get their GitHub Releases.
 
-A package's first release needs the package to exist on JSR already: JSR
-never creates one on upload, and `deno publish` fails with "Following
-packages don't exist". See "First release on JSR" under Adding New Packages.
+A package's first release needs the package to exist on JSR already: JSR never
+creates one on upload, and `deno publish` fails with "Following packages don't
+exist". See "First release on JSR" under Adding New Packages.
 
-Only packages under `packages/` are released. Members marked
-`"publish": false` (everything in `scripts/`) never are.
+Only packages under `packages/` are released. Members marked `"publish": false`
+(everything in `scripts/`) never are.
 
 ## Adding New Packages
 
@@ -925,7 +928,8 @@ correct structure.
 
 New packages should:
 
-- Include `main`/`mini` export paths for large features, or a flat structure for small features
+- Include `main`/`mini` export paths for large features, or a flat structure for
+  small features
 - Have comprehensive README with usage examples
 - Follow the same TypeScript strictness
 - Include test coverage
@@ -937,16 +941,14 @@ New packages should:
 Before the PR that publishes a new package merges, a maintainer of the
 `@sekhmet` scope does two things on JSR:
 
-1. Creates the package at
-   `https://jsr.io/new?scope=sekhmet&package=<name>`.
+1. Creates the package at `https://jsr.io/new?scope=sekhmet&package=<name>`.
 2. In the package's **Settings**, links the GitHub repository
-   `ben-laird/sekhmet`, so the release workflow can publish over GitHub
-   OIDC.
+   `ben-laird/sekhmet`, so the release workflow can publish over GitHub OIDC.
 
-If the PR merged first, the release job fails on that package after tagging
-it. Do both steps, then rerun the `release` workflow on `main` with
-**force** checked (see What happens on merge). `@sekhmet/schema` 0.1.0 was
-published this way (2026-11-18).
+If the PR merged first, the release job fails on that package after tagging it.
+Do both steps, then rerun the `release` workflow on `main` with **force**
+checked (see What happens on merge). `@sekhmet/schema` 0.1.0 was published this
+way (2026-11-18).
 
 ## Questions?
 
