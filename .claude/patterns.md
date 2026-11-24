@@ -260,8 +260,7 @@ out main values**: every `Option`, `Result`, `Outcome`, `Vow` or `Recovery` it
 returns is the method-chaining main form, imported from the main entrypoint
 (`@sekhmet/enum/option`, not `@sekhmet/enum/option/mini`). A main value
 subclasses the mini one, so it still passes anywhere a mini value is accepted.
-A type with no main class yet (on main today, `Vow`) is returned as its mini
-form until it gets one.
+`Vow`'s main class is being added under #111.
 
 Handing out mini values leaves the caller with no methods, and values from two
 packages stop comparing equal: a main `Outcome` and a mini `Outcome` holding

@@ -301,10 +301,10 @@ the big package configuration.
 
 **A package with no main/mini split hands out main values.** Every `Option`,
 `Result`, `Outcome`, `Vow` or `Recovery` it returns is the method-chaining main
-form (import `@sekhmet/enum/option`, not `@sekhmet/enum/option/mini`); a type
-with no main class yet is returned as its mini form until it gets one. A main
-value subclasses the mini one, so it passes anywhere a mini value is accepted.
-See [patterns.md](.claude/patterns.md) (#109).
+form (import `@sekhmet/enum/option`, not `@sekhmet/enum/option/mini`; `Vow`'s
+main is being added under #111). A main value subclasses the mini one, so it
+passes anywhere a mini value is accepted. See
+[patterns.md](.claude/patterns.md) (#109).
 
 **Every enum is structured like `Option` and `Result`**, whether or not its
 package has a main/mini split. Mini holds an exported `…Variants` type, a class
