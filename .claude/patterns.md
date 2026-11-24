@@ -280,8 +280,9 @@ sibling files such as `predicates.ts` and `unwrap.ts`):
 
 - a `Variants` type built with `Split`, exported under the enum's name
   (`export type { Variants as OptionVariants }`);
-- a class extending `Enum<Variants>` with an empty body
-  (`export class Option<out T> extends Enum<Variants<T>> {}`);
+- a class extending `Enum<Variants>`
+  (`export class Option<out T> extends Enum<Variants<T>> {}`; `Option`'s and
+  `Result`'s bodies are empty, `Vow`'s is not);
 - a constructor function per variant, named after it and returning the class
   (`Some(value)`, `None()`; `Ok(value)`, `Err(err)`);
 - predicates (`isSome`, `isSomeAnd`, `isNone`), accessors and unwraps
