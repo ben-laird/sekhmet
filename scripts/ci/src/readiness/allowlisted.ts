@@ -13,7 +13,6 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 		"DispatchController.prototype.dispatch",
 		"Option",
 	),
-	privateTypeRef("dispatch/src/signal.ts", "CatchUnwind", "PanicRuntime"),
 	privateTypeRef(
 		"dispatch/src/signal.ts",
 		"DispatchSignal.prototype.poll",
@@ -129,7 +128,11 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("job/src/run.ts", "runJobs", "Result"),
 	privateTypeRef("lifetime/src/adoption.ts", "Variants", "Split"),
 	privateTypeRef("lifetime/src/adoption.ts", "Adoption", "Enum"),
-	privateTypeRef("lifetime/src/lifetime.ts", "LifetimePanics", "PanicRuntime"),
+	privateTypeRef(
+		"lifetime/src/resource.ts",
+		"Resource.prototype.start",
+		"PanicBoundary",
+	),
 	privateTypeRef(
 		"lifetime/src/lifetime.ts",
 		"Lifetime.prototype.ending",
@@ -173,6 +176,11 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 			privateType,
 		);
 	}),
+	privateTypeRef(
+		"panic/src/mini/runtime.ts",
+		'PanicRuntime["catchUnwind"]',
+		"Vow",
+	),
 	privateTypeRef("panic/src/outcome/mini/core.ts", "Variants", "Split"),
 	privateTypeRef("panic/src/outcome/mini/core.ts", "Outcome", "Enum"),
 	...[
@@ -271,8 +279,8 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("schema/src/core/mini/schema.ts", "Schema", "Struct"),
 	privateTypeRef(
 		"schema/src/core/mini/schema.ts",
+		'ParseOptions["panics"]',
 		"PanicBoundary",
-		"PanicRuntime",
 	),
 	...["parse", "Runner"].flatMap((publicType) => {
 		return ["Outcome", "Vow"].map((privateType) => {
@@ -287,7 +295,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 		return privateTypeRef(
 			"schema/src/standard/mini/to-standard.ts",
 			`${options}["panics"]`,
-			"PanicRuntime",
+			"PanicBoundary",
 		);
 	}),
 	privateTypeRef(
@@ -301,12 +309,6 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("vow/src/mini/accessors.ts", "poll", "Poll"),
 	privateTypeRef("vow/src/mini/core.ts", "Variants", "Split"),
 	privateTypeRef("vow/src/mini/core.ts", "Vow", "Enum"),
-	privateTypeRef("vow/src/mini/impl.ts", "fromPromise", "Result"),
-	privateTypeRef(
-		"vow/src/mini/impl.ts",
-		'FromPromiseOptions["panics"]',
-		"PanicRuntime",
-	),
 	...["isResolved", "isPending"].flatMap((predicate) => {
 		return [
 			privateTypeRef("vow/src/mini/predicates.ts", predicate, "Enum"),

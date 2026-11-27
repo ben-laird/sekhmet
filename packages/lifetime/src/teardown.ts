@@ -1,7 +1,6 @@
 /**
  * The machinery of teardown, private to the package: running one cleanup
- * inside the panic boundaries, settling a vow from a promise continuation
- * without ever throwing into it, and turning a failed report into a
+ * inside the panic boundary, and turning a failed report into a
  * `SuppressedError` chain at the `using` boundary.
  *
  * @module
@@ -14,15 +13,10 @@ import {
 	type Result,
 	unwrapErr,
 } from "@sekhmet/enum/result/mini";
-import { Panic } from "@sekhmet/panic";
-import {
-	isPanicked,
-	unwrap as unwrapOutcome,
-	unwrapPanicked,
-} from "@sekhmet/panic/outcome/mini";
-import { resolved, type Vow, vowWithResolver } from "@sekhmet/vow/mini";
+import { Panic, type PanicBoundary } from "@sekhmet/panic";
+import { isPanicked, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+import { map, type Vow } from "@sekhmet/vow/mini";
 import { invariant } from "@sekhmet/workflow/invariant";
-import type { LifetimePanics } from "./lifetime.ts";
 import type { EndReport } from "./phase.ts";
 
 /**
@@ -48,42 +42,16 @@ export function asPanic({
 }
 
 /**
- * Resolves `resolve` with `value` from a promise continuation, where nothing
- * may throw: a throwing dependent is reported through `catchUnwind`, and a
- * double fault (the hook throwing too) has no caller to reach.
- *
- * @internal
- */
-export function deliver<T>({
-	resolve,
-	value,
-	panics,
-}: {
-	readonly resolve: (value: T) => void;
-	readonly value: T;
-	readonly panics: LifetimePanics;
-}): void {
-	try {
-		panics.catchUnwind(() => {
-			resolve(value);
-		});
-	} catch {
-		// A double fault in a promise continuation: rethrowing would only make
-		// an unhandled rejection, and the hook that would report it just threw.
-	}
-}
-
-/**
- * Runs one cleanup inside the panic boundaries: a throw or a rejection
+ * Runs one cleanup inside the panic boundary: a throw or a rejection
  * becomes a `Panic (CleanupFailed)` (a payload that is already a `Panic`
  * stays as it is). It settles synchronously when the cleanup is sync.
  *
  * It throws only on a synchronous double fault: when the hook throws while
  * reporting a sync cleanup's throw, `catchUnwind` throws a
- * `Panic (PanicHook)`, and this lets it through for the caller to place. An
- * asynchronous double fault becomes the cleanup's panic instead, since it
- * surfaces in a promise continuation, where a throw would be an unhandled
- * rejection.
+ * `Panic (PanicHook)`, and this lets it through for the caller to place. On
+ * an asynchronous double fault the cleanup still fails with its own panic,
+ * and the `Panic (PanicHook)` escapes as an unhandled rejection, as
+ * `catchUnwind`'s contract says.
  *
  * @internal
  */
@@ -92,56 +60,16 @@ export function runCleanup({
 	panics,
 }: {
 	readonly cleanup: () => void | PromiseLike<void>;
-	readonly panics: LifetimePanics;
+	readonly panics: PanicBoundary;
 }): Vow<Result<void, Panic<unknown>>> {
-	// Boxed, so catchUnwind's promise guard sees an object, not a maybe-promise.
-	const caught = panics.catchUnwind(() => ({ returned: cleanup() }));
-	if (isPanicked(caught)) {
-		return resolved(cleanupFailed(unwrapPanicked(caught)));
-	}
-	const { returned } = unwrapOutcome(caught);
-	if (!isThenable(returned)) {
-		return resolved<Result<void, Panic<unknown>>>(Ok(undefined));
-	}
-	const { vow, resolve } = vowWithResolver<Result<void, Panic<unknown>>>();
-	const settling = panics.catchUnwindAsync(() => returned);
-	void settling.then(
-		(settled) => {
-			if (isPanicked(settled)) {
-				deliver({
-					resolve,
-					panics,
-					value: cleanupFailed(unwrapPanicked(settled)),
-				});
-				return;
-			}
-			deliver({ resolve, panics, value: Ok(undefined) });
-		},
-		(doubleFault: unknown) => {
-			deliver({ resolve, panics, value: cleanupFailed(doubleFault) });
-		},
-	);
-	return vow;
+	return map(panics.catchUnwind(cleanup), (outcome) => {
+		if (isPanicked(outcome)) return cleanupFailed(unwrapPanicked(outcome));
+		return Ok<void, Panic<unknown>>(undefined);
+	});
 }
 
 function cleanupFailed(payload: unknown): Result<void, Panic<unknown>> {
 	return Err(asPanic({ payload, name: "CleanupFailed" }));
-}
-
-/**
- * Whether `value` is a promise or another thenable.
- *
- * @internal
- */
-export function isThenable<T>(
-	value: T | PromiseLike<T>,
-): value is PromiseLike<T> {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		"then" in value &&
-		typeof value.then === "function"
-	);
 }
 
 /**

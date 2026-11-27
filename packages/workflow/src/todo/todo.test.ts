@@ -1,6 +1,8 @@
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { Panic } from "@sekhmet/panic/mini/core";
 import { isPanicked, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow/mini";
 import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
@@ -218,9 +220,10 @@ Deno.test("a runtime's hook and catchUnwind see a todo panic", () => {
 	});
 
 	// When: todo runs inside the boundary
-	const result = runtime.catchUnwind(() => todo({ description: "later" }));
+	const caught = runtime.catchUnwind(() => todo({ description: "later" }));
+	const result = expectReady(poll(caught), "the work is sync");
 
-	// Then: the hook saw it once, and the boundary returned it as Panicked
+	// Then: the hook saw it once, and the boundary settled it as Panicked
 	assertEquals(seen, ["later"]);
 	assert(isPanicked(result));
 	assert(isTodoPanic(unwrapPanicked(result)));

@@ -28,8 +28,10 @@ Rust's `std::panic` splits what happens to a panic in two. The panic hook
 reports it: it writes the message, sends telemetry, records metadata. A
 `catch_unwind` boundary recovers from it: it stops the unwind and hands the
 caller a value. This package keeps the split. A runtime's hook reports, and
-its boundaries (`catchUnwind`, `catchUnwindAsync`) recover, returning an
-`Outcome`: `Ok` of the work's value or `Panicked` of what it threw.
+its boundaries (`catchUnwind`) recover, handing back a `Vow` of an
+`Outcome`: `Ok` of the work's value or `Panicked` of what it threw. The vow
+is there because the work may be sync or async; sync work settles it before
+`catchUnwind` returns.
 
 The hook never decides the outcome. It returns nothing, and what the program
 does next is the caller's call, made on the `Outcome` the boundary returns:
@@ -138,6 +140,14 @@ recovering: it throws a new `Panic` named `Panic (PanicHook)`, whose cause is
 The runtime still records the original payload as reported. An outer
 boundary then reports and catches the `Panic (PanicHook)` like any other
 unwind; with no outer boundary, the host reports it as an uncaught error.
+
+Async work has no caller to throw to: the rejection was adopted in a promise
+callback, and a `Vow` cannot reject. So the vow still settles as `Panicked`
+with the payload, and the `Panic (PanicHook)` then escapes that callback as
+an unhandled rejection, which the Deno and Node defaults treat as fatal: the
+closest JavaScript comes to Rust's abort. A hook that throws while reporting
+a throwing dependent of the vow escapes the same way. Before the boundary
+was one `catchUnwind`, its async form rejected its promise instead.
 
 This is the second difference from Rust: a throwing hook doesn't abort, it
 escalates to the next boundary out. `isPanicHookFailure` recognizes the

@@ -1,8 +1,8 @@
 /**
  * `Vow`: a synchronous, promise-like value built on `Enum`. A vow is
  * `Pending` until resolved, then `Resolved` with its value; dependents run
- * as soon as it resolves, in the same call stack. `wait` and `fromPromise`
- * bridge to promises.
+ * as soon as it resolves, in the same call stack. `wait` bridges a vow to a
+ * promise; `@sekhmet/panic`'s `catchUnwind` turns a promise into a vow.
  *
  * @example
  * ```ts

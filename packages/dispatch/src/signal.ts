@@ -6,14 +6,14 @@
  * signal (`map`, `zip`, `any`, `fromAbortSignal`) holds no listeners of its
  * own: `listen` forwards each listener to its sources and `poll` reads
  * them. So a derived signal that nobody listens to holds no subscription,
- * and each listener runs inside its root's `catchUnwind` boundary.
+ * and each listener runs inside its root's panic boundary.
  *
  * @module
  */
 
 import { isolate, union } from "@sekhmet/enum/core/mini";
 import { Pending, type Poll, Ready } from "@sekhmet/enum/poll/mini";
-import type { PanicRuntime } from "@sekhmet/panic";
+import type { PanicBoundary } from "@sekhmet/panic";
 import { type Vow, vowWithResolver } from "@sekhmet/vow/mini";
 import { invariant } from "@sekhmet/workflow/invariant";
 import { once } from "./memo.ts";
@@ -28,9 +28,7 @@ import { once } from "./memo.ts";
  * import { DispatchController, type Unsubscribe } from "@sekhmet/dispatch";
  * import { assert, assertEquals } from "@std/assert";
  *
- * const controller = new DispatchController<string>(
- * 	definePanicRuntime().catchUnwind,
- * );
+ * const controller = new DispatchController<string>({ panics: definePanicRuntime() });
  * const heard: string[] = [];
  * const stop: Unsubscribe = controller.signal.whenDispatched((value) => {
  * 	heard.push(value);
@@ -67,9 +65,7 @@ export type Unsubscribe = () => boolean;
  * const record: Listener<number> = (value) => {
  * 	heard.push(value);
  * };
- * const controller = new DispatchController<number>(
- * 	definePanicRuntime().catchUnwind,
- * );
+ * const controller = new DispatchController<number>({ panics: definePanicRuntime() });
  * controller.signal.whenDispatched(record);
  *
  * controller.dispatch(7);
@@ -77,23 +73,6 @@ export type Unsubscribe = () => boolean;
  * ```
  */
 export type Listener<T> = (value: T) => undefined;
-
-/**
- * The only part of a panic runtime a dispatch needs: a boundary that
- * isolates and reports a throw. Pass `runtime.catchUnwind`.
- *
- * @example
- * ```ts
- * import { definePanicRuntime } from "@sekhmet/panic";
- * import { type CatchUnwind, DispatchController } from "@sekhmet/dispatch";
- *
- * const runtime = definePanicRuntime();
- * const catchUnwind: CatchUnwind = runtime.catchUnwind;
- * const controller = new DispatchController<string>(catchUnwind);
- * controller.dispatch("done");
- * ```
- */
-export type CatchUnwind = PanicRuntime["catchUnwind"];
 
 /**
  * Proves a `DispatchSignal` is built inside this package. The package's
@@ -138,9 +117,7 @@ export interface SignalSource<T> {
  *
  * type Cause = "done" | "cancelled";
  *
- * const controller = new DispatchController<Cause>(
- * 	definePanicRuntime().catchUnwind,
- * );
+ * const controller = new DispatchController<Cause>({ panics: definePanicRuntime() });
  * const signal: DispatchSignal<Cause> = controller.signal;
  * const heard: Cause[] = [];
  * signal.whenDispatched((cause) => {
@@ -190,9 +167,7 @@ export class DispatchSignal<out T> {
 	 * import { DispatchController } from "@sekhmet/dispatch";
 	 * import { assert, assertEquals } from "@std/assert";
 	 *
-	 * const controller = new DispatchController<number>(
-	 * 	definePanicRuntime().catchUnwind,
-	 * );
+	 * const controller = new DispatchController<number>({ panics: definePanicRuntime() });
 	 * assert(isPending(controller.signal.poll()));
 	 *
 	 * controller.dispatch(1);
@@ -208,7 +183,7 @@ export class DispatchSignal<out T> {
 	 * if it already has (an `AbortSignal` listener added after the abort
 	 * never fires). A listener added while the signal is dispatching runs
 	 * after the ones already waiting. A throwing listener is isolated by the
-	 * root's `catchUnwind` and reported to its hook; the others still run.
+	 * root's panic boundary and reported to its hook; the others still run.
 	 *
 	 * @param listener Runs once, with the dispatched value
 	 * @returns A function that removes the listener if it hasn't run yet
@@ -219,9 +194,7 @@ export class DispatchSignal<out T> {
 	 * import { DispatchController } from "@sekhmet/dispatch";
 	 * import { assertEquals } from "@std/assert";
 	 *
-	 * const controller = new DispatchController<string>(
-	 * 	definePanicRuntime().catchUnwind,
-	 * );
+	 * const controller = new DispatchController<string>({ panics: definePanicRuntime() });
 	 * controller.dispatch("gone");
 	 *
 	 * let heard: string | undefined;
@@ -247,9 +220,7 @@ export class DispatchSignal<out T> {
 	 * import { DispatchController } from "@sekhmet/dispatch";
 	 * import { assertEquals } from "@std/assert";
 	 *
-	 * const controller = new DispatchController<string>(
-	 * 	definePanicRuntime().catchUnwind,
-	 * );
+	 * const controller = new DispatchController<string>({ panics: definePanicRuntime() });
 	 * const waiting = controller.signal.wait();
 	 *
 	 * controller.dispatch("ready");
@@ -278,9 +249,7 @@ export class DispatchSignal<out T> {
 	 * import { isResolved } from "@sekhmet/vow/mini";
 	 * import { assert } from "@std/assert";
 	 *
-	 * const controller = new DispatchController<number>(
-	 * 	definePanicRuntime().catchUnwind,
-	 * );
+	 * const controller = new DispatchController<number>({ panics: definePanicRuntime() });
 	 * const vow = controller.signal.toVow();
 	 *
 	 * controller.dispatch(42);
@@ -307,9 +276,7 @@ export class DispatchSignal<out T> {
 	 * import { DispatchController } from "@sekhmet/dispatch";
 	 * import { assert, assertEquals } from "@std/assert";
 	 *
-	 * const cancel = new DispatchController<string>(
-	 * 	definePanicRuntime().catchUnwind,
-	 * );
+	 * const cancel = new DispatchController<string>({ panics: definePanicRuntime() });
 	 * const forFetch = cancel.signal.toAbortSignal();
 	 *
 	 * cancel.dispatch("user cancelled");
@@ -346,9 +313,7 @@ export class DispatchSignal<out T> {
 	 * import { DispatchController } from "@sekhmet/dispatch";
 	 * import { assertEquals } from "@std/assert";
 	 *
-	 * const port = new DispatchController<number>(
-	 * 	definePanicRuntime().catchUnwind,
-	 * );
+	 * const port = new DispatchController<number>({ panics: definePanicRuntime() });
 	 * const label = port.signal.map((n) => `port ${n}`);
 	 *
 	 * port.dispatch(8080);
@@ -392,9 +357,9 @@ export class DispatchSignal<out T> {
 	 * import { DispatchController } from "@sekhmet/dispatch";
 	 * import { assert, assertEquals } from "@std/assert";
 	 *
-	 * const { catchUnwind } = definePanicRuntime();
-	 * const host = new DispatchController<string>(catchUnwind);
-	 * const port = new DispatchController<number>(catchUnwind);
+	 * const panics = definePanicRuntime();
+	 * const host = new DispatchController<string>({ panics });
+	 * const port = new DispatchController<number>({ panics });
 	 * const address = host.signal.zip(port.signal);
 	 *
 	 * host.dispatch("localhost");
@@ -460,9 +425,9 @@ export class DispatchSignal<out T> {
 	 * import { DispatchController, DispatchSignal } from "@sekhmet/dispatch";
 	 * import { assertEquals } from "@std/assert";
 	 *
-	 * const { catchUnwind } = definePanicRuntime();
-	 * const timeout = new DispatchController<string>(catchUnwind);
-	 * const user = new DispatchController<string>(catchUnwind);
+	 * const panics = definePanicRuntime();
+	 * const timeout = new DispatchController<string>({ panics });
+	 * const user = new DispatchController<string>({ panics });
 	 * const stop = DispatchSignal.any([timeout.signal, user.signal]);
 	 * const heard: string[] = [];
 	 * stop.whenDispatched((reason) => {
@@ -548,8 +513,8 @@ export class DispatchSignal<out T> {
 
 	/**
 	 * A signal already dispatched with `value`, like
-	 * `AbortSignal.abort(reason)`. Its listeners run at once, inside
-	 * `catchUnwind`.
+	 * `AbortSignal.abort(reason)`. Its listeners run at once, inside the
+	 * panic boundary `panics`.
 	 *
 	 * @template T The type of the value
 	 * @param options The value, and the boundary its listeners run in
@@ -564,24 +529,24 @@ export class DispatchSignal<out T> {
 	 *
 	 * const done = DispatchSignal.dispatched({
 	 * 	value: "done",
-	 * 	catchUnwind: definePanicRuntime().catchUnwind,
+	 * 	panics: definePanicRuntime(),
 	 * });
 	 * assertEquals(done.poll(), Ready("done"));
 	 * ```
 	 */
 	static dispatched<T>({
 		value,
-		catchUnwind,
+		panics,
 	}: {
 		readonly value: T;
-		readonly catchUnwind: CatchUnwind;
+		readonly panics: PanicBoundary;
 	}): DispatchSignal<T> {
 		return new DispatchSignal({
 			token: BUILT_HERE,
 			source: {
 				poll: () => Ready(value),
 				listen: (listener) => {
-					catchUnwind(() => listener(value));
+					panics.catchUnwind(() => listener(value));
 					return () => false;
 				},
 			},
@@ -618,7 +583,7 @@ export class DispatchSignal<out T> {
 	/**
 	 * A signal that dispatches with an `AbortSignal`'s reason when it aborts.
 	 * It adds a platform listener only while it has listeners of its own,
-	 * and runs them inside `catchUnwind`.
+	 * and runs them inside the panic boundary `panics`.
 	 *
 	 * @param options The platform signal, and the boundary listeners run in
 	 * @returns A signal of the abort reason
@@ -633,7 +598,7 @@ export class DispatchSignal<out T> {
 	 * const platform = new AbortController();
 	 * const closed = DispatchSignal.fromAbortSignal({
 	 * 	signal: platform.signal,
-	 * 	catchUnwind: definePanicRuntime().catchUnwind,
+	 * 	panics: definePanicRuntime(),
 	 * });
 	 *
 	 * platform.abort("socket closed");
@@ -642,10 +607,10 @@ export class DispatchSignal<out T> {
 	 */
 	static fromAbortSignal({
 		signal,
-		catchUnwind,
+		panics,
 	}: {
 		readonly signal: AbortSignal;
-		readonly catchUnwind: CatchUnwind;
+		readonly panics: PanicBoundary;
 	}): DispatchSignal<unknown> {
 		return new DispatchSignal<unknown>({
 			token: BUILT_HERE,
@@ -658,13 +623,13 @@ export class DispatchSignal<out T> {
 				},
 				listen: (listener) => {
 					if (signal.aborted) {
-						catchUnwind(() => listener(signal.reason));
+						panics.catchUnwind(() => listener(signal.reason));
 						return () => false;
 					}
 					let waiting = true;
 					const onAbort = (): void => {
 						waiting = false;
-						catchUnwind(() => listener(signal.reason));
+						panics.catchUnwind(() => listener(signal.reason));
 					};
 					signal.addEventListener("abort", onAbort, { once: true });
 					return () => {

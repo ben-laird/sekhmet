@@ -65,7 +65,6 @@ export type {
 	ObjectDetails,
 	Origin,
 	Output,
-	PanicBoundary,
 	ParseOptions,
 	Parser,
 	ParserInit,

@@ -7,8 +7,10 @@
  */
 
 import { match } from "@sekhmet/enum/core/mini/exit";
-import type { PanicRuntime } from "@sekhmet/panic/mini/runtime";
+import { expectReady } from "@sekhmet/enum/poll/mini";
+import type { PanicBoundary } from "@sekhmet/panic/mini/runtime";
 import type { Outcome } from "@sekhmet/panic/outcome/mini/core";
+import { poll } from "@sekhmet/vow/mini/accessors";
 import { wait } from "@sekhmet/vow/mini/impl";
 import {
 	formatIssue,
@@ -39,11 +41,11 @@ export interface ToStandardSchema<O> {
 	/** The schema to expose. */
 	readonly schema: Schema<unknown, O, SchemaIssue | Issues<SchemaIssue>>;
 	/**
-	 * The panic runtime each parse runs under. A panic is reported to its
-	 * hook, then resumed: `validate` throws (or its promise rejects with)
-	 * the payload.
+	 * The panic boundary each parse runs under: pass the program's panic
+	 * runtime. A panic is reported to its hook, then resumed: `validate`
+	 * throws (or its promise rejects with) the payload.
 	 */
-	readonly panics: PanicRuntime;
+	readonly panics: PanicBoundary;
 }
 
 /**
@@ -57,11 +59,11 @@ export interface ToStandardOptions<O, E> {
 	/** The schema to expose. */
 	readonly schema: Schema<unknown, O, E>;
 	/**
-	 * The panic runtime each parse runs under. A panic is reported to its
-	 * hook, then resumed: `validate` throws (or its promise rejects with)
-	 * the payload.
+	 * The panic boundary each parse runs under: pass the program's panic
+	 * runtime. A panic is reported to its hook, then resumed: `validate`
+	 * throws (or its promise rejects with) the payload.
 	 */
-	readonly panics: PanicRuntime;
+	readonly panics: PanicBoundary;
 	/**
 	 * Turns one error into a Standard issue: a message, or a message and a
 	 * path. An `Issues` error is converted entry by entry, and each entry's
@@ -150,7 +152,7 @@ export function toStandard<O, E>(
 ): StandardSchemaV1<unknown, O>;
 export function toStandard<O, E>(options: {
 	readonly schema: Schema<unknown, O, E>;
-	readonly panics: PanicRuntime;
+	readonly panics: PanicBoundary;
 	readonly toIssue?: (error: Flatten<E>) => string | StandardIssue;
 }): StandardSchemaV1<unknown, O> {
 	const { schema, panics } = options;
@@ -169,10 +171,11 @@ export function toStandard<O, E>(options: {
 			Ok: (value) => ({ value }),
 			Err: (error) => {
 				// toIssue is user code: a throw is a panic, reported, then resumed
-				const caught = panics.catchUnwind(() => ({ result: issuesOf(error) }));
+				const caught = panics.catchUnwind(() => issuesOf(error));
+				const converted = expectReady(poll(caught), "issuesOf is sync");
 
-				return match(caught)<StandardResult<O>>({
-					Ok: ({ result }) => result,
+				return match(converted)<StandardResult<O>>({
+					Ok: (result) => result,
 					Err: (impossible) => impossible,
 					Panicked: (payload) => panics.resumeUnwind(payload),
 				});

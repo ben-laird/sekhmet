@@ -23,6 +23,46 @@ import {
 
 type Cause = "done" | "cancelled" | "shutdown";
 
+/**
+ * A promise that keeps every promise its `then` returns, so a test can catch
+ * a double fault escaping a callback instead of leaving it unhandled.
+ */
+class WatchedPromise<T> extends Promise<T> {
+	readonly derived: Promise<unknown>[] = [];
+
+	// biome-ignore lint/suspicious/noThenProperty: it overrides Promise's own then
+	override then<A = T, B = never>(
+		onFulfilled?: ((value: T) => A | PromiseLike<A>) | null,
+		onRejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
+	): Promise<A | B> {
+		const next = super.then(onFulfilled, onRejected);
+		this.derived.push(next);
+		return next;
+	}
+}
+
+/** A watched promise that rejects with `reason` once `reject` is called. */
+function watchedRejection(reason: unknown): {
+	readonly promise: WatchedPromise<never>;
+	readonly reject: () => void;
+} {
+	let fail!: (reason: unknown) => void;
+	const promise = new WatchedPromise<never>((_resolve, reject) => {
+		fail = reject;
+	});
+	return { promise, reject: () => fail(reason) };
+}
+
+/** What escaped the first callback the boundary gave `promise`. */
+function escapedFrom(promise: WatchedPromise<unknown>): Promise<unknown> {
+	const [callback] = promise.derived;
+	assert(callback !== undefined, "the boundary should have called then");
+	return callback.then(
+		() => undefined,
+		(reason: unknown) => reason,
+	);
+}
+
 /** A panic runtime that records what its hook reports. */
 function recordingPanics(): {
 	readonly panics: PanicRuntime;
@@ -337,23 +377,29 @@ Deno.test("a double fault in a sync init tears setup down, then start rethrows i
 	]);
 });
 
-Deno.test("a double fault in an async init is never thrown: it is the Err's panic", async () => {
+Deno.test("a double fault in an async init is never thrown: init's panic is the Err's", async () => {
 	// Given: under a throwing hook, an init that acquires something, then rejects
 	const released: string[] = [];
+	const timedOut = new Error("timed out");
+	const { promise, reject } = watchedRejection(timedOut);
 	const flaky = new Resource<undefined, never, Cause>({
 		init: (_input, setup) => {
 			setup.defer((cause) => void released.push(show(cause)));
-			return Promise.reject(new Error("timed out"));
+			return promise;
 		},
 		deinit: () => {},
 	});
 
-	// When: it's started
-	const result = await wait(
-		flaky.start({ input: undefined, panics: brokenPanics() }),
-	);
+	// When: it's started and init rejects; the escaping double fault is caught
+	// here, since in a program nothing holds it and it would crash the process
+	const started = flaky.start({ input: undefined, panics: brokenPanics() });
+	const escaped = escapedFrom(promise);
+	reject();
+	const result = await wait(started);
 
-	// Then: Err with the PanicHook panic, and setup was released
-	assert(isErr(result) && isPanicHookFailure(unwrapErr(result)));
+	// Then: Err with init's own panic, setup was released, and the PanicHook escaped
+	assert(isErr(result));
+	assertEquals(unwrapErr(result).cause, timedOut);
 	assertEquals(released.length, 1);
+	assert(isPanicHookFailure(await escaped));
 });

@@ -83,7 +83,7 @@ added after the abort is.
 
 A cleanup shouldn't throw; one that does has a bug, or hit a failure it
 couldn't handle. Each runs inside the panic runtime's boundary
-(`catchUnwind`, or `catchUnwindAsync` for a promise), so its throw or
+(`catchUnwind`, which adopts a returned promise), so its throw or
 rejection is reported to the runtime's hook and becomes a `Panic` in the
 `EndReport`, and the teardown carries on. Every cleanup runs, and every
 failure is kept, in the order the cleanups ran: `Ok(cause)` when all of
@@ -118,15 +118,20 @@ work, then rethrow. A lifetime follows it where it can:
   except one from an `ended` listener, which comes after the report is out.
   A child whose synchronous teardown double faults passes it on to its
   parent's `end`.
-- **In an async continuation** (after an async cleanup was awaited),
-  nothing is thrown: a throw in a promise continuation would be an
-  unhandled rejection, which no caller could catch. The double fault is a
-  panic in the report instead. One from an `ended` listener there has
-  nowhere to go and is lost.
+- **In an async continuation** (after an async cleanup was awaited), the
+  lifetime throws nothing: a synchronous cleanup that double faults there
+  is a panic in the report. One from an `ended` listener there has nowhere
+  to go and is lost.
+- **When the hook throws while reporting a rejection**, the cleanup still
+  fails with its own panic in the report, and the `Panic (PanicHook)`
+  escapes the promise callback as an unhandled rejection, which the Deno
+  and Node defaults treat as fatal. That is `catchUnwind`'s contract for
+  async work, the closest JavaScript comes to Rust's abort.
 
 A `Resource` follows the same rule for `init`: a double fault in a
-synchronous `init` tears `setup` down, then `start` rethrows it; in an async
-`init`, it is the `Err`'s panic.
+synchronous `init` tears `setup` down, then `start` rethrows it; when `init`
+rejects and the hook throws, `init`'s panic is the `Err`'s, and the
+`Panic (PanicHook)` escapes as an unhandled rejection.
 
 ## SetupEnd: what init acquired
 
@@ -216,7 +221,7 @@ handle. A child that needs a different cause type gets one through
 
 ## No module state
 
-A lifetime takes its panic runtime (`catchUnwind` and `catchUnwindAsync`)
-as a parameter, and the package keeps no global or module-level state:
+A lifetime takes its panic runtime as a `PanicBoundary` (`catchUnwind` and
+`resumeUnwind`) parameter, and the package keeps no global or module-level state:
 there is no current owner, no registry and no default runtime. Two
 lifetimes interact only when one adopts the other.

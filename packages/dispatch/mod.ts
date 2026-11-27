@@ -14,8 +14,8 @@
  *   at once (an `AbortSignal` silently never fires one added after the
  *   abort), and every listener returns an {@linkcode Unsubscribe}.
  * - **A throwing listener is a panic,** isolated by the
- *   {@linkcode CatchUnwind} the controller was given and reported to its
- *   runtime's hook, so the other listeners still run.
+ *   `PanicBoundary` the controller was given (`{ panics }`) and reported to
+ *   its runtime's hook, so the other listeners still run.
  * - **Signals compose and convert:** `map` (whose mapping runs once, and
  *   poisons the signal if it throws), `zip` and `DispatchSignal.any`
  *   derive signals that hold no subscription until someone listens, and
@@ -29,9 +29,7 @@
  * import { DispatchController } from "@sekhmet/dispatch";
  * import { assert, assertEquals } from "@std/assert";
  *
- * const cancel = new DispatchController<string>(
- * 	definePanicRuntime().catchUnwind,
- * );
+ * const cancel = new DispatchController<string>({ panics: definePanicRuntime() });
  * const heard: string[] = [];
  * cancel.signal.whenDispatched((reason) => {
  * 	heard.push(reason);
@@ -49,7 +47,6 @@
 
 export { DispatchController } from "./src/controller.ts";
 export {
-	type CatchUnwind,
 	DispatchSignal,
 	type Listener,
 	type Unsubscribe,

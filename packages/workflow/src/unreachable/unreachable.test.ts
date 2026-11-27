@@ -1,6 +1,8 @@
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { Panic } from "@sekhmet/panic/mini/core";
 import { isPanicked, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow/mini";
 import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import {
@@ -153,9 +155,10 @@ Deno.test("a runtime's hook and catchUnwind see an unreachable panic", () => {
 	});
 
 	// When: unreachable runs inside the boundary
-	const result = runtime.catchUnwind(() => unreachable());
+	const caught = runtime.catchUnwind(() => unreachable());
+	const result = expectReady(poll(caught), "the work is sync");
 
-	// Then: the hook reported it, and the boundary returned it as Panicked
+	// Then: the hook reported it, and the boundary settled it as Panicked
 	assertEquals(bugs, 1);
 	assert(isPanicked(result) && isUnreachablePanic(unwrapPanicked(result)));
 });

@@ -21,7 +21,7 @@ export async function exercise(): Promise<void> {
 		reported.push(payload);
 	});
 
-	const cancel = new DispatchController<string>(runtime.catchUnwind);
+	const cancel = new DispatchController<string>({ panics: runtime });
 	const heard: string[] = [];
 	cancel.signal.whenDispatched(() => {
 		throw new Error("listener bug");
@@ -63,7 +63,7 @@ export async function exercise(): Promise<void> {
 	const platform = new AbortController();
 	const closed = DispatchSignal.fromAbortSignal({
 		signal: platform.signal,
-		catchUnwind: runtime.catchUnwind,
+		panics: runtime,
 	});
 	const either = DispatchSignal.any([closed, DispatchSignal.never()]);
 	const reason = either.wait();

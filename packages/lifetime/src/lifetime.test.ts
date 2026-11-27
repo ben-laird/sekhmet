@@ -15,6 +15,46 @@ import { type EndReport, Lifetime } from "@/mod.ts";
 
 type Cause = "done" | "cancelled" | "shutdown";
 
+/**
+ * A promise that keeps every promise its `then` returns, so a test can catch
+ * a double fault escaping a callback instead of leaving it unhandled.
+ */
+class WatchedPromise<T> extends Promise<T> {
+	readonly derived: Promise<unknown>[] = [];
+
+	// biome-ignore lint/suspicious/noThenProperty: it overrides Promise's own then
+	override then<A = T, B = never>(
+		onFulfilled?: ((value: T) => A | PromiseLike<A>) | null,
+		onRejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
+	): Promise<A | B> {
+		const next = super.then(onFulfilled, onRejected);
+		this.derived.push(next);
+		return next;
+	}
+}
+
+/** A watched promise that rejects with `reason` once `reject` is called. */
+function watchedRejection(reason: unknown): {
+	readonly promise: WatchedPromise<never>;
+	readonly reject: () => void;
+} {
+	let fail!: (reason: unknown) => void;
+	const promise = new WatchedPromise<never>((_resolve, reject) => {
+		fail = reject;
+	});
+	return { promise, reject: () => fail(reason) };
+}
+
+/** What escaped the first callback the boundary gave `promise`. */
+function escapedFrom(promise: WatchedPromise<unknown>): Promise<unknown> {
+	const [callback] = promise.derived;
+	assert(callback !== undefined, "the boundary should have called then");
+	return callback.then(
+		() => undefined,
+		(reason: unknown) => reason,
+	);
+}
+
 /** A panic runtime that records what its hook reports. */
 function recordingPanics(): {
 	readonly panics: PanicRuntime;
@@ -477,8 +517,8 @@ Deno.test("endWhen links a lifetime to outside signals; the first to dispatch de
 	// Given: a lifetime that ends on a timeout or a user's cancel
 	const { panics } = recordingPanics();
 	const root = new Lifetime<undefined, Cause>({ value: undefined, panics });
-	const timeout = new DispatchController<Cause>(panics.catchUnwind);
-	const user = new DispatchController<Cause>(panics.catchUnwind);
+	const timeout = new DispatchController<Cause>({ panics });
+	const user = new DispatchController<Cause>({ panics });
 	root.endWhen(DispatchSignal.any([timeout.signal, user.signal]));
 
 	// When: the user cancels, then the timeout fires
@@ -494,7 +534,7 @@ Deno.test("endWhen's link is released by its Unsubscribe, or when the lifetime e
 	const { panics } = recordingPanics();
 	const unlinked = new Lifetime<undefined, Cause>({ value: undefined, panics });
 	const ended = new Lifetime<undefined, Cause>({ value: undefined, panics });
-	const signal = new DispatchController<Cause>(panics.catchUnwind);
+	const signal = new DispatchController<Cause>({ panics });
 	const unlink = unlinked.endWhen(signal.signal);
 	const release = ended.endWhen(signal.signal);
 
@@ -887,25 +927,33 @@ Deno.test("a double fault in an ending listener is rethrown after the teardown, 
 });
 
 Deno.test("a double fault in an async continuation is never thrown: it is in the report", async () => {
-	// Given: under a throwing hook, a sync throwing cleanup beneath an async one, and a rejecting one
+	// Given: under a throwing hook, a sync throwing cleanup beneath a rejecting one
 	const root = new Lifetime<undefined, Cause>({
 		value: undefined,
 		panics: brokenPanics(),
 	});
+	const rejected = new Error("rejected");
+	const { promise, reject } = watchedRejection(rejected);
 	root.defer(() => {
 		throw new Error("runs after the await");
 	});
-	root.defer(() => Promise.reject(new Error("rejected")));
+	root.defer(() => promise);
 
-	// When: it ends, and the teardown finishes
+	// When: it ends and the cleanup rejects; the double fault escaping the
+	// rejection's callback is caught here, since nothing in a program holds it
 	const ended = root.end("done");
+	const escaped = escapedFrom(promise);
+	reject();
 	const report = await ended.wait();
 
-	// Then: end returned normally; both double faults are PanicHook panics in the report
+	// Then: end returned normally; the rejection is the cleanup's own panic,
+	// the sync throw after it is a PanicHook panic, and the hook's failure escaped
 	assert(isErr(report));
 	const { panics } = unwrapErr(report);
 	assertEquals(panics.length, 2);
-	assert(panics.every((panic) => isPanicHookFailure(panic)));
+	assertEquals(panics[0]?.cause, rejected);
+	assert(isPanicHookFailure(panics[1]));
+	assert(isPanicHookFailure(await escaped));
 });
 
 Deno.test("a child's sync double fault reaches its parent's end", () => {

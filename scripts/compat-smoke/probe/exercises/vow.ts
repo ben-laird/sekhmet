@@ -1,19 +1,13 @@
 /**
  * Exercises `@sekhmet/vow`: vows resolved synchronously through the root,
- * and a promise bridged into a vow through mini.
+ * and read now with `poll` and awaited with `wait` through mini.
  *
  * @module
  */
 
-import { unwrap } from "@sekhmet/enum/result/mini/unwrap";
-import { definePanicRuntime } from "@sekhmet/panic";
+import { Ready } from "@sekhmet/enum/poll/mini";
 import { map, vowWithResolver, wait, zipWith } from "@sekhmet/vow";
-import {
-	all,
-	fromPromise,
-	wait as miniWait,
-	resolved,
-} from "@sekhmet/vow/mini";
+import { all, wait as miniWait, poll, resolved } from "@sekhmet/vow/mini";
 import { Vow } from "@sekhmet/vow/mini/core";
 import { map as miniMap } from "@sekhmet/vow/mini/impl";
 import { expectEqual } from "../check.ts";
@@ -37,14 +31,10 @@ export async function exercise(): Promise<void> {
 	});
 	expectEqual({ label: "wait", actual: await wait(total), expected: 15 });
 
-	const bridged = fromPromise({
-		promise: Promise.resolve("ready"),
-		panics: definePanicRuntime(),
-	});
 	expectEqual({
-		label: "fromPromise",
-		actual: unwrap(await miniWait(bridged)),
-		expected: "ready",
+		label: "poll",
+		actual: poll(resolved("ready")),
+		expected: Ready("ready"),
 	});
 
 	const doubled = miniMap(resolved(21), (n) => n * 2);

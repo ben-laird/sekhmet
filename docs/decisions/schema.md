@@ -856,14 +856,19 @@ those sections are kept as history.
 - **Schema takes a panic runtime, like lifetime.** `Err(E)` is the expected
   failure; a throw or a rejection in user code (a parser, refinement,
   transform, `preprocess`, a `lazy` getter, a foreign Standard `validate`)
-  is a panic, caught by `panics` (`catchUnwind`/`catchUnwindAsync`),
+  is a panic, caught by `panics` (`catchUnwind`/`catchUnwindAsync` then;
+  one `catchUnwind` since #114),
   reported to its hook, and settled as `Panicked`. `Outcome` (#86) keeps the
   two channels apart, so `mapErr` and `orElse` never see a panic. Rejected:
   binding a runtime only on async steps (a rejection would be reported while
   the vow never settled), and `Result<O, E | Panic>` (it mixes bugs with
   expected failures).
 - **`panics` is a `PanicBoundary`**, `Pick<PanicRuntime, "catchUnwind" |
-  "catchUnwindAsync">`, the same slice `@sekhmet/lifetime` takes. The
+  "catchUnwindAsync">`, the same slice `@sekhmet/lifetime` takes.
+  (Superseded by #114, 2026-11-27: `PanicBoundary` is now `@sekhmet/panic`'s
+  `Pick<PanicRuntime, "catchUnwind" | "resumeUnwind">`, its one
+  `catchUnwind` returns a `Vow<Outcome>`, and schema's own alias and private
+  `guard` are gone: it calls `catchUnwind` and flattens with `fromCaught`.) The
   options object follows the named-arguments rule, with the schema as the
   receiver, so main's method is `schema.parse({ input, panics })`. It
   returns a `Vow` of panic's main `Outcome` class, with its methods:

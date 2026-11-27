@@ -22,8 +22,8 @@ deno add jsr:@sekhmet/dispatch jsr:@sekhmet/panic jsr:@sekhmet/enum jsr:@std/ass
 ## Make an end signal
 
 First, we describe how a download can end, and make a controller for it. The
-controller takes the panic runtime's `catchUnwind`, the boundary its
-listeners will run in:
+controller takes the panic runtime as `panics`, the boundary its listeners
+will run in:
 
 ```ts
 import { DispatchController } from "@sekhmet/dispatch";
@@ -37,7 +37,7 @@ type EndCause =
 // {}
 
 const runtime = definePanicRuntime();
-const end = new DispatchController<EndCause>(runtime.catchUnwind);
+const end = new DispatchController<EndCause>({ panics: runtime });
 
 assert(isPending(end.signal.poll()));
 
@@ -71,7 +71,7 @@ function progressBar(ended: DispatchSignal<EndCause>, log: string[]): void {
 }
 
 const runtime = definePanicRuntime();
-const end = new DispatchController<EndCause>(runtime.catchUnwind);
+const end = new DispatchController<EndCause>({ panics: runtime });
 const log: string[] = [];
 progressBar(end.signal, log);
 
@@ -99,7 +99,7 @@ type EndCause =
 // {}
 
 const runtime = definePanicRuntime();
-const end = new DispatchController<EndCause>(runtime.catchUnwind);
+const end = new DispatchController<EndCause>({ panics: runtime });
 
 const first = end.dispatch({ kind: "cancelled", by: "user" });
 const second = end.dispatch({ kind: "finished" });
@@ -131,8 +131,8 @@ import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
-const user = new DispatchController<"user">(runtime.catchUnwind);
-const timeout = new DispatchController<"timeout">(runtime.catchUnwind);
+const user = new DispatchController<"user">({ panics: runtime });
+const timeout = new DispatchController<"timeout">({ panics: runtime });
 const cancelled = DispatchSignal.any([user.signal, timeout.signal]).map(
 	(by) => ({ kind: "cancelled", by }) as const,
 );
@@ -166,7 +166,7 @@ type EndCause =
 // {}
 
 const runtime = definePanicRuntime();
-const end = new DispatchController<EndCause>(runtime.catchUnwind);
+const end = new DispatchController<EndCause>({ panics: runtime });
 const forFetch: AbortSignal = end.signal.toAbortSignal();
 // fetch(url, { signal: forFetch })
 

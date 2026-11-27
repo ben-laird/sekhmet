@@ -14,27 +14,30 @@ There is no default runtime, so create one where your program starts and run
 everything inside its boundary.
 
 1. Call `definePanicRuntime()` once, at the entry point.
-2. Run the program's main function with `runtime.catchUnwind`, or with
-   `runtime.catchUnwindAsync` if it returns a promise.
+2. Run the program's main function with `runtime.catchUnwind`, sync or
+   async: it hands back a `Vow` of an `Outcome`.
 3. Read the `Outcome`: `Ok` holds what the program returned, `Panicked` what
-   it threw.
+   it threw. A sync program settles the vow before `catchUnwind` returns, so
+   read it with `poll` and `expectReady`; wait for an async one with `wait`.
 
 ```ts
 import { definePanicRuntime } from "@sekhmet/panic";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { Ok } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow";
 import { assertEquals } from "@std/assert";
 
 const main = (): number => 0;
 
 const runtime = definePanicRuntime();
-const exit = runtime.catchUnwind(main);
+const exit = expectReady(poll(runtime.catchUnwind(main)), "main is sync");
 
 assertEquals(exit, Ok(0));
 ```
 
-Passing a promise-returning function to `catchUnwind` is a type error naming
-`useCatchUnwindAsyncForPromises`, since that boundary would hand back the
-promise as an `Ok` and miss its rejection: use `catchUnwindAsync` instead.
+A function that returns a promise or another thenable is adopted, as
+`await` adopts it, so its rejection is `Panicked` too; see
+[how to recover from async work](#how-to-recover-from-async-work).
 
 ## How to report panics to a logger
 
@@ -129,7 +132,9 @@ since it catches every throw, not only `Panic`s. Convert it on the returned
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
 import { Err } from "@sekhmet/enum/result/mini/core";
 import { intoInner } from "@sekhmet/enum/either/mini";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { intoResult, mapErr, recover } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -139,7 +144,8 @@ function main(): number {
 	panic({ message: "config is missing a port", cause: null });
 }
 
-const recovered = recover(runtime.catchUnwind(main), (payload) => {
+const exit = expectReady(poll(runtime.catchUnwind(main)), "main is sync");
+const recovered = recover(exit, (payload) => {
 	return Err(payload instanceof Panic ? payload.message : "unknown failure");
 });
 
@@ -150,13 +156,16 @@ assertEquals(result, Err("config is missing a port"));
 
 ## How to recover from async work
 
-Use `catchUnwindAsync` for a function that returns a promise. It catches a
-rejection and a synchronous throw from the function alike, so it never leaves
-an unhandled rejection. It accepts any `PromiseLike`, so thenables work too.
+`catchUnwind` adopts a returned promise, or any other thenable, as `await`
+does. It catches a rejection, a `then` that throws and a synchronous throw
+from the function alike, so it never leaves an unhandled rejection. Wait for
+the vow with `wait` from `@sekhmet/vow`; until it settles, `poll` reads it as
+`Pending`.
 
 ```ts
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
 import { mapPanic, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+import { wait } from "@sekhmet/vow";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -167,7 +176,7 @@ async function loadConfig(): Promise<string> {
 }
 
 const result = mapPanic(
-	await runtime.catchUnwindAsync(() => loadConfig()),
+	await wait(runtime.catchUnwind(() => loadConfig())),
 	(payload) => {
 		if (payload instanceof Panic) {
 			return { kind: "panic", name: payload.name };
@@ -178,6 +187,43 @@ const result = mapPanic(
 
 assertEquals(unwrapPanicked(result), { kind: "panic", name: "Panic (Config)" });
 ```
+
+Two things follow from adopting a thenable:
+
+- **A thenable returned as data is flattened.** A sync function whose value
+  happens to be a promise is waited for, not handed back. Box it to keep it:
+  `catchUnwind(() => ({ pending }))`.
+- **An expected failure is classified at the edge.** A rejection is always
+  `Panicked`, since throw means panic. When a rejection is an expected
+  failure, turn it into a `Result` first (`promise.then(Ok, Err)`), then
+  flatten what the boundary caught with `fromCaught`:
+
+```ts
+import { definePanicRuntime } from "@sekhmet/panic";
+import { Err as ResultErr, Ok as ResultOk } from "@sekhmet/enum/result/mini";
+import { Err, fromCaught } from "@sekhmet/panic/outcome/mini";
+import { wait } from "@sekhmet/vow";
+import { assertEquals } from "@std/assert";
+
+const runtime = definePanicRuntime();
+const fetchUser = (): Promise<string> => Promise.reject("offline");
+
+const caught = await wait(
+	runtime.catchUnwind(() => {
+		return fetchUser().then(
+			ResultOk<string, string>,
+			ResultErr<string, string>,
+		);
+	}),
+);
+
+assertEquals(fromCaught(caught), Err("offline"));
+```
+
+If the hook throws while reporting a rejection, there is no caller to throw
+the `Panic (PanicHook)` to, and a vow cannot reject: the vow still settles as
+`Panicked`, and the `Panic (PanicHook)` escapes as an unhandled rejection; see
+[when the hook throws](./concepts.md#when-the-hook-throws).
 
 ## How to pass a panic on to an outer boundary
 
@@ -192,7 +238,9 @@ again:
 
 ```ts
 import { definePanicRuntime, panic } from "@sekhmet/panic";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { isPanicked, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -203,14 +251,15 @@ const recoverable = (_payload: unknown): boolean => false;
 const step = (): number => panic({ message: "bad state", cause: null });
 
 const outer = runtime.catchUnwind(() => {
-	const inner = runtime.catchUnwind(step);
+	const inner = expectReady(poll(runtime.catchUnwind(step)), "step is sync");
 	if (isPanicked(inner) && !recoverable(unwrapPanicked(inner))) {
 		runtime.resumeUnwind(unwrapPanicked(inner));
 	}
 	return inner;
 });
+const exit = expectReady(poll(outer), "the outer work is sync");
 
-assertEquals([isPanicked(outer), reports], [true, 1]);
+assertEquals([isPanicked(exit), reports], [true, 1]);
 ```
 
 This holds for object payloads, such as a `Panic`. A thrown primitive is
@@ -271,7 +320,9 @@ import {
 	panic,
 	PanicMetadataRegistry,
 } from "@sekhmet/panic";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow";
 import { assert, assertEquals } from "@std/assert";
 
 interface PanicMeta {
@@ -288,9 +339,10 @@ runtime.setHook(({ payload }) => {
 	if (payload instanceof Panic) registry.getOrInsert(payload);
 });
 
-const payload = unwrapPanicked(
-	runtime.catchUnwind(() => panic({ message: "bad state", cause: null })),
-);
+const caught = runtime.catchUnwind(() => {
+	return panic({ message: "bad state", cause: null });
+});
+const payload = unwrapPanicked(expectReady(poll(caught), "sync work"));
 
 assert(payload instanceof Panic);
 assertEquals(registry.size, 1);
@@ -302,15 +354,18 @@ assertEquals(registry.get(payload), {
 
 ## How to recognize a hook that failed
 
-When a hook throws, the boundary stops recovering and throws a
-`Panic (PanicHook)` instead, which an outer boundary catches. Recognize it
+When a hook throws while a boundary reports sync work, the boundary stops
+recovering and throws a `Panic (PanicHook)` instead, which an outer boundary
+catches. Recognize it
 with `isPanicHookFailure`, which narrows the payload so its cause's `payload`
 (what the hook was reporting) and `thrown` (what the hook threw) need no
 cast:
 
 ```ts
 import { definePanicRuntime, isPanicHookFailure, panic } from "@sekhmet/panic";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow";
 import { assert, assertEquals } from "@std/assert";
 
 const outer = definePanicRuntime();
@@ -320,13 +375,12 @@ inner.setHook(() => {
 	throw new Error("reporter offline");
 });
 
-const payload = unwrapPanicked(
-	outer.catchUnwind(() => {
-		return inner.catchUnwind(() => {
-			return panic({ message: "bad state", cause: null });
-		});
-	}),
-);
+const caught = outer.catchUnwind(() => {
+	return inner.catchUnwind(() => {
+		return panic({ message: "bad state", cause: null });
+	});
+});
+const payload = unwrapPanicked(expectReady(poll(caught), "sync work"));
 
 assert(isPanicHookFailure(payload));
 assertEquals(String(payload.cause.thrown), "Error: reporter offline");

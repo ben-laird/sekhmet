@@ -30,7 +30,7 @@ type Cause =
 Deno.test("a dispatch carries a typed value, and the first one wins", () => {
 	// Given: a controller for a typed cause
 	const { panics } = recordingPanics();
-	const controller = new DispatchController<Cause>(panics.catchUnwind);
+	const controller = new DispatchController<Cause>({ panics });
 
 	// When: it's dispatched twice
 	const first = controller.dispatch({ kind: "cancelled", by: "user" });
@@ -50,7 +50,7 @@ Deno.test("a listener added after the dispatch still runs (AbortSignal's would n
 	const abort = new AbortController();
 	abort.abort("gone");
 	const { panics } = recordingPanics();
-	const controller = new DispatchController<string>(panics.catchUnwind);
+	const controller = new DispatchController<string>({ panics });
 	controller.dispatch("gone");
 	let abortHeard = false;
 	let dispatchHeard: string | undefined;
@@ -71,7 +71,7 @@ Deno.test("a listener added after the dispatch still runs (AbortSignal's would n
 Deno.test("unsubscribing before the dispatch stops the listener", () => {
 	// Given: two listeners, one unsubscribed
 	const { panics } = recordingPanics();
-	const controller = new DispatchController<number>(panics.catchUnwind);
+	const controller = new DispatchController<number>({ panics });
 	const heard: string[] = [];
 	const stopA = controller.signal.whenDispatched(() => void heard.push("a"));
 	controller.signal.whenDispatched(() => void heard.push("b"));
@@ -89,7 +89,7 @@ Deno.test("unsubscribing before the dispatch stops the listener", () => {
 Deno.test("a throwing listener is a reported panic; the others still run and dispatch doesn't throw", () => {
 	// Given: three listeners, the middle one throwing
 	const { panics, reported } = recordingPanics();
-	const controller = new DispatchController<string>(panics.catchUnwind);
+	const controller = new DispatchController<string>({ panics });
 	const heard: string[] = [];
 	controller.signal.whenDispatched(() => void heard.push("first"));
 	controller.signal.whenDispatched(() => {
@@ -112,7 +112,7 @@ Deno.test("a throwing listener is a reported panic; the others still run and dis
 Deno.test("a throwing listener added after the dispatch is a reported panic too", () => {
 	// Given: a controller that has already dispatched
 	const { panics, reported } = recordingPanics();
-	const controller = new DispatchController<string>(panics.catchUnwind);
+	const controller = new DispatchController<string>({ panics });
 	controller.dispatch("go");
 
 	// When: a throwing listener is added
@@ -128,7 +128,7 @@ Deno.test("a throwing listener added after the dispatch is a reported panic too"
 Deno.test("a listener added while dispatching runs after the ones already waiting", () => {
 	// Given: a listener that adds another when it runs, then a second listener
 	const { panics } = recordingPanics();
-	const controller = new DispatchController<string>(panics.catchUnwind);
+	const controller = new DispatchController<string>({ panics });
 	const heard: string[] = [];
 	controller.signal.whenDispatched((v) => {
 		heard.push(`outer ${v}`);
@@ -146,7 +146,7 @@ Deno.test("a listener added while dispatching runs after the ones already waitin
 Deno.test("a listener can unsubscribe a later one mid-dispatch, which then never runs", () => {
 	// Given: a first listener that unsubscribes the second when it runs
 	const { panics } = recordingPanics();
-	const controller = new DispatchController<string>(panics.catchUnwind);
+	const controller = new DispatchController<string>({ panics });
 	const heard: string[] = [];
 	const removed: boolean[] = [];
 	controller.signal.whenDispatched(() => {
@@ -169,7 +169,7 @@ Deno.test("a listener can unsubscribe a later one mid-dispatch, which then never
 Deno.test("a listener that dispatches again mid-dispatch gets the first value back", () => {
 	// Given: a listener that dispatches a second value while the first drains
 	const { panics } = recordingPanics();
-	const controller = new DispatchController<string>(panics.catchUnwind);
+	const controller = new DispatchController<string>({ panics });
 	const again: unknown[] = [];
 	controller.signal.whenDispatched(() => {
 		again.push(controller.dispatch("second"));
@@ -189,7 +189,7 @@ Deno.test("a throwing panic hook (a double fault) propagates, but the dispatch s
 	panics.setHook(() => {
 		throw new Error("hook bug");
 	});
-	const controller = new DispatchController<string>(panics.catchUnwind);
+	const controller = new DispatchController<string>({ panics });
 	const heard: string[] = [];
 	controller.signal.whenDispatched(() => void heard.push("first"));
 	controller.signal.whenDispatched(() => {

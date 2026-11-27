@@ -288,18 +288,22 @@ After `catchUnwind`:
 
 ```ts
 import { definePanicRuntime } from "@sekhmet/panic";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { defined, isInvariantPanic } from "@sekhmet/workflow/invariant";
 import { isPanicAnd, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow";
 import { assert, assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
 runtime.setHook(() => {}); // keep the example quiet
 
-const result = runtime.catchUnwind(() => {
+const caught = runtime.catchUnwind(() => {
 	return defined(new Map<string, number>().get("apple"), {
 		expectedBehavior: "every item should have a price",
 	});
 });
+// The work is sync, so the boundary's vow settled before catchUnwind returned
+const result = expectReady(poll(caught), "the work is sync");
 
 assert(isPanicAnd(result, isInvariantPanic));
 const payload = unwrapPanicked(result);

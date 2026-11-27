@@ -104,7 +104,6 @@ export {
 	mapErr,
 	type Output,
 	orElse,
-	type PanicBoundary,
 	ParseError,
 	type ParseOptions,
 	type Parser,

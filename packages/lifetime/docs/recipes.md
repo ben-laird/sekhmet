@@ -132,8 +132,8 @@ type Cause = "timed out" | "cancelled";
 
 const panics = definePanicRuntime();
 const job = new Lifetime<undefined, Cause>({ value: undefined, panics });
-const timeout = new DispatchController<Cause>(panics.catchUnwind);
-const user = new DispatchController<Cause>(panics.catchUnwind);
+const timeout = new DispatchController<Cause>({ panics });
+const user = new DispatchController<Cause>({ panics });
 job.endWhen(DispatchSignal.any([timeout.signal, user.signal]));
 
 user.dispatch("cancelled");

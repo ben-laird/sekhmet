@@ -1,14 +1,19 @@
 import { intoInner } from "@sekhmet/enum/either/mini";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { Err as ResultErr } from "@sekhmet/enum/result/mini/core";
+import { poll } from "@sekhmet/vow/mini/accessors";
+import type { Vow } from "@sekhmet/vow/mini/core";
+import { map, wait } from "@sekhmet/vow/mini/impl";
+import { isPending, isResolved } from "@sekhmet/vow/mini/predicates";
 import {
 	assert,
 	assertEquals,
 	assertInstanceOf,
-	assertRejects,
 	assertStrictEquals,
 	assertThrows,
 } from "@std/assert";
 import { stub } from "@std/testing/mock";
+import { assertType, type IsExact } from "@std/testing/types";
 import { Panic, panic } from "@/src/mini/core.ts";
 import {
 	defaultPanicHook,
@@ -18,10 +23,10 @@ import {
 	type PanicHookInfo,
 	type PanicRuntime,
 } from "@/src/mini/runtime.ts";
-import { Ok } from "@/src/outcome/mini/core.ts";
+import { Ok, type Outcome } from "@/src/outcome/mini/core.ts";
 import { recover, unwrapPanicked } from "@/src/outcome/mini/panic.ts";
 import { isPanicked } from "@/src/outcome/mini/predicates.ts";
-import { unwrapErr } from "@/src/outcome/mini/unwrap.ts";
+import { unwrapErr, unwrap as unwrapOk } from "@/src/outcome/mini/unwrap.ts";
 
 /** A runtime whose hook records every report instead of printing it. */
 function recordingRuntime(): {
@@ -37,6 +42,29 @@ function recordingRuntime(): {
 }
 
 const boom = (): Panic<null> => new Panic({ message: "boom", cause: null });
+
+/**
+ * A promise that keeps every promise its `then` returns, so a test can see
+ * how the callbacks it was given settle, without an unhandled rejection.
+ */
+class WatchedPromise<T> extends Promise<T> {
+	readonly derived: Promise<unknown>[] = [];
+
+	// biome-ignore lint/suspicious/noThenProperty: it overrides Promise's own then
+	override then<A = T, B = never>(
+		onFulfilled?: ((value: T) => A | PromiseLike<A>) | null,
+		onRejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
+	): Promise<A | B> {
+		const next = super.then(onFulfilled, onRejected);
+		this.derived.push(next);
+		return next;
+	}
+}
+
+/** The outcome of sync work, which a boundary settles before it returns. */
+function settledNow<T>(vow: Vow<T>): T {
+	return expectReady(poll(vow), "sync work settles before catchUnwind returns");
+}
 
 /** A PromiseLike that is not a Promise, settled by `executor`. */
 function thenable<T>(
@@ -57,10 +85,11 @@ Deno.test("catchUnwind() of a returning fn is Ok and reports nothing", () => {
 	const { runtime, reports } = recordingRuntime();
 
 	// When: catching a function that returns normally
-	const result = runtime.catchUnwind(() => 42);
+	const caught = runtime.catchUnwind(() => 42);
 
-	// Then: the result is Ok of the value and the hook never ran
-	assertEquals(result, Ok(42));
+	// Then: the vow is already settled with Ok of the value, and the hook never ran
+	assert(isResolved(caught));
+	assertEquals(settledNow(caught), Ok(42));
 	assertEquals(reports, []);
 });
 
@@ -78,9 +107,11 @@ Deno.test("catchUnwind() turns every throw into Panicked of the same payload", a
 			const { runtime } = recordingRuntime();
 
 			// When: catching it
-			const result = runtime.catchUnwind(() => {
-				throw payload;
-			});
+			const result = settledNow(
+				runtime.catchUnwind(() => {
+					throw payload;
+				}),
+			);
 
 			// Then: the result is Panicked holding that very payload
 			assert(isPanicked(result));
@@ -89,26 +120,28 @@ Deno.test("catchUnwind() turns every throw into Panicked of the same payload", a
 	}
 });
 
-Deno.test("catchUnwind() rejects promise-returning functions at the type level", () => {
+Deno.test("catchUnwind() infers the value type from sync and async work", () => {
 	// Given: a runtime
 	const { runtime } = recordingRuntime();
 
-	// When: passing async work to the sync boundary
-	// Then: each call is a type error pointing at catchUnwindAsync
-	// @ts-expect-error: a Promise is async work; use catchUnwindAsync
-	runtime.catchUnwind(() => Promise.resolve(1));
-	// @ts-expect-error: a thenable is async work; use catchUnwindAsync
-	runtime.catchUnwind(() => thenable<number>((resolve) => resolve(1)));
-
-	// When: passing functions that return any, or never return
+	// When: catching sync work, a promise, a thenable, any, and a divergence
+	const sync = runtime.catchUnwind(() => 1);
+	const promised = runtime.catchUnwind(() => Promise.resolve(1));
+	const then = runtime.catchUnwind(() => thenable<number>((r) => r(1)));
 	const parsed = runtime.catchUnwind(() => JSON.parse("1"));
-	const diverged = runtime.catchUnwind(() =>
-		panic({ message: "m", cause: null }),
-	);
+	const diverged = runtime.catchUnwind(() => {
+		return panic({ message: "m", cause: null });
+	});
 
-	// Then: both type-check and behave as usual
-	assertEquals(parsed, Ok(1));
-	assert(isPanicked(diverged));
+	// Then: each is a vow of an Outcome of the settled value
+	assertType<IsExact<typeof sync, Vow<Outcome<number, never, unknown>>>>(true);
+	assertType<IsExact<typeof promised, typeof sync>>(true);
+	assertType<IsExact<typeof then, typeof sync>>(true);
+	assertType<IsExact<typeof diverged, Vow<Outcome<never, never, unknown>>>>(
+		true,
+	);
+	assertEquals(settledNow(parsed), Ok(1));
+	assert(isPanicked(settledNow(diverged)));
 });
 
 Deno.test("catchUnwind() reports the payload and its stack to the hook once", () => {
@@ -156,7 +189,7 @@ Deno.test("Nested boundaries report a payload only at the innermost", () => {
 
 	// Then: the hook ran once, and the outer boundary still holds the payload
 	assertEquals(reports.length, 1);
-	assertStrictEquals(unwrapPanicked(outer), payload);
+	assertStrictEquals(unwrapPanicked(settledNow(outer)), payload);
 });
 
 Deno.test("Every runtime a payload passes through reports it once", () => {
@@ -216,16 +249,18 @@ Deno.test("A frozen object payload is reported once per runtime", () => {
 	assertEquals(reports.length, 1);
 });
 
-Deno.test("Nested catchUnwindAsync boundaries report a payload once", async () => {
+Deno.test("Nested async boundaries report a payload once", async () => {
 	// Given: a runtime with a recording hook and a Panic
 	const { runtime, reports } = recordingRuntime();
 	const payload = boom();
 
 	// When: an inner async boundary catches it and an outer one re-catches it
-	const outer = await runtime.catchUnwindAsync(async () => {
-		await runtime.catchUnwindAsync(() => Promise.reject(payload));
-		throw payload;
-	});
+	const outer = await wait(
+		runtime.catchUnwind(async () => {
+			await wait(runtime.catchUnwind(() => Promise.reject(payload)));
+			throw payload;
+		}),
+	);
 
 	// Then: the hook ran once and the outer boundary holds the payload
 	assertEquals(reports.length, 1);
@@ -242,11 +277,11 @@ Deno.test("resumeUnwind() hands the outer boundary the same payload without re-r
 		const inner = runtime.catchUnwind(() => {
 			throw payload;
 		});
-		runtime.resumeUnwind(unwrapPanicked(inner));
+		runtime.resumeUnwind(unwrapPanicked(settledNow(inner)));
 	});
 
 	// Then: the outer boundary holds the same payload, reported once
-	assertStrictEquals(unwrapPanicked(outer), payload);
+	assertStrictEquals(unwrapPanicked(settledNow(outer)), payload);
 	assertEquals(reports.length, 1);
 });
 
@@ -303,7 +338,7 @@ Deno.test("Primitive payloads are reported at every boundary that catches them",
 				const inner = runtime.catchUnwind(() => {
 					throw payload;
 				});
-				runtime.resumeUnwind(unwrapPanicked(inner));
+				runtime.resumeUnwind(unwrapPanicked(settledNow(inner)));
 			});
 
 			// Then: both boundaries reported it
@@ -335,9 +370,11 @@ Deno.test("Hostile payloads are recovered, reported and never mistaken for a hoo
 			const { runtime, reports } = recordingRuntime();
 
 			// When: a boundary catches the hostile payload twice
-			const result = runtime.catchUnwind(() => {
-				throw payload;
-			});
+			const result = settledNow(
+				runtime.catchUnwind(() => {
+					throw payload;
+				}),
+			);
 			runtime.catchUnwind(() => {
 				throw payload;
 			});
@@ -451,9 +488,11 @@ Deno.test("A throwing hook panics out of the boundary", async (t) => {
 		});
 
 		// When: the same runtime catches the original payload again
-		const result = runtime.catchUnwind(() => {
-			throw payload;
-		});
+		const result = settledNow(
+			runtime.catchUnwind(() => {
+				throw payload;
+			}),
+		);
 
 		// Then: it is recovered without being reported a second time
 		assertStrictEquals(unwrapPanicked(result), payload);
@@ -470,14 +509,14 @@ Deno.test("A throwing hook panics out of the boundary", async (t) => {
 		const payload = boom();
 
 		// When: the inner boundary's hook throws
-		const result = outer.runtime.catchUnwind(() =>
-			inner.catchUnwind(() => {
+		const result = outer.runtime.catchUnwind(() => {
+			return inner.catchUnwind(() => {
 				throw payload;
-			}),
-		);
+			});
+		});
 
 		// Then: the outer boundary reports the PanicHook panic, not the payload
-		const caught = unwrapPanicked(result);
+		const caught = unwrapPanicked(settledNow(result));
 		assertInstanceOf(caught, Panic);
 		assertEquals(caught.name, "Panic (PanicHook)");
 		assertEquals(outer.reports.length, 1);
@@ -532,27 +571,28 @@ Deno.test("isPanicHookFailure() recognizes only a boundary's hook-failure panic"
 	});
 });
 
-Deno.test("catchUnwindAsync() covers resolve, rejection and synchronous throw", async (t) => {
-	await t.step("resolve", async () => {
+Deno.test("catchUnwind() adopts async work", async (t) => {
+	await t.step("a resolving promise settles Ok later", async () => {
 		// Given: a runtime with a recording hook
 		const { runtime, reports } = recordingRuntime();
 
-		// When: catching an async function that resolves
-		const result = await runtime.catchUnwindAsync(() => Promise.resolve(7));
+		// When: catching a function that returns a resolving promise
+		const caught = runtime.catchUnwind(() => Promise.resolve(7));
 
-		// Then: the result is Ok and nothing was reported
-		assertEquals(result, Ok(7));
+		// Then: the vow is pending, then settles Ok, and nothing was reported
+		assert(isPending(caught));
+		assertEquals(await wait(caught), Ok(7));
 		assertEquals(reports, []);
 	});
 
-	await t.step("rejection", async () => {
+	await t.step("a rejection is Panicked, reported once", async () => {
 		// Given: a runtime with a recording hook and a payload
 		const { runtime, reports } = recordingRuntime();
 		const payload = boom();
 
 		// When: catching an async function that rejects with it
-		const result = await runtime.catchUnwindAsync(() =>
-			Promise.reject(payload),
+		const result = await wait(
+			runtime.catchUnwind(() => Promise.reject(payload)),
 		);
 
 		// Then: the result is Panicked of the payload, reported once
@@ -560,28 +600,30 @@ Deno.test("catchUnwindAsync() covers resolve, rejection and synchronous throw", 
 		assertEquals(reports.length, 1);
 	});
 
-	await t.step("synchronous throw", async () => {
+	await t.step("a throw before any promise settles at once", () => {
 		// Given: a runtime with a recording hook and a payload
 		const { runtime, reports } = recordingRuntime();
 		const payload = "thrown before any promise";
 
 		// When: catching a function that throws before returning a promise
-		const result = await runtime.catchUnwindAsync((): Promise<number> => {
-			throw payload;
-		});
+		const result = settledNow(
+			runtime.catchUnwind((): Promise<number> => {
+				throw payload;
+			}),
+		);
 
 		// Then: the result is Panicked of the payload, reported once
 		assertStrictEquals(unwrapPanicked(result), payload);
 		assertEquals(reports.length, 1);
 	});
 
-	await t.step("resolving thenable", async () => {
+	await t.step("a resolving thenable is Ok", async () => {
 		// Given: a runtime and a thenable (not a Promise) that resolves
 		const { runtime, reports } = recordingRuntime();
 
 		// When: catching a function that returns it
-		const result = await runtime.catchUnwindAsync(() =>
-			thenable<number>((resolve) => resolve(3)),
+		const result = await wait(
+			runtime.catchUnwind(() => thenable<number>((resolve) => resolve(3))),
 		);
 
 		// Then: the result is Ok and nothing was reported
@@ -589,14 +631,16 @@ Deno.test("catchUnwindAsync() covers resolve, rejection and synchronous throw", 
 		assertEquals(reports, []);
 	});
 
-	await t.step("rejecting thenable", async () => {
+	await t.step("a rejecting thenable is Panicked", async () => {
 		// Given: a runtime and a thenable that rejects with a payload
 		const { runtime, reports } = recordingRuntime();
 		const payload = boom();
 
 		// When: catching a function that returns it
-		const result = await runtime.catchUnwindAsync(() =>
-			thenable<number>((_resolve, reject) => reject(payload)),
+		const result = await wait(
+			runtime.catchUnwind(() => {
+				return thenable<number>((_resolve, reject) => reject(payload));
+			}),
 		);
 
 		// Then: the result is Panicked of the payload, reported once
@@ -604,7 +648,7 @@ Deno.test("catchUnwindAsync() covers resolve, rejection and synchronous throw", 
 		assertEquals(reports.length, 1);
 	});
 
-	await t.step("thenable whose then throws", async () => {
+	await t.step("a thenable whose then throws is Panicked", async () => {
 		// Given: a runtime and a thenable whose then method throws a payload
 		const { runtime, reports } = recordingRuntime();
 		const payload = boom();
@@ -616,28 +660,169 @@ Deno.test("catchUnwindAsync() covers resolve, rejection and synchronous throw", 
 		};
 
 		// When: catching a function that returns it
-		const result = await runtime.catchUnwindAsync(() => hostile);
+		const result = await wait(runtime.catchUnwind(() => hostile));
 
 		// Then: the result is Panicked of the payload, reported once
 		assertStrictEquals(unwrapPanicked(result), payload);
 		assertEquals(reports.length, 1);
 	});
 
-	await t.step("throwing hook rejects with a PanicHook panic", async () => {
-		// Given: a runtime whose hook throws
-		const runtime = definePanicRuntime();
-		runtime.setHook(() => {
-			throw new Error("hook broke");
-		});
+	await t.step("a then getter that throws is Panicked at once", () => {
+		// Given: a runtime and a value whose then getter throws a payload
+		const { runtime, reports } = recordingRuntime();
+		const payload = boom();
+		const hostile = {
+			// biome-ignore lint/suspicious/noThenProperty: a hostile then getter is the subject under test
+			get then(): never {
+				throw payload;
+			},
+		};
 
-		// When: catching an async function that rejects
-		// Then: the returned promise rejects with the PanicHook panic
-		const rejected = await assertRejects(() =>
-			runtime.catchUnwindAsync(() => Promise.reject(boom())),
-		);
-		assertInstanceOf(rejected, Panic);
-		assertEquals(rejected.name, "Panic (PanicHook)");
+		// When: catching a function that returns it
+		const result = settledNow(runtime.catchUnwind(() => hostile));
+
+		// Then: reading then was user code, so it is Panicked, reported once
+		assertStrictEquals(unwrapPanicked(result), payload);
+		assertEquals(reports.length, 1);
 	});
+
+	await t.step("a thenable returned as data is flattened", async () => {
+		// Given: a runtime and sync work whose value is a promise
+		const { runtime } = recordingRuntime();
+		const data = Promise.resolve("inner");
+
+		// When: catching it bare, and boxed
+		const bare = runtime.catchUnwind(() => data);
+		const boxed = settledNow(runtime.catchUnwind(() => ({ data })));
+
+		// Then: bare is adopted as await adopts it, and the box keeps the value
+		assertEquals(await wait(bare), Ok("inner"));
+		assertStrictEquals(unwrapOk(boxed).data, data);
+	});
+});
+
+Deno.test("catchUnwind() follows a thenable a thenable fulfils with", async () => {
+	// Given: a thenable that fulfils with another thenable
+	const { runtime, reports } = recordingRuntime();
+	const inner = thenable<number>((resolve) => resolve(5));
+	// A non-conforming thenable: it hands over a thenable, not a value
+	const outer = {
+		// biome-ignore lint/suspicious/noThenProperty: a thenable is the subject under test
+		then: (onFulfilled: (value: PromiseLike<number>) => void): void => {
+			onFulfilled(inner);
+		},
+	};
+
+	// When: catching a function that returns the outer one
+	const result = await wait(runtime.catchUnwind<unknown>(() => outer));
+
+	// Then: the inner thenable's value is the Ok, as await would give
+	assertEquals(result, Ok(5));
+	assertEquals(reports, []);
+});
+
+Deno.test("catchUnwind() heeds only a thenable's first callback", () => {
+	// Given: a thenable that fulfils, then rejects, then throws
+	const { runtime, reports } = recordingRuntime();
+	const fickle: PromiseLike<number> = {
+		// biome-ignore lint/suspicious/noThenProperty: a thenable is the subject under test
+		then: (onFulfilled, onRejected) => {
+			onFulfilled?.(1);
+			onRejected?.(boom());
+			throw boom();
+		},
+	};
+
+	// When: catching a function that returns it
+	const result = settledNow(runtime.catchUnwind(() => fickle));
+
+	// Then: it settled with the first callback, at once, and reported nothing
+	assertEquals(result, Ok(1));
+	assertEquals(reports, []);
+});
+
+Deno.test("A hook that throws on async work escapes after the vow settles", async () => {
+	// Given: a runtime whose hook throws, and async work over a watched promise
+	const runtime = definePanicRuntime();
+	runtime.setHook(() => {
+		throw new Error("reporter offline");
+	});
+	const payload = boom();
+	let fail!: (reason: unknown) => void;
+	const source = new WatchedPromise<number>((_resolve, reject) => {
+		fail = reject;
+	});
+	const caught = runtime.catchUnwind(() => source);
+
+	// When: the promise rejects; the callback's promise is caught here, since
+	// in a program nothing holds it and it would crash the process
+	const [callback] = source.derived;
+	assert(callback !== undefined);
+	const escaped = callback.then(
+		() => undefined,
+		(reason: unknown) => reason,
+	);
+	fail(payload);
+	const reason = await escaped;
+
+	// Then: the vow settled as Panicked, and the Panic (PanicHook) escaped
+	assertEquals(source.derived.length, 1);
+	assertStrictEquals(unwrapPanicked(settledNow(caught)), payload);
+	assert(isPanicHookFailure(reason));
+	assertStrictEquals(reason.cause.payload, payload);
+});
+
+Deno.test("A hook that throws on a throwing dependent escapes its callback", async () => {
+	// Given: a runtime whose hook throws, async work, and a throwing dependent
+	const runtime = definePanicRuntime();
+	runtime.setHook(() => {
+		throw new Error("reporter offline");
+	});
+	let fulfil!: (value: number) => void;
+	const source = new WatchedPromise<number>((resolve) => {
+		fulfil = resolve;
+	});
+	const caught = runtime.catchUnwind(() => source);
+	map(caught, () => {
+		throw new Error("bad dependent");
+	});
+
+	// When: the promise fulfils, with the callback's promise caught here
+	const [callback] = source.derived;
+	assert(callback !== undefined);
+	const escaped = callback.then(
+		() => undefined,
+		(reason: unknown) => reason,
+	);
+	fulfil(1);
+	const reason = await escaped;
+
+	// Then: the vow still resolved, and the Panic (PanicHook) escaped
+	assertEquals(settledNow(caught), Ok(1));
+	assert(isPanicHookFailure(reason));
+	assertInstanceOf(reason.cause.payload, AggregateError);
+});
+
+Deno.test("Dependents of an async boundary's vow run inside it", async () => {
+	// Given: a runtime with a recording hook and async work
+	const { runtime, reports } = recordingRuntime();
+	const bug = new Error("bad dependent");
+	const caught = runtime.catchUnwind(() => Promise.resolve(1));
+	const seen: unknown[] = [];
+
+	// When: one dependent throws, and another records the outcome
+	map(caught, () => {
+		throw bug;
+	});
+	map(caught, (outcome) => seen.push(outcome));
+	await wait(caught);
+
+	// Then: every dependent ran, and the throw was reported, not left unhandled
+	assertEquals(seen, [Ok(1)]);
+	assertEquals(reports.length, 1);
+	const reported = reports[0]?.payload;
+	assertInstanceOf(reported, AggregateError);
+	assertEquals(reported.errors, [bug]);
 });
 
 Deno.test("recover() converts a caught payload into an app error", () => {
@@ -651,7 +836,9 @@ Deno.test("recover() converts a caught payload into an app error", () => {
 
 	// When: catching a panic and recovering from it
 	const result = recover(
-		runtime.catchUnwind(() => panic({ message: "bad state", cause: null })),
+		settledNow(
+			runtime.catchUnwind(() => panic({ message: "bad state", cause: null })),
+		),
 		toAppError,
 	);
 

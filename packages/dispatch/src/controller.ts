@@ -8,20 +8,16 @@
 import { isolate, union } from "@sekhmet/enum/core/mini";
 import { None, type Option, Some } from "@sekhmet/enum/option/mini";
 import { Pending, type Poll, Ready } from "@sekhmet/enum/poll/mini";
+import type { PanicBoundary } from "@sekhmet/panic";
 import { invariant } from "@sekhmet/workflow/invariant";
-import {
-	BUILT_HERE,
-	type CatchUnwind,
-	DispatchSignal,
-	type Listener,
-} from "./signal.ts";
+import { BUILT_HERE, DispatchSignal, type Listener } from "./signal.ts";
 
 /**
  * The write side of a dispatch, like `AbortController`: it dispatches a
  * typed value once, and its {@linkcode DispatchController.signal} is the
  * read side to hand out.
  *
- * Its listeners run inside the `catchUnwind` it was given, so a throwing
+ * Its listeners run inside the panic boundary it was given, so a throwing
  * listener is reported to that runtime's hook, the other listeners still
  * run, and `dispatch` doesn't throw for it. Only a hook that throws while
  * reporting (a double fault) propagates.
@@ -40,9 +36,7 @@ import {
  * 	| { readonly kind: "cancelled"; readonly by: string };
  * // {}
  *
- * const controller = new DispatchController<Cause>(
- * 	definePanicRuntime().catchUnwind,
- * );
+ * const controller = new DispatchController<Cause>({ panics: definePanicRuntime() });
  * const heard: Cause[] = [];
  * controller.signal.whenDispatched((cause) => {
  * 	heard.push(cause);
@@ -66,9 +60,7 @@ export class DispatchController<T> {
 	 * import { definePanicRuntime } from "@sekhmet/panic";
 	 * import { DispatchController, type DispatchSignal } from "@sekhmet/dispatch";
 	 *
-	 * const controller = new DispatchController<string>(
-	 * 	definePanicRuntime().catchUnwind,
-	 * );
+	 * const controller = new DispatchController<string>({ panics: definePanicRuntime() });
 	 * const signal: DispatchSignal<string> = controller.signal;
 	 * signal.whenDispatched(() => {});
 	 * ```
@@ -77,13 +69,15 @@ export class DispatchController<T> {
 	readonly #dispatch: (value: T) => Option<T>;
 
 	/**
-	 * A controller whose listeners run inside `catchUnwind`, such as
-	 * `new DispatchController<T>(runtime.catchUnwind)`.
+	 * A controller whose listeners run inside the panic boundary `panics`,
+	 * such as `new DispatchController<T>({ panics: runtime })`. A listener
+	 * runs on the dispatcher's stack, not its subscriber's, so no caller of
+	 * its own waits on it.
 	 *
-	 * @param catchUnwind The boundary each listener runs in, which reports a
-	 *   throw to its runtime's hook
+	 * @param options `panics`, the boundary each listener runs in, which
+	 *   reports a throw to its runtime's hook
 	 */
-	constructor(catchUnwind: CatchUnwind) {
+	constructor({ panics }: { readonly panics: PanicBoundary }) {
 		let state: Poll<T> = Pending();
 		// Listeners still to run: before the dispatch, and while it drains.
 		let waiting: Set<Listener<T>> | undefined = new Set();
@@ -95,7 +89,7 @@ export class DispatchController<T> {
 			listener: Listener<T>;
 			value: T;
 		}): void => {
-			catchUnwind(() => listener(value));
+			panics.catchUnwind(() => listener(value));
 		};
 
 		this.signal = new DispatchSignal({
@@ -150,10 +144,10 @@ export class DispatchController<T> {
 	 * Dispatches `value`, once. It returns the value already there, like
 	 * Rust's `HashMap::insert`: `None` if this call dispatched, and
 	 * `Some(first)` if an earlier call had. A throwing listener is reported
-	 * through `catchUnwind`, never thrown to the caller.
+	 * through the boundary, never thrown to the caller.
 	 *
 	 * The one exception is a double fault: if the panic hook itself throws
-	 * while reporting a listener's throw, `catchUnwind` throws a panic. The
+	 * while reporting a listener's throw, the boundary throws a panic. The
 	 * dispatch still completes first (every queued listener runs, in order,
 	 * and later listeners run at once as usual), then `dispatch` rethrows the
 	 * first such panic.
@@ -169,9 +163,7 @@ export class DispatchController<T> {
 	 * import { DispatchController } from "@sekhmet/dispatch";
 	 * import { assert, assertEquals } from "@std/assert";
 	 *
-	 * const controller = new DispatchController<string>(
-	 * 	definePanicRuntime().catchUnwind,
-	 * );
+	 * const controller = new DispatchController<string>({ panics: definePanicRuntime() });
 	 * assert(isNone(controller.dispatch("first")));
 	 * assertEquals(controller.dispatch("second"), Some("first"));
 	 * ```

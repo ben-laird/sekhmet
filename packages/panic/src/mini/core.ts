@@ -97,21 +97,22 @@ export function panic<T>(source: PanicSource<T>): never {
  * @example
  * ```ts
  * import { definePanicRuntime, Panic } from "@sekhmet/panic";
+ * import { expectReady } from "@sekhmet/enum/poll/mini";
  * import { unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+ * import { poll } from "@sekhmet/vow";
  * import { assert, assertEquals } from "@std/assert";
  *
  * const runtime = definePanicRuntime();
  * runtime.setHook(() => {}); // keep the example quiet
  *
- * const payload = unwrapPanicked(
- *   runtime.catchUnwind(() => {
- *     throw new Panic({
- *       name: "DatabaseError",
- *       message: "Connection lost",
- *       cause: { host: "localhost", port: 5432 },
- *     });
- *   }),
- * );
+ * const caught = runtime.catchUnwind(() => {
+ *   throw new Panic({
+ *     name: "DatabaseError",
+ *     message: "Connection lost",
+ *     cause: { host: "localhost", port: 5432 },
+ *   });
+ * });
+ * const payload = unwrapPanicked(expectReady(poll(caught), "sync work"));
  *
  * assert(payload instanceof Panic);
  * assertEquals(payload.cause, { host: "localhost", port: 5432 });

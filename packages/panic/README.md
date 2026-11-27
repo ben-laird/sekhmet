@@ -10,8 +10,9 @@ In Sekhmet, errors are values (`Result`), and `throw` means panic.
 ## Features
 
 1. **Reporting and recovery are separate.** The hook only reports; the
-   boundary recovers and hands you an `Outcome`, which keeps
-   a caught panic apart from an expected error.
+   boundary recovers and hands you a `Vow` of an `Outcome`, which keeps a
+   caught panic apart from an expected error. Sync work settles that vow
+   before `catchUnwind` returns, and async work settles it later.
 2. **No global state.** There is no default runtime and no module-level hook.
    You create a runtime and run your program inside it.
 3. **Reported once per runtime.** Each runtime reports a thrown `Panic` (or
@@ -45,7 +46,9 @@ bunx jsr add @sekhmet/panic     # bun
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
 import { Err as ResultErr } from "@sekhmet/enum/result/mini/core";
 import { intoInner } from "@sekhmet/enum/either/mini";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { Err, mapErr, recover } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -55,9 +58,11 @@ function main(): number {
 }
 
 // Every throw inside main is reported once (to console.error by default),
-// then returned as Panicked. recover turns the panic into an app error, kept
-// in an Either apart from the outcome's own errors; a boundary has none.
-const recovered = recover(runtime.catchUnwind(main), (payload) => {
+// then settled as Panicked; main is sync, so the vow is settled at once.
+// recover turns the panic into an app error, kept in an Either apart from
+// the outcome's own errors; a boundary has none.
+const exit = expectReady(poll(runtime.catchUnwind(main)), "main is sync");
+const recovered = recover(exit, (payload) => {
 	return ResultErr(
 		payload instanceof Panic ? payload.message : "unknown failure",
 	);

@@ -22,7 +22,7 @@ import { assertEquals } from "@std/assert";
 
 type Reason = { readonly kind: "user" } | { readonly kind: "navigated" };
 
-const cancel = new DispatchController<Reason>(definePanicRuntime().catchUnwind);
+const cancel = new DispatchController<Reason>({ panics: definePanicRuntime() });
 const signal = cancel.signal.toAbortSignal();
 // await fetch(url, { signal });
 
@@ -43,9 +43,9 @@ import { DispatchController, DispatchSignal } from "@sekhmet/dispatch";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals } from "@std/assert";
 
-const { catchUnwind } = definePanicRuntime();
-const shutdown = new DispatchController<string>(catchUnwind);
-const request = new DispatchController<string>(catchUnwind);
+const panics = definePanicRuntime();
+const shutdown = new DispatchController<string>({ panics });
+const request = new DispatchController<string>({ panics });
 const stop = DispatchSignal.any([shutdown.signal, request.signal]);
 
 const heard: string[] = [];
@@ -74,9 +74,9 @@ import { Ready } from "@sekhmet/enum/poll/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals } from "@std/assert";
 
-const { catchUnwind } = definePanicRuntime();
-const host = new DispatchController<string>(catchUnwind);
-const port = new DispatchController<number>(catchUnwind);
+const panics = definePanicRuntime();
+const host = new DispatchController<string>({ panics });
+const port = new DispatchController<number>({ panics });
 const url = host.signal.zip(port.signal).map(([h, p]) => `http://${h}:${p}`);
 
 port.dispatch(8080);
@@ -98,7 +98,7 @@ import { assertEquals } from "@std/assert";
 const platform = new AbortController();
 const closed = DispatchSignal.fromAbortSignal({
 	signal: platform.signal,
-	catchUnwind: definePanicRuntime().catchUnwind,
+	panics: definePanicRuntime(),
 });
 
 platform.abort("socket closed");
@@ -119,7 +119,7 @@ import { definePanicRuntime } from "@sekhmet/panic";
 import { isResolved } from "@sekhmet/vow/mini";
 import { assert, assertEquals } from "@std/assert";
 
-const ready = new DispatchController<string>(definePanicRuntime().catchUnwind);
+const ready = new DispatchController<string>({ panics: definePanicRuntime() });
 const promise = ready.signal.wait();
 const vow = ready.signal.toVow();
 
@@ -144,7 +144,7 @@ import { assert, assertEquals } from "@std/assert";
 
 const done = DispatchSignal.dispatched({
 	value: "done",
-	catchUnwind: definePanicRuntime().catchUnwind,
+	panics: definePanicRuntime(),
 });
 const forever = DispatchSignal.never<string>();
 
@@ -154,7 +154,7 @@ assert(isPending(forever.poll()));
 
 ## How to catch a throwing listener
 
-A listener that throws is a panic: `catchUnwind` isolates it and reports it
+A listener that throws is a panic: the boundary isolates it and reports it
 to the runtime's hook, and the other listeners still run. Set a hook to see
 it:
 
@@ -169,7 +169,7 @@ runtime.setHook(({ payload }) => {
 	reported.push(payload);
 });
 
-const end = new DispatchController<string>(runtime.catchUnwind);
+const end = new DispatchController<string>({ panics: runtime });
 const heard: string[] = [];
 end.signal.whenDispatched(() => {
 	throw new Error("listener bug");
@@ -185,5 +185,5 @@ assertEquals(reported.length, 1);
 
 The one throw that does reach `dispatch` is a double fault: a hook that
 throws while reporting. The dispatch still completes (every listener runs, and
-later listeners still run at once), then `dispatch` rethrows the panic
-`catchUnwind` raised.
+later listeners still run at once), then `dispatch` rethrows the panic the
+boundary raised.

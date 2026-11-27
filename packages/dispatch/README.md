@@ -39,7 +39,7 @@ type Cause =
 // {}
 
 const runtime = definePanicRuntime();
-const end = new DispatchController<Cause>(runtime.catchUnwind);
+const end = new DispatchController<Cause>({ panics: runtime });
 
 const log: string[] = [];
 end.signal.whenDispatched((cause) => {
@@ -63,20 +63,20 @@ assertEquals(forFetch.reason, { kind: "cancelled", by: "user" });
 
 ## API
 
-| Export                                                    | Does                                                               |
-| --------------------------------------------------------- | ------------------------------------------------------------------ |
-| `new DispatchController<T>(catchUnwind)`                  | the write side; its listeners run inside `catchUnwind`             |
-| `controller.dispatch(value)`                              | dispatches once: `None` if this call did, `Some(first)` if not     |
-| `controller.signal`                                       | the read side, a `DispatchSignal<T>`                               |
-| `signal.poll()`                                           | `Ready(value)` once dispatched, `Pending` before                   |
-| `signal.whenDispatched(listener)`                         | runs `listener` on dispatch, or at once; returns an `Unsubscribe`  |
-| `signal.map(f)`, `signal.zip(other)`                      | a signal of `f(value)`, or of both values once both dispatch       |
-| `DispatchSignal.any(signals)`                             | a signal of the first value dispatched; `any([])` never dispatches |
-| `DispatchSignal.dispatched({ value, catchUnwind })`       | a signal already dispatched with `value`                           |
-| `DispatchSignal.never()`                                  | a signal that never dispatches                                     |
-| `signal.wait()`, `signal.toVow()`                         | the value as a `Promise`, or as a new `Vow`                        |
-| `signal.toAbortSignal()`                                  | an `AbortSignal` that aborts with the value                        |
-| `DispatchSignal.fromAbortSignal({ signal, catchUnwind })` | a signal of an `AbortSignal`'s abort reason                        |
+| Export                                               | Does                                                               |
+| ---------------------------------------------------- | ------------------------------------------------------------------ |
+| `new DispatchController<T>({ panics })`              | the write side; its listeners run inside the `panics` boundary     |
+| `controller.dispatch(value)`                         | dispatches once: `None` if this call did, `Some(first)` if not     |
+| `controller.signal`                                  | the read side, a `DispatchSignal<T>`                               |
+| `signal.poll()`                                      | `Ready(value)` once dispatched, `Pending` before                   |
+| `signal.whenDispatched(listener)`                    | runs `listener` on dispatch, or at once; returns an `Unsubscribe`  |
+| `signal.map(f)`, `signal.zip(other)`                 | a signal of `f(value)`, or of both values once both dispatch       |
+| `DispatchSignal.any(signals)`                        | a signal of the first value dispatched; `any([])` never dispatches |
+| `DispatchSignal.dispatched({ value, panics })`       | a signal already dispatched with `value`                           |
+| `DispatchSignal.never()`                             | a signal that never dispatches                                     |
+| `signal.wait()`, `signal.toVow()`                    | the value as a `Promise`, or as a new `Vow`                        |
+| `signal.toAbortSignal()`                             | an `AbortSignal` that aborts with the value                        |
+| `DispatchSignal.fromAbortSignal({ signal, panics })` | a signal of an `AbortSignal`'s abort reason                        |
 
 ## Learn more
 

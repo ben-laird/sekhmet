@@ -19,8 +19,9 @@ That makes a vow the better fit where you want promise-style composition but
 cannot or do not want to wait for a microtask: wiring values that arrive from
 callbacks, building a dependency graph that should settle in one pass, or
 testing code without `await`. Use a `Promise` for work that is asynchronous
-anyway, such as I/O. `wait` and `fromPromise` convert between the two, so each
-part of a program can use whichever fits.
+anyway, such as I/O. `wait` turns a vow into a promise, and `@sekhmet/panic`'s
+`catchUnwind` turns a promise into a vow, so each part of a program can use
+whichever fits.
 
 ## Resolution is synchronous
 
@@ -53,11 +54,12 @@ This is why a vow suits a dependency graph. Once `resolve` returns, everything
 downstream of it has settled, so code that runs next sees a consistent state
 with nothing left in flight.
 
-`wait` and `fromPromise` are the two places a vow meets the microtask queue.
-`wait` returns a `Promise`, and a promise never settles synchronously, so even
-an already-resolved vow's promise resolves on the next microtask. `fromPromise`
-resolves its vow from the promise's `then` callback, so its dependents run on a
-microtask too, after the promise settles.
+Bridging to promises is where a vow meets the microtask queue. `wait` returns
+a `Promise`, and a promise never settles synchronously, so even an
+already-resolved vow's promise resolves on the next microtask. A vow made from
+a promise, by `@sekhmet/panic`'s `catchUnwind`, resolves from the promise's
+`then` callback, so its dependents run on a microtask too, after the promise
+settles.
 
 ## A vow is an enum
 
@@ -98,14 +100,15 @@ that changes over time, make a new vow per change or use a different tool.
 ## A vow cannot fail
 
 Since a vow has no rejected state, a failure that a vow carries has to live in
-its value. `fromPromise` does exactly that: a promise can reject, so the vow it
-returns resolves with a `Result` from `@sekhmet/enum/result`, `Ok(value)` when
-the promise fulfils and `Err(reason)` when it rejects. The promise's own
-rejection is always handled, so it never surfaces as an unhandled rejection. A
-dependent that throws is another matter; see
-[errors in dependents](#errors-in-dependents). Keeping the failure in the value
-means the type says the vow can carry one, and every dependent decides what to
-do with it.
+its value. `@sekhmet/panic`'s `catchUnwind` does exactly that for a promise: a
+promise can reject, so the vow it returns resolves with an `Outcome`,
+`Ok(value)` when the promise fulfils and `Panicked(reason)` when it rejects,
+since a rejection is a throw and a throw means panic. An expected failure is
+classified first, as a `Result` in the value. The promise's own rejection is
+always handled, so it never surfaces as an unhandled rejection. A dependent
+that throws is another matter; see [errors in dependents](#errors-in-dependents).
+Keeping the failure in the value means the type says the vow can carry one, and
+every dependent decides what to do with it.
 
 ## Errors in dependents
 
@@ -137,11 +140,11 @@ graph, and throwing at the end keeps the fault from passing silently. The error
 surfaces in whoever called `resolve`, since that is the call stack the
 dependents ran in.
 
-For a vow from `fromPromise`, whoever called `resolve` is the promise's `then`
+For a vow made from a promise, whoever called `resolve` is the promise's `then`
 callback, not your code, so no caller could catch the `AggregateError`, and it
-would become an unhandled promise rejection. That is why `fromPromise` takes a
-panic runtime from `@sekhmet/panic`: it resolves the vow inside the runtime's
-`catchUnwind`, so the runtime's hook reports the `AggregateError` instead. A
+would become an unhandled promise rejection. That is why the bridge from a
+promise lives in `@sekhmet/panic`: its `catchUnwind` resolves the vow inside the
+boundary, so the runtime's hook reports the `AggregateError` instead. A
 dependent that throws is a bug, which is what a panic means. Every other
 dependent still runs and the vow still resolves, just as with `resolve`.
 
