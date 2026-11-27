@@ -1,4 +1,9 @@
-import { assertEquals, assertFalse, unreachable } from "@std/assert";
+import {
+	assertEquals,
+	assertFalse,
+	assertThrows,
+	unreachable,
+} from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { match, union } from "@/src/core/mini/exit.ts";
 import { Pending, type Poll, Ready } from "@/src/poll/mini/core.ts";
@@ -290,4 +295,42 @@ Deno.test("map() obeys the functor laws", async (t) => {
 			assertEquals(twoSteps, oneStep);
 		}
 	});
+});
+
+Deno.test("expectReady() returns the value of Ready", () => {
+	// Given: a Ready Poll
+	const poll: Poll<number> = Ready(42);
+
+	// When: calling expectReady() with a custom message
+	const subject = TestSubject.expectReady(poll, "should be ready");
+
+	// Then: the Ready value is returned, typed as T
+	assertEquals(subject, 42);
+	assertType<IsExact<typeof subject, number>>(true);
+});
+
+Deno.test("expectReady() throws with the custom message for Pending", () => {
+	// Given: a Pending Poll
+	const poll = Pending<number>();
+
+	// When: calling expectReady() on Pending
+	// Then: an error is thrown with the custom message
+	assertThrows(
+		() => TestSubject.expectReady(poll, "custom error message"),
+		Error,
+		"custom error message",
+	);
+});
+
+Deno.test("expectReady() works with different value types", () => {
+	// Given: Ready Polls of different value types
+	const stringPoll = Ready("hello");
+	const objectPoll = Ready({ key: "value" });
+	const arrayPoll = Ready([1, 2, 3]);
+
+	// When: calling expectReady() on each Poll
+	// Then: each Ready value is returned
+	assertEquals(TestSubject.expectReady(stringPoll, "msg"), "hello");
+	assertEquals(TestSubject.expectReady(objectPoll, "msg"), { key: "value" });
+	assertEquals(TestSubject.expectReady(arrayPoll, "msg"), [1, 2, 3]);
 });
