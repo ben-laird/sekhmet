@@ -30,7 +30,7 @@ edges explicit, and gives each its own type:
   phase, and no lifetime without a value.
 
 The split keeps each half honest. A failure to acquire is the resource's
-concern: `start` returns `Err` with the panic, and no lifetime is made, so
+concern: `start` settles as `Panicked` with the panic, and no lifetime is made, so
 there is nothing half-built to end. A lifetime's concern is only the
 release, which it guarantees whatever happens to the value in between.
 
@@ -130,7 +130,7 @@ work, then rethrow. A lifetime follows it where it can:
 
 A `Resource` follows the same rule for `init`: a double fault in a
 synchronous `init` tears `setup` down, then `start` rethrows it; when `init`
-rejects and the hook throws, `init`'s panic is the `Err`'s, and the
+rejects and the hook throws, `init`'s panic is still the payload, and the
 `Panic (PanicHook)` escapes as an unhandled rejection.
 
 ## SetupEnd: what init acquired
@@ -148,8 +148,8 @@ opened.
   and `deinit` has run.
 - `InitPanicked(panic)`: `init` panicked before the resource existed. There
   is no lifetime and no `deinit`; `setup` is torn down at once, and `start`
-  settles with `Err(panic)` once it has been, so nothing `init` acquired
-  leaks. If setup's teardown fails too, the `Err` carries everything in one
+  settles as `Panicked(panic)` once it has been, so nothing `init` acquired
+  leaks. If setup's teardown fails too, the payload carries everything in one
   place: a `Panic (SetupTeardownFailed)` whose cause holds `init`'s panic
   and each of setup's cleanup panics (`isSetupTeardownPanic` narrows it).
   This keeps failures as data, as an `EndReport` does, rather than a

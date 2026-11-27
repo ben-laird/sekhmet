@@ -4,7 +4,7 @@
  * - **A {@linkcode Resource} is the rising edge.** `init` acquires a value
  *   and `deinit` releases it; `start` returns a vow of a
  *   {@linkcode Lifetime}, settled at once when `init` is sync. A panic in
- *   `init` comes back as `Err`, after whatever `init` acquired on its
+ *   `init` settles as `Panicked`, after whatever `init` acquired on its
  *   `setup` lifetime is released.
  * - **A {@linkcode Lifetime} is the falling edge.** It exists only once its
  *   value does: `Alive(value) → Ending(cause) → Ended(report)`, read from

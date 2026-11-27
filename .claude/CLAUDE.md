@@ -112,7 +112,8 @@ Packages (`packages/`):
   Its decision record is `docs/decisions/job.md`
 - `@sekhmet/lifetime`: RAII on `@sekhmet/dispatch` and `@sekhmet/vow`: a
   `Resource` (the rising edge: `init(input, setup)` and `deinit(value,
-  cause)`; `start` returns a `Vow` of `Result<Lifetime, Panic>`) and a
+  cause)`; `start` returns a `Vow` of an `Outcome` of a `Lifetime`, with
+  `Panicked` when `init` panics) and a
   `Lifetime<T, C>` (the falling edge: `Alive → Ending → Ended`, read from
   its `ending` and `ended` signals; one teardown stack of cleanups and
   adopted children, released in reverse acquisition order; `using` and
