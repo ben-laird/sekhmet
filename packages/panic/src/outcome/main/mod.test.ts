@@ -154,6 +154,21 @@ Deno.test("Outcome.intoNested returns a main Result of a main Result", () => {
 	assertEquals(nested.unwrap().unwrapErr(), "e");
 });
 
+Deno.test("Outcome.fromCaught returns a main Outcome of the inner Result", () => {
+	// Given: a main Outcome a boundary caught around a Result that failed
+	const caught: Outcome<resultMini.Result<number, string>, never> = Ok(
+		resultMini.Err("expected"),
+	);
+
+	// When: flattening it
+	const flat = caught.fromCaught();
+
+	// Then: the inner error is the main Outcome's own Err
+	assertInstanceOf(flat, Outcome);
+	assertType<IsExact<typeof flat, Outcome<number, string, unknown>>>(true);
+	assertEquals(flat.unwrapErr(), "expected");
+});
+
 Deno.test("Outcome.flattenResult returns a main Outcome with a main Either error", () => {
 	// Given: a main Outcome of a Result that returned an error
 	const outcome: Outcome<resultMini.Result<number, string>, string> = Ok(

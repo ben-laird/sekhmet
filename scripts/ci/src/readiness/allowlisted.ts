@@ -214,7 +214,13 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 		"flattenEither",
 		"Either",
 	),
-	...["fromResult", "intoResult", "panicResult", "intoNested"].map((name) => {
+	...[
+		"fromResult",
+		"intoResult",
+		"panicResult",
+		"intoNested",
+		"fromCaught",
+	].map((name) => {
 		return privateTypeRef("panic/src/outcome/mini/convert.ts", name, "Result");
 	}),
 	privateTypeRef("panic/src/outcome/mini/panic.ts", "panicked", "Option"),

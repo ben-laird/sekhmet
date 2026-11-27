@@ -1,7 +1,8 @@
 /**
  * Bridging outcomes and results: `fromResult`, and the receiver-constrained
  * `intoResult` (no panic channel left) and `panicResult` (no error channel
- * left), plus `intoNested` for interop with code that nests them.
+ * left), plus `intoNested` for interop with code that nests them, and
+ * `fromCaught`, which flattens a boundary's `Outcome` of a `Result`.
  *
  * @module
  */
@@ -9,7 +10,12 @@
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini/core";
 import { panicWithoutCause } from "@/src/mini/core.ts";
-import { type Outcome, Err as OutcomeErr, Ok as OutcomeOk } from "./core.ts";
+import {
+	type Outcome,
+	Err as OutcomeErr,
+	Ok as OutcomeOk,
+	Panicked as OutcomePanicked,
+} from "./core.ts";
 import { resume } from "./panic.ts";
 
 /**
@@ -129,5 +135,52 @@ export function intoNested<T, E, P>(
 		Ok: (value) => Ok<Result<T, E>, P>(Ok(value)),
 		Err: (error) => Ok<Result<T, E>, P>(Err(error)),
 		Panicked: (payload) => Err<Result<T, E>, P>(payload),
+	});
+}
+
+/**
+ * Flattens what a panic boundary caught around work that returns a Result
+ * into one Outcome: `Ok(Ok(value))` becomes `Ok(value)`, `Ok(Err(error))`
+ * becomes `Err(error)`, and `Panicked(payload)` stays `Panicked(payload)`.
+ *
+ * It is how an expected failure is classified at the edge: a boundary's
+ * `catchUnwind` has no error channel of its own, so work that can fail
+ * returns a Result, and this lifts that Result's error into the Outcome's.
+ *
+ * @template T The type of the success value
+ * @template E The type of the error
+ * @template P The type of the panic payload
+ * @param self An Outcome of a Result whose error type is never, as a
+ *   boundary returns it
+ * @returns The inner Result's value or error, or the panic payload
+ *
+ * @example
+ * ```ts
+ * import { assertEquals } from "@std/assert";
+ * import { Err as ResultErr, Ok as ResultOk } from "@sekhmet/enum/result/mini";
+ * import { Err, fromCaught, Ok, Panicked } from "@sekhmet/panic/outcome/mini";
+ *
+ * assertEquals(fromCaught(Ok(ResultOk(1))), Ok(1));
+ * assertEquals(fromCaught(Ok(ResultErr("not found"))), Err("not found"));
+ * assertEquals(fromCaught(Panicked("boom")), Panicked("boom"));
+ * ```
+ */
+export function fromCaught<T, E, P>(
+	self: Outcome<Result<T, E>, never, P>,
+): Outcome<T, E, P> {
+	return match(self)({
+		Ok: (result) => {
+			return match(result)({
+				Ok: (value) => OutcomeOk<T, E, P>(value),
+				Err: (error) => OutcomeErr<T, E, P>(error),
+			});
+		},
+		Err: (error) => {
+			return panicWithoutCause({
+				name: "Outcome",
+				message: `fromCaught got an Err, which its type rules out: ${String(error)}`,
+			});
+		},
+		Panicked: (payload) => OutcomePanicked<T, E, P>(payload),
 	});
 }

@@ -171,6 +171,47 @@ export interface PanicRuntime {
 }
 
 /**
+ * The part of a {@linkcode PanicRuntime} that code running user callbacks
+ * needs: catching a panic ({@linkcode PanicRuntime.catchUnwind}) and passing
+ * a caught payload on ({@linkcode PanicRuntime.resumeUnwind}). It is the
+ * runtime itself, narrowed: pass the runtime as is (`{ panics: runtime }`).
+ * It is least privilege, since code under a boundary can catch, report
+ * through the app's hook and resume, but never replace the hook.
+ *
+ * The panic protocol: a panic propagates, unless your code runs on a stack
+ * nobody's waiting on. Then the API takes a `PanicBoundary`, which catches
+ * the panic, reports it once and hands back an `Outcome`. From there it is
+ * a `Panicked` value that combinators pass through untouched.
+ *
+ * 1. Propagate by default: code that runs a callback synchronously, inside
+ *    its caller's own call, lets a panic propagate and takes no boundary.
+ * 2. Catch only where no caller is waiting: an API that runs user code later
+ *    (from a timer or scheduler, from another party's call, inside a promise
+ *    callback) takes `panics: PanicBoundary`.
+ * 3. Never catch without reporting: code without a boundary never catches a
+ *    panic into an `Outcome`, since an unreported `Panicked` that is dropped
+ *    vanishes silently.
+ * 4. The boundary that catches a panic reports it, exactly once.
+ * 5. After that, a panic is a value: `Outcome`'s `Panicked(payload)`, or a
+ *    variant named `Panicked` with an `unknown` payload in an enum with its
+ *    own terminal for it.
+ * 6. Combinators pass `Panicked` through untouched: they never convert it to
+ *    an error, swallow it, or report it again.
+ * 7. Unwrapping a `Panicked` rethrows the same payload (`resumeUnwind`), so
+ *    it isn't reported twice.
+ * 8. No ambient or global runtime.
+ *
+ * @example
+ * ```ts
+ * import { definePanicRuntime, type PanicBoundary } from "@sekhmet/panic";
+ *
+ * const runtime = definePanicRuntime();
+ * const panics: PanicBoundary = runtime;
+ * ```
+ */
+export type PanicBoundary = Pick<PanicRuntime, "catchUnwind" | "resumeUnwind">;
+
+/**
  * The hook every runtime starts with, like Rust's default hook: it writes a
  * `panicked: …` report to `console.error`.
  *

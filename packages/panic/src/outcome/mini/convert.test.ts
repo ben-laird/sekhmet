@@ -66,3 +66,21 @@ Deno.test("intoNested() puts Ok and Err inside and the payload outside", () => {
 		IsExact<(typeof subject)[number], Result<Result<number, string>, boolean>>
 	>(true);
 });
+
+Deno.test("fromCaught() flattens a caught Result into the Outcome", () => {
+	// Given: what a boundary catches around work that returns a Result
+	const caught: Outcome<Result<number, string>, never, boolean>[] = [
+		Ok(ResultOk(1)),
+		Ok(ResultErr("e")),
+		Panicked(true),
+	];
+
+	// When: flattening each
+	const subject = caught.map(TestSubject.fromCaught);
+
+	// Then: the inner Result's channels become the Outcome's, and a panic stays one
+	assertEquals(subject, [Ok(1), Err("e"), Panicked(true)]);
+	assertType<
+		IsExact<(typeof subject)[number], Outcome<number, string, boolean>>
+	>(true);
+});
