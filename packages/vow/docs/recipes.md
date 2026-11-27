@@ -159,6 +159,19 @@ resolve(1);
 assertEquals(value(vow), Some(1));
 ```
 
+To read the state as a `Poll` instead, call `poll`: it returns `Ready(value)`
+or `Pending()`, and `expectReady` from `@sekhmet/enum/poll/mini` unwraps work
+you know settled synchronously.
+
+```ts
+import { assertEquals } from "@std/assert";
+import { expectReady } from "@sekhmet/enum/poll/mini";
+import { andThen, poll, resolved } from "@sekhmet/vow";
+
+const sync = andThen(resolved(2), (n) => resolved(n * 10));
+assertEquals(expectReady(poll(sync), "every step was resolved"), 20);
+```
+
 To branch on the state without reading the value, use the type guards
 `isResolved` and `isPending`.
 

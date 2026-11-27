@@ -292,6 +292,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("schema/src/core/mini/schema.ts", "ParseSyncError", "Enum"),
 	privateTypeRef("schema/src/core/mini/schema.ts", "parseSync", "Result"),
 	privateTypeRef("vow/src/mini/accessors.ts", "value", "Option"),
+	privateTypeRef("vow/src/mini/accessors.ts", "poll", "Poll"),
 	privateTypeRef("vow/src/mini/core.ts", "Variants", "Split"),
 	privateTypeRef("vow/src/mini/core.ts", "Vow", "Enum"),
 	privateTypeRef("vow/src/mini/impl.ts", "fromPromise", "Result"),
