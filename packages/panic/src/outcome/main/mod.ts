@@ -483,6 +483,37 @@ export class Outcome<out T, out E, out P = unknown> extends mini.Outcome<
 	}
 
 	/**
+	 * Flattens what a panic boundary caught around work that returns a Result
+	 * into one Outcome: `Ok(Ok(value))` becomes `Ok(value)`, `Ok(Err(error))`
+	 * becomes `Err(error)`, and `Panicked(payload)` stays `Panicked(payload)`.
+	 *
+	 * It is how an expected failure is classified at the edge: a boundary's
+	 * `catchUnwind` has no error channel of its own, so work that can fail
+	 * returns a Result, and this lifts that Result's error into the Outcome's.
+	 *
+	 * @template T - The type of the success value
+	 * @template E - The type of the error
+	 * @template P - The type of the panic payload
+	 * @returns The inner Result's value or error, or the panic payload
+	 * @example
+	 * ```ts
+	 * import { assertEquals } from "@std/assert";
+	 * import { Err as ResultErr, Ok as ResultOk } from "@sekhmet/enum/result/mini";
+	 * import { Err, Ok, Panicked } from "@sekhmet/panic/outcome";
+	 *
+	 * assertEquals(Ok(ResultOk(1)).fromCaught(), Ok(1));
+	 * assertEquals(Ok(ResultErr("not found")).fromCaught(), Err("not found"));
+	 * assertEquals(Panicked("boom").fromCaught(), Panicked("boom"));
+	 * ```
+	 * @see {@link mini.fromCaught}
+	 */
+	fromCaught<T, E, P>(
+		this: Outcome<MiniResult<T, E>, never, P>,
+	): Outcome<T, E, P> {
+		return Outcome.fromMini(mini.fromCaught(this));
+	}
+
+	/**
 	 * Maps an Outcome's panic payload by applying a function to it. `Ok` and
 	 * `Err` pass through unchanged.
 	 *
