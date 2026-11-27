@@ -1,12 +1,14 @@
 /**
- * Exercises `@sekhmet/panic`: a panic runtime's hook and `catchUnwind`
- * boundaries, sync and async, with panics thrown from the prelude, and the
- * `Outcome` they return, through its main and mini entrypoints.
+ * Exercises `@sekhmet/panic`: a panic runtime's hook and its `catchUnwind`
+ * boundary, which settles a `Vow` of an `Outcome` at once for sync work and
+ * later for async work, with panics thrown from the prelude, through its
+ * main and mini entrypoints.
  *
  * @module
  */
 
 import { intoInner } from "@sekhmet/enum/either/mini/transform";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { Err as ResultErr } from "@sekhmet/enum/result/mini/core";
 import { definePanicRuntime, Panic as RootPanic } from "@sekhmet/panic";
 import { PanicMetadataRegistry } from "@sekhmet/panic/mini/registry";
@@ -17,6 +19,7 @@ import { recover, unwrapPanicked } from "@sekhmet/panic/outcome/mini/panic";
 import { isOk } from "@sekhmet/panic/outcome/mini/predicates";
 import { unwrap, unwrapErr } from "@sekhmet/panic/outcome/mini/unwrap";
 import { Panic, panic } from "@sekhmet/panic/prelude";
+import { poll, wait } from "@sekhmet/vow/mini";
 import { expectEqual } from "../check.ts";
 
 /** Runs the exercise. */
@@ -25,8 +28,13 @@ export async function exercise(): Promise<void> {
 	const reported: unknown[] = [];
 	runtime.setHook(({ payload }) => reported.push(payload));
 
-	const caught = runtime.catchUnwind((): number =>
-		panic({ message: "config is missing a port", cause: null }),
+	const caught = expectReady(
+		poll(
+			runtime.catchUnwind((): number => {
+				return panic({ message: "config is missing a port", cause: null });
+			}),
+		),
+		"sync work settles at once",
 	);
 	const payload = unwrapPanicked(caught);
 	expectEqual({
@@ -42,17 +50,19 @@ export async function exercise(): Promise<void> {
 
 	expectEqual({
 		label: "catchUnwind passes a value through",
-		actual: unwrap(runtime.catchUnwind(() => 42)),
+		actual: unwrap(expectReady(poll(runtime.catchUnwind(() => 42)), "sync")),
 		expected: 42,
 	});
 
 	const miniRuntime = miniDefinePanicRuntime();
 	miniRuntime.setHook(() => {});
-	const rejected = await miniRuntime.catchUnwindAsync(() =>
-		Promise.reject(new TypeError("async failure")),
+	const rejected = await wait(
+		miniRuntime.catchUnwind(() =>
+			Promise.reject(new TypeError("async failure")),
+		),
 	);
 	expectEqual({
-		label: "catchUnwindAsync catches a rejection",
+		label: "catchUnwind adopts a promise and catches its rejection",
 		actual: [isOk(rejected), String(unwrapPanicked(rejected))],
 		expected: [false, "TypeError: async failure"],
 	});

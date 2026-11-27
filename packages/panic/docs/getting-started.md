@@ -12,11 +12,11 @@ is a complete program you can run.
 ## Install
 
 Add the package, `@sekhmet/enum`, whose `Result` we will use to recover from
-a panic, and `@std/assert`, which each step uses to check its
-output:
+a panic, `@sekhmet/vow`, which holds what a boundary hands back, and
+`@std/assert`, which each step uses to check its output:
 
 ```sh
-deno add jsr:@sekhmet/panic jsr:@sekhmet/enum jsr:@std/assert
+deno add jsr:@sekhmet/panic jsr:@sekhmet/enum jsr:@sekhmet/vow jsr:@std/assert
 ```
 
 ## Run work inside a runtime
@@ -26,21 +26,26 @@ boundary:
 
 ```ts
 import { definePanicRuntime } from "@sekhmet/panic";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { Ok } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
 
 const port = (): number => 8080;
-const result = runtime.catchUnwind(port);
+const caught = runtime.catchUnwind(port);
+const result = expectReady(poll(caught), "port is sync");
 
 assertEquals(result, Ok(8080));
 ```
 
-The function returned normally, so `catchUnwind` hands its value back wrapped
-in `Ok`. What a boundary returns is an `Outcome`: `Ok` when the work
-returned, or `Panicked` when it threw. A boundary catches only throws, so it
-never returns the `Outcome`'s third variant, an expected `Err`.
+A boundary hands back a `Vow`, a value that may settle now or later, since
+the work may be sync or async. `port` is sync, so the vow settled before
+`catchUnwind` returned: `poll` reads it as `Ready`, and `expectReady`
+unwraps that. What settled is an `Outcome`: `Ok` when the work returned, or
+`Panicked` when it threw. A boundary catches only throws, so it never
+settles the `Outcome`'s third variant, an expected `Err`.
 
 ## Panic
 
@@ -48,7 +53,9 @@ Now let's make the function panic, as it would if its config had no port:
 
 ```ts
 import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { isPanicked, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow";
 import { assert, assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -56,7 +63,7 @@ const runtime = definePanicRuntime();
 function port(): number {
 	panic({ message: "config is missing a port", cause: null });
 }
-const result = runtime.catchUnwind(port);
+const result = expectReady(poll(runtime.catchUnwind(port)), "port is sync");
 
 assert(isPanicked(result));
 const payload = unwrapPanicked(result);
@@ -100,7 +107,7 @@ assertEquals(report.message, "config is missing a port");
 ```
 
 The boundary called our hook once, with the panic as its payload, before it
-returned the `Panicked`. Nothing was written to standard error this time.
+settled the `Panicked`. Nothing was written to standard error this time.
 
 ## Recover with a fallback
 
@@ -109,8 +116,10 @@ while reading the port falls back to a default, with `recover`:
 
 ```ts
 import { definePanicRuntime, panic } from "@sekhmet/panic";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { Ok } from "@sekhmet/enum/result/mini/core";
 import { recover, unwrap } from "@sekhmet/panic/outcome/mini";
+import { poll } from "@sekhmet/vow";
 import { assertEquals } from "@std/assert";
 
 const runtime = definePanicRuntime();
@@ -122,7 +131,8 @@ runtime.setHook(({ payload }) => {
 function port(): number {
 	panic({ message: "config is missing a port", cause: null });
 }
-const chosen = unwrap(recover(runtime.catchUnwind(port), () => Ok(3000)));
+const exit = expectReady(poll(runtime.catchUnwind(port)), "port is sync");
+const chosen = unwrap(recover(exit, () => Ok(3000)));
 
 assertEquals(chosen, 3000);
 assertEquals(reports.length, 1);

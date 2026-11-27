@@ -1,12 +1,7 @@
 import { Panic } from "@sekhmet/panic";
 import { assert, assertEquals } from "@std/assert";
 import { Lifetime } from "./lifetime.ts";
-import {
-	asPanic,
-	installDisposers,
-	isThenable,
-	suppressedError,
-} from "./teardown.ts";
+import { asPanic, installDisposers, suppressedError } from "./teardown.ts";
 
 Deno.test("suppressedError uses the platform's SuppressedError where there is one", () => {
 	// Given: a runtime with SuppressedError, or without it
@@ -63,24 +58,6 @@ Deno.test("asPanic keeps a Panic and wraps anything else, keeping it as the caus
 	);
 	assert(wrapped.cause === error);
 	assertEquals(text.message, "bare");
-});
-
-Deno.test("isThenable tells promises and thenables from plain values", () => {
-	// Given: a promise, a hand-made thenable, and plain values
-	const thenable = {
-		// biome-ignore lint/suspicious/noThenProperty: a thenable is the subject under test
-		then: () => {},
-	};
-	const notCallable = {
-		// biome-ignore lint/suspicious/noThenProperty: a non-callable then
-		then: 1,
-	};
-
-	// When / Then: only the first two are thenables
-	assert(isThenable(Promise.resolve()));
-	assert(isThenable(thenable));
-	assert(!isThenable<unknown>(undefined));
-	assert(!isThenable<unknown>(notCallable));
 });
 
 Deno.test("installDisposers installs each disposer only under a symbol the runtime defines", () => {

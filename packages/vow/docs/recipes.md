@@ -200,26 +200,32 @@ resolved.
 ## How to turn a promise into a vow and handle failure
 
 This guide shows you how to bring a promise's outcome into a vow graph without
-losing its rejection.
+losing its rejection. The bridge is `@sekhmet/panic`'s `catchUnwind`, since a
+rejection is a throw, and a throw means panic.
 
-1. Call `fromPromise` with the promise and your program's panic runtime. The vow
-   it returns stays pending until the promise settles, then resolves with
-   `Ok(value)` or `Err(reason)`.
-2. `map` the vow and `match` on the `Result` to handle both cases.
+1. Run the promise through your program's panic runtime:
+   `panics.catchUnwind(() => promise)`. The vow it returns stays pending until
+   the promise settles, then resolves with an `Outcome`.
+2. When a rejection is an expected failure, classify it first, as a `Result`
+   (`promise.then(Ok, Err)`), and flatten what the boundary caught with
+   `fromCaught`. Any other rejection is `Panicked`, reported to the hook.
+3. `map` the vow and `match` on the `Outcome` to handle each case.
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { fromPromise, map, wait } from "@sekhmet/vow";
+import { map, wait } from "@sekhmet/vow";
 import { match } from "@sekhmet/enum/core/mini";
+import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
+import { fromCaught } from "@sekhmet/panic/outcome/mini";
 
 const panics = definePanicRuntime(); // once, at your program's entry point
-const loaded = fromPromise({
-	promise: Promise.reject(new Error("offline")),
-	panics,
+const request: Promise<number> = Promise.reject(new Error("offline"));
+const loaded = panics.catchUnwind(() => {
+	return request.then(Ok<number, unknown>, Err<number, unknown>);
 });
-const message = map(loaded, (result) => {
-	return match(result)({
+const message = map(loaded, (caught) => {
+	return match(fromCaught(caught))({
 		Ok: (value) => `loaded ${String(value)}`,
 		Err: (reason) => {
 			if (reason instanceof Error) {
@@ -227,6 +233,7 @@ const message = map(loaded, (result) => {
 			}
 			return `failed: ${String(reason)}`;
 		},
+		Panicked: () => "bug",
 	});
 });
 
@@ -234,10 +241,9 @@ assertEquals(await wait(message), "failed: offline");
 ```
 
 The reason is typed `unknown`, since a promise can reject with anything, so
-narrow it before use. The predicates and unwrapping helpers in
-`@sekhmet/enum/result/mini`, such as `isOk` and `unwrapOr`, work on the value
-too. The panic runtime is for a different failure: a dependent of the vow that
-throws, which is a bug, not an outcome of the promise. See
+narrow it before use. The panic runtime also catches a different failure: a
+dependent of the vow that throws, which is a bug, not an outcome of the
+promise. See
 [how to catch errors thrown by dependents](#how-to-catch-errors-thrown-by-dependents).
 
 ## How to catch errors thrown by dependents
@@ -274,24 +280,24 @@ The vow is resolved and every other dependent has run by the time the error
 reaches you. See [errors in dependents](./concepts.md#errors-in-dependents) for
 why.
 
-A vow from `fromPromise` is different: you never call its resolver, the
+A vow made from a promise is different: you never call its resolver, the
 promise's `then` callback does, so there is no `try` to put it in. Its
-dependents' errors go to the panic runtime you passed instead.
+dependents' errors go to the panic runtime whose `catchUnwind` made it.
 
-1. Pass `fromPromise` the panic runtime your program runs in.
+1. Make the vow with `catchUnwind` on the panic runtime your program runs in.
 2. Set that runtime's hook to report faults; it receives the `AggregateError`.
 
 ```ts
 import { assertEquals, assertInstanceOf } from "@std/assert";
-import { fromPromise, map, wait } from "@sekhmet/vow";
-import { Ok } from "@sekhmet/enum/result/mini";
+import { map, wait } from "@sekhmet/vow";
 import { definePanicRuntime } from "@sekhmet/panic";
+import { Ok } from "@sekhmet/panic/outcome/mini";
 
 const panics = definePanicRuntime();
 const reported: unknown[] = [];
 panics.setHook(({ payload }) => reported.push(payload)); // stands in for a real reporter
 
-const loaded = fromPromise({ promise: Promise.resolve(1), panics });
+const loaded = panics.catchUnwind(() => Promise.resolve(1));
 map(loaded, () => {
 	throw new Error("bad dependent");
 });

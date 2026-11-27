@@ -12,6 +12,7 @@ import {
 } from "@sekhmet/dispatch";
 import { isolate, match, union } from "@sekhmet/enum/core/mini";
 import { None, type Option, Some } from "@sekhmet/enum/option/mini";
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import {
 	Err,
 	isErr,
@@ -20,14 +21,20 @@ import {
 	unwrap,
 	unwrapErr,
 } from "@sekhmet/enum/result/mini";
-import { type Panic, type PanicRuntime, panic } from "@sekhmet/panic";
+import { type Panic, type PanicBoundary, panic } from "@sekhmet/panic";
 import {
 	isPanicked,
 	unwrap as unwrapOutcome,
 	unwrapPanicked,
 } from "@sekhmet/panic/outcome/mini";
 import { block } from "@sekhmet/primordials/scoping";
-import { map, resolved, type Vow, value as vowValue } from "@sekhmet/vow/mini";
+import {
+	map,
+	poll,
+	resolved,
+	type Vow,
+	value as vowValue,
+} from "@sekhmet/vow/mini";
 import { invariant } from "@sekhmet/workflow/invariant";
 import { Adoption } from "./adoption.ts";
 import { causeOf, type EndReport, Phase } from "./phase.ts";
@@ -38,25 +45,6 @@ import {
 	runCleanup,
 	throwIfFailed,
 } from "./teardown.ts";
-
-/**
- * The only parts of a panic runtime a lifetime needs: the boundaries that
- * isolate and report a throw. Pass the runtime itself.
- *
- * @example
- * ```ts
- * import { definePanicRuntime } from "@sekhmet/panic";
- * import { Lifetime, type LifetimePanics } from "@sekhmet/lifetime";
- *
- * const panics: LifetimePanics = definePanicRuntime();
- * const lifetime = new Lifetime<undefined, string>({ value: undefined, panics });
- * lifetime.end("done");
- * ```
- */
-export type LifetimePanics = Pick<
-	PanicRuntime,
-	"catchUnwind" | "catchUnwindAsync"
->;
 
 /**
  * A cleanup, given the cause the lifetime ended with. It is synchronous, or
@@ -209,7 +197,7 @@ export class Lifetime<T, C> {
 	 */
 	readonly ended: DispatchSignal<EndReport<C>>;
 
-	readonly #panics: LifetimePanics;
+	readonly #panics: PanicBoundary;
 	readonly #ownDisposeCause: Option<C>;
 	#value: Option<T>;
 	readonly #stack: Entry<C>[] = [];
@@ -230,7 +218,7 @@ export class Lifetime<T, C> {
 		disposeCause,
 	}: {
 		readonly value: T;
-		readonly panics: LifetimePanics;
+		readonly panics: PanicBoundary;
 		readonly disposeCause?: C;
 	}) {
 		this.#value = Some(value);
@@ -240,10 +228,8 @@ export class Lifetime<T, C> {
 		} else {
 			this.#ownDisposeCause = Some(disposeCause);
 		}
-		this.#endingController = new DispatchController<C>(panics.catchUnwind);
-		this.#endedController = new DispatchController<EndReport<C>>(
-			panics.catchUnwind,
-		);
+		this.#endingController = new DispatchController<C>({ panics });
+		this.#endedController = new DispatchController<EndReport<C>>({ panics });
 		this.ending = this.#endingController.signal;
 		this.ended = this.#endedController.signal;
 	}
@@ -761,7 +747,7 @@ export class Lifetime<T, C> {
 	 *
 	 * const panics = definePanicRuntime();
 	 * const lifetime = new Lifetime<undefined, string>({ value: undefined, panics });
-	 * const cancel = new DispatchController<string>(panics.catchUnwind);
+	 * const cancel = new DispatchController<string>({ panics });
 	 * lifetime.endWhen(cancel.signal);
 	 *
 	 * cancel.dispatch("user cancelled");
@@ -1041,7 +1027,7 @@ function childEntry<C, U, D>({
 }: {
 	readonly child: Lifetime<U, D>;
 	readonly fromParent: (cause: C) => D;
-	readonly panics: LifetimePanics;
+	readonly panics: PanicBoundary;
 	/** Unlinks the child from its owner, making it a root */
 	readonly release: () => void;
 }): Entry<C> {
@@ -1079,7 +1065,7 @@ function endChild<C, U, D>({
 	readonly child: Lifetime<U, D>;
 	readonly fromParent: (cause: C) => D;
 	readonly cause: C;
-	readonly panics: LifetimePanics;
+	readonly panics: PanicBoundary;
 	readonly release: () => void;
 	readonly onDoubleFault: (thrown: unknown) => void;
 }): Vow<readonly Panic<unknown>[]> {
@@ -1116,10 +1102,11 @@ function mapCause<C, D>({
 }: {
 	readonly fromParent: (cause: C) => D;
 	readonly cause: C;
-	readonly panics: LifetimePanics;
+	readonly panics: PanicBoundary;
 }): Result<D, Panic<unknown>> {
-	// Boxed, so catchUnwind's promise guard sees an object, not a maybe-promise.
-	const caught = panics.catchUnwind(() => ({ mapped: fromParent(cause) }));
+	// Boxed, so a thenable D stays a value instead of being adopted
+	const boundary = panics.catchUnwind(() => ({ mapped: fromParent(cause) }));
+	const caught = expectReady(poll(boundary), "the box settles at once");
 	if (isPanicked(caught)) {
 		return Err(causeMappingFailed(unwrapPanicked(caught)));
 	}

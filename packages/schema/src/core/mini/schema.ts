@@ -21,7 +21,8 @@ import {
 	Ok,
 	type Result,
 } from "@sekhmet/enum/result/mini";
-import type { PanicRuntime } from "@sekhmet/panic/mini/runtime";
+import type { PanicBoundary } from "@sekhmet/panic/mini/runtime";
+import { fromCaught } from "@sekhmet/panic/outcome/mini/convert";
 import {
 	type Outcome,
 	Ok as OutcomeOk,
@@ -29,9 +30,14 @@ import {
 } from "@sekhmet/panic/outcome/mini/core";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import type { Vow } from "@sekhmet/vow/mini/core";
+import {
+	map as mapVow,
+	resolved,
+	vowWithResolver,
+} from "@sekhmet/vow/mini/impl";
 import type { Annotation } from "./annotation.ts";
 import { Opaque, SchemaNode, type TransformStep } from "./node.ts";
-import { guard, isPromiseLike, proceed, settled, step } from "./parsing.ts";
+import { isPromiseLike, proceed, settled, step } from "./parsing.ts";
 import { type PipeView, type TransformView, viewed } from "./view.ts";
 
 /**
@@ -72,24 +78,6 @@ export type MaybePromise<T> = T | PromiseLike<T>;
 export type Parser<I, O, E> = (input: I) => MaybePromise<Result<O, E>>;
 
 /**
- * The part of a panic runtime a parse runs user code under: its
- * `catchUnwind` and `catchUnwindAsync`. Every `PanicRuntime` from
- * `definePanicRuntime()` is one.
- *
- * @example
- * ```ts
- * import { definePanicRuntime } from "@sekhmet/panic";
- * import type { PanicBoundary } from "@sekhmet/schema/core/mini";
- *
- * const panics: PanicBoundary = definePanicRuntime();
- * ```
- */
-export type PanicBoundary = Pick<
-	PanicRuntime,
-	"catchUnwind" | "catchUnwindAsync"
->;
-
-/**
  * What {@linkcode parse} takes: the input, and the panic runtime its user
  * code (parsers, refinements, transforms) runs under.
  *
@@ -109,7 +97,10 @@ export type PanicBoundary = Pick<
 export interface ParseOptions<I> {
 	/** The input to parse. */
 	readonly input: I;
-	/** The panic runtime a throw or rejection in user code is caught by. */
+	/**
+	 * The panic boundary a throw or rejection in user code is caught by:
+	 * pass the program's panic runtime.
+	 */
 	readonly panics: PanicBoundary;
 }
 
@@ -183,13 +174,18 @@ export class Schema<I, O, E> extends Struct<SchemaParams<I, O, E>> {
 	}
 }
 
-/** The runner a schema's init describes: its own, or its parser's, guarded. */
+/** The runner a schema's init describes: its own, or its parser's, caught. */
 function runnerOf<I, O, E>(init: SchemaInit<I, O, E>): Runner<I, O, E> {
 	if (init.run !== undefined) return init.run;
 
 	const parser = init.parse;
 
-	return ({ input, panics }) => guard({ panics, work: () => parser(input) });
+	return ({ input, panics }) => {
+		return mapVow(
+			panics.catchUnwind(() => parser(input)),
+			fromCaught,
+		);
+	};
 }
 
 /**
@@ -490,36 +486,66 @@ interface Unwinding {
 function unwinding(): Unwinding {
 	let abandoned = false;
 
+	const run = <T>(
+		fn: () => T | PromiseLike<T>,
+	): Outcome<T | PromiseLike<T>, never, unknown> => {
+		if (!abandoned) return OutcomeOk(fn());
+
+		try {
+			return OutcomeOk(fn());
+		} catch (payload: unknown) {
+			return Panicked(payload);
+		}
+	};
+
 	return {
 		panics: {
-			// The guard rest is type-only, as in definePanicRuntime: never read
 			catchUnwind: <T>(
-				fn: () => T,
-				..._useCatchUnwindAsyncForPromises: unknown[]
-			): Outcome<T, never, unknown> => {
-				if (!abandoned) return OutcomeOk(fn());
+				fn: () => T | PromiseLike<T>,
+			): Vow<Outcome<T, never, unknown>> => {
+				return match(run(fn))<Vow<Outcome<T, never, unknown>>>({
+					Ok: (returned) => {
+						if (!isPromiseLike(returned)) return resolved(OutcomeOk(returned));
 
-				try {
-					return OutcomeOk(fn());
-				} catch (payload: unknown) {
-					return Panicked(payload);
-				}
+						return later(returned);
+					},
+					Err: (impossible) => impossible,
+					Panicked: (payload) => resolved(Panicked(payload)),
+				});
 			},
-			// Only an abandoned parse awaits: a rejection settles it as Panicked
-			catchUnwindAsync: async <T>(
-				fn: () => PromiseLike<T>,
-			): Promise<Outcome<T, never, unknown>> => {
-				try {
-					return OutcomeOk(await fn());
-				} catch (payload: unknown) {
-					return Panicked(payload);
-				}
+			resumeUnwind: (payload: unknown): never => {
+				throw payload;
 			},
 		},
 		abandon: () => {
 			abandoned = true;
 		},
 	};
+}
+
+/**
+ * Only an abandoned parse awaits: a rejection settles it as `Panicked`, and
+ * a dependent that throws is dropped with it, since nothing reads it.
+ */
+function later<T>(promise: PromiseLike<T>): Vow<Outcome<T, never, unknown>> {
+	const { vow, resolve } = vowWithResolver<Outcome<T, never, unknown>>();
+	const settle = (outcome: Outcome<T, never, unknown>): void => {
+		try {
+			resolve(outcome);
+		} catch {
+			// The abandoned parse's own continuation threw; nobody reads it
+		}
+	};
+
+	void Promise.resolve()
+		.then(() => promise)
+		.then(
+			(value) => settle(OutcomeOk(value)),
+			(payload: unknown) => settle(Panicked(payload)),
+		);
+	// {}
+
+	return vow;
 }
 
 /**
@@ -919,8 +945,18 @@ function continueWith<I, O, E, P, F, S extends Schema<I, O, E>>(
 
 				return proceed(parse(schema, options), {
 					panics,
-					Ok: (output) => guard({ panics, work: () => next(Ok(output)) }),
-					Err: (error) => guard({ panics, work: () => next(Err(error)) }),
+					Ok: (output) => {
+						return mapVow(
+							panics.catchUnwind(() => next(Ok(output))),
+							fromCaught,
+						);
+					},
+					Err: (error) => {
+						return mapVow(
+							panics.catchUnwind(() => next(Err(error))),
+							fromCaught,
+						);
+					},
 				});
 			},
 			node: new SchemaNode("Transform", { step, inner: schema }),
@@ -1186,15 +1222,8 @@ export function preprocess<J, I, O, E, S extends Schema<I, O, E>>(
 	return viewed({
 		init: {
 			run: ({ input, panics }: ParseOptions<J>) => {
-				const prepared = guard<I, never>({
-					panics,
-					work: () => {
-						const returned = prepare(input);
-						if (!isPromiseLike(returned)) return Ok(returned);
-
-						return Promise.resolve(returned).then((value) => Ok(value));
-					},
-				});
+				// A throw or a rejection in prepare settles the parse as Panicked
+				const prepared = panics.catchUnwind(() => prepare(input));
 
 				return proceed(prepared, {
 					panics,

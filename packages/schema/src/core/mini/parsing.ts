@@ -1,32 +1,33 @@
 /**
- * How a parse runs: user code under a panic boundary ({@linkcode guard}),
- * lifted into a {@linkcode Parsing} (a `Vow` of an `Outcome`) that settles
- * synchronously when the code was synchronous, and continued with
- * {@linkcode proceed}, which passes a panic through. Internal: not exported
- * from the mini barrel.
+ * How a parse runs: user code under a panic boundary (`panics.catchUnwind`,
+ * its caught `Result` flattened with `fromCaught`), as a {@linkcode Parsing}
+ * (a `Vow` of an `Outcome`) that settles synchronously when the code was
+ * synchronous, and continued with {@linkcode proceed}, which passes a panic
+ * through. Internal: not exported from the mini barrel.
  *
  * Every callback a parse hands to a vow continuation runs under the
- * boundary ({@linkcode step}, through `proceed`, `guard` or `parse`), so
- * none throws inside a vow's `resolve`, where the throw would be lost and the
- * parse would never settle. That covers internal code too, which can throw
- * when it reads a user value (a getter, a Proxy trap).
+ * boundary ({@linkcode step}, through `proceed`, or `catchUnwind` itself),
+ * so none throws inside a vow's `resolve`, where the throw would be lost and
+ * the parse would never settle. That covers internal code too, which can
+ * throw when it reads a user value (a getter, a Proxy trap).
  *
  * One throw escapes by design: a panic hook that throws while reporting (a
- * `HookFailurePanic`) escapes every boundary, as the panic runtime's
- * contract says. In an async parse it then throws inside a `resolve`: the
- * parse may never settle, and the failure surfaces as an unhandled
- * rejection. `@sekhmet/lifetime` treats a hook failure the same way.
+ * `Panic (PanicHook)`) escapes every boundary, as the panic runtime's
+ * contract says. In a synchronous parse it unwinds to the caller; in an
+ * async one the parse still settles as `Panicked`, and the hook's failure
+ * surfaces as an unhandled rejection.
  *
  * @module
  */
 
 import { match } from "@sekhmet/enum/core/mini/exit";
 import type { Result } from "@sekhmet/enum/result/mini";
+import type { PanicBoundary } from "@sekhmet/panic/mini/runtime";
 import { fromResult } from "@sekhmet/panic/outcome/mini/convert";
 import { type Outcome, Panicked } from "@sekhmet/panic/outcome/mini/core";
 import type { Vow } from "@sekhmet/vow/mini/core";
-import { andThen, resolved, vowWithResolver } from "@sekhmet/vow/mini/impl";
-import type { MaybePromise, PanicBoundary } from "./schema.ts";
+import { andThen, resolved } from "@sekhmet/vow/mini/impl";
+import type { MaybePromise } from "./schema.ts";
 
 /**
  * A parse, settled or in flight: `Ok(output)`, the expected `Err(error)`,
@@ -60,64 +61,6 @@ export function isPromiseLike<T>(
 }
 
 /**
- * Runs user code that returns a `Result` (or a promise of one) under
- * `panics`: a throw, or a rejection of the promise, settles the parse as
- * `Panicked`. A synchronous `Result` settles it synchronously.
- */
-export function guard<O, E>({
-	panics,
-	work,
-}: {
-	readonly panics: PanicBoundary;
-	readonly work: () => MaybePromise<Result<O, E>>;
-}): Parsing<O, E> {
-	// Boxed, so catchUnwind's promise guard sees an object, not a maybe-promise.
-	const caught = panics.catchUnwind(() => ({ returned: work() }));
-
-	return match(caught)<Parsing<O, E>>({
-		Ok: ({ returned }) => {
-			if (isPromiseLike(returned)) return later({ panics, promise: returned });
-
-			return settled(returned);
-		},
-		Err: (impossible) => impossible,
-		Panicked: (payload) => panicked(payload),
-	});
-}
-
-/** A parse that settles when `promise` does, a rejection as `Panicked`. */
-function later<O, E>({
-	panics,
-	promise,
-}: {
-	readonly panics: PanicBoundary;
-	readonly promise: PromiseLike<Result<O, E>>;
-}): Parsing<O, E> {
-	const { vow, resolve } = vowWithResolver<Outcome<O, E, unknown>>();
-	const deliver = (outcome: Outcome<O, E, unknown>): void => {
-		// The vow settles first; a continuation that throws is reported, not lost.
-		panics.catchUnwind(() => resolve(outcome));
-	};
-
-	void panics
-		.catchUnwindAsync(() => promise)
-		.then(
-			(caught) => {
-				deliver(
-					match(caught)<Outcome<O, E, unknown>>({
-						Ok: (result) => fromResult(result),
-						Err: (impossible) => impossible,
-						Panicked: (payload) => Panicked(payload),
-					}),
-				);
-			},
-			(doubleFault: unknown) => deliver(Panicked(doubleFault)),
-		);
-
-	return vow;
-}
-
-/**
  * Runs the work that builds a parse under `panics`: a throw, from user code
  * it calls or a user value it reads, settles the parse as `Panicked` with
  * the payload unchanged.
@@ -129,13 +72,13 @@ export function step<O, E>({
 	readonly panics: PanicBoundary;
 	readonly work: () => Parsing<O, E>;
 }): Parsing<O, E> {
-	// Boxed, so catchUnwind's promise guard sees an object, not a maybe-promise.
-	const caught = panics.catchUnwind(() => ({ parsing: work() }));
-
-	return match(caught)<Parsing<O, E>>({
-		Ok: ({ parsing }) => parsing,
-		Err: (impossible) => impossible,
-		Panicked: (payload) => panicked(payload),
+	// A Parsing is a vow, never a thenable, so catchUnwind hands it back as is
+	return andThen(panics.catchUnwind(work), (built) => {
+		return match(built)<Parsing<O, E>>({
+			Ok: (parsing) => parsing,
+			Err: (impossible) => impossible,
+			Panicked: (payload) => panicked(payload),
+		});
 	});
 }
 

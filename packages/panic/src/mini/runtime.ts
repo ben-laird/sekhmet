@@ -3,12 +3,14 @@
  * and recovering from one (`catch_unwind`), with no global state.
  *
  * Create a runtime with {@linkcode definePanicRuntime} and run your whole
- * program inside its {@linkcode PanicRuntime.catchUnwind} or
- * {@linkcode PanicRuntime.catchUnwindAsync}.
+ * program inside its {@linkcode PanicRuntime.catchUnwind}, which settles a
+ * `Vow` of an `Outcome` whether the program is sync or async.
  *
  * @module
  */
 
+import type { Vow } from "@sekhmet/vow/mini/core";
+import { resolved, vowWithResolver } from "@sekhmet/vow/mini/impl";
 import { Ok, type Outcome, Panicked } from "@/src/outcome/mini/core.ts";
 import { Panic } from "./core.ts";
 
@@ -66,82 +68,76 @@ export interface PanicRuntime {
 	 * Runs `fn` and catches every throw, like Rust's `catch_unwind`. The hook
 	 * reports the payload first, unless it has already been reported.
 	 *
+	 * It always returns a `Vow`, since a `Vow` means "sync or async, I don't
+	 * know which". Sync work settles the vow before `catchUnwind` returns, so
+	 * read it right after the call with `poll` from `@sekhmet/vow` and
+	 * `expectReady` from `@sekhmet/enum/poll/mini`. Async work settles it
+	 * later, and the vow's dependents then run inside this boundary: one that
+	 * throws is reported through the hook, as the vow's `AggregateError`.
+	 * The vow and the `Outcome` in it are the mini forms, from
+	 * `@sekhmet/vow` and `@sekhmet/panic/outcome/mini`; a method-chaining
+	 * main `Vow` waits on #111.
+	 *
+	 * A returned thenable is adopted, as `await` does: its value is the `Ok`,
+	 * and its rejection, or a `then` that throws, is `Panicked`, matching
+	 * "throw means panic". A thenable it fulfils with is followed in turn,
+	 * and only the first callback of each counts. Its `then` is called at
+	 * once rather than on a microtask, so one that calls back synchronously
+	 * settles the vow at once. A sync function that returns a thenable as
+	 * data is flattened too. To keep one as a value, box it
+	 * (`() => ({ thenable })`). An expected failure is classified at the
+	 * edge: return a `Result` (`promise.then(Ok, Err)`), and flatten the
+	 * caught `Result` into the `Outcome` with `fromCaught`.
+	 *
 	 * The payload is `unknown`, as Rust's is `Box<dyn Any>`: narrow it with
 	 * `instanceof Panic` or `isPanicAnd`, and turn it into an app error with
-	 * `recover`. A boundary returns an `Outcome`, never a `Result`: its `Err`
+	 * `recover`. A boundary settles an `Outcome`, never a `Result`: its `Err`
 	 * channel is `never`, since a boundary catches only throws.
 	 *
-	 * If the hook throws, the boundary does not recover: it throws a
-	 * `Panic (PanicHook)` whose cause is a {@linkcode PanicHookFailure}. That
-	 * mirrors Rust aborting on a panic while panicking, without killing the
-	 * host; an outer boundary reports and catches it as a new unwind.
+	 * If the hook throws while reporting a payload of sync work, the
+	 * boundary does not recover: it throws a `Panic (PanicHook)` whose cause
+	 * is a {@linkcode PanicHookFailure}. That mirrors Rust aborting on a
+	 * panic while panicking, without killing the host; an outer boundary
+	 * reports and catches it as a new unwind.
 	 *
-	 * Async work belongs in {@linkcode PanicRuntime.catchUnwindAsync}: passing
-	 * a function that returns a `PromiseLike` here is a type error ("Arguments
-	 * for the rest parameter 'useCatchUnwindAsyncForPromises' were not
-	 * provided"), since this boundary would return the promise as an `Ok` and
-	 * miss its rejection. The check is type-only and costs nothing at runtime.
-	 * It rejects a return type that is wholly `PromiseLike`; `any` and `never`
-	 * pass.
+	 * Async work has no caller to throw to, and a `Vow` cannot reject. So
+	 * when the hook throws while reporting a rejection, the vow still
+	 * settles as `Panicked` with the payload, and the `Panic (PanicHook)`
+	 * then escapes the settle callback as an unhandled rejection, which
+	 * crashes the process under the Deno and Node defaults. The same goes
+	 * for a hook that throws while reporting a throwing dependent. This is
+	 * deliberate, and a change from the old `catchUnwindAsync`, which
+	 * rejected its promise. The default hook never throws.
 	 *
-	 * @template T The return type of `fn`
-	 * @param fn The synchronous work to run
-	 * @param useCatchUnwindAsyncForPromises Never passed; it exists only to
-	 *   reject promise-returning `fn`s
-	 * @returns `Ok` of the return value, or `Panicked` of the thrown payload
+	 * @template T The value `fn` returns, or its thenable fulfils with
+	 * @param fn The work to run, sync or async
+	 * @returns A vow of `Ok` of the value, or `Panicked` of the payload;
+	 *   settled already when `fn` was sync
 	 *
 	 * @example
 	 * ```ts
 	 * import { definePanicRuntime } from "@sekhmet/panic";
-	 * import { isPanicked, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
-	 * import { assert, assertInstanceOf } from "@std/assert";
+	 * import { expectReady } from "@sekhmet/enum/poll/mini";
+	 * import { isPanicked, Ok, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+	 * import { poll, wait } from "@sekhmet/vow";
+	 * import { assert, assertEquals, assertInstanceOf } from "@std/assert";
 	 *
 	 * const runtime = definePanicRuntime();
 	 * runtime.setHook(() => {}); // keep the example quiet
 	 *
-	 * const result = runtime.catchUnwind(() => JSON.parse("{ not json"));
-	 *
+	 * // Sync work: settled before catchUnwind returns
+	 * const parsed = runtime.catchUnwind(() => JSON.parse("{ not json"));
+	 * const result = expectReady(poll(parsed), "sync work settles at once");
 	 * assert(isPanicked(result));
 	 * assertInstanceOf(unwrapPanicked(result), SyntaxError);
+	 *
+	 * // Async work: the returned promise is adopted
+	 * assertEquals(await wait(runtime.catchUnwind(async () => 42)), Ok(42));
 	 * ```
 	 */
 	readonly catchUnwind: <T>(
-		fn: () => T,
-		...useCatchUnwindAsyncForPromises: 0 extends 1 & T
-			? []
-			: [T] extends [never]
-				? []
-				: [T] extends [PromiseLike<unknown>]
-					? [useCatchUnwindAsyncForPromises: never]
-					: []
-	) => Outcome<T, never, unknown>;
-	/**
-	 * The async form of {@linkcode PanicRuntime.catchUnwind}: it catches a
-	 * rejection of the returned promise or thenable, a `then` that throws, and
-	 * a synchronous throw from `fn` alike, so it never leaves an unhandled
-	 * rejection. It rejects only when the hook throws, with the same
-	 * `Panic (PanicHook)`.
-	 *
-	 * @template T The resolved type of `fn`'s promise or thenable
-	 * @param fn The async work to run; any `PromiseLike` is accepted
-	 * @returns A promise of `Ok` of the resolved value, or `Panicked` of the payload
-	 *
-	 * @example
-	 * ```ts
-	 * import { definePanicRuntime } from "@sekhmet/panic";
-	 * import { Ok } from "@sekhmet/panic/outcome/mini";
-	 * import { assertEquals } from "@std/assert";
-	 *
-	 * const runtime = definePanicRuntime();
-	 *
-	 * const result = await runtime.catchUnwindAsync(async () => 42);
-	 *
-	 * assertEquals(result, Ok(42));
-	 * ```
-	 */
-	readonly catchUnwindAsync: <T>(
-		fn: () => PromiseLike<T>,
-	) => Promise<Outcome<T, never, unknown>>;
+		fn: () => T | PromiseLike<T>,
+	) => Vow<Outcome<T, never, unknown>>;
 	/**
 	 * Throws `payload` unchanged without reporting it, like Rust's
 	 * `resume_unwind`. Use it to pass a caught payload on to an outer
@@ -180,7 +176,7 @@ export interface PanicRuntime {
  *
  * The panic protocol: a panic propagates, unless your code runs on a stack
  * nobody's waiting on. Then the API takes a `PanicBoundary`, which catches
- * the panic, reports it once and hands back an `Outcome`. From there it is
+ * the panic, reports it once and hands back a `Vow<Outcome>`. From there it is
  * a `Panicked` value that combinators pass through untouched.
  *
  * 1. Propagate by default: code that runs a callback synchronously, inside
@@ -191,7 +187,8 @@ export interface PanicRuntime {
  * 3. Never catch without reporting: code without a boundary never catches a
  *    panic into an `Outcome`, since an unreported `Panicked` that is dropped
  *    vanishes silently.
- * 4. The boundary that catches a panic reports it, exactly once.
+ * 4. The boundary that catches a panic reports it, exactly once, and hands
+ *    back a `Vow<Outcome<T, never, unknown>>`.
  * 5. After that, a panic is a value: `Outcome`'s `Panicked(payload)`, or a
  *    variant named `Panicked` with an `unknown` payload in an enum with its
  *    own terminal for it.
@@ -297,7 +294,9 @@ function errorReport({
  * import { definePanicRuntime, Panic, panic } from "@sekhmet/panic";
  * import { Err as ResultErr } from "@sekhmet/enum/result/mini/core";
  * import { intoInner } from "@sekhmet/enum/either/mini";
+ * import { expectReady } from "@sekhmet/enum/poll/mini";
  * import { Err, mapErr, recover } from "@sekhmet/panic/outcome/mini";
+ * import { poll } from "@sekhmet/vow";
  * import { assertEquals } from "@std/assert";
  *
  * const runtime = definePanicRuntime();
@@ -313,7 +312,8 @@ function errorReport({
  * });
  *
  * const main = (): number => panic({ message: "no port", cause: null });
- * const recovered = recover(runtime.catchUnwind(main), (payload) => {
+ * const exit = expectReady(poll(runtime.catchUnwind(main)), "main is sync");
+ * const recovered = recover(exit, (payload) => {
  *   return ResultErr(payload instanceof Panic ? payload.message : "unknown failure");
  * });
  * // A boundary has no error of its own, so the Either holds only the app error
@@ -349,24 +349,34 @@ export function definePanicRuntime(): PanicRuntime {
 	};
 
 	return {
-		// The guard rest is type-only: never passed, so never read
-		catchUnwind: (fn, ..._useCatchUnwindAsyncForPromises) => {
+		catchUnwind: <T>(
+			fn: () => T | PromiseLike<T>,
+		): Vow<Outcome<T, never, unknown>> => {
+			let returned: PromiseLike<T>;
 			try {
-				return Ok(fn());
+				const value = fn();
+				// Reading `then` runs user code too (a getter, a Proxy trap)
+				if (!isThenable(value)) return resolved(Ok(value));
+				returned = value;
 			} catch (payload: unknown) {
 				report(payload);
-				return Panicked(payload);
+				return resolved(Panicked(payload));
 			}
-		},
-		catchUnwindAsync: async <T>(
-			fn: () => PromiseLike<T>,
-		): Promise<Outcome<T, never, unknown>> => {
-			try {
-				return Ok(await fn());
-			} catch (payload: unknown) {
-				report(payload);
-				return Panicked(payload);
-			}
+
+			const { vow, resolve } = vowWithResolver<Outcome<T, never, unknown>>();
+			adopt({
+				thenable: returned,
+				report,
+				// A dependent that throws is a panic with no caller: report it
+				settle: (outcome) => {
+					try {
+						resolve(outcome);
+					} catch (thrown: unknown) {
+						report(thrown);
+					}
+				},
+			});
+			return vow;
 		},
 		resumeUnwind: (payload: unknown): never => {
 			markReported(payload);
@@ -394,7 +404,9 @@ export function definePanicRuntime(): PanicRuntime {
  * @example
  * ```ts
  * import { definePanicRuntime, isPanicHookFailure, panic } from "@sekhmet/panic";
+ * import { expectReady } from "@sekhmet/enum/poll/mini";
  * import { unwrapPanicked } from "@sekhmet/panic/outcome/mini";
+ * import { poll } from "@sekhmet/vow";
  * import { assert, assertEquals } from "@std/assert";
  *
  * const outer = definePanicRuntime();
@@ -404,11 +416,11 @@ export function definePanicRuntime(): PanicRuntime {
  *   throw new Error("reporter offline");
  * });
  *
- * const payload = unwrapPanicked(
- *   outer.catchUnwind(() =>
- *     inner.catchUnwind(() => panic({ message: "bad state", cause: null })),
- *   ),
- * );
+ * // The inner hook throws, so the inner boundary throws Panic (PanicHook)
+ * const caught = outer.catchUnwind(() => {
+ *   return inner.catchUnwind(() => panic({ message: "bad state", cause: null }));
+ * });
+ * const payload = unwrapPanicked(expectReady(poll(caught), "sync work"));
  *
  * assert(isPanicHookFailure(payload));
  * assertEquals(String(payload.cause.thrown), "Error: reporter offline");
@@ -435,6 +447,71 @@ class HookFailurePanic extends Panic<PanicHookFailure> {
 	static is(value: unknown): value is HookFailurePanic {
 		return isObjectLike(value) && #brand in value;
 	}
+}
+
+/**
+ * Adopts `thenable` as `await` does: it calls `then` once, follows a
+ * thenable it fulfils with, and heeds only the first callback of each. A
+ * rejection, or a `then` that throws, is reported and settled as `Panicked`.
+ * If the hook throws, the vow still settles, then the `Panic (PanicHook)`
+ * escapes the callback, as an unhandled rejection in a promise's.
+ */
+function adopt<T>({
+	thenable,
+	settle,
+	report,
+}: {
+	readonly thenable: PromiseLike<T>;
+	readonly settle: (outcome: Outcome<T, never, unknown>) => void;
+	readonly report: (payload: unknown) => void;
+}): void {
+	const fail = (payload: unknown): void => {
+		let doubleFault: { readonly thrown: unknown } | undefined;
+		try {
+			report(payload);
+		} catch (thrown: unknown) {
+			doubleFault = { thrown };
+		}
+		settle(Panicked(payload));
+		if (doubleFault !== undefined) throw doubleFault.thrown;
+	};
+	const follow = (next: PromiseLike<T>): void => {
+		let called = false;
+		const fulfil = (value: T): void => {
+			if (called) return;
+			called = true;
+			let nested: PromiseLike<T> | undefined;
+			try {
+				nested = isThenable(value) ? value : undefined;
+			} catch (payload: unknown) {
+				fail(payload);
+				return;
+			}
+			if (nested === undefined) {
+				settle(Ok(value));
+			} else {
+				follow(nested);
+			}
+		};
+		const reject = (payload: unknown): void => {
+			if (called) return;
+			called = true;
+			fail(payload);
+		};
+		try {
+			void next.then(fulfil, reject);
+		} catch (payload: unknown) {
+			reject(payload);
+		}
+	};
+	follow(thenable);
+}
+
+/** Whether `value` is a thenable, as `await` treats it: a callable `then`. */
+function isThenable<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
+	return (
+		isObjectLike(value) && typeof Reflect.get(value, "then") === "function"
+	);
 }
 
 function isObjectLike(value: unknown): value is object {

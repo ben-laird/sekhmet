@@ -4,7 +4,8 @@
 `Pending` until something resolves it, then `Resolved` with its value. Callbacks
 attached with `map`, `andThen` or `zip` run inside the `resolve` call, not on a
 later microtask, so a value flows through a chain of vows in one call stack.
-`wait` and `fromPromise` bridge to promises.
+`wait` bridges a vow to a promise; `@sekhmet/panic`'s `catchUnwind` turns a
+promise into a vow.
 
 ## Install
 
@@ -50,20 +51,19 @@ assertEquals(await wait(total), 15);
 
 `@sekhmet/vow` exports free functions; `@sekhmet/vow/mini` exports the same set.
 
-| Export                              | Does                                                           |
-| ----------------------------------- | -------------------------------------------------------------- |
-| `new Vow(executor)`                 | a vow the executor resolves, now or later                      |
-| `vowWithResolver()`                 | a pending vow and the function that resolves it                |
-| `resolved(value)`                   | a vow already resolved with `value`                            |
-| `map(vow, f)`                       | a vow of `f(value)`                                            |
-| `andThen(vow, f)`                   | a vow of the value of the vow `f(value)` returns               |
-| `zip(a, b)`, `zipWith(a, b, f)`     | a vow of both values once both resolve                         |
-| `all(vows)`                         | a vow of every value, in order, once all resolve               |
-| `wait(vow)`                         | a `Promise` of the value                                       |
-| `value(vow)`                        | `Some(value)` once resolved, `None` while pending, read now    |
-| `poll(vow)`                         | `Ready(value)` once resolved, `Pending()` while pending, now   |
-| `isResolved(vow)`, `isPending(vow)` | type guards for the vow's current state                        |
-| `fromPromise({ promise, panics })`  | a vow of `Ok(value)` or `Err(reason)` once the promise settles |
+| Export                              | Does                                                         |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `new Vow(executor)`                 | a vow the executor resolves, now or later                    |
+| `vowWithResolver()`                 | a pending vow and the function that resolves it              |
+| `resolved(value)`                   | a vow already resolved with `value`                          |
+| `map(vow, f)`                       | a vow of `f(value)`                                          |
+| `andThen(vow, f)`                   | a vow of the value of the vow `f(value)` returns             |
+| `zip(a, b)`, `zipWith(a, b, f)`     | a vow of both values once both resolve                       |
+| `all(vows)`                         | a vow of every value, in order, once all resolve             |
+| `wait(vow)`                         | a `Promise` of the value                                     |
+| `value(vow)`                        | `Some(value)` once resolved, `None` while pending, read now  |
+| `poll(vow)`                         | `Ready(value)` once resolved, `Pending()` while pending, now |
+| `isResolved(vow)`, `isPending(vow)` | type guards for the vow's current state                      |
 
 ## Learn more
 

@@ -11,7 +11,7 @@
  * | `set_hook`          | `runtime.setHook(hook)`                            |
  * | `take_hook`         | `runtime.takeHook()` (restores `defaultPanicHook`) |
  * | `PanicHookInfo`     | `PanicHookInfo` (`payload`, `stack`)               |
- * | `catch_unwind`      | `runtime.catchUnwind(fn)` / `catchUnwindAsync(fn)` |
+ * | `catch_unwind`      | `runtime.catchUnwind(fn)`, a `Vow` of an `Outcome` |
  * | `thread::Result`    | `Outcome` (`@sekhmet/panic/outcome`)               |
  * | `resume_unwind`     | `runtime.resumeUnwind(payload)`                    |
  * | `Box<dyn Any>`      | `unknown`                                          |
@@ -24,13 +24,16 @@
  * @example
  * ```ts
  * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { expectReady } from "@sekhmet/enum/poll/mini";
  * import { Ok } from "@sekhmet/panic/outcome/mini";
+ * import { poll } from "@sekhmet/vow";
  * import { assertEquals } from "@std/assert";
  *
  * const main = (): number => 42;
  *
  * const runtime = definePanicRuntime();
- * const result = runtime.catchUnwind(main);
+ * // Sync work settles the boundary's vow before catchUnwind returns
+ * const result = expectReady(poll(runtime.catchUnwind(main)), "main is sync");
  *
  * assertEquals(result, Ok(42));
  * ```

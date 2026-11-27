@@ -68,8 +68,8 @@ function countingAbortSignal(): {
 Deno.test("map and zip derive new signals", () => {
 	// Given: two signals and a signal derived from them
 	const { panics } = recordingPanics();
-	const port = new DispatchController<number>(panics.catchUnwind);
-	const host = new DispatchController<string>(panics.catchUnwind);
+	const port = new DispatchController<number>({ panics });
+	const host = new DispatchController<string>({ panics });
 	const url = host.signal.zip(port.signal).map(([h, p]) => `http://${h}:${p}`);
 	let heard: string | undefined;
 	url.whenDispatched((value) => {
@@ -90,7 +90,7 @@ Deno.test("map and zip derive new signals", () => {
 Deno.test("map runs its mapping once, however many readers it has", () => {
 	// Given: a mapped signal that counts its calls, with two listeners
 	const { panics } = recordingPanics();
-	const controller = new DispatchController<number>(panics.catchUnwind);
+	const controller = new DispatchController<number>({ panics });
 	let calls = 0;
 	const doubled = controller.signal.map((n) => {
 		calls += 1;
@@ -111,7 +111,7 @@ Deno.test("map runs its mapping once, however many readers it has", () => {
 Deno.test("a throwing mapping poisons map: it runs once, and every later read is a poison panic", () => {
 	// Given: a mapped signal whose mapping throws, with two listeners
 	const { panics, reported } = recordingPanics();
-	const controller = new DispatchController<number>(panics.catchUnwind);
+	const controller = new DispatchController<number>({ panics });
 	const payload = new Error("mapping bug");
 	let runs = 0;
 	const mapped = controller.signal.map((): number => {
@@ -146,11 +146,11 @@ Deno.test("a derived signal holds a source's subscription only while it has list
 	const other = countingAbortSignal();
 	const first = DispatchSignal.fromAbortSignal({
 		signal: source.signal,
-		catchUnwind: panics.catchUnwind,
+		panics,
 	});
 	const second = DispatchSignal.fromAbortSignal({
 		signal: other.signal,
-		catchUnwind: panics.catchUnwind,
+		panics,
 	});
 	const mapped = first.map(String);
 	const zipped = first.zip(second);
@@ -184,11 +184,11 @@ Deno.test("zip holds only its first source until it fires, then only its second"
 	const other = countingAbortSignal();
 	const zipped = DispatchSignal.fromAbortSignal({
 		signal: source.signal,
-		catchUnwind: panics.catchUnwind,
+		panics,
 	}).zip(
 		DispatchSignal.fromAbortSignal({
 			signal: other.signal,
-			catchUnwind: panics.catchUnwind,
+			panics,
 		}),
 	);
 	const stop = zipped.whenDispatched(() => {});
@@ -209,7 +209,7 @@ Deno.test("zip holds only its first source until it fires, then only its second"
 Deno.test("toAbortSignal on a signal that has already dispatched aborts at once", () => {
 	// Given: a signal that has already dispatched
 	const { panics } = recordingPanics();
-	const controller = new DispatchController<string>(panics.catchUnwind);
+	const controller = new DispatchController<string>({ panics });
 	controller.dispatch("gone");
 
 	// When: it's converted
@@ -243,9 +243,9 @@ Deno.test("a DispatchSignal can't be built without a controller", () => {
 Deno.test("any dispatches with the first source and lets go of the rest", () => {
 	// Given: three sources combined with any, with a listener
 	const { panics } = recordingPanics();
-	const timeout = new DispatchController<string>(panics.catchUnwind);
-	const user = new DispatchController<string>(panics.catchUnwind);
-	const shutdown = new DispatchController<string>(panics.catchUnwind);
+	const timeout = new DispatchController<string>({ panics });
+	const user = new DispatchController<string>({ panics });
+	const shutdown = new DispatchController<string>({ panics });
 	const stop = DispatchSignal.any([
 		timeout.signal,
 		user.signal,
@@ -267,8 +267,8 @@ Deno.test("any dispatches with the first source and lets go of the rest", () => 
 Deno.test("an Unsubscribe reports true only the first time it removes a waiting listener", () => {
 	// Given: a waiting listener on any and on zip, and listeners on dispatched and never
 	const { panics } = recordingPanics();
-	const a = new DispatchController<string>(panics.catchUnwind);
-	const b = new DispatchController<number>(panics.catchUnwind);
+	const a = new DispatchController<string>({ panics });
+	const b = new DispatchController<number>({ panics });
 	const heard: string[] = [];
 	const stops = {
 		any: DispatchSignal.any([a.signal]).whenDispatched(() => {
@@ -279,7 +279,7 @@ Deno.test("an Unsubscribe reports true only the first time it removes a waiting 
 		}),
 		dispatched: DispatchSignal.dispatched({
 			value: "done",
-			catchUnwind: panics.catchUnwind,
+			panics,
 		}).whenDispatched(() => {}),
 		never: DispatchSignal.never<string>().whenDispatched(() => {}),
 	};
@@ -299,7 +299,7 @@ Deno.test("an Unsubscribe reports true only the first time it removes a waiting 
 Deno.test("any's Unsubscribe reports false once its listener has run", () => {
 	// Given: a listener on any
 	const { panics } = recordingPanics();
-	const a = new DispatchController<string>(panics.catchUnwind);
+	const a = new DispatchController<string>({ panics });
 	const stop = DispatchSignal.any([a.signal]).whenDispatched(() => {});
 
 	// When: its source dispatches
@@ -312,8 +312,8 @@ Deno.test("any's Unsubscribe reports false once its listener has run", () => {
 Deno.test("any decides the earliest Ready source even when a listener dispatches another first", () => {
 	// Given: an earlier listener on a that dispatches b, then any([a, b]) with a listener
 	const { panics } = recordingPanics();
-	const a = new DispatchController<string>(panics.catchUnwind);
-	const b = new DispatchController<string>(panics.catchUnwind);
+	const a = new DispatchController<string>({ panics });
+	const b = new DispatchController<string>({ panics });
 	a.signal.whenDispatched(() => {
 		b.dispatch("b");
 	});
@@ -332,8 +332,8 @@ Deno.test("any decides the earliest Ready source even when a listener dispatches
 Deno.test("any, read after its sources dispatched, picks the earliest in order", () => {
 	// Given: two sources that have both dispatched, the later one first
 	const { panics } = recordingPanics();
-	const a = new DispatchController<string>(panics.catchUnwind);
-	const b = new DispatchController<string>(panics.catchUnwind);
+	const a = new DispatchController<string>({ panics });
+	const b = new DispatchController<string>({ panics });
 	b.dispatch("b");
 	a.dispatch("a");
 	const either = DispatchSignal.any([a.signal, b.signal]);
@@ -351,12 +351,12 @@ Deno.test("any, read after its sources dispatched, picks the earliest in order",
 Deno.test("it bridges to AbortSignal both ways, for fetch and friends", async () => {
 	// Given: a dispatch signal and a platform AbortController
 	const { panics } = recordingPanics();
-	const cancel = new DispatchController<string>(panics.catchUnwind);
+	const cancel = new DispatchController<string>({ panics });
 	const forFetch = cancel.signal.toAbortSignal();
 	const platform = new AbortController();
 	const fromPlatform = DispatchSignal.fromAbortSignal({
 		signal: platform.signal,
-		catchUnwind: panics.catchUnwind,
+		panics,
 	});
 	const heard = fromPlatform.wait();
 
@@ -377,7 +377,7 @@ Deno.test("a throwing listener on an aborted platform signal is a reported panic
 	const platform = new AbortController();
 	const fromPlatform = DispatchSignal.fromAbortSignal({
 		signal: platform.signal,
-		catchUnwind: panics.catchUnwind,
+		panics,
 	});
 	fromPlatform.whenDispatched(() => {
 		throw new Error("listener bug");
@@ -396,7 +396,7 @@ Deno.test("a throwing listener on an aborted platform signal is a reported panic
 Deno.test("toVow makes a new Vow, settled synchronously", () => {
 	// Given: a signal and two vows of it
 	const { panics } = recordingPanics();
-	const controller = new DispatchController<number>(panics.catchUnwind);
+	const controller = new DispatchController<number>({ panics });
 	const first = controller.signal.toVow();
 	const second = controller.signal.toVow();
 
@@ -413,7 +413,7 @@ Deno.test("dispatched and never are signals with no controller", () => {
 	const { panics } = recordingPanics();
 	const done = DispatchSignal.dispatched({
 		value: "done",
-		catchUnwind: panics.catchUnwind,
+		panics,
 	});
 	const forever = DispatchSignal.never<string>();
 
@@ -432,7 +432,7 @@ Deno.test("dispatched and never are signals with no controller", () => {
 Deno.test("an async listener is a compile error", () => {
 	// Given: a signal
 	const { panics } = recordingPanics();
-	const controller = new DispatchController<string>(panics.catchUnwind);
+	const controller = new DispatchController<string>({ panics });
 	const heard: string[] = [];
 
 	// When: a synchronous listener and an async one are added
@@ -458,7 +458,7 @@ Deno.test("DispatchSignal is covariant", () => {
 	const { panics } = recordingPanics();
 	const narrow: DispatchSignal<"done" | "cancelled"> = new DispatchController<
 		"done" | "cancelled"
-	>(panics.catchUnwind).signal;
+	>({ panics }).signal;
 
 	// When: it's used where a wider signal is expected
 	const wide: DispatchSignal<string> = narrow;

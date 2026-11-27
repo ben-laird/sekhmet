@@ -78,20 +78,24 @@ it from a synchronous listener and handle its outcome there.
 
 ## A throwing listener is a panic
 
-A listener shouldn't throw: one that does has a bug. The controller takes the
-`catchUnwind` of a `@sekhmet/panic` runtime and runs each listener inside it,
-so a throw is isolated and reported to that runtime's hook. The other
+A listener shouldn't throw: one that does has a bug. A listener runs on the
+dispatcher's stack, not on the stack of the code that added it, so nobody is
+waiting to catch its throw. That is why the controller takes a
+`PanicBoundary` from `@sekhmet/panic` (`{ panics }`) and runs each listener
+inside its `catchUnwind`, so a throw is isolated and reported to that
+runtime's hook. The other
 listeners still run, the signal is still dispatched, and `dispatch` returns
 normally.
 
-A hook that throws while reporting is a double fault, which `catchUnwind`
+A hook that throws while reporting is a double fault, which the boundary
 turns into a panic of its own. That one does propagate, since the runtime can
 no longer report it. Even then the dispatch completes first: every queued
 listener runs in order, the queue drains, and later listeners still run at
 once. Then `dispatch` rethrows the first such panic.
 
-The controller takes only `catchUnwind`, not the whole runtime, because that
-is all it needs: `new DispatchController<T>(runtime.catchUnwind)`. Derived
+The controller takes a `PanicBoundary`, the runtime narrowed to
+`catchUnwind` and `resumeUnwind`, so it can never replace the hook; pass the
+runtime itself: `new DispatchController<T>({ panics: runtime })`. Derived
 signals need no runtime of their own, since each of their listeners runs
 inside a root controller's boundary.
 

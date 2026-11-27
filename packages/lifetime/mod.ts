@@ -49,11 +49,7 @@
  */
 
 export { Adoption, type AdoptionVariants } from "./src/adoption.ts";
-export {
-	type Cleanup,
-	Lifetime,
-	type LifetimePanics,
-} from "./src/lifetime.ts";
+export { type Cleanup, Lifetime } from "./src/lifetime.ts";
 export {
 	type EndFailure,
 	type EndReport,

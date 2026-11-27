@@ -1,16 +1,20 @@
 /**
  * Exercises `@sekhmet/workflow`: each helper panics through a panic runtime,
- * and its guard recognizes the payload, through the root and the subpaths.
+ * whose boundary settles sync work at once, and its guard recognizes the
+ * payload, through the root and the subpaths.
  * The 0.2.0 checks `defined`, `satisfies` and `invariantEqual` pass on good
  * values and panic with their own `cause.check.kind` on bad ones.
  *
  * @module
  */
 
+import { expectReady } from "@sekhmet/enum/poll/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
+import type { Outcome } from "@sekhmet/panic/outcome/mini/core";
 import { unwrapPanicked } from "@sekhmet/panic/outcome/mini/panic";
 import { isOk } from "@sekhmet/panic/outcome/mini/predicates";
 import { unwrap } from "@sekhmet/panic/outcome/mini/unwrap";
+import { poll } from "@sekhmet/vow/mini";
 import { isTodoPanic, todo } from "@sekhmet/workflow";
 import { invariant, isInvariantPanic } from "@sekhmet/workflow/invariant";
 import { defined } from "@sekhmet/workflow/invariant/defined";
@@ -29,12 +33,16 @@ function checkKind(payload: unknown): string | undefined {
 
 function exerciseChecks(): void {
 	const runtime = definePanicRuntime();
+	// Sync work settles the boundary's vow before catchUnwind returns
+	const catchNow = <T>(work: () => T): Outcome<T, never, unknown> => {
+		return expectReady(poll(runtime.catchUnwind(work)), "sync work");
+	};
 	runtime.setHook(() => {});
 	const absent: string | null = JSON.parse("null");
 	expectEqual({
 		label: "defined returns a present value and keeps 0",
 		actual: unwrap(
-			runtime.catchUnwind(() => {
+			catchNow(() => {
 				return [
 					defined("Ada", { expectedBehavior: "a name is set" }),
 					defined(0, { expectedBehavior: "a count is set" }),
@@ -44,7 +52,7 @@ function exerciseChecks(): void {
 		expected: ["Ada", 0],
 	});
 	const fromDefined = unwrapPanicked(
-		runtime.catchUnwind(() => {
+		catchNow(() => {
 			return defined(absent, { expectedBehavior: "a name is set" });
 		}),
 	);
@@ -55,19 +63,19 @@ function exerciseChecks(): void {
 	expectEqual({
 		label: "satisfies returns an accepted value",
 		actual: unwrap(
-			runtime.catchUnwind(() => {
+			catchNow(() => {
 				return satisfies(4, { predicate: isEven, expectedBehavior: "even" });
 			}),
 		),
 		expected: 4,
 	});
 	const fromSatisfies = unwrapPanicked(
-		runtime.catchUnwind(() => {
+		catchNow(() => {
 			return satisfies(3, { predicate: isEven, expectedBehavior: "even" });
 		}),
 	);
 
-	const passedEqual = runtime.catchUnwind(() => {
+	const passedEqual = catchNow(() => {
 		invariantEqual({
 			actual: Number.NaN,
 			expected: Number.NaN,
@@ -75,7 +83,7 @@ function exerciseChecks(): void {
 		});
 	});
 	const fromEqual = unwrapPanicked(
-		runtime.catchUnwind(() => {
+		catchNow(() => {
 			invariantEqual({ actual: 1, expected: 2, expectedBehavior: "1 is 2" });
 		}),
 	);
@@ -94,13 +102,17 @@ function exerciseChecks(): void {
 /** Runs the exercise. */
 export function exercise(): void {
 	const runtime = definePanicRuntime();
+	// Sync work settles the boundary's vow before catchUnwind returns
+	const catchNow = <T>(work: () => T): Outcome<T, never, unknown> => {
+		return expectReady(poll(runtime.catchUnwind(work)), "sync work");
+	};
 	const reported: string[] = [];
 	runtime.setHook(({ payload }) => {
 		reported.push(payload instanceof Error ? payload.name : "?");
 	});
 
 	const fromTodo = unwrapPanicked(
-		runtime.catchUnwind(() => {
+		catchNow(() => {
 			return todo({
 				description: "export to CSV",
 				subtasks: [{ description: "escape quotes", complete: true }],
@@ -119,21 +131,19 @@ export function exercise(): void {
 		],
 	});
 
-	const fromUnimplemented = unwrapPanicked(
-		runtime.catchUnwind(() => unimplemented()),
-	);
+	const fromUnimplemented = unwrapPanicked(catchNow(() => unimplemented()));
 	const cyclic: Record<string, unknown> = { big: 1n };
 	cyclic.self = cyclic;
 	const untyped = JSON.parse("null") ?? cyclic;
 	const fromUnreachable = unwrapPanicked(
-		runtime.catchUnwind(() => {
+		catchNow(() => {
 			const flag: true = untyped;
 			if (flag === true) return;
 			unreachable({ value: flag });
 		}),
 	);
 	const fromInvariant = unwrapPanicked(
-		runtime.catchUnwind(() => {
+		catchNow(() => {
 			invariant(false, { expectedBehavior: "false should be true" });
 		}),
 	);

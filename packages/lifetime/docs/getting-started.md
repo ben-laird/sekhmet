@@ -224,7 +224,7 @@ const request = app.child({
 	fromParent: (because): RequestCause => ({ kind: "app ended", because }),
 });
 const forFetch = request.ending.toAbortSignal();
-const disconnect = new DispatchController<RequestCause>(panics.catchUnwind);
+const disconnect = new DispatchController<RequestCause>({ panics });
 request.endWhen(disconnect.signal);
 
 disconnect.dispatch({ kind: "client gone" });

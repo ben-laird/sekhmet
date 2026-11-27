@@ -6,7 +6,8 @@
  * @module
  */
 
-import { Enum, isolate, type Split } from "@sekhmet/enum/core/mini";
+import { Enum, isolate, type Split, union } from "@sekhmet/enum/core/mini";
+import { isReady } from "@sekhmet/enum/poll/mini";
 import {
 	Err,
 	isErr,
@@ -14,17 +15,17 @@ import {
 	type Result,
 	unwrapErr,
 } from "@sekhmet/enum/result/mini";
-import { Panic } from "@sekhmet/panic";
+import { Panic, type PanicBoundary } from "@sekhmet/panic";
 import {
 	isPanicked,
 	type Outcome,
 	unwrap as unwrapOutcome,
 	unwrapPanicked,
 } from "@sekhmet/panic/outcome/mini";
-import { map, resolved, type Vow, vowWithResolver } from "@sekhmet/vow/mini";
-import { Lifetime, type LifetimePanics } from "./lifetime.ts";
+import { andThen, map, poll, resolved, type Vow } from "@sekhmet/vow/mini";
+import { Lifetime } from "./lifetime.ts";
 import type { EndReport } from "./phase.ts";
-import { asPanic, deliver, isThenable } from "./teardown.ts";
+import { asPanic } from "./teardown.ts";
 
 /**
  * The variants of {@linkcode SetupEnd}.
@@ -169,8 +170,9 @@ export class Resource<I, T, C> {
 	 *
 	 * A double fault in `init` (the hook throwing while it reports `init`'s
 	 * throw) follows `Lifetime.end`'s rule: in a synchronous `init`, setup
-	 * is torn down and `start` rethrows the `Panic (PanicHook)`; in an async
-	 * one, it is the `Err`'s panic.
+	 * is torn down and `start` rethrows the `Panic (PanicHook)`. In an async
+	 * one, `init`'s panic is still the `Err`'s, and the `Panic (PanicHook)`
+	 * escapes as an unhandled rejection, as `catchUnwind`'s contract says.
 	 *
 	 * @param options The input; the panic runtime; and the lifetime's
 	 *   dispose cause, for `using`, optional
@@ -219,7 +221,7 @@ export class Resource<I, T, C> {
 		disposeCause,
 	}: {
 		readonly input: I;
-		readonly panics: LifetimePanics;
+		readonly panics: PanicBoundary;
 		readonly disposeCause?: C;
 	}): Vow<Result<Lifetime<T, C>, Panic<unknown>>> {
 		const setup = new Lifetime<undefined, SetupEnd<C>>({
@@ -260,12 +262,9 @@ export class Resource<I, T, C> {
 			return afterSetup(failure);
 		};
 
-		let caught: Outcome<{ readonly returned: T | PromiseLike<T> }, never>;
+		let caught: Vow<Outcome<T, never, unknown>>;
 		try {
-			// Boxed, so catchUnwind's promise guard sees an object, not a maybe-promise.
-			caught = panics.catchUnwind(() => ({
-				returned: this.#init(input, setup),
-			}));
+			caught = panics.catchUnwind(() => this.#init(input, setup));
 		} catch (doubleFault: unknown) {
 			try {
 				fail(initFailed(doubleFault));
@@ -274,48 +273,29 @@ export class Resource<I, T, C> {
 			}
 			throw doubleFault;
 		}
-		if (isPanicked(caught)) {
-			return fail(initFailed(unwrapPanicked(caught)));
-		}
-		const { returned } = unwrapOutcome(caught);
-		if (!isThenable(returned)) {
-			return resolved(succeed(returned));
+		const now = poll(caught);
+		if (isReady(now)) {
+			const settled = union(now);
+			if (isPanicked(settled)) {
+				return fail(initFailed(unwrapPanicked(settled)));
+			}
+			return resolved(succeed(unwrapOutcome(settled)));
 		}
 
-		const { vow, resolve } =
-			vowWithResolver<Result<Lifetime<T, C>, Panic<unknown>>>();
-		const settle = (
-			outcome: Vow<Result<Lifetime<T, C>, Panic<unknown>>>,
-		): void => {
-			map(outcome, (result) => {
-				deliver({ resolve, value: result, panics });
-			});
-		};
 		// In a promise continuation, a double fault from setup's teardown can't
 		// be thrown; it is in setup's report, which the Err carries.
-		const failInContinuation = (payload: unknown): void => {
-			const failure = initFailed(payload);
+		return andThen(caught, (settled) => {
+			if (!isPanicked(settled)) {
+				return resolved(succeed(unwrapOutcome(settled)));
+			}
+			const failure = initFailed(unwrapPanicked(settled));
 			try {
 				setup.end(new SetupEnd<C>("InitPanicked", failure));
 			} catch {
 				// Recorded in setup's report; see above.
 			}
-			settle(afterSetup(failure));
-		};
-		const settling = panics.catchUnwindAsync(() => returned);
-		void settling.then(
-			(settled) => {
-				if (isPanicked(settled)) {
-					failInContinuation(unwrapPanicked(settled));
-					return;
-				}
-				settle(resolved(succeed(unwrapOutcome(settled))));
-			},
-			(doubleFault: unknown) => {
-				failInContinuation(doubleFault);
-			},
-		);
-		return vow;
+			return afterSetup(failure);
+		});
 	}
 }
 

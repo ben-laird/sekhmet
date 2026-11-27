@@ -15,6 +15,7 @@
 import { match, union } from "@sekhmet/enum/core/mini/exit";
 import { isolate } from "@sekhmet/enum/core/mini/isolate";
 import { Err, Ok } from "@sekhmet/enum/result/mini";
+import type { PanicBoundary } from "@sekhmet/panic/mini/runtime";
 import {
 	type Outcome,
 	Err as OutcomeErr,
@@ -33,12 +34,7 @@ import {
 } from "@/src/core/mini/issues.ts";
 import { nodeOf, SchemaNode } from "@/src/core/mini/node.ts";
 import { type Parsing, settled, step } from "@/src/core/mini/parsing.ts";
-import {
-	type PanicBoundary,
-	type ParseOptions,
-	parse,
-	Schema,
-} from "@/src/core/mini/schema.ts";
+import { type ParseOptions, parse, Schema } from "@/src/core/mini/schema.ts";
 
 /** A child schema with its type parameters erased. */
 export type Child = Schema<unknown, unknown, unknown>;
