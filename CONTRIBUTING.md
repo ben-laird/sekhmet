@@ -416,6 +416,43 @@ holds the instance (`schema.with.or(other)`). Every namespace method needs
 its own `doc`, since the function's examples aren't rewritten for it, and
 gen-main rejects a getter, class or method name that is already taken.
 
+### Panics and panic boundaries
+
+`throw` means panic. The protocol is in
+[`.claude/patterns.md`, "Panics"](.claude/patterns.md#panics); in short, a
+panic propagates unless your code runs on a stack nobody's waiting on, and
+then the API takes a `PanicBoundary`. When you write an API:
+
+- **Take a boundary only where no caller waits.** Running a callback inside
+  your caller's call (a combinator, a resolved vow's `map`) takes no runtime
+  and lets the panic propagate. Running it later (a listener another party
+  triggers, a teardown, a promise continuation) takes
+  `panics: PanicBoundary` from `@sekhmet/panic`. Never define your own alias
+  for a slice of the runtime, and never take the whole `PanicRuntime` to
+  catch: `PanicBoundary` can't replace the hook.
+- **Catch only through the boundary.** Call `panics.catchUnwind(work)`: it
+  reports once and hands back a `Vow<Outcome<T, never, unknown>>`. Don't
+  write a private `try`/`catch` that turns a throw into an `Outcome`
+  without reporting it, and don't wrap `catchUnwind` in a package-private
+  `guard`.
+- **Read sync work at once.** A boundary settles sync work before it
+  returns: read it with `expectReady(poll(vow), "…")`. Box a value that may
+  be a thenable (`() => ({ value })`) so it isn't adopted.
+- **Classify expected failures at the edge.** A rejection is `Panicked`.
+  When it is an expected failure, return a `Result`
+  (`promise.then(Ok, Err)`) and flatten what the boundary caught with
+  `fromCaught` into `Outcome<T, E, unknown>`, never
+  `Outcome<Result<T, E>, …>`.
+- **Settle a caught panic as `Panicked(payload: unknown)`,** in an
+  `Outcome` or in a `Panicked` variant of your own enum, never as `Err` or
+  `Result<_, Panic>`; combinators pass it through.
+- **Test async double faults without provoking them.** A hook that throws
+  on async work makes an unhandled rejection by design, and tests never
+  provoke one (see `.claude/rules/lessons.md`). Hand the boundary a promise
+  subclass that keeps the promises its `then` returns, and catch the escaped
+  rejection there, as `packages/panic/src/mini/runtime.test.ts` does; then
+  run `deno task compat:test node` and `bun`.
+
 ### Infrastructure Code Conventions
 
 Code in `scripts/`, CI configuration, GitHub Actions workflows, and other
