@@ -1,6 +1,6 @@
 import type { Enum, Isolate } from "@/src/core/mini/core.ts";
-import { match } from "@/src/core/mini/exit.ts";
-import { isolate } from "@/src/core/mini/isolate.ts";
+import { match, union } from "@/src/core/mini/exit.ts";
+import { assertIsolated, isolate } from "@/src/core/mini/isolate.ts";
 import type { Result } from "@/src/result/mini/core.ts";
 import {
 	map as mapResult,
@@ -174,4 +174,32 @@ export function isPending<T>(
 	self: Poll<T>,
 ): self is Enum<Isolate<PollVariants<T>, "Pending">> & Poll<never> {
 	return isolate(self, "Pending");
+}
+
+/**
+ * Unwraps a Poll, yielding the Ready value or throwing an error with a custom
+ * message if it is still Pending.
+ *
+ * Use this when the value must already be there, such as reading work that
+ * settled synchronously; the message says why it should have been Ready.
+ *
+ * @template T - The type of the value in the Poll
+ * @param self - The Poll to unwrap
+ * @param message - Custom error message to use if the Poll is Pending
+ * @returns The Ready value
+ * @throws Error with the provided message if the Poll is Pending
+ *
+ * @example
+ * ```ts
+ * import { assertEquals, assertThrows } from "@std/assert";
+ * import { Pending, Ready, expectReady } from "@sekhmet/enum/poll/mini";
+ *
+ * assertEquals(expectReady(Ready(42), "value should be ready"), 42);
+ * assertThrows(() => expectReady(Pending(), "not yet"), Error, "not yet");
+ * ```
+ */
+export function expectReady<T>(self: Poll<T>, message: string): T {
+	assertIsolated(self, "Ready", message);
+
+	return union(self);
 }

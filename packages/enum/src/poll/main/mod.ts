@@ -222,6 +222,30 @@ export class Poll<out T> extends mini.Poll<T> {
 		Poll<never> {
 		return mini.isPending(this);
 	}
+
+	/**
+	 * Unwraps a Poll, yielding the Ready value or throwing an error with a custom
+	 * message if it is still Pending.
+	 *
+	 * Use this when the value must already be there, such as reading work that
+	 * settled synchronously; the message says why it should have been Ready.
+	 *
+	 * @param message - Custom error message to use if the Poll is Pending
+	 * @returns The Ready value
+	 * @throws Error with the provided message if the Poll is Pending
+	 * @example
+	 * ```ts
+	 * import { assertEquals, assertThrows } from "@std/assert";
+	 * import { Pending, Ready } from "@sekhmet/enum/poll";
+	 *
+	 * assertEquals(Ready(42).expectReady("value should be ready"), 42);
+	 * assertThrows(() => Pending().expectReady("not yet"), Error, "not yet");
+	 * ```
+	 * @see {@link mini.expectReady}
+	 */
+	expectReady(message: string): T {
+		return mini.expectReady(this, message);
+	}
 }
 
 /**

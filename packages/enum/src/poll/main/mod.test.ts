@@ -1,4 +1,9 @@
-import { assertEquals, assertInstanceOf, unreachable } from "@std/assert";
+import {
+	assertEquals,
+	assertInstanceOf,
+	assertThrows,
+	unreachable,
+} from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import * as coreMini from "@/src/core/mini/mod.ts";
 import { Err, Ok, Result } from "@/src/result/main/mod.ts";
@@ -19,6 +24,19 @@ Deno.test("Poll methods chain on main constructors", () => {
 	assertEquals(mappedReady.isReady(), true);
 	assertEquals(coreMini.union(mappedReady), "10");
 	assertEquals(mappedPending.isPending(), true);
+});
+
+Deno.test("Poll.expectReady unwraps a chained Ready and throws on Pending", () => {
+	// Given: a main Ready and a main Pending
+	const ready = Ready(5);
+	const pending = Pending<number>();
+
+	// When: mapping, then expecting each to be ready
+	const value = ready.map((n) => n * 2).expectReady("should be ready");
+
+	// Then: the Ready value comes out, and Pending throws the message
+	assertEquals(value, 10);
+	assertThrows(() => pending.expectReady("not yet"), Error, "not yet");
 });
 
 Deno.test("main Poll is an instance of mini Poll and mini Enum", () => {
