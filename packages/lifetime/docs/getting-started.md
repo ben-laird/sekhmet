@@ -108,7 +108,7 @@ is released the same way. Its `start` returns a vow, settled at once when
 
 ```ts
 import { isolate, union } from "@sekhmet/enum/core/mini";
-import { unwrap } from "@sekhmet/enum/result/mini";
+import { unwrap } from "@sekhmet/panic/outcome/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { value } from "@sekhmet/vow/mini";
 import { Resource } from "@sekhmet/lifetime";
@@ -140,9 +140,9 @@ assertEquals(log, [
 ]);
 ```
 
-`start` gave back a `Result`: `Ok` with the connection's lifetime, or `Err`
-with a panic if `init` had thrown. Here it was `Ok`, and ending the lifetime
-ran `deinit` with the cause.
+`start` gave back an `Outcome` from `@sekhmet/panic`: `Ok` with the
+connection's lifetime, or `Panicked` with the panic if `init` had thrown.
+Here it was `Ok`, and ending the lifetime ran `deinit` with the cause.
 
 ## Tear down with await using
 
@@ -151,7 +151,7 @@ before it runs the next one, and `await using` ends it when the block exits.
 For that, the lifetime needs a dispose cause, the cause `using` ends it with:
 
 ```ts
-import { unwrap } from "@sekhmet/enum/result/mini";
+import { unwrap } from "@sekhmet/panic/outcome/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { wait } from "@sekhmet/vow/mini";
 import { Lifetime, Resource } from "@sekhmet/lifetime";

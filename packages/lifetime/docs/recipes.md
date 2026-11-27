@@ -22,7 +22,7 @@ connected first.
    everything, last connected first.
 
 ```ts
-import { unwrap } from "@sekhmet/enum/result/mini";
+import { unwrap } from "@sekhmet/panic/outcome/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { wait } from "@sekhmet/vow/mini";
 import { Lifetime, Resource } from "@sekhmet/lifetime";
@@ -86,10 +86,11 @@ assertEquals(log, [
 ]);
 ```
 
-A connection whose `init` fails comes back as `Err` and never joins the app,
-so there is nothing of it to disconnect. To give up on the rest when one
-fails, check the `Result` before adopting and let the block exit: the
-connections already adopted are still released.
+A connection whose `init` panics comes back as `Panicked` and never joins the
+app, so there is nothing of it to disconnect. Here `unwrap` throws its payload
+again, so the block exits, and the connections already adopted are still
+released. To carry on without it instead, check the `Outcome` with
+`isPanicked` before adopting.
 
 ## How to cancel fetch when a lifetime ends
 
@@ -201,7 +202,7 @@ a `SetupEnd`: `Ended(cause)` after a normal end, or `InitPanicked(panic)` if
 
 ```ts
 import { isolate, union } from "@sekhmet/enum/core/mini";
-import { unwrap } from "@sekhmet/enum/result/mini";
+import { unwrap } from "@sekhmet/panic/outcome/mini";
 import { definePanicRuntime } from "@sekhmet/panic";
 import { value, type Vow } from "@sekhmet/vow/mini";
 import { Resource } from "@sekhmet/lifetime";

@@ -1,6 +1,5 @@
 import { isolate, match, union } from "@sekhmet/enum/core/mini";
 import { Some } from "@sekhmet/enum/option/mini";
-import { isErr, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 import {
 	definePanicRuntime,
 	isPanicHookFailure,
@@ -8,12 +7,19 @@ import {
 	type PanicRuntime,
 } from "@sekhmet/panic";
 import {
+	isPanicked,
+	type Outcome,
+	unwrap,
+	unwrapPanicked,
+} from "@sekhmet/panic/outcome/mini";
+import {
 	isResolved,
 	type Vow,
 	value as vowValue,
 	wait,
 } from "@sekhmet/vow/mini";
 import { assert, assertEquals, assertThrows } from "@std/assert";
+import { assertType, type IsExact } from "@std/testing/types";
 import {
 	isSetupTeardownPanic,
 	Lifetime,
@@ -157,7 +163,28 @@ Deno.test("an async init settles later, and `await using` tears it down", async 
 	assertEquals(log, ["open pool of 4", "size 4", "drain pool: shutdown"]);
 });
 
-Deno.test("an init that panics returns Err, after releasing what it had acquired", async () => {
+Deno.test("start settles a Vow of an Outcome with no Err channel", () => {
+	// Given: a resource
+	const { panics } = recordingPanics();
+	const plain = new Resource<string, string, Cause>({
+		init: (input) => input,
+		deinit: () => {},
+	});
+
+	// When: it's started
+	const starting = plain.start({ input: "a", panics });
+
+	// Then: Ok of a lifetime, or Panicked of an unknown payload, never Err
+	assertType<
+		IsExact<
+			typeof starting,
+			Vow<Outcome<Lifetime<string, Cause>, never, unknown>>
+		>
+	>(true);
+	unwrap(settled(starting)).end("done");
+});
+
+Deno.test("an init that panics settles Panicked, after releasing what it had acquired", async () => {
 	// Given: a resource whose init acquires something, then throws (sync) or rejects (async)
 	const { panics, reported } = recordingPanics();
 	const released: string[] = [];
@@ -176,10 +203,11 @@ Deno.test("an init that panics returns Err, after releasing what it had acquired
 	const syncResult = settled(flaky.start({ input: "sync", panics }));
 	const asyncResult = await wait(flaky.start({ input: "async", panics }));
 
-	// Then: both are Err with a Panic, reported to the hook; init's acquisitions learned why they were released
-	assert(isErr(syncResult) && unwrapErr(syncResult) instanceof Panic);
-	assert(isErr(asyncResult) && unwrapErr(asyncResult) instanceof Panic);
-	assertEquals(unwrapErr(syncResult).name, "Panic (InitFailed)");
+	// Then: both are Panicked with a Panic, reported to the hook; init's acquisitions learned why they were released
+	assert(isPanicked(syncResult) && isPanicked(asyncResult));
+	const [syncPanic, asyncPanic] = [syncResult, asyncResult].map(unwrapPanicked);
+	assert(syncPanic instanceof Panic && asyncPanic instanceof Panic);
+	assertEquals(syncPanic.name, "Panic (InitFailed)");
 	assertEquals(released, [
 		"sync: init panicked: handshake failed",
 		"async: init panicked: timed out",
@@ -187,7 +215,7 @@ Deno.test("an init that panics returns Err, after releasing what it had acquired
 	assertEquals(reported.length, 2);
 });
 
-Deno.test("an init's async setup teardown is awaited before start settles with Err", async () => {
+Deno.test("an init's async setup teardown is awaited before start settles as Panicked", async () => {
 	// Given: an init that acquires something released asynchronously, then throws
 	const { panics } = recordingPanics();
 	let released = false;
@@ -207,12 +235,12 @@ Deno.test("an init's async setup teardown is awaited before start settles with E
 	const pendingAtFirst = !isResolved(starting);
 	const result = await wait(starting);
 
-	// Then: Err only once setup was released
+	// Then: Panicked only once setup was released
 	assert(pendingAtFirst);
-	assert(isErr(result) && released);
+	assert(isPanicked(result) && released);
 });
 
-Deno.test("an init panic whose setup teardown fails too returns both in one Err, each reported once", async () => {
+Deno.test("an init panic whose setup teardown fails too settles both in one payload, each reported once", async () => {
 	// Given: a resource whose init acquires something that fails to release, then throws (sync) or rejects (async)
 	const { panics, reported } = recordingPanics();
 	const flaky = new Resource<"sync" | "async", never, Cause>({
@@ -237,11 +265,11 @@ Deno.test("an init panic whose setup teardown fails too returns both in one Err,
 		await wait(flaky.start({ input: "async", panics })),
 	];
 
-	// Then: each Err carries init's panic and setup's failures, in run order;
-	// the hook saw each original panic once, and never the carrier
+	// Then: each payload carries init's panic and setup's failures, in run
+	// order; the hook saw each original panic once, and never the carrier
 	const carried = results.map((result) => {
-		assert(isErr(result));
-		const failure = unwrapErr(result);
+		assert(isPanicked(result));
+		const failure = unwrapPanicked(result);
 		assert(isSetupTeardownPanic(failure));
 		assertEquals(failure.name, "Panic (SetupTeardownFailed)");
 		return [
@@ -377,7 +405,7 @@ Deno.test("a double fault in a sync init tears setup down, then start rethrows i
 	]);
 });
 
-Deno.test("a double fault in an async init is never thrown: init's panic is the Err's", async () => {
+Deno.test("a double fault in an async init is never thrown: init's panic is the payload", async () => {
 	// Given: under a throwing hook, an init that acquires something, then rejects
 	const released: string[] = [];
 	const timedOut = new Error("timed out");
@@ -397,9 +425,11 @@ Deno.test("a double fault in an async init is never thrown: init's panic is the 
 	reject();
 	const result = await wait(started);
 
-	// Then: Err with init's own panic, setup was released, and the PanicHook escaped
-	assert(isErr(result));
-	assertEquals(unwrapErr(result).cause, timedOut);
+	// Then: Panicked with init's own panic, setup was released, and the PanicHook escaped
+	assert(isPanicked(result));
+	const payload = unwrapPanicked(result);
+	assert(payload instanceof Panic);
+	assertEquals(payload.cause, timedOut);
 	assertEquals(released.length, 1);
 	assert(isPanicHookFailure(await escaped));
 });

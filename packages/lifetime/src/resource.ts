@@ -8,17 +8,13 @@
 
 import { Enum, isolate, type Split, union } from "@sekhmet/enum/core/mini";
 import { isReady } from "@sekhmet/enum/poll/mini";
-import {
-	Err,
-	isErr,
-	Ok,
-	type Result,
-	unwrapErr,
-} from "@sekhmet/enum/result/mini";
+import { isErr, unwrapErr } from "@sekhmet/enum/result/mini";
 import { Panic, type PanicBoundary } from "@sekhmet/panic";
 import {
 	isPanicked,
 	type Outcome,
+	Ok as OutcomeOk,
+	Panicked,
 	unwrap as unwrapOutcome,
 	unwrapPanicked,
 } from "@sekhmet/panic/outcome/mini";
@@ -97,8 +93,8 @@ export class SetupEnd<out C> extends Enum<Variants<C>> {}
  * @example
  * ```ts
  * import { isolate, union } from "@sekhmet/enum/core/mini";
- * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { unwrap } from "@sekhmet/panic/outcome/mini";
  * import { value } from "@sekhmet/vow/mini";
  * import { Resource } from "@sekhmet/lifetime";
  * import { assert, assertEquals } from "@std/assert";
@@ -158,32 +154,38 @@ export class Resource<I, T, C> {
 	 * Acquires a `T` for `input`. It settles synchronously when `init` is
 	 * sync, so anything that may be sync or async comes back as a `Vow`.
 	 *
-	 * A panic in `init` (a throw, or a rejection) is reported to the panic
-	 * hook and returned as `Err`, after `setup` has been torn down with
-	 * `InitPanicked(panic)`. An expected failure is `init` returning a
-	 * `Result` of its own.
+	 * It settles an `Outcome`, as the panic boundary it runs `init` under
+	 * does: `Ok(lifetime)`, or `Panicked(payload)` when `init` panicked (a
+	 * throw, or a rejection). The panic was reported to the hook once, and
+	 * `setup` was torn down with `InitPanicked(panic)` first. There is no
+	 * `Err`: an expected failure is `init` returning a `Result` of its own.
+	 * Unwrapping a `Panicked` throws the payload again, as Rust's
+	 * `resume_unwind` does.
 	 *
-	 * If tearing `setup` down fails too, the `Err` carries both: a
-	 * `Panic (SetupTeardownFailed)` whose cause, a
-	 * {@linkcode SetupTeardownFailure}, holds `init`'s panic and each of
-	 * setup's cleanup panics. Read it with {@linkcode isSetupTeardownPanic}.
+	 * The payload is `init`'s panic, a `Panic (InitFailed)` around what it
+	 * threw unless that already was a `Panic`. If tearing `setup` down fails
+	 * too, the payload carries both: a `Panic (SetupTeardownFailed)` whose
+	 * cause, a {@linkcode SetupTeardownFailure}, holds `init`'s panic and
+	 * each of setup's cleanup panics. Read it with
+	 * {@linkcode isSetupTeardownPanic}.
 	 *
 	 * A double fault in `init` (the hook throwing while it reports `init`'s
 	 * throw) follows `Lifetime.end`'s rule: in a synchronous `init`, setup
 	 * is torn down and `start` rethrows the `Panic (PanicHook)`. In an async
-	 * one, `init`'s panic is still the `Err`'s, and the `Panic (PanicHook)`
+	 * one, `init`'s panic is still the payload, and the `Panic (PanicHook)`
 	 * escapes as an unhandled rejection, as `catchUnwind`'s contract says.
 	 *
 	 * @param options The input; the panic runtime; and the lifetime's
 	 *   dispose cause, for `using`, optional
-	 * @returns A vow of the started lifetime, or of `init`'s panic
+	 * @returns A vow of `Ok` of the started lifetime, or `Panicked` of
+	 *   `init`'s panic
 	 * @throws The `Panic (PanicHook)` of a double fault in a synchronous
 	 *   `init`
 	 *
 	 * @example
 	 * ```ts
-	 * import { unwrap } from "@sekhmet/enum/result/mini";
 	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 * import { unwrap } from "@sekhmet/panic/outcome/mini";
 	 * import { wait } from "@sekhmet/vow/mini";
 	 * import { Resource } from "@sekhmet/lifetime";
 	 * import { assertEquals } from "@std/assert";
@@ -223,12 +225,13 @@ export class Resource<I, T, C> {
 		readonly input: I;
 		readonly panics: PanicBoundary;
 		readonly disposeCause?: C;
-	}): Vow<Result<Lifetime<T, C>, Panic<unknown>>> {
+	}): Vow<Outcome<Lifetime<T, C>, never, unknown>> {
+		type Started = Outcome<Lifetime<T, C>, never, unknown>;
 		const setup = new Lifetime<undefined, SetupEnd<C>>({
 			value: undefined,
 			panics,
 		});
-		const succeed = (value: T): Result<Lifetime<T, C>, Panic<unknown>> => {
+		const succeed = (value: T): Started => {
 			const lifetime = new Lifetime<T, C>({
 				value,
 				panics,
@@ -244,20 +247,16 @@ export class Resource<I, T, C> {
 				lifetime.defer((cause) => endSetup({ setup, cause }));
 			}
 			lifetime.defer((cause) => this.#deinit(value, cause));
-			return Ok(lifetime);
+			return OutcomeOk(lifetime);
 		};
-		// Settles with Err once setup is torn down, carrying its failures too.
-		const afterSetup = (
-			failure: Panic<unknown>,
-		): Vow<Result<Lifetime<T, C>, Panic<unknown>>> => {
+		// Settles as Panicked once setup is torn down, with its failures too.
+		const afterSetup = (failure: Panic<unknown>): Vow<Started> => {
 			return map(setup.ended.toVow(), (report) => {
-				return Err(withSetupFailures({ init: failure, report }));
+				return Panicked(withSetupFailures({ init: failure, report }));
 			});
 		};
 		// Tears setup down; throws only on a synchronous double fault in it.
-		const fail = (
-			failure: Panic<unknown>,
-		): Vow<Result<Lifetime<T, C>, Panic<unknown>>> => {
+		const fail = (failure: Panic<unknown>): Vow<Started> => {
 			setup.end(new SetupEnd<C>("InitPanicked", failure));
 			return afterSetup(failure);
 		};
@@ -283,7 +282,7 @@ export class Resource<I, T, C> {
 		}
 
 		// In a promise continuation, a double fault from setup's teardown can't
-		// be thrown; it is in setup's report, which the Err carries.
+		// be thrown; it is in setup's report, which the payload carries.
 		return andThen(caught, (settled) => {
 			if (!isPanicked(settled)) {
 				return resolved(succeed(unwrapOutcome(settled)));
@@ -304,16 +303,16 @@ function initFailed(payload: unknown): Panic<unknown> {
 }
 
 /**
- * The cause of the panic `start` returns when `init` panicked and tearing
- * its `setup` down failed too: `init`'s panic, and each of setup's cleanup
+ * The cause of the panic `start` settles as `Panicked` when `init` panicked
+ * and tearing its `setup` down failed too: `init`'s panic, and each of setup's cleanup
  * panics, in the order they ran. Each was reported to the panic hook once,
  * when it happened; the panic that carries them is not reported again.
  *
  * @example
  * ```ts
  * import { isolate, union } from "@sekhmet/enum/core/mini";
- * import { isErr, unwrapErr } from "@sekhmet/enum/result/mini";
  * import { definePanicRuntime } from "@sekhmet/panic";
+ * import { isPanicked, unwrapPanicked } from "@sekhmet/panic/outcome/mini";
  * import { value } from "@sekhmet/vow/mini";
  * import { isSetupTeardownPanic, Resource } from "@sekhmet/lifetime";
  * import { assert, assertEquals } from "@std/assert";
@@ -333,8 +332,8 @@ function initFailed(payload: unknown): Panic<unknown> {
  * const started = value(flaky.start({ input: undefined, panics }));
  * assert(isolate(started, "Some"));
  * const result = union(started);
- * assert(isErr(result));
- * const failure = unwrapErr(result);
+ * assert(isPanicked(result));
+ * const failure = unwrapPanicked(result);
  * assert(isSetupTeardownPanic(failure));
  * assertEquals(failure.cause.init.message, "handshake failed");
  * assertEquals(

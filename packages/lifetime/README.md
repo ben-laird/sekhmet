@@ -56,7 +56,7 @@ assertEquals(order, ["close db: shutdown", "close logs"]);
 | Export                                                 | Does                                                                         |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | `new Resource<I, T, C>({ init, deinit })`              | the rising edge: `init(input, setup)` acquires, `deinit(value, cause)` frees |
-| `resource.start({ input, panics, disposeCause? })`     | a `Vow` of `Ok(lifetime)`, or `Err(panic)` if `init` panicked                |
+| `resource.start({ input, panics, disposeCause? })`     | a `Vow` of `Ok(lifetime)`, or `Panicked(panic)` if `init` panicked           |
 | `new Lifetime<T, C>({ value, panics, disposeCause? })` | a root lifetime holding `value`, until a parent adopts it                    |
 | `lifetime.phase()`                                     | `Alive(value)`, `Ending(cause)` or `Ended(report)`                           |
 | `lifetime.value()`, `lifetime.with(fn)`                | the value, or `fn` run on it, only while Alive                               |

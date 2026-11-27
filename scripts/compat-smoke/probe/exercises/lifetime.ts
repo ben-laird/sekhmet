@@ -7,9 +7,10 @@
  */
 
 import { isolate, union } from "@sekhmet/enum/core/mini";
-import { isErr, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { isErr, unwrapErr } from "@sekhmet/enum/result/mini";
 import { Lifetime, Resource } from "@sekhmet/lifetime";
 import { definePanicRuntime } from "@sekhmet/panic";
+import { unwrap } from "@sekhmet/panic/outcome/mini";
 import { wait } from "@sekhmet/vow/mini";
 import { expectEqual } from "../check.ts";
 
