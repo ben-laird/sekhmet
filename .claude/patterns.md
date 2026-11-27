@@ -683,6 +683,76 @@ Deno.test("complex feature behavior", async (t) => {
 });
 ```
 
+## Panics
+
+A panic propagates, unless your code runs on a stack nobody's waiting on.
+Then the API takes a `PanicBoundary`, which catches the panic, reports it
+once and hands back a `Vow<Outcome>`. From there it is a `Panicked` value
+that combinators pass through untouched.
+
+1. **Propagate by default.** Code that runs your callback synchronously,
+   inside its caller's own call, lets a panic propagate and takes no
+   runtime. Examples: `Option.map`, or `vow.map` on a resolved vow.
+2. **Catch only where no caller is waiting.** An API that runs user code on
+   a stack the caller doesn't own takes `panics: PanicBoundary`: later, from
+   a timer or scheduler, from another party's `send`, or inside a promise
+   callback. In practice that is the "app" builders (machine, channels,
+   lifetimes, the breaker) and anything that settles asynchronously.
+3. **Never catch without reporting.** Code without a runtime never catches a
+   panic into an `Outcome`: a `Panicked` that nobody reported vanishes
+   silently if dropped. The only two legal moves are to propagate the panic,
+   or to catch it at a boundary that reports it.
+4. **The boundary that catches a panic reports it, exactly once,** and hands
+   back a `Vow<Outcome<T, never, unknown>>`.
+5. **After that, a panic is a value.** In a result it is `Outcome`'s
+   `Panicked(payload)`. An enum with its own terminal for it uses a variant
+   named `Panicked` with an `unknown` payload and the same meaning.
+6. **Combinators pass `Panicked` through untouched.** They never convert it
+   to `Err`/`Failed`, swallow it, or report it again.
+7. **Unwrapping a `Panicked` rethrows the same payload** (`resumeUnwind`),
+   so it isn't reported twice.
+8. **No ambient or global runtime.**
+
+### Taking and using a boundary
+
+```ts
+import { expectReady } from "@sekhmet/enum/poll/mini";
+import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime, type PanicBoundary } from "@sekhmet/panic";
+import {
+	fromCaught,
+	Err as OutcomeErr,
+	Ok as OutcomeOk,
+} from "@sekhmet/panic/outcome/mini";
+import { poll, wait } from "@sekhmet/vow";
+import { assertEquals } from "@std/assert";
+
+// An API that runs user code later takes the runtime, narrowed
+function later({ panics }: { readonly panics: PanicBoundary }) {
+	// Sync work settles at once; read it with poll and expectReady
+	const now = expectReady(poll(panics.catchUnwind(() => 1)), "sync");
+	// Async work is adopted; an expected failure is a Result, flattened
+	const fetched = panics.catchUnwind(() => {
+		return Promise.reject("offline").then(
+			Ok<number, string>,
+			Err<number, string>,
+		);
+	});
+	return { now, fetched };
+}
+
+const { now, fetched } = later({ panics: definePanicRuntime() });
+assertEquals(now, OutcomeOk(1));
+assertEquals(fromCaught(await wait(fetched)), OutcomeErr("offline"));
+```
+
+- **`catchUnwind` always returns a `Vow`.** A returned thenable is adopted,
+  as `await` does, so a thenable returned as _data_ is flattened: box it
+  (`() => ({ thenable })`) to keep it.
+- **A hook that throws on async work** can't reject a `Vow`: the vow settles
+  as `Panicked`, and the `Panic (PanicHook)` escapes as an unhandled
+  rejection, like Rust aborting on a panic while panicking.
+
 ## Error Handling Pattern
 
 ### Using enums for result types

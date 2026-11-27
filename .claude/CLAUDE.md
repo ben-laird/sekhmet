@@ -93,7 +93,7 @@ Packages (`packages/`):
 
 - `@sekhmet/dispatch`: a typed one-shot signal, `AbortController`/
   `AbortSignal` with a typed value: `DispatchController<T>` (built with a
-  panic runtime's `catchUnwind`; `dispatch` returns the value already
+  `PanicBoundary`, `{ panics }`; `dispatch` returns the value already
   there as an `Option`) and its `DispatchSignal<T>` (`poll`,
   `whenDispatched`, `map`, `zip`, `any`, and bridges to promises, `Vow`
   and `AbortSignal`); classes only, no main/mini split
@@ -122,8 +122,10 @@ Packages (`packages/`):
 - `@sekhmet/matrix`: `matrix()` builds the Cartesian product of value arrays for
   parameterized tests
 - `@sekhmet/panic`: `Panic` error, `panic()`/`panicWithoutCause()`, a Rust-style
-  panic runtime (`definePanicRuntime()`: a reporting hook plus `catchUnwind`
-  boundaries, no global state), a metadata registry, and `Outcome<T, E, P>`
+  panic runtime (`definePanicRuntime()`: a reporting hook plus one
+  `catchUnwind` boundary returning a `Vow<Outcome>`, no global state; code
+  that runs user callbacks takes the narrowed `PanicBoundary`), a metadata
+  registry, and `Outcome<T, E, P>`
   (`@sekhmet/panic/outcome`, a main/mini feature): `Ok | Err | Panicked`,
   whose ordinary combinators pass a panic through untouched
 - `@sekhmet/primordials`: foundation primitives (`Struct`, `Subtle`, `block`,
