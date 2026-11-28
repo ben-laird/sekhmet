@@ -357,12 +357,12 @@ export function definePanicRuntime(): PanicRuntime {
 		catchUnwind: <T>(
 			fn: () => T | PromiseLike<T>,
 		): Vow<Outcome<T, never, unknown>> => {
-			let returned: PromiseLike<T>;
+			let then: Then<T>;
 			try {
-				const value = fn();
 				// Reading `then` runs user code too (a getter, a Proxy trap)
-				if (!isThenable(value)) return resolved(Ok(value));
-				returned = value;
+				const returned = classify(fn());
+				if (returned.kind === "Value") return resolved(Ok(returned.value));
+				then = returned.then;
 			} catch (payload: unknown) {
 				report(payload);
 				return resolved(Panicked(payload));
@@ -370,7 +370,7 @@ export function definePanicRuntime(): PanicRuntime {
 
 			const { vow, resolve } = vowWithResolver<Outcome<T, never, unknown>>();
 			adopt({
-				thenable: returned,
+				then,
 				report,
 				// A dependent that throws is a panic with no caller: report it
 				settle: (outcome) => {
@@ -489,11 +489,11 @@ function reportEach({
  * `then` that throws), it escapes `catchUnwind`, as sync work's does.
  */
 function adopt<T>({
-	thenable,
+	then,
 	settle,
 	report,
 }: {
-	readonly thenable: PromiseLike<T>;
+	readonly then: Then<T>;
 	readonly settle: (outcome: Outcome<T, never, unknown>) => void;
 	readonly report: (payload: unknown) => void;
 }): void {
@@ -507,22 +507,22 @@ function adopt<T>({
 		settle(Panicked(payload));
 		if (doubleFault !== undefined) throw doubleFault.thrown;
 	};
-	const follow = (next: PromiseLike<T>): void => {
+	const follow = (next: Then<T>): void => {
 		let called = false;
 		const fulfil = (value: T): void => {
 			if (called) return;
 			called = true;
-			let nested: PromiseLike<T> | undefined;
+			let nested: Returned<T>;
 			try {
-				nested = isThenable(value) ? value : undefined;
+				nested = classify(value);
 			} catch (payload: unknown) {
 				fail(payload);
 				return;
 			}
-			if (nested === undefined) {
-				settle(Ok(value));
+			if (nested.kind === "Value") {
+				settle(Ok(nested.value));
 			} else {
-				follow(nested);
+				follow(nested.then);
 			}
 		};
 		const reject = (payload: unknown): void => {
@@ -543,20 +543,47 @@ function adopt<T>({
 			};
 		};
 		try {
-			void next.then(own(fulfil), own(reject));
+			next(own(fulfil), own(reject));
 		} catch (payload: unknown) {
 			if (escaped !== undefined) throw escaped.thrown;
 			reject(payload);
 		}
 	};
-	follow(thenable);
+	follow(then);
 }
 
-/** Whether `value` is a thenable, as `await` treats it: a callable `then`. */
-function isThenable<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
-	return (
-		isObjectLike(value) && typeof Reflect.get(value, "then") === "function"
-	);
+/** A thenable's `then`, read once and bound to it. */
+type Then<T> = (
+	onFulfilled: (value: T) => void,
+	onRejected: (reason: unknown) => void,
+) => void;
+
+/** What work returned: a plain value, or a thenable to adopt. */
+type Returned<T> =
+	| { readonly kind: "Value"; readonly value: T }
+	| { readonly kind: "Thenable"; readonly then: Then<T> };
+// {}
+
+/**
+ * Tells a thenable from a plain value as `await` does: it reads `then` once
+ * and, if it is callable, keeps it bound to the value, so adopting the
+ * thenable never reads it again.
+ */
+function classify<T>(value: T | PromiseLike<T>): Returned<T> {
+	let then: Then<T> = () => {};
+	const isThenable = (
+		candidate: T | PromiseLike<T>,
+	): candidate is PromiseLike<T> => {
+		if (!isObjectLike(candidate)) return false;
+		const read: unknown = Reflect.get(candidate, "then");
+		if (typeof read !== "function") return false;
+		then = (onFulfilled, onRejected) => {
+			Reflect.apply(read, candidate, [onFulfilled, onRejected]);
+		};
+		return true;
+	};
+	if (!isThenable(value)) return { kind: "Value", value };
+	return { kind: "Thenable", then };
 }
 
 function isObjectLike(value: unknown): value is object {
