@@ -139,13 +139,9 @@ know it will never come), use the statics instead of a controller:
 ```ts
 import { DispatchSignal } from "@sekhmet/dispatch";
 import { isPending, Ready } from "@sekhmet/enum/poll/mini";
-import { definePanicRuntime } from "@sekhmet/panic";
 import { assert, assertEquals } from "@std/assert";
 
-const done = DispatchSignal.dispatched({
-	value: "done",
-	panics: definePanicRuntime(),
-});
+const done = DispatchSignal.dispatched({ value: "done" });
 const forever = DispatchSignal.never<string>();
 
 assertEquals(done.poll(), Ready("done"));

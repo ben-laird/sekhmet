@@ -277,10 +277,9 @@ Deno.test("an Unsubscribe reports true only the first time it removes a waiting 
 		zip: a.signal.zip(b.signal).whenDispatched(() => {
 			heard.push("zip");
 		}),
-		dispatched: DispatchSignal.dispatched({
-			value: "done",
-			panics,
-		}).whenDispatched(() => {}),
+		dispatched: DispatchSignal.dispatched({ value: "done" }).whenDispatched(
+			() => {},
+		),
 		never: DispatchSignal.never<string>().whenDispatched(() => {}),
 	};
 
@@ -408,13 +407,49 @@ Deno.test("toVow makes a new Vow, settled synchronously", () => {
 	assert(isResolved(first) && isResolved(second));
 });
 
+Deno.test("dispatched runs a listener in the caller's call, so its throw propagates", async (t) => {
+	await t.step("to the whenDispatched caller", () => {
+		// Given: an already-dispatched signal and a listener that throws
+		const done = DispatchSignal.dispatched({ value: "done" });
+		const bug = new Error("listener bug");
+
+		// When: the listener is added
+		const thrown = assertThrows(() => {
+			done.whenDispatched(() => {
+				throw bug;
+			});
+		});
+
+		// Then: the throw reached the caller unchanged
+		assert(thrown === bug);
+	});
+
+	await t.step(
+		"to the root boundary when reached through a later dispatch",
+		() => {
+			// Given: a controller's signal zipped with a dispatched one, and a throwing listener
+			const { panics, reported } = recordingPanics();
+			const start = new DispatchController<string>({ panics });
+			const bug = new Error("listener bug");
+			start.signal
+				.zip(DispatchSignal.dispatched({ value: 1 }))
+				.whenDispatched(() => {
+					throw bug;
+				});
+			// {}
+
+			// When: the controller dispatches later
+			start.dispatch("go");
+
+			// Then: the controller's boundary reported the throw, once
+			assertEquals(reported, [bug]);
+		},
+	);
+});
+
 Deno.test("dispatched and never are signals with no controller", () => {
 	// Given: one of each
-	const { panics } = recordingPanics();
-	const done = DispatchSignal.dispatched({
-		value: "done",
-		panics,
-	});
+	const done = DispatchSignal.dispatched({ value: "done" });
 	const forever = DispatchSignal.never<string>();
 
 	// When: each is polled

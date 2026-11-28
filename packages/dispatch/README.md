@@ -72,7 +72,7 @@ assertEquals(forFetch.reason, { kind: "cancelled", by: "user" });
 | `signal.whenDispatched(listener)`                    | runs `listener` on dispatch, or at once; returns an `Unsubscribe`  |
 | `signal.map(f)`, `signal.zip(other)`                 | a signal of `f(value)`, or of both values once both dispatch       |
 | `DispatchSignal.any(signals)`                        | a signal of the first value dispatched; `any([])` never dispatches |
-| `DispatchSignal.dispatched({ value, panics })`       | a signal already dispatched with `value`                           |
+| `DispatchSignal.dispatched({ value })`               | a signal already dispatched with `value`                           |
 | `DispatchSignal.never()`                             | a signal that never dispatches                                     |
 | `signal.wait()`, `signal.toVow()`                    | the value as a `Promise`, or as a new `Vow`                        |
 | `signal.toAbortSignal()`                             | an `AbortSignal` that aborts with the value                        |

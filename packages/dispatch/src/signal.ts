@@ -514,39 +514,39 @@ export class DispatchSignal<out T> {
 	/**
 	 * A signal already dispatched with `value`, like
 	 * `AbortSignal.abort(reason)`. Its listeners run at once, inside the
-	 * panic boundary `panics`.
+	 * `whenDispatched` call that adds them, so it takes no panic runtime: a
+	 * listener that throws propagates to that caller, as any callback's
+	 * does. Reached through another signal's listener (a `zip` with a
+	 * controller's signal), the throw lands in that root's boundary.
 	 *
 	 * @template T The type of the value
-	 * @param options The value, and the boundary its listeners run in
+	 * @param options The value
 	 * @returns A signal that has already dispatched
 	 *
 	 * @example
 	 * ```ts
 	 * import { Ready } from "@sekhmet/enum/poll/mini";
-	 * import { definePanicRuntime } from "@sekhmet/panic";
 	 * import { DispatchSignal } from "@sekhmet/dispatch";
-	 * import { assertEquals } from "@std/assert";
+	 * import { assertEquals, assertThrows } from "@std/assert";
 	 *
-	 * const done = DispatchSignal.dispatched({
-	 * 	value: "done",
-	 * 	panics: definePanicRuntime(),
-	 * });
+	 * const done = DispatchSignal.dispatched({ value: "done" });
 	 * assertEquals(done.poll(), Ready("done"));
+	 *
+	 * // The listener runs inside whenDispatched, so its throw reaches us
+	 * assertThrows(() => {
+	 * 	done.whenDispatched(() => {
+	 * 		throw new Error("listener bug");
+	 * 	});
+	 * });
 	 * ```
 	 */
-	static dispatched<T>({
-		value,
-		panics,
-	}: {
-		readonly value: T;
-		readonly panics: PanicBoundary;
-	}): DispatchSignal<T> {
+	static dispatched<T>({ value }: { readonly value: T }): DispatchSignal<T> {
 		return new DispatchSignal({
 			token: BUILT_HERE,
 			source: {
 				poll: () => Ready(value),
 				listen: (listener) => {
-					panics.catchUnwind(() => listener(value));
+					listener(value);
 					return () => false;
 				},
 			},

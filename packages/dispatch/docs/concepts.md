@@ -97,7 +97,10 @@ The controller takes a `PanicBoundary`, the runtime narrowed to
 `catchUnwind` and `resumeUnwind`, so it can never replace the hook; pass the
 runtime itself: `new DispatchController<T>({ panics: runtime })`. Derived
 signals need no runtime of their own, since each of their listeners runs
-inside a root controller's boundary.
+inside a root controller's boundary. Neither does `DispatchSignal.dispatched`:
+its listeners run at once, inside the `whenDispatched` call that adds them,
+where a caller is waiting, so a throw propagates to that caller, or to the
+root boundary whose listener added them.
 
 ## Derived signals hold no subscription
 
