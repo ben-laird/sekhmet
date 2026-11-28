@@ -4,6 +4,16 @@ All notable changes to this Package are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this Package adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-11-28
+
+### Added
+
+- poll(vow) reads a vow's state now as a Poll: Ready(value) once resolved, Pending() otherwise (#114)
+
+### Changed
+
+- **BREAKING** Remove fromPromise and FromPromiseOptions: vow no longer depends on @sekhmet/panic. Bridge a promise with a panic runtime's catchUnwind(() => promise) instead, whose rejection is Panicked; classify an expected failure with promise.then(Ok, Err) and flatten it with fromCaught (#114)
+
 ## [0.4.0] - 2026-11-20
 
 ### Added

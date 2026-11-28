@@ -4,6 +4,12 @@ All notable changes to this Package are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this Package adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-11-28
+
+### Added
+
+- Poll's expectReady(poll, message) unwraps a Ready and throws the message on Pending, like Option's expect (#114)
+
 ## [0.5.0] - 2026-11-20
 
 ### Added
