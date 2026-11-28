@@ -158,7 +158,8 @@ assertEquals(result, Err("config is missing a port"));
 
 `catchUnwind` adopts a returned promise, or any other thenable, as `await`
 does. It catches a rejection, a `then` that throws and a synchronous throw
-from the function alike, so it never leaves an unhandled rejection. Wait for
+from the function alike, so it never leaves an unhandled rejection, unless
+the hook itself throws while reporting one (see below). Wait for
 the vow with `wait` from `@sekhmet/vow`; until it settles, `poll` reads it as
 `Pending`.
 

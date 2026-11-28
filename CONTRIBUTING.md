@@ -431,7 +431,10 @@ then the API takes a `PanicBoundary`. When you write an API:
   for a slice of the runtime, and never take the whole `PanicRuntime` to
   catch: `PanicBoundary` can't replace the hook.
 - **Catch only through the boundary.** Call `panics.catchUnwind(work)`: it
-  reports once and hands back a `Vow<Outcome<T, never, unknown>>`. Don't
+  reports once and hands back a `Vow<Outcome<T, never, unknown>>`. "Once"
+  is per runtime: a payload that crosses another runtime's boundary is
+  reported there too, and a primitive payload is reported by every boundary
+  that catches it, even after `resumeUnwind`, so panic with a `Panic`. Don't
   write a private `try`/`catch` that turns a throw into an `Outcome`
   without reporting it, and don't wrap `catchUnwind` in a package-private
   `guard`.
