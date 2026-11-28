@@ -800,7 +800,7 @@ Deno.test("A hook that throws on a throwing dependent escapes its callback", asy
 	// Then: the vow still resolved, and the Panic (PanicHook) escaped
 	assertEquals(settledNow(caught), Ok(1));
 	assert(isPanicHookFailure(reason));
-	assertInstanceOf(reason.cause.payload, AggregateError);
+	assertEquals(String(reason.cause.payload), "Error: bad dependent");
 });
 
 Deno.test("Dependents of an async boundary's vow run inside it", async () => {
@@ -817,12 +817,48 @@ Deno.test("Dependents of an async boundary's vow run inside it", async () => {
 	map(caught, (outcome) => seen.push(outcome));
 	await wait(caught);
 
-	// Then: every dependent ran, and the throw was reported, not left unhandled
+	// Then: every dependent ran, and the throw itself was reported, not left unhandled
 	assertEquals(seen, [Ok(1)]);
 	assertEquals(reports.length, 1);
-	const reported = reports[0]?.payload;
-	assertInstanceOf(reported, AggregateError);
-	assertEquals(reported.errors, [bug]);
+	assertStrictEquals(reports[0]?.payload, bug);
+});
+
+Deno.test("A dependent that unwraps a Panicked doesn't report it again", async () => {
+	// Given: async work that rejects with a panic, and a dependent that unwraps it
+	const { runtime, reports } = recordingRuntime();
+	const payload = boom();
+	const caught = runtime.catchUnwind(() => Promise.reject(payload));
+	map(caught, unwrapOk);
+
+	// When: the work settles, and the dependent rethrows the same payload
+	await wait(caught);
+
+	// Then: the hook saw the payload once, never the vow's AggregateError around it
+	assertEquals(reports.length, 1);
+	assertStrictEquals(reports[0]?.payload, payload);
+});
+
+Deno.test("Several throwing dependents are each reported once", async () => {
+	// Given: async work with two dependents that throw different payloads
+	const { runtime, reports } = recordingRuntime();
+	const first = new Error("first");
+	const second = "second";
+	const caught = runtime.catchUnwind(() => Promise.resolve(1));
+	map(caught, () => {
+		throw first;
+	});
+	map(caught, () => {
+		throw second;
+	});
+
+	// When: the work settles
+	await wait(caught);
+
+	// Then: each throw was reported on its own, in order
+	assertEquals(
+		reports.map(({ payload }) => payload),
+		[first, second],
+	);
 });
 
 Deno.test("recover() converts a caught payload into an app error", () => {

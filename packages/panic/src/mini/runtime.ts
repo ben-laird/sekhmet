@@ -73,7 +73,10 @@ export interface PanicRuntime {
 	 * read it right after the call with `poll` from `@sekhmet/vow` and
 	 * `expectReady` from `@sekhmet/enum/poll/mini`. Async work settles it
 	 * later, and the vow's dependents then run inside this boundary: one that
-	 * throws is reported through the hook, as the vow's `AggregateError`.
+	 * throws is reported through the hook. Each throw is reported on its own,
+	 * not as the vow's `AggregateError`, so a dependent that rethrows a
+	 * payload already reported (unwrapping a `Panicked`) is not reported
+	 * again.
 	 * The vow and the `Outcome` in it are the mini forms, from
 	 * `@sekhmet/vow` and `@sekhmet/panic/outcome/mini`; a method-chaining
 	 * main `Vow` waits on #111.
@@ -372,7 +375,7 @@ export function definePanicRuntime(): PanicRuntime {
 					try {
 						resolve(outcome);
 					} catch (thrown: unknown) {
-						report(thrown);
+						reportEach({ thrown, report });
 					}
 				},
 			});
@@ -447,6 +450,31 @@ class HookFailurePanic extends Panic<PanicHookFailure> {
 	static is(value: unknown): value is HookFailurePanic {
 		return isObjectLike(value) && #brand in value;
 	}
+}
+
+/**
+ * Reports what a vow's `resolve` threw: the `AggregateError` of its
+ * dependents' throws, entry by entry, so a payload already reported (a
+ * dependent that unwrapped a `Panicked`) is not reported again. Every entry
+ * is reported even if the hook throws; the first such failure is rethrown.
+ */
+function reportEach({
+	thrown,
+	report,
+}: {
+	readonly thrown: unknown;
+	readonly report: (payload: unknown) => void;
+}): void {
+	const entries = thrown instanceof AggregateError ? thrown.errors : [thrown];
+	let doubleFault: { readonly thrown: unknown } | undefined;
+	for (const entry of entries) {
+		try {
+			report(entry);
+		} catch (failure: unknown) {
+			doubleFault ??= { thrown: failure };
+		}
+	}
+	if (doubleFault !== undefined) throw doubleFault.thrown;
 }
 
 /**

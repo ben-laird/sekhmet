@@ -144,7 +144,8 @@ For a vow made from a promise, whoever called `resolve` is the promise's `then`
 callback, not your code, so no caller could catch the `AggregateError`, and it
 would become an unhandled promise rejection. That is why the bridge from a
 promise lives in `@sekhmet/panic`: its `catchUnwind` resolves the vow inside the
-boundary, so the runtime's hook reports the `AggregateError` instead. A
+boundary, so the runtime's hook reports each throw in the `AggregateError`
+instead. A
 dependent that throws is a bug, which is what a panic means. Every other
 dependent still runs and the vow still resolves, just as with `resolve`.
 
