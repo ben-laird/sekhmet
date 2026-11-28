@@ -33,7 +33,7 @@ Deno.test("readonly freezes a copy of a plain object, never the input", () => {
 	const frozen = readonly(identity<{ name: string }>());
 
 	// When: parsing the object
-	const parsed = unwrap(parseSync(frozen, input));
+	const parsed = unwrap(parseSync(frozen, { input: input, panics }));
 
 	// Then: the output is an equal, frozen copy, and the input is untouched
 	assertEquals(parsed, input);
@@ -48,7 +48,7 @@ Deno.test("readonly freezes a copy of an array, never the input", () => {
 	const frozen = readonly(identity<number[]>());
 
 	// When: parsing the array
-	const parsed = unwrap(parseSync(frozen, input));
+	const parsed = unwrap(parseSync(frozen, { input: input, panics }));
 
 	// Then: the output is an equal, frozen array copy, and the input is untouched
 	assertEquals(parsed, [1, 2]);
@@ -64,7 +64,7 @@ Deno.test("readonly is shallow: nested objects are not frozen", () => {
 	const frozen = readonly(identity<{ inner: { n: number } }>());
 
 	// When: parsing it
-	const parsed = unwrap(parseSync(frozen, input));
+	const parsed = unwrap(parseSync(frozen, { input: input, panics }));
 
 	// Then: only the outer copy is frozen; the nested object is shared as is
 	assertEquals(Object.isFrozen(parsed), true);
@@ -82,7 +82,7 @@ Deno.test("readonly keeps a null prototype and symbol keys", () => {
 	const frozen = readonly(identity<Record<PropertyKey, unknown>>());
 
 	// When: parsing it
-	const parsed = unwrap(parseSync(frozen, input));
+	const parsed = unwrap(parseSync(frozen, { input: input, panics }));
 
 	// Then: the copy has the same prototype and keys
 	assertEquals(Object.getPrototypeOf(parsed), null);
@@ -102,11 +102,14 @@ Deno.test("readonly passes primitives, Maps, Dates and class instances through",
 
 	// When: parsing each
 	// Then: each comes back as the very same value, not frozen
-	assertEquals(unwrap(parseSync(frozen, "text")), "text");
-	assertEquals(unwrap(parseSync(frozen, null)), null);
-	assertStrictEquals(unwrap(parseSync(frozen, map)), map);
-	assertStrictEquals(unwrap(parseSync(frozen, date)), date);
-	assertStrictEquals(unwrap(parseSync(frozen, point)), point);
+	assertEquals(unwrap(parseSync(frozen, { input: "text", panics })), "text");
+	assertEquals(unwrap(parseSync(frozen, { input: null, panics })), null);
+	assertStrictEquals(unwrap(parseSync(frozen, { input: map, panics })), map);
+	assertStrictEquals(unwrap(parseSync(frozen, { input: date, panics })), date);
+	assertStrictEquals(
+		unwrap(parseSync(frozen, { input: point, panics })),
+		point,
+	);
 	assertEquals(Object.isFrozen(map), false);
 });
 

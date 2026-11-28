@@ -15,13 +15,16 @@ import type { Inspect } from "./check.ts";
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { type Bound, number } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const above: Bound<number> = { value: 0, inclusive: false };
  * const ratio = number({ min: 0, max: { value: 1, inclusive: false } });
  *
- * assertEquals(isOk(parseSync(ratio, 0)), true);
- * assertEquals(isErr(parseSync(ratio, 1)), true);
- * assertEquals(isErr(parseSync(number({ min: above }), 0)), true);
+ * assertEquals(isOk(parseSync(ratio, { input: 0, panics })), true);
+ * assertEquals(isErr(parseSync(ratio, { input: 1, panics })), true);
+ * assertEquals(isErr(parseSync(number({ min: above }), { input: 0, panics })), true);
  * ```
  */
 export type Bound<T> =

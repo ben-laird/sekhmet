@@ -36,7 +36,7 @@ Deno.test("brand passes the output through unchanged", () => {
 	const branded = brand(same, "Thing");
 
 	// When: parsing with the branded schema
-	const parsed = unwrap(parseSync(branded, value));
+	const parsed = unwrap(parseSync(branded, { input: value, panics }));
 
 	// Then: the very same value comes back, with no brand key at runtime
 	assertStrictEquals(parsed, value);

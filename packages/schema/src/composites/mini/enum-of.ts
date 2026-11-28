@@ -45,9 +45,11 @@ function oneOf<T extends Literal>(
  * import { formatIssue, parse, parseSync } from "@sekhmet/schema/core/mini";
  * import { wait } from "@sekhmet/vow";
  *
+ * const panics = definePanicRuntime();
+ *
  * const color = enumOf(["red", "green"]);
  *
- * assertEquals(unwrap(parseSync(color, "red")), "red");
+ * assertEquals(unwrap(parseSync(color, { input: "red", panics })), "red");
  * assertEquals(
  * 	formatIssue(
  * 		unwrapErr(await wait(parse(color, { input: "blue", panics: definePanicRuntime() }))),

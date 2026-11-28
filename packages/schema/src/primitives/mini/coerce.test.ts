@@ -1,4 +1,5 @@
 import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals, assertThrows } from "@std/assert";
 import type { SchemaIssue } from "@/src/core/mini/issue.ts";
 import { InvalidType } from "@/src/core/mini/issue.ts";
@@ -6,6 +7,8 @@ import { ParseError, parseSync, type Schema } from "@/src/core/mini/schema.ts";
 import { boolean } from "./boolean.ts";
 import { number } from "./number.ts";
 import { string } from "./string.ts";
+
+const panics = definePanicRuntime();
 
 /** One schema's coercion cases: the converted values and the rejected inputs. */
 interface Table<T> {
@@ -39,7 +42,7 @@ function runTable<T>(table: Table<T>): void {
 		Deno.test(`${table.name} converts ${label(input)}`, () => {
 			// Given: the coercing schema
 			// When: parsing a convertible input
-			const result = parseSync(table.schema, input);
+			const result = parseSync(table.schema, { input: input, panics });
 
 			// Then: it gives the converted value
 			assertEquals(result, Ok(output));
@@ -49,7 +52,7 @@ function runTable<T>(table: Table<T>): void {
 		Deno.test(`${table.name} rejects ${label(input)}`, () => {
 			// Given: the coercing schema
 			// When: parsing an input it must not convert
-			const result = parseSync(table.schema, input);
+			const result = parseSync(table.schema, { input: input, panics });
 
 			// Then: it fails with InvalidType, keeping the input
 			assertEquals(
@@ -193,8 +196,8 @@ Deno.test("native coercion still applies number's own checks", () => {
 		const lenient = number({ coerce: "native", nan: true });
 
 		// When: parsing a value that Number() turns into NaN
-		const rejected = parseSync(strict, input);
-		const accepted = parseSync(lenient, input);
+		const rejected = parseSync(strict, { input: input, panics });
+		const accepted = parseSync(lenient, { input: input, panics });
 
 		// Then: NaN fails unless nan: true; the issue describes the coerced value
 		assertEquals(
@@ -213,14 +216,17 @@ Deno.test("strict coercion of an overflowing exponent still rejects Infinity", (
 	// When: parsing an exponent string beyond the number range
 	// Then: Infinity fails unless infinite: true
 	assertEquals(
-		parseSync(strict, "1e999"),
+		parseSync(strict, { input: "1e999", panics }),
 		Err(
 			ParseError(
 				InvalidType({ input: Number.POSITIVE_INFINITY, expected: "number" }),
 			),
 		),
 	);
-	assertEquals(parseSync(lenient, "1e999"), Ok(Number.POSITIVE_INFINITY));
+	assertEquals(
+		parseSync(lenient, { input: "1e999", panics }),
+		Ok(Number.POSITIVE_INFINITY),
+	);
 });
 
 Deno.test("native coercion lets errors other than TypeError propagate", () => {
@@ -234,7 +240,7 @@ Deno.test("native coercion lets errors other than TypeError propagate", () => {
 	// When: native-coercing it
 	// Then: the error is a bug in the input, so it propagates
 	assertThrows(
-		() => parseSync(number({ coerce: "native" }), broken),
+		() => parseSync(number({ coerce: "native" }), { input: broken, panics }),
 		RangeError,
 		"broken valueOf",
 	);

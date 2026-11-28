@@ -1,4 +1,5 @@
 import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals, assertThrows } from "@std/assert";
 import {
 	InvalidType,
@@ -9,6 +10,8 @@ import {
 import { ParseError, parseSync } from "@/src/core/mini/schema.ts";
 import { bigint } from "./bigint.ts";
 
+const panics = definePanicRuntime();
+
 Deno.test("bigint's min and max bound it, with each bound's inclusivity", () => {
 	// Given: bigints in (0n, 2^64]
 	const top = 2n ** 64n;
@@ -16,10 +19,10 @@ Deno.test("bigint's min and max bound it, with each bound's inclusivity", () => 
 
 	// When: parsing the bounds and values beyond them
 	// Then: the inclusive maximum passes and the rest fail with their issue
-	assertEquals(parseSync(schema, 1n), Ok(1n));
-	assertEquals(parseSync(schema, top), Ok(top));
+	assertEquals(parseSync(schema, { input: 1n, panics }), Ok(1n));
+	assertEquals(parseSync(schema, { input: top, panics }), Ok(top));
 	assertEquals(
-		parseSync(schema, 0n),
+		parseSync(schema, { input: 0n, panics }),
 		Err(
 			ParseError(
 				TooSmall({
@@ -32,7 +35,7 @@ Deno.test("bigint's min and max bound it, with each bound's inclusivity", () => 
 		),
 	);
 	assertEquals(
-		parseSync(schema, top + 1n),
+		parseSync(schema, { input: top + 1n, panics }),
 		Err(
 			ParseError(
 				TooBig({
@@ -52,15 +55,15 @@ Deno.test("bigint's multipleOf checks divisibility, after the bounds", () => {
 
 	// When: parsing a multiple, a non-multiple and a value failing both checks
 	// Then: the multiple passes, and the bound is reported before divisibility
-	assertEquals(parseSync(schema, 9n), Ok(9n));
+	assertEquals(parseSync(schema, { input: 9n, panics }), Ok(9n));
 	assertEquals(
-		parseSync(schema, 10n),
+		parseSync(schema, { input: 10n, panics }),
 		Err(
 			ParseError(NotMultipleOf({ input: 10n, origin: "bigint", divisor: 3n })),
 		),
 	);
 	assertEquals(
-		parseSync(schema, -1n),
+		parseSync(schema, { input: -1n, panics }),
 		Err(
 			ParseError(
 				TooSmall({
@@ -89,7 +92,7 @@ Deno.test("bigint accepts bigints", () => {
 		const schema = bigint();
 
 		// When: parsing a bigint
-		const result = parseSync(schema, input);
+		const result = parseSync(schema, { input: input, panics });
 
 		// Then: it is accepted unchanged
 		assertEquals(result, Ok(input));
@@ -102,7 +105,7 @@ Deno.test("bigint rejects every other value with InvalidType", () => {
 		const schema = bigint();
 
 		// When: parsing a value of another type
-		const result = parseSync(schema, input);
+		const result = parseSync(schema, { input: input, panics });
 
 		// Then: it fails expecting bigint
 		assertEquals(

@@ -13,10 +13,13 @@
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { or } from "@sekhmet/schema/algebra";
  * import { number, string } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const id = or({ left: string(), right: number() }).map(String);
  *
- * assertEquals(unwrap(id.parseSync(7)), "7");
+ * assertEquals(unwrap(id.parseSync({ input: 7, panics })), "7");
  * ```
  *
  * @module
@@ -64,11 +67,14 @@ export { BRAND, omit, partial, pick, required } from "../mini/mod.ts";
  * import { brand, type Branded } from "@sekhmet/schema/algebra";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * type UserId = Branded<string, "UserId">;
  * const userId = brand(string({ format: "uuid" }), "UserId");
  *
- * const id: UserId = unwrap(parseSync(userId, "4f3c1f9e-8f0a-4b8e-9a59-0a1b2c3d4e5f"));
+ * const id: UserId = unwrap(parseSync(userId, { input: "4f3c1f9e-8f0a-4b8e-9a59-0a1b2c3d4e5f", panics }));
  * assertEquals(id, "4f3c1f9e-8f0a-4b8e-9a59-0a1b2c3d4e5f");
  * ```
  */
@@ -121,11 +127,12 @@ export function brand<
  * import { boolean, number, string } from "@sekhmet/schema/primitives/mini";
  * import { wait } from "@sekhmet/vow";
  *
+ * const panics = definePanicRuntime();
+ *
  * const scalar = or({ left: or({ left: string(), right: number() }), right: boolean() });
  *
- * assertEquals(unwrap(parseSync(scalar, true)), true);
+ * assertEquals(unwrap(parseSync(scalar, { input: true, panics })), true);
  *
- * const panics = definePanicRuntime();
  * const [{ error }] = entries(
  * 	unwrapErr(await wait(parse(scalar, { input: null, panics }))),
  * );
@@ -170,9 +177,12 @@ export function or<I, O, E, J, P, F>(
  * import { object } from "@sekhmet/schema/composites/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const user = readonly(object({ shape: { name: string() } }));
- * const parsed = unwrap(parseSync(user, { name: "Ada" }));
+ * const parsed = unwrap(parseSync(user, { input: { name: "Ada" }, panics }));
  *
  * assertEquals(parsed, { name: "Ada" });
  * assertEquals(Object.isFrozen(parsed), true);

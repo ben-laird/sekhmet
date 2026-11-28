@@ -253,13 +253,16 @@ export type UnknownKeys = "strip" | "strict" | "passthrough";
  * import { object, type ObjectOptions } from "@sekhmet/schema/composites/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const options = { shape: { name: string() }, unknownKeys: "passthrough" } satisfies ObjectOptions<
  * 	{ name: ReturnType<typeof string> },
  * 	"passthrough"
  * >;
  *
- * assertEquals(unwrap(parseSync(object(options), { name: "Ada", admin: true })), {
+ * assertEquals(unwrap(parseSync(object(options), { input: { name: "Ada", admin: true }, panics })), {
  * 	name: "Ada",
  * 	admin: true,
  * });
@@ -416,6 +419,9 @@ function planOf([key, entry]: [string, Entry]): Plan {
  * import { object, optional } from "@sekhmet/schema/composites/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const user = object({
  * 	shape: {
@@ -425,12 +431,12 @@ function planOf([key, entry]: [string, Entry]): Plan {
  * 	},
  * });
  *
- * assertEquals(unwrap(parseSync(user, { name: "Ada", middle: undefined })), {
+ * assertEquals(unwrap(parseSync(user, { input: { name: "Ada", middle: undefined }, panics })), {
  * 	name: "Ada",
  * 	middle: undefined,
  * });
- * assertEquals(isErr(parseSync(user, { name: "Ada" })), true);
- * assertEquals(isErr(parseSync(user, { name: "Ada", middle: "A", nickname: undefined })), true);
+ * assertEquals(isErr(parseSync(user, { input: { name: "Ada" }, panics })), true);
+ * assertEquals(isErr(parseSync(user, { input: { name: "Ada", middle: "A", nickname: undefined }, panics })), true);
  * ```
  *
  * @example
@@ -444,14 +450,15 @@ function planOf([key, entry]: [string, Entry]): Plan {
  * import { string } from "@sekhmet/schema/primitives/mini";
  * import { wait } from "@sekhmet/vow";
  *
+ * const panics = definePanicRuntime();
+ *
  * const shape = { name: string() };
  * const strict = object({ shape, unknownKeys: "strict" });
  * const loose = object({ shape, unknownKeys: "passthrough" });
  * const input = { name: "Ada", admin: true };
  *
- * assertEquals(unwrap(parseSync(object({ shape }), input)), { name: "Ada" });
- * assertEquals(unwrap(parseSync(loose, input)), input);
- * const panics = definePanicRuntime();
+ * assertEquals(unwrap(parseSync(object({ shape }), { input: input, panics })), { name: "Ada" });
+ * assertEquals(unwrap(parseSync(loose, { input: input, panics })), input);
  * const [issue] = entries(unwrapErr(await wait(parse(strict, { input, panics }))));
  * assertEquals(issue.path, ["admin"]);
  * ```

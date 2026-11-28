@@ -1,4 +1,5 @@
 import { Err, isErr, Ok, unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { optional } from "@/src/composites/mini/modifiers.ts";
@@ -14,6 +15,8 @@ import {
 	Schema,
 } from "@/src/core/mini/schema.ts";
 import { omit, partial, pick, required } from "./shape.ts";
+
+const panics = definePanicRuntime();
 
 type Text = Schema<unknown, string, "not text">;
 const text: Text = new Schema({
@@ -70,9 +73,12 @@ Deno.test("pick and omit infer their keys when passed straight to object", () =>
 	// Then: only the named keys are kept, by type and at runtime
 	assertType<IsExact<Output<typeof named>, { name: string }>>(true);
 	assertType<IsExact<Output<typeof unmailed>, { name: string }>>(true);
-	assertEquals(unwrap(parseSync(named, { name: "a", email: "b" })), {
-		name: "a",
-	});
+	assertEquals(
+		unwrap(parseSync(named, { input: { name: "a", email: "b" }, panics })),
+		{
+			name: "a",
+		},
+	);
 });
 
 Deno.test("pick and omit reject keys the shape doesn't declare", () => {
@@ -93,9 +99,12 @@ Deno.test("partial makes every key optional, keeping value-optionality", () => {
 	const all = object({ shape: partial(kinds) });
 
 	// When: parsing with every key missing, and with each present as undefined
-	const empty = parseSync(all, {});
+	const empty = parseSync(all, { input: {}, panics });
 	const undefinedEach = Object.keys(kinds).map((key) => {
-		return [key, isErr(parseSync(all, { [key]: undefined }))];
+		return [
+			key,
+			isErr(parseSync(all, { input: { [key]: undefined }, panics })),
+		];
 	});
 
 	// Then: every key may be missing; only the value-optional ones accept undefined
@@ -120,14 +129,17 @@ Deno.test("required makes every key required, keeping value-optionality", () => 
 				return other !== key;
 			}),
 		);
-		return [key, isErr(parseSync(all, rest))];
+		return [key, isErr(parseSync(all, { input: rest, panics }))];
 	});
 	const undefinedEach = Object.keys(kinds).map((key) => {
-		return [key, isErr(parseSync(all, { ...full, [key]: undefined }))];
+		return [
+			key,
+			isErr(parseSync(all, { input: { ...full, [key]: undefined }, panics })),
+		];
 	});
 
 	// Then: every key must be present; only the value-optional ones accept undefined
-	assertEquals(unwrap(parseSync(all, full)), full);
+	assertEquals(unwrap(parseSync(all, { input: full, panics })), full);
 	assertEquals(
 		missingEach.map(([, failed]) => failed),
 		[true, true, true, true],
@@ -201,7 +213,9 @@ Deno.test("a shape spread extends a shape", () => {
 	const user = object({ shape: extended });
 
 	// Then: it has both fields, the new one with its optional key
-	assertEquals(unwrap(parseSync(user, { name: "Ada" })), { name: "Ada" });
+	assertEquals(unwrap(parseSync(user, { input: { name: "Ada" }, panics })), {
+		name: "Ada",
+	});
 	assertType<IsExact<Output<typeof user>, { name: string; nickname?: string }>>(
 		true,
 	);

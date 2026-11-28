@@ -12,10 +12,13 @@
  * import { assertEquals } from "@std/assert";
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { string } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const length = string().map((text) => text.length);
  *
- * assertEquals(unwrap(length.parseSync("four")), 4);
+ * assertEquals(unwrap(length.parseSync({ input: "four", panics })), 4);
  * ```
  *
  * @module
@@ -64,13 +67,16 @@ export {
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { bigint } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(isOk(parseSync(bigint(), 10n)), true);
- * assertEquals(isErr(parseSync(bigint(), 10)), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(isOk(parseSync(bigint(), { input: 10n, panics })), true);
+ * assertEquals(isErr(parseSync(bigint(), { input: 10, panics })), true);
  *
  * const even = bigint({ min: 0n, multipleOf: 2n });
- * assertEquals(isOk(parseSync(even, 2n ** 64n)), true);
- * assertEquals(isErr(parseSync(even, 3n)), true);
+ * assertEquals(isOk(parseSync(even, { input: 2n ** 64n, panics })), true);
+ * assertEquals(isErr(parseSync(even, { input: 3n, panics })), true);
  * ```
  */
 export function bigint(
@@ -99,9 +105,12 @@ export function bigint(
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { boolean } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(unwrap(parseSync(boolean(), true)), true);
- * assertEquals(isErr(parseSync(boolean(), "true")), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(unwrap(parseSync(boolean(), { input: true, panics })), true);
+ * assertEquals(isErr(parseSync(boolean(), { input: "true", panics })), true);
  * ```
  * @example
  * ```ts
@@ -109,14 +118,17 @@ export function bigint(
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { boolean } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const strict = boolean({ coerce: true });
- * assertEquals(unwrap(parseSync(strict, "false")), false);
- * assertEquals(unwrap(parseSync(strict, 1)), true);
- * assertEquals(isErr(parseSync(strict, "maybe")), true);
+ * assertEquals(unwrap(parseSync(strict, { input: "false", panics })), false);
+ * assertEquals(unwrap(parseSync(strict, { input: 1, panics })), true);
+ * assertEquals(isErr(parseSync(strict, { input: "maybe", panics })), true);
  *
  * const native = boolean({ coerce: "native" });
- * assertEquals(unwrap(parseSync(native, "false")), true);
+ * assertEquals(unwrap(parseSync(native, { input: "false", panics })), true);
  * ```
  */
 export function boolean(
@@ -143,13 +155,16 @@ export function boolean(
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { date } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(isOk(parseSync(date(), new Date(0))), true);
- * assertEquals(isErr(parseSync(date(), new Date("nope"))), true);
- * assertEquals(isErr(parseSync(date(), "1970-01-01")), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(isOk(parseSync(date(), { input: new Date(0), panics })), true);
+ * assertEquals(isErr(parseSync(date(), { input: new Date("nope"), panics })), true);
+ * assertEquals(isErr(parseSync(date(), { input: "1970-01-01", panics })), true);
  *
  * const modern = date({ min: new Date("2000-01-01T00:00:00Z") });
- * assertEquals(isErr(parseSync(modern, new Date(0))), true);
+ * assertEquals(isErr(parseSync(modern, { input: new Date(0), panics })), true);
  * ```
  */
 export function date(
@@ -173,12 +188,15 @@ export function date(
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { literal } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const admin = literal("admin");
- * const role: "admin" = unwrap(parseSync(admin, "admin"));
+ * const role: "admin" = unwrap(parseSync(admin, { input: "admin", panics }));
  *
  * assertEquals(role, "admin");
- * assertEquals(isErr(parseSync(admin, "user")), true);
+ * assertEquals(isErr(parseSync(admin, { input: "user", panics })), true);
  * ```
  */
 export function literal<const T extends mini.Literal>(
@@ -199,8 +217,11 @@ export function literal<const T extends mini.Literal>(
  * import { isErr } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { never } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(isErr(parseSync(never(), undefined)), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(isErr(parseSync(never(), { input: undefined, panics })), true);
  * ```
  */
 export function never(): Schema<unknown, never, SchemaIssue> {
@@ -221,9 +242,12 @@ export function never(): Schema<unknown, never, SchemaIssue> {
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { null_ } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(isOk(parseSync(null_(), null)), true);
- * assertEquals(isErr(parseSync(null_(), undefined)), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(isOk(parseSync(null_(), { input: null, panics })), true);
+ * assertEquals(isErr(parseSync(null_(), { input: undefined, panics })), true);
  * ```
  */
 export function null_(): Schema<unknown, null, SchemaIssue> {
@@ -256,12 +280,15 @@ export function null_(): Schema<unknown, null, SchemaIssue> {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const schema = number();
  *
- * assertEquals(unwrap(parseSync(schema, 42)), 42);
- * assertEquals(isErr(parseSync(schema, Number.NaN)), true);
- * assertEquals(isErr(parseSync(schema, "42")), true);
+ * assertEquals(unwrap(parseSync(schema, { input: 42, panics })), 42);
+ * assertEquals(isErr(parseSync(schema, { input: Number.NaN, panics })), true);
+ * assertEquals(isErr(parseSync(schema, { input: "42", panics })), true);
  * ```
  * @example
  * ```ts
@@ -269,15 +296,18 @@ export function null_(): Schema<unknown, null, SchemaIssue> {
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const percent = number({ int: true, min: 0, max: 100 });
  * const positive = number({ min: { value: 0, inclusive: false } });
  * const price = number({ multipleOf: 0.01 });
  *
- * assertEquals(isOk(parseSync(percent, 100)), true);
- * assertEquals(isErr(parseSync(percent, 2.5)), true);
- * assertEquals(isErr(parseSync(positive, 0)), true);
- * assertEquals(isErr(parseSync(price, 19.999)), true);
+ * assertEquals(isOk(parseSync(percent, { input: 100, panics })), true);
+ * assertEquals(isErr(parseSync(percent, { input: 2.5, panics })), true);
+ * assertEquals(isErr(parseSync(positive, { input: 0, panics })), true);
+ * assertEquals(isErr(parseSync(price, { input: 19.999, panics })), true);
  * ```
  * @example
  * ```ts
@@ -285,14 +315,17 @@ export function null_(): Schema<unknown, null, SchemaIssue> {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const strict = number({ coerce: true });
- * assertEquals(unwrap(parseSync(strict, " 1e3 ")), 1000);
- * assertEquals(isErr(parseSync(strict, "")), true);
+ * assertEquals(unwrap(parseSync(strict, { input: " 1e3 ", panics })), 1000);
+ * assertEquals(isErr(parseSync(strict, { input: "", panics })), true);
  *
  * const native = number({ coerce: "native" });
- * assertEquals(unwrap(parseSync(native, "")), 0);
- * assertEquals(isErr(parseSync(native, "abc")), true);
+ * assertEquals(unwrap(parseSync(native, { input: "", panics })), 0);
+ * assertEquals(isErr(parseSync(native, { input: "abc", panics })), true);
  * ```
  */
 export function number(
@@ -324,9 +357,12 @@ export function number(
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(unwrap(parseSync(string(), "hello")), "hello");
- * assertEquals(isErr(parseSync(string(), 123)), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(unwrap(parseSync(string(), { input: "hello", panics })), "hello");
+ * assertEquals(isErr(parseSync(string(), { input: 123, panics })), true);
  * ```
  * @example
  * ```ts
@@ -334,15 +370,18 @@ export function number(
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const email = string({ trim: true, minLength: 3, format: "email" });
  * const slug = string({ regex: /^[a-z0-9-]+$/ });
  * const config = string({ startsWith: "config/", endsWith: ".json" });
  *
- * assertEquals(unwrap(parseSync(email, " ada@example.com ")), "ada@example.com");
- * assertEquals(isErr(parseSync(email, "ada@localhost")), true);
- * assertEquals(isErr(parseSync(slug, "Not a slug")), true);
- * assertEquals(isErr(parseSync(config, "config/app.yaml")), true);
+ * assertEquals(unwrap(parseSync(email, { input: " ada@example.com ", panics })), "ada@example.com");
+ * assertEquals(isErr(parseSync(email, { input: "ada@localhost", panics })), true);
+ * assertEquals(isErr(parseSync(slug, { input: "Not a slug", panics })), true);
+ * assertEquals(isErr(parseSync(config, { input: "config/app.yaml", panics })), true);
  * ```
  * @example
  * ```ts
@@ -350,11 +389,14 @@ export function number(
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const handle = string({ trim: true, case: "lower", startsWith: "@" });
  *
- * assertEquals(unwrap(parseSync(handle, " @Ada ")), "@ada");
- * assertEquals(isErr(parseSync(handle, "Ada")), true);
+ * assertEquals(unwrap(parseSync(handle, { input: " @Ada ", panics })), "@ada");
+ * assertEquals(isErr(parseSync(handle, { input: "Ada", panics })), true);
  * ```
  * @example
  * ```ts
@@ -362,13 +404,16 @@ export function number(
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const strict = string({ coerce: true });
- * assertEquals(unwrap(parseSync(strict, 123)), "123");
- * assertEquals(isErr(parseSync(strict, null)), true);
+ * assertEquals(unwrap(parseSync(strict, { input: 123, panics })), "123");
+ * assertEquals(isErr(parseSync(strict, { input: null, panics })), true);
  *
  * const native = string({ coerce: "native" });
- * assertEquals(unwrap(parseSync(native, null)), "null");
+ * assertEquals(unwrap(parseSync(native, { input: null, panics })), "null");
  * ```
  */
 export function string(
@@ -396,12 +441,15 @@ export function string(
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { stringbool } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const flag = stringbool();
  *
- * assertEquals(unwrap(parseSync(flag, " Yes ")), true);
- * assertEquals(unwrap(parseSync(flag, "OFF")), false);
- * assertEquals(isErr(parseSync(flag, "maybe")), true);
+ * assertEquals(unwrap(parseSync(flag, { input: " Yes ", panics })), true);
+ * assertEquals(unwrap(parseSync(flag, { input: "OFF", panics })), false);
+ * assertEquals(isErr(parseSync(flag, { input: "maybe", panics })), true);
  * ```
  * @example
  * ```ts
@@ -409,10 +457,13 @@ export function string(
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { stringbool } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const answer = stringbool({ truthy: ["oui"], falsy: ["non"] });
  *
- * assertEquals(unwrap(parseSync(answer, "Oui")), true);
+ * assertEquals(unwrap(parseSync(answer, { input: "Oui", panics })), true);
  * ```
  */
 export function stringbool(
@@ -432,9 +483,12 @@ export function stringbool(
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { symbol } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(isOk(parseSync(symbol(), Symbol("id"))), true);
- * assertEquals(isErr(parseSync(symbol(), "id")), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(isOk(parseSync(symbol(), { input: Symbol("id"), panics })), true);
+ * assertEquals(isErr(parseSync(symbol(), { input: "id", panics })), true);
  * ```
  */
 export function symbol(): Schema<unknown, symbol, SchemaIssue> {
@@ -455,9 +509,12 @@ export function symbol(): Schema<unknown, symbol, SchemaIssue> {
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { undefined_ } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(isOk(parseSync(undefined_(), undefined)), true);
- * assertEquals(isErr(parseSync(undefined_(), null)), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(isOk(parseSync(undefined_(), { input: undefined, panics })), true);
+ * assertEquals(isErr(parseSync(undefined_(), { input: null, panics })), true);
  * ```
  */
 export function undefined_(): Schema<unknown, undefined, SchemaIssue> {
@@ -476,10 +533,13 @@ export function undefined_(): Schema<unknown, undefined, SchemaIssue> {
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { unknown } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const payload = { any: "thing" };
  *
- * assertEquals(unwrap(parseSync(unknown(), payload)), payload);
+ * assertEquals(unwrap(parseSync(unknown(), { input: payload, panics })), payload);
  * ```
  */
 export function unknown(): Schema<unknown, unknown, never> {

@@ -55,7 +55,9 @@ Deno.test("object parses each field and strips undeclared keys", () => {
 	const user = object({ shape: { name: text, age: count } });
 
 	// When: parsing an object with an extra key
-	const parsed = unwrap(parseSync(user, { name: "Ada", age: 36, admin: true }));
+	const parsed = unwrap(
+		parseSync(user, { input: { name: "Ada", age: 36, admin: true }, panics }),
+	);
 
 	// Then: the declared fields are kept and the extra key is dropped
 	assertEquals(parsed, { name: "Ada", age: 36 });
@@ -161,7 +163,9 @@ Deno.test("each field kind handles a missing key and a key present as undefined"
 				const missing = unwrapErr(
 					resume(await wait(parse(person, { input: withoutMiddle, panics }))),
 				);
-				const blank = unwrap(parseSync(person, { ...full, middle: undefined }));
+				const blank = unwrap(
+					parseSync(person, { input: { ...full, middle: undefined }, panics }),
+				);
 
 				// Then: missing fails with the inner schema's issue; undefined is kept
 				assertEquals(entries(missing), [
@@ -177,7 +181,9 @@ Deno.test("each field kind handles a missing key and a key present as undefined"
 			async () => {
 				// When: the key-optional field's key is missing, and when it is undefined
 				const { nickname: _, ...withoutNickname } = full;
-				const missing = unwrap(parseSync(person, withoutNickname));
+				const missing = unwrap(
+					parseSync(person, { input: withoutNickname, panics }),
+				);
 				const blank = unwrapErr(
 					resume(
 						await wait(
@@ -202,8 +208,12 @@ Deno.test("each field kind handles a missing key and a key present as undefined"
 			() => {
 				// When: the doubly optional field's key is missing, and when it is undefined
 				const { alias: _, ...withoutAlias } = full;
-				const missing = unwrap(parseSync(person, withoutAlias));
-				const blank = unwrap(parseSync(person, { ...full, alias: undefined }));
+				const missing = unwrap(
+					parseSync(person, { input: withoutAlias, panics }),
+				);
+				const blank = unwrap(
+					parseSync(person, { input: { ...full, alias: undefined }, panics }),
+				);
 
 				// Then: missing is left out, and undefined is kept as given
 				assertFalse(Object.hasOwn(missing, "alias"));
@@ -222,8 +232,8 @@ Deno.test('an explicit key: "required" entry is the same as a bare schema', asyn
 	// When: parsing a valid value and a missing key with each
 	// Then: both give the same results and the same types
 	assertEquals(
-		parseSync(entry, { name: "Ada" }),
-		parseSync(bare, { name: "Ada" }),
+		parseSync(entry, { input: { name: "Ada" }, panics }),
+		parseSync(bare, { input: { name: "Ada" }, panics }),
 	);
 	assertEquals(
 		entries(unwrapErr(resume(await wait(parse(entry, { input: {}, panics }))))),
@@ -240,7 +250,7 @@ Deno.test("a missing required key is checked without its .optional(), through .n
 	const missing = unwrapErr(
 		resume(await wait(parse(user, { input: {}, panics }))),
 	);
-	const nulled = unwrap(parseSync(user, { middle: null }));
+	const nulled = unwrap(parseSync(user, { input: { middle: null }, panics }));
 
 	// Then: the missing key reports the inner issue, and null still passes
 	assertEquals(entries(missing), [{ path: ["middle"], error: "not text" }]);
@@ -257,7 +267,7 @@ Deno.test("a required field whose own schema accepts undefined passes a missing 
 	const box = object({ shape: { content: anything } });
 
 	// When: the key is missing
-	const parsed = unwrap(parseSync(box, {}));
+	const parsed = unwrap(parseSync(box, { input: {}, panics }));
 
 	// Then: it parses as undefined, and the output has the key, as its type says
 	assertEquals(parsed, { content: undefined });
@@ -295,8 +305,10 @@ Deno.test('unknownKeys: "passthrough" copies undeclared keys, "strip" drops them
 	const input = { name: "Ada", admin: true };
 
 	// Then: passthrough keeps it, strip drops it
-	assertEquals(unwrap(parseSync(loose, input)), input);
-	assertEquals(unwrap(parseSync(lenient, input)), { name: "Ada" });
+	assertEquals(unwrap(parseSync(loose, { input: input, panics })), input);
+	assertEquals(unwrap(parseSync(lenient, { input: input, panics })), {
+		name: "Ada",
+	});
 });
 
 Deno.test("passthrough can't set the output's prototype through __proto__", () => {
@@ -305,7 +317,7 @@ Deno.test("passthrough can't set the output's prototype through __proto__", () =
 	const input = JSON.parse('{"__proto__": {"polluted": true}}');
 
 	// When: parsing it
-	const parsed = unwrap(parseSync(loose, input));
+	const parsed = unwrap(parseSync(loose, { input: input, panics }));
 
 	// Then: __proto__ is an own data property; the prototype is untouched
 	assertEquals(Object.getPrototypeOf(parsed), Object.prototype);
@@ -362,7 +374,9 @@ Deno.test("parseSync reports UnexpectedAsyncParse for an object with an async fi
 	const mixed = object({ shape: { name: text, age: laterCount } });
 
 	// When: parsing it synchronously
-	const error = unwrapErr(parseSync(mixed, { name: "Ada", age: 36 }));
+	const error = unwrapErr(
+		parseSync(mixed, { input: { name: "Ada", age: 36 }, panics }),
+	);
 
 	// Then: the parse is reported as unexpectedly async
 	assertEquals(unionKinds(error), "UnexpectedAsyncParse");
@@ -454,8 +468,10 @@ Deno.test("a viewed schema with a `key` of its own is a required key, not a fiel
 
 	// Then: the key is required, in the type and at parse time
 	assertType<IsExact<Output<typeof holder>, { value: string }>>(true);
-	assertFalse(isOk(parseSync(holder, {})));
-	assertEquals(unwrap(parseSync(holder, { value: "a" })), { value: "a" });
+	assertFalse(isOk(parseSync(holder, { input: {}, panics })));
+	assertEquals(unwrap(parseSync(holder, { input: { value: "a" }, panics })), {
+		value: "a",
+	});
 });
 
 Deno.test("object views its shape: all four field kinds keep their exact types", () => {

@@ -103,13 +103,16 @@ function multipleOf(divisor: bigint): Inspect<bigint> {
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { bigint } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(isOk(parseSync(bigint(), 10n)), true);
- * assertEquals(isErr(parseSync(bigint(), 10)), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(isOk(parseSync(bigint(), { input: 10n, panics })), true);
+ * assertEquals(isErr(parseSync(bigint(), { input: 10, panics })), true);
  *
  * const even = bigint({ min: 0n, multipleOf: 2n });
- * assertEquals(isOk(parseSync(even, 2n ** 64n)), true);
- * assertEquals(isErr(parseSync(even, 3n)), true);
+ * assertEquals(isOk(parseSync(even, { input: 2n ** 64n, panics })), true);
+ * assertEquals(isErr(parseSync(even, { input: 3n, panics })), true);
  * ```
  */
 export function bigint(

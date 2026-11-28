@@ -19,7 +19,7 @@ Deno.test("enumOf accepts exactly its values", async (t) => {
 		await t.step(`accepts ${String(value)}`, () => {
 			// When: parsing one of its values
 			// Then: it is accepted unchanged
-			assertEquals(unwrap(parseSync(literal, value)), value);
+			assertEquals(unwrap(parseSync(literal, { input: value, panics })), value);
 		});
 	}
 });

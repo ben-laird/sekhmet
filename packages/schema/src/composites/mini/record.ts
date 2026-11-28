@@ -150,6 +150,9 @@ export interface RecordView<K, V> {
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { record } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const name = new Schema({ parse: (input: string) => Ok(input) });
  * const score = new Schema({
@@ -159,7 +162,7 @@ export interface RecordView<K, V> {
  * });
  * const scores = record({ key: name, value: score });
  *
- * assertEquals(unwrap(parseSync(scores, { ada: 3 })), { ada: 3 });
+ * assertEquals(unwrap(parseSync(scores, { input: { ada: 3 }, panics })), { ada: 3 });
  * ```
  */
 export function record<

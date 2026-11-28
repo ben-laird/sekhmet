@@ -1,4 +1,5 @@
 import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals, assertThrows } from "@std/assert";
 import { InvalidType, InvalidValue } from "@/src/core/mini/issue.ts";
 import { ParseError, parseSync } from "@/src/core/mini/schema.ts";
@@ -7,6 +8,8 @@ import {
 	STRINGBOOL_TRUTHY,
 	stringbool,
 } from "./stringbool.ts";
+
+const panics = definePanicRuntime();
 
 const DEFAULT_WORDS = [...STRINGBOOL_TRUTHY, ...STRINGBOOL_FALSY];
 
@@ -38,7 +41,7 @@ Deno.test("stringbool reads every default word, trimmed and ignoring case", () =
 				const schema = stringbool();
 
 				// When: parsing a default word, in any case, with whitespace
-				const result = parseSync(schema, input);
+				const result = parseSync(schema, { input: input, panics });
 
 				// Then: it reads as the word's boolean
 				assertEquals(result, Ok(value), JSON.stringify(input));
@@ -53,7 +56,7 @@ Deno.test("stringbool rejects other strings with InvalidValue", () => {
 		const schema = stringbool();
 
 		// When: parsing a string in neither list
-		const result = parseSync(schema, input);
+		const result = parseSync(schema, { input: input, panics });
 
 		// Then: it fails listing the accepted words
 		assertEquals(
@@ -70,7 +73,7 @@ Deno.test("stringbool rejects non-strings with InvalidType", () => {
 		const schema = stringbool();
 
 		// When: parsing a value that is not a string
-		const result = parseSync(schema, input);
+		const result = parseSync(schema, { input: input, panics });
 
 		// Then: it fails expecting a string
 		assertEquals(
@@ -86,10 +89,10 @@ Deno.test("stringbool uses configured word lists in place of the defaults", () =
 
 	// When: parsing the configured words and a default one
 	// Then: the configured words read, matched ignoring case, and defaults fail
-	assertEquals(parseSync(schema, "oui"), Ok(true));
-	assertEquals(parseSync(schema, " NON "), Ok(false));
+	assertEquals(parseSync(schema, { input: "oui", panics }), Ok(true));
+	assertEquals(parseSync(schema, { input: " NON ", panics }), Ok(false));
 	assertEquals(
-		parseSync(schema, "yes"),
+		parseSync(schema, { input: "yes", panics }),
 		Err(ParseError(InvalidValue({ input: "yes", expected: ["Oui", "non"] }))),
 	);
 });

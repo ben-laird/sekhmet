@@ -1,4 +1,5 @@
 import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import {
 	formatIssue,
@@ -9,12 +10,14 @@ import {
 import { ParseError, parseSync } from "@/src/core/mini/schema.ts";
 import { date } from "./date.ts";
 
+const panics = definePanicRuntime();
+
 Deno.test("date accepts a valid Date and returns the same instance", () => {
 	// Given: a date schema and a valid Date
 	const input = new Date("2026-11-16T00:00:00Z");
 
 	// When: parsing it
-	const result = parseSync(date(), input);
+	const result = parseSync(date(), { input: input, panics });
 
 	// Then: it is accepted, not copied
 	assertEquals(result, Ok(input));
@@ -26,7 +29,7 @@ Deno.test("date rejects an Invalid Date, naming it as received", () => {
 	const input = new Date(Number.NaN);
 
 	// When: parsing it
-	const result = parseSync(date(), input);
+	const result = parseSync(date(), { input: input, panics });
 
 	// Then: it fails with InvalidType, received "invalid date"
 	const issue = InvalidType({ input, expected: "date" });
@@ -38,7 +41,7 @@ Deno.test("date does not coerce strings or timestamps", () => {
 	for (const input of ["2026-11-16", 0, null, undefined, {}]) {
 		// Given: a value that only describes a date
 		// When: parsing it
-		const result = parseSync(date(), input);
+		const result = parseSync(date(), { input: input, panics });
 
 		// Then: it fails with InvalidType
 		assertEquals(
@@ -58,11 +61,11 @@ Deno.test("date's min and max compare times, with each bound's inclusivity", () 
 	// When: parsing the bounds, a copy of the start, and a date before it
 	// Then: the inclusive start passes, by time, and the exclusive end fails
 	assertEquals(
-		parseSync(schema, new Date(start.getTime())),
+		parseSync(schema, { input: new Date(start.getTime()), panics }),
 		Ok(new Date(start)),
 	);
 	assertEquals(
-		parseSync(schema, before),
+		parseSync(schema, { input: before, panics }),
 		Err(
 			ParseError(
 				TooSmall({
@@ -75,7 +78,7 @@ Deno.test("date's min and max compare times, with each bound's inclusivity", () 
 		),
 	);
 	assertEquals(
-		parseSync(schema, end),
+		parseSync(schema, { input: end, panics }),
 		Err(
 			ParseError(
 				TooBig({ input: end, origin: "date", maximum: end, inclusive: false }),

@@ -197,6 +197,8 @@ export interface DiscriminatedUnionView<K extends string, M> {
  * import { entries, formatIssue, parse, parseSync, Schema } from "@sekhmet/schema/core/mini";
  * import { wait } from "@sekhmet/vow";
  *
+ * const panics = definePanicRuntime();
+ *
  * const size = new Schema({
  * 	parse: (input: unknown) => {
  * 		return typeof input === "number" ? Ok(input) : Err("not a size");
@@ -210,12 +212,11 @@ export interface DiscriminatedUnionView<K extends string, M> {
  * 	},
  * });
  *
- * assertEquals(unwrap(parseSync(shape, { kind: "circle", radius: 2 })), {
+ * assertEquals(unwrap(parseSync(shape, { input: { kind: "circle", radius: 2 }, panics })), {
  * 	radius: 2,
  * 	kind: "circle",
  * });
  *
- * const panics = definePanicRuntime();
  * const star = { kind: "star" };
  * const [issue] = entries(unwrapErr(await wait(parse(shape, { input: star, panics }))));
  * assertEquals(issue.path, ["kind"]);

@@ -1,5 +1,6 @@
 import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 import { Ok } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { object as mainObject } from "@/src/composites/main/mod.ts";
 import { Schema as MainSchema } from "@/src/core/main/mod.ts";
@@ -18,6 +19,8 @@ import {
 	tuple,
 	union,
 } from "./mod.ts";
+
+const panics = definePanicRuntime();
 
 const text = string();
 const count = number();
@@ -155,14 +158,19 @@ Deno.test("a missing key reports the inner issue through main optional().nullabl
 	const person = mainObject({ shape: { middle } });
 
 	// When: the key is missing, null, or undefined
-	const missing = person.parseSync({});
+	const missing = person.parseSync({ input: {}, panics });
 
 	// Then: missing fails as text does for undefined; null and undefined pass
 	assertEquals(missing.isErr(), true);
-	assertEquals(person.parseSync({ middle: null }).unwrap(), { middle: null });
-	assertEquals(person.parseSync({ middle: undefined }).unwrap(), {
-		middle: undefined,
+	assertEquals(person.parseSync({ input: { middle: null }, panics }).unwrap(), {
+		middle: null,
 	});
+	assertEquals(
+		person.parseSync({ input: { middle: undefined }, panics }).unwrap(),
+		{
+			middle: undefined,
+		},
+	);
 });
 
 Deno.test("withoutOptional sees through neither a transform nor a hand-written wrapper", () => {
@@ -173,7 +181,7 @@ Deno.test("withoutOptional sees through neither a transform nor a hand-written w
 	const person = mainObject({ shape: { hidden, accepting } });
 
 	// When: both keys are missing
-	const parsed = person.parseSync({});
+	const parsed = person.parseSync({ input: {}, panics });
 
 	// Then: each parses undefined as itself, so both pass
 	assertEquals(parsed.unwrap(), { hidden: undefined, accepting: undefined });

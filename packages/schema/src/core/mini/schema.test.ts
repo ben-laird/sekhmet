@@ -170,48 +170,56 @@ function drain(): Promise<void> {
 
 // An unhandled rejection fails a test on every runtime the suite runs on, so
 // draining after each abandoned parse proves none escapes.
-Deno.test("parseSync abandons an async parse without leaving a rejection behind", async (t) => {
+Deno.test("parseSync reports an abandoned async parse's panic once, leaving no rejection behind", async (t) => {
 	const later = new Schema({
 		parse: (input: number) => Promise.resolve(Ok(input)),
 	});
 
 	await t.step("a mapping that throws once the parse resumes", async () => {
-		// Given: a throwing map over an async schema
+		// Given: a throwing map over an async schema, under a recording runtime
+		const { panics, reported } = recordingPanics();
+		const bug = new Error("mapping bug");
 		const mapped = map(later, (): number => {
-			throw new Error("mapping bug");
+			throw bug;
 		});
 
 		// When: parsing synchronously, then letting the abandoned parse run
-		const result = parseSync(mapped, 1);
+		const result = parseSync(mapped, { input: 1, panics });
 		await drain();
 
-		// Then: the parse was reported async, and its panic stayed with it
+		// Then: the parse was async, and its panic was reported exactly once
 		assertEquals(unionKinds(unwrapErr(result)), "UnexpectedAsyncParse");
+		assertEquals(reported, [bug]);
 	});
 
 	await t.step("a parser whose promise rejects", async () => {
-		// Given: an async parser that rejects
+		// Given: an async parser that rejects, under a recording runtime
+		const { panics, reported } = recordingPanics();
+		const bug = new Error("async bug");
 		const rejecting = new Schema({
 			parse: (_input: number): Promise<Result<number, never>> => {
-				return Promise.reject(new Error("async bug"));
+				return Promise.reject(bug);
 			},
 		});
 
 		// When: parsing synchronously, then letting the abandoned parse run
-		const result = parseSync(rejecting, 1);
+		const result = parseSync(rejecting, { input: 1, panics });
 		await drain();
 
-		// Then: the parse was reported async, and the rejection stayed with it
+		// Then: the parse was async, and the rejection was reported exactly once
 		assertEquals(unionKinds(unwrapErr(result)), "UnexpectedAsyncParse");
+		assertEquals(reported, [bug]);
 	});
 
 	await t.step("a synchronous panic beside async work", async () => {
 		// Given: an object whose field a starts async work that will throw,
 		// and whose field b throws now
+		const { panics, reported } = recordingPanics();
+		const laterBug = new Error("mapping bug");
 		const both = object({
 			shape: {
 				a: map(later, (): number => {
-					throw new Error("mapping bug");
+					throw laterBug;
 				}),
 				b: new Schema({
 					parse: (_input: number): Result<number, never> => {
@@ -221,11 +229,16 @@ Deno.test("parseSync abandons an async parse without leaving a rejection behind"
 			},
 		});
 
-		// When / Then: parseSync unwinds b's throw at once
-		assertThrows(() => parseSync(both, { a: 1, b: 1 }), RangeError, "sync bug");
+		// When / Then: parseSync unwinds b's throw at once, to its waiting caller
+		assertThrows(
+			() => parseSync(both, { input: { a: 1, b: 1 }, panics }),
+			RangeError,
+			"sync bug",
+		);
 
-		// Then: field a's abandoned work resumes without leaving a rejection
+		// Then: field a's abandoned work resumes, and only its panic is reported
 		await drain();
+		assertEquals(reported, [laterBug]);
 	});
 });
 
@@ -238,7 +251,11 @@ Deno.test("parseSync lets a panic unwind to its caller", () => {
 	});
 
 	// When / Then: parseSync throws the payload unchanged
-	assertThrows(() => parseSync(schema, 1), RangeError, "bug");
+	assertThrows(
+		() => parseSync(schema, { input: 1, panics }),
+		RangeError,
+		"bug",
+	);
 });
 
 Deno.test("parseSync succeeds with synchronous schema", () => {
@@ -246,7 +263,7 @@ Deno.test("parseSync succeeds with synchronous schema", () => {
 	const schema = new Schema({ parse: (input: number) => Ok(input * 2) });
 
 	// When: parsing synchronously
-	const result = parseSync(schema, 10);
+	const result = parseSync(schema, { input: 10, panics });
 
 	// Then: the result should be Ok
 	assertEquals(
@@ -265,7 +282,7 @@ Deno.test("parseSync fails with asynchronous schema", () => {
 	});
 
 	// When: parsing synchronously
-	const result = parseSync(schema, 10);
+	const result = parseSync(schema, { input: 10, panics });
 
 	// Then: the result should be an UnexpectedAsyncParse error
 	const error = match(result)({
@@ -290,7 +307,7 @@ Deno.test("parseSync wraps parse errors", () => {
 	});
 
 	// When: parsing synchronously
-	const result = parseSync(schema, 10);
+	const result = parseSync(schema, { input: 10, panics });
 
 	// Then: the error should be wrapped in ParseError
 	const error = match(result)({
@@ -350,7 +367,7 @@ Deno.test("map transforms successful results", () => {
 
 	// When: mapping the output
 	const mapped = map(schema, (n) => n * 2);
-	const result = parseSync(mapped, 10);
+	const result = parseSync(mapped, { input: 10, panics });
 
 	// Then: the output should be transformed
 	assertEquals(
@@ -370,7 +387,7 @@ Deno.test("map preserves errors", () => {
 
 	// When: mapping the output
 	const mapped = map(schema, (n: number) => n * 2);
-	const result = parseSync(mapped, 10);
+	const result = parseSync(mapped, { input: 10, panics });
 
 	// Then: the error should be preserved
 	const error = match(result)({
@@ -396,7 +413,7 @@ Deno.test("mapErr transforms errors", () => {
 
 	// When: mapping the error
 	const mapped = mapErr(schema, (e) => new Error(`${e.message} transformed`));
-	const result = parseSync(mapped, 10);
+	const result = parseSync(mapped, { input: 10, panics });
 
 	// Then: the error should be transformed
 	const error = match(result)({
@@ -420,7 +437,7 @@ Deno.test("pipe chains schemas together", () => {
 
 	// When: piping them together
 	const piped = pipe(first, second);
-	const result = parseSync(piped, "hello");
+	const result = parseSync(piped, { input: "hello", panics });
 
 	// Then: the output should be the chained result
 	assertEquals(
@@ -439,7 +456,7 @@ Deno.test("pipe short-circuits on first error", () => {
 
 	// When: piping them together
 	const piped = pipe(first, second);
-	const result = parseSync(piped, "hello");
+	const result = parseSync(piped, { input: "hello", panics });
 
 	// Then: the error should be propagated without running the second schema
 	const error = match(result)({
@@ -467,7 +484,7 @@ Deno.test("filter accepts values that pass the predicate", () => {
 		error: () => new TypeError(),
 		predicate: isPositive,
 	});
-	const result = parseSync(filtered, 10);
+	const result = parseSync(filtered, { input: 10, panics });
 
 	// Then: the value should pass through
 	assertEquals(
@@ -489,7 +506,7 @@ Deno.test("filter rejects values that fail the predicate", () => {
 		error: () => new TypeError(),
 		predicate: isPositive,
 	});
-	const result = parseSync(filtered, -10);
+	const result = parseSync(filtered, { input: -10, panics });
 
 	// Then: the error should be returned
 	const error = match(result)({
@@ -518,7 +535,7 @@ Deno.test("filter builds its error from the rejected output", () => {
 	});
 
 	// When: parsing a value that fails the predicate
-	const result = parseSync(filtered, -10);
+	const result = parseSync(filtered, { input: -10, panics });
 
 	// Then: the error carries the rejected output
 	assertEquals(union(unwrapErr(result)), "-10 is not positive");
@@ -563,7 +580,7 @@ Deno.test("filter does not build an error for an accepted output", async () => {
 	);
 
 	// When: parsing values that pass the predicate
-	const syncResult = parseSync(sync, 10);
+	const syncResult = parseSync(sync, { input: 10, panics });
 	const asyncResult = resume(await wait(parse(async, { input: 20, panics })));
 
 	// Then: both pass through, and the error builder was never called
@@ -622,7 +639,7 @@ const laterDigits = new Schema({
 
 /** The error a `parseSync` failure wraps, or `undefined` on success. */
 function syncError<I, O, E>(schema: Schema<I, O, E>, input: I): unknown {
-	return match(parseSync(schema, input))({
+	return match(parseSync(schema, { input: input, panics }))({
 		Ok: () => undefined,
 		Err: (error) => union(error),
 	});
@@ -641,7 +658,7 @@ Deno.test("andThen transforms a successful output into its Result", () => {
 	// When: parsing an even, an odd and a non-digit input
 	// Then: next's Ok and Err become the parse's, and self's error passes
 	// through
-	assertEquals(unwrap(parseSync(halved, "42")), 21);
+	assertEquals(unwrap(parseSync(halved, { input: "42", panics })), 21);
 	assertEquals(syncError(halved, "7"), "odd");
 	assertEquals(syncError(halved, "x"), "not digits");
 	assertEquals(unionKinds(parse(halved, { input: "42", panics })), "Resolved");
@@ -656,7 +673,7 @@ Deno.test("andThen does not call next when self fails", () => {
 	});
 
 	// When: parsing an input self rejects
-	parseSync(chained, "x");
+	parseSync(chained, { input: "x", panics });
 
 	// Then: next never ran
 	assertEquals(calls, []);
@@ -676,7 +693,7 @@ Deno.test("andThen with a promise is async, and parseSync reports it", async () 
 		"Pending",
 	);
 	assertEquals(
-		unionKinds(unwrapErr(parseSync(fetched, "1"))),
+		unionKinds(unwrapErr(parseSync(fetched, { input: "1", panics }))),
 		"UnexpectedAsyncParse",
 	);
 	assertEquals(
@@ -699,7 +716,7 @@ Deno.test("andThen accepts enum's main Result from next", () => {
 
 	// When: parsing
 	// Then: the main Result's value is the output
-	assertEquals(unwrap(parseSync(chained, "21")), 42);
+	assertEquals(unwrap(parseSync(chained, { input: "21", panics })), 42);
 });
 
 Deno.test("law: andThen with an Ok-wrapping next equals map", () => {
@@ -711,7 +728,10 @@ Deno.test("law: andThen with an Ok-wrapping next equals map", () => {
 	// When: parsing valid and invalid inputs with both
 	// Then: the results are equal
 	for (const input of ["0", "21", "x", ""]) {
-		assertEquals(parseSync(chained, input), parseSync(mapped, input));
+		assertEquals(
+			parseSync(chained, { input: input, panics }),
+			parseSync(mapped, { input: input, panics }),
+		);
 	}
 });
 
@@ -723,7 +743,7 @@ Deno.test("andThen panics when next throws", () => {
 
 	// When: parsing an input self accepts
 	// Then: the throw is not caught
-	assertThrows(() => parseSync(broken, "1"), Error, "bug");
+	assertThrows(() => parseSync(broken, { input: "1", panics }), Error, "bug");
 });
 
 Deno.test("orElse replaces a failure with recover's Result", () => {
@@ -733,8 +753,8 @@ Deno.test("orElse replaces a failure with recover's Result", () => {
 
 	// When: parsing a valid and an invalid input
 	// Then: a success passes through, and recover's Result replaces a failure
-	assertEquals(unwrap(parseSync(lenient, "7")), 7);
-	assertEquals(unwrap(parseSync(lenient, "x")), 0);
+	assertEquals(unwrap(parseSync(lenient, { input: "7", panics })), 7);
+	assertEquals(unwrap(parseSync(lenient, { input: "x", panics })), 0);
 	assertEquals(syncError(reworded, "x"), "not digits!");
 	assertEquals(unionKinds(parse(lenient, { input: "x", panics })), "Resolved");
 });
@@ -748,7 +768,7 @@ Deno.test("orElse does not call recover when self succeeds", () => {
 	});
 
 	// When: parsing an input self accepts
-	parseSync(recovered, "1");
+	parseSync(recovered, { input: "1", panics });
 
 	// Then: recover never ran
 	assertEquals(calls, []);
@@ -779,7 +799,10 @@ Deno.test("inspect taps each successful output once, without changing it", async
 	const asyncTapped = inspect(laterDigits, record);
 
 	// When: parsing valid and invalid inputs
-	const results = [parseSync(syncTapped, "1"), parseSync(syncTapped, "x")];
+	const results = [
+		parseSync(syncTapped, { input: "1", panics }),
+		parseSync(syncTapped, { input: "x", panics }),
+	];
 	const pending = wait(parse(asyncTapped, { input: "2", panics }));
 	const seenBeforeResolving = [...seen];
 	const resolved = resume(await pending);
@@ -787,7 +810,10 @@ Deno.test("inspect taps each successful output once, without changing it", async
 
 	// Then: the tap ran once per success, after the async value was known, and
 	// the results are those of the untapped schemas
-	assertEquals(results, [parseSync(digits, "1"), parseSync(digits, "x")]);
+	assertEquals(results, [
+		parseSync(digits, { input: "1", panics }),
+		parseSync(digits, { input: "x", panics }),
+	]);
 	assertEquals(
 		resolved,
 		resume(await wait(parse(laterDigits, { input: "2", panics }))),
@@ -806,7 +832,10 @@ Deno.test("inspectErr taps each error once, without changing it", async () => {
 	const asyncTapped = inspectErr(laterDigits, record);
 
 	// When: parsing valid and invalid inputs
-	const results = [parseSync(syncTapped, "1"), parseSync(syncTapped, "x")];
+	const results = [
+		parseSync(syncTapped, { input: "1", panics }),
+		parseSync(syncTapped, { input: "x", panics }),
+	];
 	const pending = wait(parse(asyncTapped, { input: "y", panics }));
 	const seenBeforeResolving = [...seen];
 	const resolved = resume(await pending);
@@ -814,7 +843,10 @@ Deno.test("inspectErr taps each error once, without changing it", async () => {
 
 	// Then: the tap ran once per failure, after the async error was known, and
 	// the results are those of the untapped schemas
-	assertEquals(results, [parseSync(digits, "1"), parseSync(digits, "x")]);
+	assertEquals(results, [
+		parseSync(digits, { input: "1", panics }),
+		parseSync(digits, { input: "x", panics }),
+	]);
 	assertEquals(
 		resolved,
 		resume(await wait(parse(laterDigits, { input: "y", panics }))),
@@ -829,7 +861,7 @@ Deno.test("preprocess transforms the input before parsing", () => {
 
 	// When: parsing padded valid and invalid inputs
 	// Then: digits parsed the trimmed input, synchronously
-	assertEquals(unwrap(parseSync(trimmed, " 42 ")), 42);
+	assertEquals(unwrap(parseSync(trimmed, { input: " 42 ", panics })), 42);
 	assertEquals(syncError(trimmed, " x "), "not digits");
 	assertEquals(unionKinds(parse(trimmed, { input: "1", panics })), "Resolved");
 });
@@ -856,7 +888,10 @@ Deno.test("law: preprocess with the identity equals the schema", () => {
 	// When: parsing valid and invalid inputs with both
 	// Then: the results are equal
 	for (const input of ["0", "21", "x", ""]) {
-		assertEquals(parseSync(same, input), parseSync(digits, input));
+		assertEquals(
+			parseSync(same, { input: input, panics }),
+			parseSync(digits, { input: input, panics }),
+		);
 	}
 });
 

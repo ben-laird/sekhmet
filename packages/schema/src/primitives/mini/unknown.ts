@@ -22,10 +22,13 @@ import { Schema } from "@/src/core/mini/schema.ts";
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { unknown } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const payload = { any: "thing" };
  *
- * assertEquals(unwrap(parseSync(unknown(), payload)), payload);
+ * assertEquals(unwrap(parseSync(unknown(), { input: payload, panics })), payload);
  * ```
  */
 export function unknown(): Schema<unknown, unknown, never> {

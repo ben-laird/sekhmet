@@ -1,4 +1,5 @@
 import { Ok, unwrap } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { getStructParams, struct } from "@sekhmet/primordials/struct";
 import {
 	assertEquals,
@@ -15,6 +16,8 @@ import {
 	type ViewOf,
 	viewed,
 } from "./view.ts";
+
+const panics = definePanicRuntime();
 
 const text = new Schema({ parse: (input: string) => Ok(input) });
 const Labelled = nodeKind<{ readonly label: string }>({ name: "Labelled" });
@@ -36,7 +39,7 @@ Deno.test("viewed builds the schema init describes, with the view's own properti
 	// Then: it is a Schema parsing as init says, whose view is the child itself
 	assertType<IsExact<Output<typeof labelled>, string>>(true);
 	assertInstanceOf(labelled, Schema);
-	assertEquals(unwrap(parseSync(labelled, "x")), "x");
+	assertEquals(unwrap(parseSync(labelled, { input: "x", panics })), "x");
 	assertStrictEquals(nodeOf(labelled), node);
 	assertStrictEquals(labelled.text, text);
 	assertEquals(Object.keys(labelled), ["text"]);

@@ -1,4 +1,5 @@
 import { Err, Ok, type Result } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals, assertThrows } from "@std/assert";
 import {
 	InvalidType,
@@ -15,6 +16,8 @@ import {
 } from "@/src/core/mini/schema.ts";
 import { number } from "./number.ts";
 
+const panics = definePanicRuntime();
+
 type Parsed = Result<number, ParseSyncError<SchemaIssue>>;
 
 function failed(issue: SchemaIssue): Parsed {
@@ -30,7 +33,11 @@ function assertParses({
 	cases: readonly [input: unknown, expected: Parsed][];
 }): void {
 	for (const [input, expected] of cases) {
-		assertEquals(parseSync(schema, input), expected, String(input));
+		assertEquals(
+			parseSync(schema, { input: input, panics }),
+			expected,
+			String(input),
+		);
 	}
 }
 
@@ -227,7 +234,10 @@ Deno.test("{ value, inclusive: true } is the same as a bare bound", () => {
 	for (const input of [-1, 0, 5, 10, 11]) {
 		// When: parsing a value with each
 		// Then: both give the same result
-		assertEquals(parseSync(spelled, input), parseSync(bare, input));
+		assertEquals(
+			parseSync(spelled, { input: input, panics }),
+			parseSync(bare, { input: input, panics }),
+		);
 	}
 });
 
@@ -237,7 +247,7 @@ Deno.test("checks report the first failure in their documented order", () => {
 
 	// When: parsing a valid value, a non-number and values failing several checks
 	// Then: int comes before min and max, which come before multipleOf
-	assertEquals(parseSync(schema, 50), Ok(50));
+	assertEquals(parseSync(schema, { input: 50, panics }), Ok(50));
 	assertParses({
 		schema,
 		cases: [
@@ -287,7 +297,7 @@ Deno.test("an allowed NaN is accepted without any other check", () => {
 		const schema = number({ nan: true, ...options });
 
 		// When: parsing NaN
-		const result = parseSync(schema, Number.NaN);
+		const result = parseSync(schema, { input: Number.NaN, panics });
 
 		// Then: allowed means accepted, so NaN passes
 		assertEquals(result, Ok(Number.NaN), JSON.stringify(options));
@@ -412,7 +422,7 @@ Deno.test("checks run on the coerced number", () => {
 	const schema = number({ coerce: true, min: 3 });
 
 	// When: parsing a numeric string whose number is too small
-	const result = parseSync(schema, " 2 ");
+	const result = parseSync(schema, { input: " 2 ", panics });
 
 	// Then: the check reports the converted value
 	assertEquals(

@@ -272,6 +272,7 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
 	privateTypeRef("schema/src/core/mini/node.ts", "customData", "Option"),
 	privateTypeRef("schema/src/core/mini/schema.ts", "Parser", "Result"),
 	privateTypeRef("schema/src/core/mini/schema.ts", "Schema", "Struct"),
+	privateTypeRef("schema/src/core/mini/guard.ts", "is", "PanicBoundary"),
 	privateTypeRef(
 		"schema/src/core/mini/schema.ts",
 		'ParseOptions["panics"]',

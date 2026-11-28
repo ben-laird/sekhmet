@@ -22,9 +22,12 @@ import { Schema } from "@/src/core/mini/schema.ts";
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { symbol } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(isOk(parseSync(symbol(), Symbol("id"))), true);
- * assertEquals(isErr(parseSync(symbol(), "id")), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(isOk(parseSync(symbol(), { input: Symbol("id"), panics })), true);
+ * assertEquals(isErr(parseSync(symbol(), { input: "id", panics })), true);
  * ```
  */
 export function symbol(): Schema<unknown, symbol, SchemaIssue> {

@@ -433,9 +433,12 @@ To narrow a value in an `if` or a `filter` call, make a guard with `is`:
 import { assertEquals } from "@std/assert";
 import { is } from "@sekhmet/schema/core";
 import { number } from "@sekhmet/schema/primitives";
+import { definePanicRuntime } from "@sekhmet/panic";
+
+const panics = definePanicRuntime();
 
 const values: (string | number)[] = ["a", 1, "b", 2];
-const numbers: number[] = values.filter(is(number()));
+const numbers: number[] = values.filter(is(number(), { panics }));
 
 assertEquals(numbers, [1, 2]);
 ```

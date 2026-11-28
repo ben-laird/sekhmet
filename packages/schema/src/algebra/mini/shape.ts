@@ -127,11 +127,14 @@ function schemaOf(entry: AnySchema | Field): AnySchema {
  * import { object } from "@sekhmet/schema/composites/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number, string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const user = { name: string(), age: number() };
  * const name = object({ shape: pick({ shape: user, keys: ["name"] }) });
  *
- * assertEquals(unwrap(parseSync(name, { name: "Ada", age: 36 })), { name: "Ada" });
+ * assertEquals(unwrap(parseSync(name, { input: { name: "Ada", age: 36 }, panics })), { name: "Ada" });
  * ```
  */
 export function pick<S extends Shape, const K extends keyof S & string>(
@@ -167,11 +170,14 @@ export function pick(options: {
  * import { object } from "@sekhmet/schema/composites/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const account = { name: string(), password: string() };
  * const visible = object({ shape: omit({ shape: account, keys: ["password"] }) });
  *
- * assertEquals(unwrap(parseSync(visible, { name: "Ada", password: "x" })), { name: "Ada" });
+ * assertEquals(unwrap(parseSync(visible, { input: { name: "Ada", password: "x" }, panics })), { name: "Ada" });
  * ```
  */
 export function omit<S extends Shape, const K extends keyof S & string>(
@@ -207,11 +213,14 @@ export function omit(options: {
  * import { object } from "@sekhmet/schema/composites/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const patch = object({ shape: partial({ name: string(), email: string() }) });
  *
- * assertEquals(unwrap(parseSync(patch, { name: "Ada" })), { name: "Ada" });
- * assertEquals(isErr(parseSync(patch, { name: undefined })), true);
+ * assertEquals(unwrap(parseSync(patch, { input: { name: "Ada" }, panics })), { name: "Ada" });
+ * assertEquals(isErr(parseSync(patch, { input: { name: undefined }, panics })), true);
  * ```
  */
 export function partial<S extends Shape>(shape: S): PartialShape<S>;
@@ -241,12 +250,15 @@ export function partial(shape: Shape): Shape {
  * import { object, type Shape } from "@sekhmet/schema/composites/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const draft = { title: { schema: string(), key: "optional" } } satisfies Shape;
  * const post = object({ shape: required(draft) });
  *
- * assertEquals(unwrap(parseSync(post, { title: "Hi" })), { title: "Hi" });
- * assertEquals(isErr(parseSync(post, {})), true);
+ * assertEquals(unwrap(parseSync(post, { input: { title: "Hi" }, panics })), { title: "Hi" });
+ * assertEquals(isErr(parseSync(post, { input: {}, panics })), true);
  * ```
  */
 export function required<S extends Shape>(shape: S): RequiredShape<S>;
