@@ -110,7 +110,9 @@ export interface PanicRuntime {
 	 * crashes the process under the Deno and Node defaults. The same goes
 	 * for a hook that throws while reporting a throwing dependent. This is
 	 * deliberate, and a change from the old `catchUnwindAsync`, which
-	 * rejected its promise. The default hook never throws.
+	 * rejected its promise. The default hook never throws. A thenable that
+	 * rejects inside its own `then` call, or a `then` that throws, has a
+	 * caller: then the `Panic (PanicHook)` escapes `catchUnwind` itself.
 	 *
 	 * @template T The value `fn` returns, or its thenable fulfils with
 	 * @param fn The work to run, sync or async
@@ -482,7 +484,9 @@ function reportEach({
  * thenable it fulfils with, and heeds only the first callback of each. A
  * rejection, or a `then` that throws, is reported and settled as `Panicked`.
  * If the hook throws, the vow still settles, then the `Panic (PanicHook)`
- * escapes the callback, as an unhandled rejection in a promise's.
+ * escapes the callback, as an unhandled rejection in a promise's. When the
+ * callback ran inside `then` itself (a thenable that rejects at once, or a
+ * `then` that throws), it escapes `catchUnwind`, as sync work's does.
  */
 function adopt<T>({
 	thenable,
@@ -526,9 +530,22 @@ function adopt<T>({
 			called = true;
 			fail(payload);
 		};
+		// A throw out of our own callbacks (a double fault) is never `then`'s
+		let escaped: { readonly thrown: unknown } | undefined;
+		const own = <A>(callback: (arg: A) => void): ((arg: A) => void) => {
+			return (arg) => {
+				try {
+					callback(arg);
+				} catch (thrown: unknown) {
+					escaped ??= { thrown };
+					throw thrown;
+				}
+			};
+		};
 		try {
-			void next.then(fulfil, reject);
+			void next.then(own(fulfil), own(reject));
 		} catch (payload: unknown) {
+			if (escaped !== undefined) throw escaped.thrown;
 			reject(payload);
 		}
 	};
