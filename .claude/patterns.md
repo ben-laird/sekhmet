@@ -703,7 +703,11 @@ that combinators pass through untouched.
    silently if dropped. The only two legal moves are to propagate the panic,
    or to catch it at a boundary that reports it.
 4. **The boundary that catches a panic reports it, exactly once,** and hands
-   back a `Vow<Outcome<T, never, unknown>>`.
+   back a `Vow<Outcome<T, never, unknown>>`. Once is per runtime: another
+   runtime the same payload passes through reports it again, once. A
+   primitive payload (a string, `undefined`) can't be recorded, so every
+   boundary that catches one reports it, even after `resumeUnwind`; throw a
+   `Panic` for the once-only guarantee.
 5. **After that, a panic is a value.** In a result it is `Outcome`'s
    `Panicked(payload)`. An enum with its own terminal for it uses a variant
    named `Panicked` with an `unknown` payload and the same meaning.
