@@ -74,11 +74,14 @@ export type Branded<T, B extends string> = T & {
  * import { brand, type Branded } from "@sekhmet/schema/algebra/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * type UserId = Branded<string, "UserId">;
  * const userId = brand(string({ format: "uuid" }), "UserId");
  *
- * const id: UserId = unwrap(parseSync(userId, "4f3c1f9e-8f0a-4b8e-9a59-0a1b2c3d4e5f"));
+ * const id: UserId = unwrap(parseSync(userId, { input: "4f3c1f9e-8f0a-4b8e-9a59-0a1b2c3d4e5f", panics }));
  * assertEquals(id, "4f3c1f9e-8f0a-4b8e-9a59-0a1b2c3d4e5f");
  * ```
  */

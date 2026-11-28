@@ -32,13 +32,16 @@ import { type AnySchema, Schema } from "@/src/core/mini/schema.ts";
  * import { or, type OrOptions } from "@sekhmet/schema/algebra/mini";
  * import { parseSync, type SchemaIssue } from "@sekhmet/schema/core/mini";
  * import { number, string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const options: OrOptions<unknown, string, SchemaIssue, unknown, number, SchemaIssue> = {
  * 	left: string(),
  * 	right: number(),
  * };
  *
- * assertEquals(unwrap(parseSync(or(options), 3)), 3);
+ * assertEquals(unwrap(parseSync(or(options), { input: 3, panics })), 3);
  * ```
  */
 export interface OrOptions<I, O, E, J, P, F> {
@@ -96,11 +99,12 @@ function branches(side: AnySchema): readonly [AnySchema, ...AnySchema[]] {
  * import { boolean, number, string } from "@sekhmet/schema/primitives/mini";
  * import { wait } from "@sekhmet/vow";
  *
+ * const panics = definePanicRuntime();
+ *
  * const scalar = or({ left: or({ left: string(), right: number() }), right: boolean() });
  *
- * assertEquals(unwrap(parseSync(scalar, true)), true);
+ * assertEquals(unwrap(parseSync(scalar, { input: true, panics })), true);
  *
- * const panics = definePanicRuntime();
  * const [{ error }] = entries(
  * 	unwrapErr(await wait(parse(scalar, { input: null, panics }))),
  * );

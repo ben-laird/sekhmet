@@ -44,7 +44,9 @@ Deno.test("record parses every key and value", () => {
 	const scores = record({ key: name, value: count });
 
 	// When: parsing a matching object
-	const parsed = unwrap(parseSync(scores, { ada: 3, bo: 4 }));
+	const parsed = unwrap(
+		parseSync(scores, { input: { ada: 3, bo: 4 }, panics }),
+	);
 
 	// Then: every entry is kept
 	assertEquals(parsed, { ada: 3, bo: 4 });
@@ -78,7 +80,7 @@ Deno.test("record outputs the key schema's output as the key", () => {
 	const scores = record({ key: upper, value: count });
 
 	// When: parsing an object
-	const parsed = unwrap(parseSync(scores, { ada: 3 }));
+	const parsed = unwrap(parseSync(scores, { input: { ada: 3 }, panics }));
 
 	// Then: the output is keyed by the transformed key
 	assertEquals(parsed, { ADA: 3 });

@@ -1,5 +1,6 @@
 import { union } from "@sekhmet/enum/core/mini/exit";
 import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals, assertThrows, fail } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { number } from "@/src/primitives/mini/number.ts";
@@ -13,10 +14,12 @@ import {
 	Schema,
 } from "./schema.ts";
 
+const panics = definePanicRuntime();
+
 Deno.test("is narrows its input in an if", () => {
 	// Given: an unknown value and a guard from string()
 	const value: unknown = "ada";
-	const isString = is(string());
+	const isString = is(string(), { panics });
 
 	// When: the guard tests the value
 	if (isString(value)) {
@@ -31,7 +34,7 @@ Deno.test("is narrows its input in an if", () => {
 
 Deno.test("is answers whether the schema accepts the input", () => {
 	// Given: a guard from string()
-	const isString = is(string());
+	const isString = is(string(), { panics });
 
 	// When: it tests a value the schema accepts and one it rejects
 	const accepted = isString("a");
@@ -47,7 +50,7 @@ Deno.test("is narrows the element type of Array.prototype.filter", () => {
 	const values: readonly (string | number)[] = ["a", 1, "b", 2];
 
 	// When: it is filtered with a guard from number()
-	const numbers = values.filter(is(number()));
+	const numbers = values.filter(is(number(), { panics }));
 
 	// Then: the result is typed and filled as the schema's output
 	assertType<IsExact<typeof numbers, number[]>>(true);
@@ -63,7 +66,7 @@ Deno.test("is keeps the input type the schema's input narrows", () => {
 	});
 
 	// When: a guard from it filters strings
-	const roles = ["user", "admin"].filter(is(admin));
+	const roles = ["user", "admin"].filter(is(admin, { panics }));
 
 	// Then: the result is the output intersected with the input
 	assertType<IsExact<typeof roles, "admin"[]>>(true);
@@ -83,12 +86,12 @@ Deno.test("is works as filter's predicate", () => {
 	});
 	const text = filter(scalar, {
 		error: () => "not text",
-		predicate: is(string()),
+		predicate: is(string(), { panics }),
 	});
 
 	// When: it parses a string and a number
-	const accepted = parseSync(text, "a");
-	const rejected = parseSync(text, 1);
+	const accepted = parseSync(text, { input: "a", panics });
+	const rejected = parseSync(text, { input: 1, panics });
 
 	// Then: the output is narrowed to string, and the number fails with the error
 	assertType<IsExact<Output<typeof text>, string>>(true);
@@ -99,8 +102,8 @@ Deno.test("is works as filter's predicate", () => {
 
 Deno.test("is only checks a transforming schema's output, not the input", () => {
 	// Given: guards from schemas that transform (trim, coercion)
-	const isShort = is(string({ trim: true, maxLength: 1 }));
-	const isNumber = is(number({ coerce: true }));
+	const isShort = is(string({ trim: true, maxLength: 1 }), { panics });
+	const isNumber = is(number({ coerce: true }), { panics });
 
 	// When: they test inputs that pass only after transforming
 	const padded = isShort("  a  ");
@@ -118,7 +121,7 @@ Deno.test("is panics on a schema that parses asynchronously", () => {
 	const later = new Schema({
 		parse: (input: string) => Promise.resolve(Ok<string, string>(input)),
 	});
-	const isLater = is(later);
+	const isLater = is(later, { panics });
 
 	// When: the guard tests a value
 	// Then: it panics with a message naming the cause

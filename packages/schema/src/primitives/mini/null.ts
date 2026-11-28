@@ -25,9 +25,12 @@ import { Schema } from "@/src/core/mini/schema.ts";
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { null_ } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(isOk(parseSync(null_(), null)), true);
- * assertEquals(isErr(parseSync(null_(), undefined)), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(isOk(parseSync(null_(), { input: null, panics })), true);
+ * assertEquals(isErr(parseSync(null_(), { input: undefined, panics })), true);
  * ```
  */
 export function null_(): Schema<unknown, null, SchemaIssue> {

@@ -13,6 +13,9 @@
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { object } from "@sekhmet/schema/composites";
  * import { number, string } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const user = object({
  * 	shape: {
@@ -25,7 +28,7 @@
  * });
  *
  * const input = { name: "Ada", nickname: undefined, tags: [] };
- * assertEquals(unwrap(user.parseSync(input)), input);
+ * assertEquals(unwrap(user.parseSync({ input: input, panics })), input);
  * ```
  *
  * @module
@@ -172,6 +175,8 @@ export function array<I, O, E, S extends MiniSchema<I, O, E>>(
  * import { entries, formatIssue, parse, parseSync, Schema } from "@sekhmet/schema/core/mini";
  * import { wait } from "@sekhmet/vow";
  *
+ * const panics = definePanicRuntime();
+ *
  * const size = new Schema({
  * 	parse: (input: unknown) => {
  * 		return typeof input === "number" ? Ok(input) : Err("not a size");
@@ -185,12 +190,11 @@ export function array<I, O, E, S extends MiniSchema<I, O, E>>(
  * 	},
  * });
  *
- * assertEquals(unwrap(parseSync(shape, { kind: "circle", radius: 2 })), {
+ * assertEquals(unwrap(parseSync(shape, { input: { kind: "circle", radius: 2 }, panics })), {
  * 	radius: 2,
  * 	kind: "circle",
  * });
  *
- * const panics = definePanicRuntime();
  * const star = { kind: "star" };
  * const [issue] = entries(unwrapErr(await wait(parse(shape, { input: star, panics }))));
  * assertEquals(issue.path, ["kind"]);
@@ -231,9 +235,11 @@ export function discriminatedUnion<
  * import { formatIssue, parse, parseSync } from "@sekhmet/schema/core/mini";
  * import { wait } from "@sekhmet/vow";
  *
+ * const panics = definePanicRuntime();
+ *
  * const color = enumOf(["red", "green"]);
  *
- * assertEquals(unwrap(parseSync(color, "red")), "red");
+ * assertEquals(unwrap(parseSync(color, { input: "red", panics })), "red");
  * assertEquals(
  * 	formatIssue(
  * 		unwrapErr(await wait(parse(color, { input: "blue", panics: definePanicRuntime() }))),
@@ -266,6 +272,9 @@ export function enumOf<const T extends readonly [Literal, ...Literal[]]>(
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { array, lazy, object } from "@sekhmet/schema/composites";
  * import { type Issues, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * interface Tree {
  * 	children: Tree[];
@@ -274,7 +283,7 @@ export function enumOf<const T extends readonly [Literal, ...Literal[]]>(
  * 	shape: { children: array({ item: lazy(() => tree) }) },
  * });
  *
- * assertEquals(unwrap(parseSync(tree, { children: [{ children: [] }] })), {
+ * assertEquals(unwrap(parseSync(tree, { input: { children: [{ children: [] }] }, panics })), {
  * 	children: [{ children: [] }],
  * });
  * ```
@@ -301,10 +310,13 @@ export function lazy<I, O, E, S extends MiniSchema<I, O, E>>(
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { nullable } from "@sekhmet/schema/composites";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const text = new Schema({ parse: (input: unknown) => Ok(String(input)) });
  *
- * assertEquals(unwrap(parseSync(nullable(text), null)), null);
+ * assertEquals(unwrap(parseSync(nullable(text), { input: null, panics })), null);
  * ```
  */
 export function nullable<I, O, E, S extends MiniSchema<I, O, E>>(
@@ -334,11 +346,14 @@ export function nullable<I, O, E, S extends MiniSchema<I, O, E>>(
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { array, optional } from "@sekhmet/schema/composites";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const text = new Schema({ parse: (input: unknown) => Ok(String(input)) });
  * const gaps = array({ item: optional(text) });
  *
- * assertEquals(unwrap(parseSync(gaps, ["a", undefined])), ["a", undefined]);
+ * assertEquals(unwrap(parseSync(gaps, { input: ["a", undefined], panics })), ["a", undefined]);
  * assertEquals(optional(text).inner, text);
  * ```
  */
@@ -414,6 +429,9 @@ export function optional<I, O, E, S extends MiniSchema<I, O, E>>(
  * import { object, optional } from "@sekhmet/schema/composites";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const user = object({
  * 	shape: {
@@ -423,12 +441,12 @@ export function optional<I, O, E, S extends MiniSchema<I, O, E>>(
  * 	},
  * });
  *
- * assertEquals(unwrap(parseSync(user, { name: "Ada", middle: undefined })), {
+ * assertEquals(unwrap(parseSync(user, { input: { name: "Ada", middle: undefined }, panics })), {
  * 	name: "Ada",
  * 	middle: undefined,
  * });
- * assertEquals(isErr(parseSync(user, { name: "Ada" })), true);
- * assertEquals(isErr(parseSync(user, { name: "Ada", middle: "A", nickname: undefined })), true);
+ * assertEquals(isErr(parseSync(user, { input: { name: "Ada" }, panics })), true);
+ * assertEquals(isErr(parseSync(user, { input: { name: "Ada", middle: "A", nickname: undefined }, panics })), true);
  * ```
  * @example
  * ```ts
@@ -441,14 +459,15 @@ export function optional<I, O, E, S extends MiniSchema<I, O, E>>(
  * import { string } from "@sekhmet/schema/primitives/mini";
  * import { wait } from "@sekhmet/vow";
  *
+ * const panics = definePanicRuntime();
+ *
  * const shape = { name: string() };
  * const strict = object({ shape, unknownKeys: "strict" });
  * const loose = object({ shape, unknownKeys: "passthrough" });
  * const input = { name: "Ada", admin: true };
  *
- * assertEquals(unwrap(parseSync(object({ shape }), input)), { name: "Ada" });
- * assertEquals(unwrap(parseSync(loose, input)), input);
- * const panics = definePanicRuntime();
+ * assertEquals(unwrap(parseSync(object({ shape }), { input: input, panics })), { name: "Ada" });
+ * assertEquals(unwrap(parseSync(loose, { input: input, panics })), input);
  * const [issue] = entries(unwrapErr(await wait(parse(strict, { input, panics }))));
  * assertEquals(issue.path, ["admin"]);
  * ```
@@ -485,6 +504,9 @@ export function object<
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { record } from "@sekhmet/schema/composites";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const name = new Schema({ parse: (input: string) => Ok(input) });
  * const score = new Schema({
@@ -494,7 +516,7 @@ export function object<
  * });
  * const scores = record({ key: name, value: score });
  *
- * assertEquals(unwrap(parseSync(scores, { ada: 3 })), { ada: 3 });
+ * assertEquals(unwrap(parseSync(scores, { input: { ada: 3 }, panics })), { ada: 3 });
  * ```
  */
 export function record<
@@ -537,6 +559,9 @@ export function record<
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { tuple } from "@sekhmet/schema/composites";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const text = new Schema({
  * 	parse: (input: unknown) => {
@@ -549,7 +574,7 @@ export function record<
  * 	},
  * });
  *
- * assertEquals(unwrap(parseSync(tuple([text, count]), ["apples", 3])), ["apples", 3]);
+ * assertEquals(unwrap(parseSync(tuple([text, count]), { input: ["apples", 3], panics })), ["apples", 3]);
  * ```
  */
 export function tuple<const T extends readonly AnySchema[]>(
@@ -580,6 +605,8 @@ export function tuple<const T extends readonly AnySchema[]>(
  * import { entries, formatIssue, parse, parseSync, Schema } from "@sekhmet/schema/core/mini";
  * import { wait } from "@sekhmet/vow";
  *
+ * const panics = definePanicRuntime();
+ *
  * const text = new Schema({
  * 	parse: (input: unknown) => {
  * 		return typeof input === "string" ? Ok(input) : Err("not text");
@@ -592,9 +619,8 @@ export function tuple<const T extends readonly AnySchema[]>(
  * });
  * const textOrCount = union([text, count]);
  *
- * assertEquals(unwrap(parseSync(textOrCount, 3)), 3);
+ * assertEquals(unwrap(parseSync(textOrCount, { input: 3, panics })), 3);
  *
- * const panics = definePanicRuntime();
  * const [{ error }] = entries(
  * 	unwrapErr(await wait(parse(textOrCount, { input: null, panics }))),
  * );

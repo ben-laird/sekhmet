@@ -1,5 +1,6 @@
 import { isNone, type Option, unwrap } from "@sekhmet/enum/option/mini";
 import { Ok, unwrap as unwrapResult } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { getStructParams } from "@sekhmet/primordials/struct";
 import { assertEquals, assertStrictEquals, assertThrows } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
@@ -18,6 +19,8 @@ import { nodeOf } from "./node.ts";
 import { map, type Output, parseSync, Schema } from "./schema.ts";
 import { viewed } from "./view.ts";
 
+const panics = definePanicRuntime();
+
 const label = annotationKey<string>({ name: "label" });
 const order = annotationKey<number>({ name: "order" });
 const text = new Schema({ parse: (input: string) => Ok(input) });
@@ -28,7 +31,10 @@ Deno.test("annotate keeps the parser and node and adds the annotations", () => {
 	const labelled = annotate(text, [label("Name"), order(1)]);
 
 	// Then: it parses as before, with the same node, and has the annotations
-	assertEquals(unwrapResult(parseSync(labelled, "Ada")), "Ada");
+	assertEquals(
+		unwrapResult(parseSync(labelled, { input: "Ada", panics })),
+		"Ada",
+	);
 	assertStrictEquals(getStructParams(labelled).run, getStructParams(text).run);
 	assertStrictEquals(nodeOf(labelled), nodeOf(text));
 	assertEquals(unwrap(annotation({ schema: labelled, key: label })), "Name");
@@ -136,7 +142,7 @@ Deno.test("annotate keeps the view, on a new mini or main Schema", () => {
 		"Main",
 	);
 	assertEquals(isNone(annotation({ schema: mainViewed, key: label })), true);
-	assertEquals(mainLabelled.parseSync("a").unwrap(), "a");
+	assertEquals(mainLabelled.parseSync({ input: "a", panics }).unwrap(), "a");
 });
 
 Deno.test("annotate works on frozen schemas and on subclasses adding only own fields", () => {
@@ -159,7 +165,7 @@ Deno.test("annotate works on frozen schemas and on subclasses adding only own fi
 
 	// Then: each is a new, unfrozen Schema with the annotation, and an own
 	// field comes along as the view; it is a plain Schema, not the subclass
-	assertEquals(labelledFrozen.parseSync("a").unwrap(), "a");
+	assertEquals(labelledFrozen.parseSync({ input: "a", panics }).unwrap(), "a");
 	assertEquals(Object.isFrozen(labelledFrozen), false);
 	assertEquals(labelledTagged.tag, "t");
 	assertEquals(labelledMini.tag, "m");
@@ -189,9 +195,9 @@ Deno.test("annotate panics on a subclass that adds prototype members", async (t)
 	}
 	class WithOverride extends MainSchema<string, string, never> {
 		override parseSync(
-			input: string,
+			options: Parameters<MainSchema<string, string, never>["parseSync"]>[0],
 		): ReturnType<MainSchema<string, string, never>["parseSync"]> {
-			return super.parseSync(input);
+			return super.parseSync(options);
 		}
 	}
 	const parse = (input: string) => Ok(input);

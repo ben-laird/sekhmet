@@ -1,16 +1,19 @@
 import { match } from "@sekhmet/enum/core/mini/exit";
 import { Err } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals } from "@std/assert";
 import { InvalidType } from "@/src/core/mini/issue.ts";
 import { ParseError, parseSync } from "@/src/core/mini/schema.ts";
 import { string } from "./string.ts";
+
+const panics = definePanicRuntime();
 
 Deno.test("string accepts string values", () => {
 	// Given: a string schema
 	const schema = string();
 
 	// When: parsing a string
-	const result = parseSync(schema, "hello");
+	const result = parseSync(schema, { input: "hello", panics });
 
 	// Then: it should succeed
 	assertEquals(
@@ -27,7 +30,7 @@ Deno.test("string rejects non-string values by default", () => {
 	const schema = string();
 
 	// When: parsing a non-string
-	const result = parseSync(schema, 123);
+	const result = parseSync(schema, { input: 123, panics });
 
 	// Then: it fails with an InvalidType issue
 	assertEquals(
@@ -41,7 +44,7 @@ Deno.test("string coerces non-string values when coerce is true", () => {
 	const schema = string({ coerce: true });
 
 	// When: parsing a number
-	const result = parseSync(schema, 123);
+	const result = parseSync(schema, { input: 123, panics });
 
 	// Then: it should coerce to string
 	assertEquals(

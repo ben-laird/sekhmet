@@ -27,7 +27,7 @@
  * 	(s) => s.length,
  * );
  *
- * assertEquals(unwrap(length.parseSync("four")), 4);
+ * assertEquals(unwrap(length.parseSync({ input: "four", panics })), 4);
  * ```
  *
  * @module

@@ -157,12 +157,15 @@ function inspectNumber(options: NumberSchemaOptions): Inspect<number> {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const schema = number();
  *
- * assertEquals(unwrap(parseSync(schema, 42)), 42);
- * assertEquals(isErr(parseSync(schema, Number.NaN)), true);
- * assertEquals(isErr(parseSync(schema, "42")), true);
+ * assertEquals(unwrap(parseSync(schema, { input: 42, panics })), 42);
+ * assertEquals(isErr(parseSync(schema, { input: Number.NaN, panics })), true);
+ * assertEquals(isErr(parseSync(schema, { input: "42", panics })), true);
  * ```
  *
  * @example
@@ -171,15 +174,18 @@ function inspectNumber(options: NumberSchemaOptions): Inspect<number> {
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const percent = number({ int: true, min: 0, max: 100 });
  * const positive = number({ min: { value: 0, inclusive: false } });
  * const price = number({ multipleOf: 0.01 });
  *
- * assertEquals(isOk(parseSync(percent, 100)), true);
- * assertEquals(isErr(parseSync(percent, 2.5)), true);
- * assertEquals(isErr(parseSync(positive, 0)), true);
- * assertEquals(isErr(parseSync(price, 19.999)), true);
+ * assertEquals(isOk(parseSync(percent, { input: 100, panics })), true);
+ * assertEquals(isErr(parseSync(percent, { input: 2.5, panics })), true);
+ * assertEquals(isErr(parseSync(positive, { input: 0, panics })), true);
+ * assertEquals(isErr(parseSync(price, { input: 19.999, panics })), true);
  * ```
  *
  * @example
@@ -188,14 +194,17 @@ function inspectNumber(options: NumberSchemaOptions): Inspect<number> {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { number } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const strict = number({ coerce: true });
- * assertEquals(unwrap(parseSync(strict, " 1e3 ")), 1000);
- * assertEquals(isErr(parseSync(strict, "")), true);
+ * assertEquals(unwrap(parseSync(strict, { input: " 1e3 ", panics })), 1000);
+ * assertEquals(isErr(parseSync(strict, { input: "", panics })), true);
  *
  * const native = number({ coerce: "native" });
- * assertEquals(unwrap(parseSync(native, "")), 0);
- * assertEquals(isErr(parseSync(native, "abc")), true);
+ * assertEquals(unwrap(parseSync(native, { input: "", panics })), 0);
+ * assertEquals(isErr(parseSync(native, { input: "abc", panics })), true);
  * ```
  */
 export function number(

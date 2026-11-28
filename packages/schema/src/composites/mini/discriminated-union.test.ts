@@ -47,8 +47,12 @@ const shape = discriminatedUnion({
 Deno.test("discriminatedUnion dispatches on the key and keeps the discriminant", () => {
 	// Given: a union of circles and squares
 	// When: parsing one of each
-	const circle = unwrap(parseSync(shape, { kind: "circle", radius: 2 }));
-	const square = unwrap(parseSync(shape, { kind: "square", side: 3 }));
+	const circle = unwrap(
+		parseSync(shape, { input: { kind: "circle", radius: 2 }, panics }),
+	);
+	const square = unwrap(
+		parseSync(shape, { input: { kind: "square", side: 3 }, panics }),
+	);
 
 	// Then: each is parsed by its option and carries its kind
 	assertEquals(circle, { radius: 2, kind: "circle" });
@@ -184,9 +188,14 @@ Deno.test('a discriminatedUnion keyed "optional" is a required key of an object'
 	assertType<IsExact<Output<typeof holder>, { value: { optional: "yes" } }>>(
 		true,
 	);
-	assertEquals(unwrap(parseSync(holder, { value: { optional: "yes" } })), {
-		value: { optional: "yes" },
-	});
+	assertEquals(
+		unwrap(
+			parseSync(holder, { input: { value: { optional: "yes" } }, panics }),
+		),
+		{
+			value: { optional: "yes" },
+		},
+	);
 });
 
 Deno.test("discriminatedUnion panics when its option's output can't be copied", async (t) => {

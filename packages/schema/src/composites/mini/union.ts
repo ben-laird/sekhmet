@@ -91,6 +91,8 @@ export interface UnionView<T extends readonly AnySchema[]> {
  * import { entries, formatIssue, parse, parseSync, Schema } from "@sekhmet/schema/core/mini";
  * import { wait } from "@sekhmet/vow";
  *
+ * const panics = definePanicRuntime();
+ *
  * const text = new Schema({
  * 	parse: (input: unknown) => {
  * 		return typeof input === "string" ? Ok(input) : Err("not text");
@@ -103,9 +105,8 @@ export interface UnionView<T extends readonly AnySchema[]> {
  * });
  * const textOrCount = union([text, count]);
  *
- * assertEquals(unwrap(parseSync(textOrCount, 3)), 3);
+ * assertEquals(unwrap(parseSync(textOrCount, { input: 3, panics })), 3);
  *
- * const panics = definePanicRuntime();
  * const [{ error }] = entries(
  * 	unwrapErr(await wait(parse(textOrCount, { input: null, panics }))),
  * );

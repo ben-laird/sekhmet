@@ -1,9 +1,12 @@
 import { Err, Ok } from "@sekhmet/enum/result/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { assertEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
 import { InvalidValue } from "@/src/core/mini/issue.ts";
 import { type Output, ParseError, parseSync } from "@/src/core/mini/schema.ts";
 import { type Literal, literal } from "./literal.ts";
+
+const panics = definePanicRuntime();
 
 const ID = Symbol("id");
 
@@ -14,7 +17,7 @@ Deno.test("literal accepts exactly its value", () => {
 		const schema = literal(value);
 
 		// When: parsing that same value
-		const result = parseSync(schema, value);
+		const result = parseSync(schema, { input: value, panics });
 
 		// Then: it is accepted
 		assertEquals(result, Ok(value));
@@ -36,7 +39,7 @@ Deno.test("literal rejects other values with InvalidValue", () => {
 		const schema = literal(value);
 
 		// When: parsing a different value, even a loosely equal one
-		const result = parseSync(schema, input);
+		const result = parseSync(schema, { input: input, panics });
 
 		// Then: it fails listing the one allowed value
 		assertEquals(
@@ -50,8 +53,11 @@ Deno.test("literal compares with SameValueZero", () => {
 	// Given: literal schemas of NaN and of 0
 	// When: parsing NaN and -0
 	// Then: NaN matches NaN, and -0 matches 0
-	assertEquals(parseSync(literal(Number.NaN), Number.NaN), Ok(Number.NaN));
-	assertEquals(parseSync(literal(0), -0), Ok(-0));
+	assertEquals(
+		parseSync(literal(Number.NaN), { input: Number.NaN, panics }),
+		Ok(Number.NaN),
+	);
+	assertEquals(parseSync(literal(0), { input: -0, panics }), Ok(-0));
 });
 
 Deno.test("literal's output type is the literal's own type", () => {

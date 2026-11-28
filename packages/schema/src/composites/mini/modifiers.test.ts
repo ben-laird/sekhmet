@@ -41,8 +41,11 @@ Deno.test("optional passes undefined through and parses anything else", async ()
 
 	// When: parsing undefined, a string and a number
 	// Then: undefined and the string pass; the number fails as text would
-	assertEquals(unwrap(parseSync(maybe, undefined)), undefined);
-	assertEquals(unwrap(parseSync(maybe, "a")), "a");
+	assertEquals(
+		unwrap(parseSync(maybe, { input: undefined, panics })),
+		undefined,
+	);
+	assertEquals(unwrap(parseSync(maybe, { input: "a", panics })), "a");
 	assertEquals(
 		unwrapErr(resume(await wait(parse(maybe, { input: 1, panics })))),
 		"not text",
@@ -55,8 +58,8 @@ Deno.test("nullable passes null through and parses anything else", async () => {
 
 	// When: parsing null, a string and undefined
 	// Then: null and the string pass; undefined fails as text would
-	assertEquals(unwrap(parseSync(maybe, null)), null);
-	assertEquals(unwrap(parseSync(maybe, "a")), "a");
+	assertEquals(unwrap(parseSync(maybe, { input: null, panics })), null);
+	assertEquals(unwrap(parseSync(maybe, { input: "a", panics })), "a");
 	assertEquals(
 		unwrapErr(resume(await wait(parse(maybe, { input: undefined, panics })))),
 		"not text",
@@ -114,7 +117,7 @@ Deno.test("lazy builds recursive schemas such as trees", () => {
 	};
 
 	// When: parsing a two-level tree
-	const parsed = unwrap(parseSync(tree, input));
+	const parsed = unwrap(parseSync(tree, { input: input, panics }));
 
 	// Then: the whole tree is parsed
 	assertEquals(parsed, input);

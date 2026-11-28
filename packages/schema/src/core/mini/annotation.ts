@@ -219,11 +219,14 @@ export const title: AnnotationKey<string> = annotationKey({ name: "title" });
  * import { unwrap } from "@sekhmet/enum/option/mini";
  * import { Ok, unwrap as unwrapResult } from "@sekhmet/enum/result/mini";
  * import { annotate, annotation, parseSync, Schema, title } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const text = new Schema({ parse: (input: string) => Ok(input) });
  * const name = annotate(text, [title("Name"), title("Full name")]);
  *
- * assertEquals(unwrapResult(parseSync(name, "Ada")), "Ada");
+ * assertEquals(unwrapResult(parseSync(name, { input: "Ada", panics })), "Ada");
  * assertEquals(unwrap(annotation({ schema: name, key: title })), "Full name");
  * ```
  */

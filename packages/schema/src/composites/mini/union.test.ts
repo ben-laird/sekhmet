@@ -56,8 +56,8 @@ Deno.test("union accepts what any option accepts", () => {
 
 	// When: parsing a string and a number
 	// Then: both are accepted
-	assertEquals(unwrap(parseSync(textOrCount, "a")), "a");
-	assertEquals(unwrap(parseSync(textOrCount, 1)), 1);
+	assertEquals(unwrap(parseSync(textOrCount, { input: "a", panics })), "a");
+	assertEquals(unwrap(parseSync(textOrCount, { input: 1, panics })), 1);
 });
 
 Deno.test("union's first matching option wins and later options don't run", () => {
@@ -72,7 +72,7 @@ Deno.test("union's first matching option wins and later options don't run", () =
 	const either = union([text, counted]);
 
 	// When: parsing a string
-	const parsed = unwrap(parseSync(either, "a"));
+	const parsed = unwrap(parseSync(either, { input: "a", panics }));
 
 	// Then: the first option's output is used, and the second never ran
 	assertEquals(parsed, "a");

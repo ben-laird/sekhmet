@@ -47,7 +47,7 @@ Deno.test("composites return main Schemas, so core methods chain", () => {
 	const lengths = array({ item: optional(text) }).map((items) => items.length);
 
 	// When: parsing with the chained method
-	const parsed = unwrap(lengths.parseSync(["a", undefined]));
+	const parsed = unwrap(lengths.parseSync({ input: ["a", undefined], panics }));
 
 	// Then: the main Schema's methods ran
 	assertInstanceOf(lengths, Schema);
@@ -59,7 +59,9 @@ Deno.test("a main object schema parses with the mini functions", () => {
 	const user = object({ shape: { name: text } });
 
 	// When: parsing it with mini parseSync
-	const parsed = unwrap(parseSync(user, { name: "Ada", admin: true }));
+	const parsed = unwrap(
+		parseSync(user, { input: { name: "Ada", admin: true }, panics }),
+	);
 
 	// Then: it is a mini Schema too
 	assertEquals(parsed, { name: "Ada" });
@@ -80,7 +82,10 @@ Deno.test("main composites view their children as main schemas, and keep mini on
 	assertStrictEquals(mixed.shape.name, miniName);
 	assertType<IsExact<typeof user.shape.name, typeof mainName>>(true);
 	assertType<IsExact<typeof mixed.shape.name, typeof miniName>>(true);
-	assertEquals(user.shape.name.parseSync("Ada").unwrap(), "Ada");
+	assertEquals(
+		user.shape.name.parseSync({ input: "Ada", panics }).unwrap(),
+		"Ada",
+	);
 	assertInstanceOf(user, Schema);
 	assertEquals(Object.getPrototypeOf(mixed.shape.name), MiniSchema.prototype);
 });
@@ -98,7 +103,10 @@ Deno.test("the modifier methods view their receiver, exactly", () => {
 	assertStrictEquals(list.item.inner, user);
 	assertType<IsExact<typeof maybe.inner, typeof user>>(true);
 	assertType<IsExact<typeof list.item.inner, typeof user>>(true);
-	assertEquals(maybe.inner.shape.name.parseSync("a").unwrap(), "a");
+	assertEquals(
+		maybe.inner.shape.name.parseSync({ input: "a", panics }).unwrap(),
+		"a",
+	);
 	assertInstanceOf(maybe, Schema);
 	assertInstanceOf(list, Schema);
 });

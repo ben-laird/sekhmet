@@ -63,11 +63,14 @@ export interface LazyView<S> {
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { array, optional } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const text = new Schema({ parse: (input: unknown) => Ok(String(input)) });
  * const gaps = array({ item: optional(text) });
  *
- * assertEquals(unwrap(parseSync(gaps, ["a", undefined])), ["a", undefined]);
+ * assertEquals(unwrap(parseSync(gaps, { input: ["a", undefined], panics })), ["a", undefined]);
  * assertEquals(optional(text).inner, text);
  * ```
  */
@@ -105,10 +108,13 @@ export function optional(self: Child): Child & WrapperView<Child> {
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { nullable } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const text = new Schema({ parse: (input: unknown) => Ok(String(input)) });
  *
- * assertEquals(unwrap(parseSync(nullable(text), null)), null);
+ * assertEquals(unwrap(parseSync(nullable(text), { input: null, panics })), null);
  * ```
  */
 export function nullable<I, O, E, S extends Schema<I, O, E>>(
@@ -140,6 +146,9 @@ export function nullable(self: Child): Child & WrapperView<Child> {
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { array, lazy, object } from "@sekhmet/schema/composites/mini";
  * import { type Issues, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * interface Tree {
  * 	children: Tree[];
@@ -148,7 +157,7 @@ export function nullable(self: Child): Child & WrapperView<Child> {
  * 	shape: { children: array({ item: lazy(() => tree) }) },
  * });
  *
- * assertEquals(unwrap(parseSync(tree, { children: [{ children: [] }] })), {
+ * assertEquals(unwrap(parseSync(tree, { input: { children: [{ children: [] }] }, panics })), {
  * 	children: [{ children: [] }],
  * });
  * ```

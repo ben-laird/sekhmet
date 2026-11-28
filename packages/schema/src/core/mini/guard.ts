@@ -6,10 +6,11 @@
  */
 
 import { match } from "@sekhmet/enum/core/mini/exit";
+import type { PanicBoundary } from "@sekhmet/panic/mini/runtime";
 import { parseSync, type Schema } from "./schema.ts";
 
 /**
- * Turns a schema into a type guard: `is(schema)(input)` is `true` when
+ * Turns a schema into a type guard: `is(schema, { panics })(input)` is `true` when
  * `schema` parses `input` successfully, narrowing `input` to `O & I`. Curried,
  * so the guard feeds `Array.prototype.filter`, an `if`, or a
  * `filter({ predicate })`.
@@ -28,34 +29,41 @@ import { parseSync, type Schema } from "./schema.ts";
  * To use the output, parse instead (`parseSync`), and keep the value it
  * returns.
  *
- * The guard parses with `parseSync`. A schema that parses asynchronously
- * can't answer a synchronous guard, so it panics: using an async schema as a
- * guard is a programmer error, not a parse failure.
+ * The guard parses with `parseSync`, under `panics`. A schema that parses
+ * asynchronously can't answer a synchronous guard, so it panics: using an
+ * async schema as a guard is a programmer error, not a parse failure. What
+ * is left of that abandoned parse runs under `panics`.
  *
  * @template I The input type
  * @template O The output type
  * @template E The error type
  * @param schema The schema the guard parses with; it must not transform
+ * @param options `panics`, the panic runtime an abandoned async parse runs
+ *   under
  * @returns A type guard narrowing its input to `O & I`
  * @throws {TypeError} A panic when `schema` parses asynchronously
  *
  * @example
  * ```ts
  * import { assertEquals } from "@std/assert";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  * import { is } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
  *
+ * const panics = definePanicRuntime();
  * const values: unknown[] = ["a", 1, "b", null];
- * const strings: string[] = values.filter(is(string()));
+ * const strings: string[] = values.filter(is(string(), { panics }));
  *
  * assertEquals(strings, ["a", "b"]);
  * ```
  */
 export function is<I, O, E>(
 	schema: Schema<I, O, E>,
+	options: { readonly panics: PanicBoundary },
 ): (input: I) => input is O & I {
+	const { panics } = options;
 	return (input): input is O & I => {
-		return match(parseSync(schema, input))<boolean>({
+		return match(parseSync(schema, { input, panics }))<boolean>({
 			Ok: () => true,
 			Err: (error) => {
 				return match(error)<boolean>({

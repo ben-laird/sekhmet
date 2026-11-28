@@ -89,7 +89,7 @@ Deno.test("fromStandard parses synchronously when validate does", () => {
 
 	// Then: the parse is resolved and yields the Standard output
 	assertEquals(unionKinds(parsing), "Resolved");
-	assertEquals(unwrap(parseSync(schema, { name: "Ada" })), {
+	assertEquals(unwrap(parseSync(schema, { input: { name: "Ada" }, panics })), {
 		name: "Ada",
 	});
 });

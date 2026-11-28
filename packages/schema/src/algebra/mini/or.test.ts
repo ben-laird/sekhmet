@@ -53,8 +53,8 @@ Deno.test("or tries left, then right", () => {
 
 	// When: parsing what each side accepts
 	// Then: both are accepted
-	assertEquals(unwrap(parseSync(either, "a")), "a");
-	assertEquals(unwrap(parseSync(either, 1)), 1);
+	assertEquals(unwrap(parseSync(either, { input: "a", panics })), "a");
+	assertEquals(unwrap(parseSync(either, { input: 1, panics })), 1);
 });
 
 Deno.test("or doesn't run right when left succeeds", () => {
@@ -69,7 +69,7 @@ Deno.test("or doesn't run right when left succeeds", () => {
 	const either = or({ left: text, right: counted });
 
 	// When: parsing what left accepts
-	parseSync(either, "a");
+	parseSync(either, { input: "a", panics });
 
 	// Then: right never ran
 	assertEquals(calls, 0);
@@ -108,7 +108,7 @@ Deno.test("or chains flatten into one union", async () => {
 	// Then: it accepts what any side accepts, fails with one InvalidUnion of
 	// three branches, and records the flat union's node
 	for (const chain of [leftChain, rightChain]) {
-		assertEquals(unwrap(parseSync(chain, true)), true);
+		assertEquals(unwrap(parseSync(chain, { input: true, panics })), true);
 		assertEquals(
 			unwrapErr(resume(await wait(parse(chain, { input: null, panics })))),
 			expected,

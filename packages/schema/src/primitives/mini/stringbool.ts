@@ -59,12 +59,15 @@ export interface StringboolOptions {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { stringbool } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const flag = stringbool();
  *
- * assertEquals(unwrap(parseSync(flag, " Yes ")), true);
- * assertEquals(unwrap(parseSync(flag, "OFF")), false);
- * assertEquals(isErr(parseSync(flag, "maybe")), true);
+ * assertEquals(unwrap(parseSync(flag, { input: " Yes ", panics })), true);
+ * assertEquals(unwrap(parseSync(flag, { input: "OFF", panics })), false);
+ * assertEquals(isErr(parseSync(flag, { input: "maybe", panics })), true);
  * ```
  *
  * @example
@@ -73,10 +76,13 @@ export interface StringboolOptions {
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { stringbool } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const answer = stringbool({ truthy: ["oui"], falsy: ["non"] });
  *
- * assertEquals(unwrap(parseSync(answer, "Oui")), true);
+ * assertEquals(unwrap(parseSync(answer, { input: "Oui", panics })), true);
  * ```
  */
 export function stringbool(

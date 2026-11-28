@@ -47,7 +47,7 @@ Deno.test("tuple parses each element with its own schema", () => {
 	const pair = tuple([text, count]);
 
 	// When: parsing a matching array
-	const parsed = unwrap(parseSync(pair, ["apples", 3]));
+	const parsed = unwrap(parseSync(pair, { input: ["apples", 3], panics }));
 
 	// Then: both elements are kept
 	assertEquals(parsed, ["apples", 3]);
@@ -74,7 +74,7 @@ Deno.test("tuple parses missing elements as undefined", async () => {
 	const pair = tuple([text, optional(count)]);
 
 	// When: parsing a one-element array, and an empty one
-	const parsed = unwrap(parseSync(pair, ["apples"]));
+	const parsed = unwrap(parseSync(pair, { input: ["apples"], panics }));
 	const issues = unwrapErr(
 		resume(await wait(parse(pair, { input: [], panics }))),
 	);

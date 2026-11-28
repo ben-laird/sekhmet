@@ -94,6 +94,8 @@ import { toStandard as toStandardOf } from "@sekhmet/schema/standard/mini/to-sta
 import { isPending, isResolved, wait } from "@sekhmet/vow";
 import { expectEqual } from "../check.ts";
 
+const panics = definePanicRuntime();
+
 /** The error a synchronous parse failed with; throws on an async parse. */
 function rejection<E>(result: Result<unknown, ParseSyncError<E>>): E {
 	return match(unwrapErr(result))<E>({
@@ -107,15 +109,18 @@ function rejection<E>(result: Result<unknown, ParseSyncError<E>>): E {
 function exercisePrimitives(): void {
 	const coerce: CoerceMode = true;
 	const accepted = [
-		parseSync(miniString({ trim: true, minLength: 2 }), " Ada "),
-		parseSync(miniNumber({ coerce, int: true }), "42"),
-		parseSync(boolean(), true),
-		parseSync(miniBoolean(), false),
-		parseSync(stringbool(), "yes"),
-		parseSync(literal("on"), "on"),
-		parseSync(null_(), null),
-		parseSync(undefined_(), undefined),
-		parseSync(unknown(), 7),
+		parseSync(miniString({ trim: true, minLength: 2 }), {
+			input: " Ada ",
+			panics,
+		}),
+		parseSync(miniNumber({ coerce, int: true }), { input: "42", panics }),
+		parseSync(boolean(), { input: true, panics }),
+		parseSync(miniBoolean(), { input: false, panics }),
+		parseSync(stringbool(), { input: "yes", panics }),
+		parseSync(literal("on"), { input: "on", panics }),
+		parseSync(null_(), { input: null, panics }),
+		parseSync(undefined_(), { input: undefined, panics }),
+		parseSync(unknown(), { input: 7, panics }),
 	];
 	expectEqual({
 		label: "the primitives accept good values",
@@ -128,17 +133,18 @@ function exercisePrimitives(): void {
 	expectEqual({
 		label: "bigint, symbol and date accept their own kind",
 		actual: [
-			unwrap(parseSync(bigint({ multipleOf: 2n }), 4n)) === 4n,
-			unwrap(parseSync(symbol(), sym)) === sym,
-			unwrap(parseSync(date(), day)).getTime(),
+			unwrap(parseSync(bigint({ multipleOf: 2n }), { input: 4n, panics })) ===
+				4n,
+			unwrap(parseSync(symbol(), { input: sym, panics })) === sym,
+			unwrap(parseSync(date(), { input: day, panics })).getTime(),
 		],
 		expected: [true, true, 0],
 	});
 
 	const rejected = [
-		rejection(parseSync(miniString(), 1)),
-		rejection(parseSync(miniNumber({ min: 0 }), -1)),
-		rejection(parseSync(never(), "anything")),
+		rejection(parseSync(miniString(), { input: 1, panics })),
+		rejection(parseSync(miniNumber({ min: 0 }), { input: -1, panics })),
+		rejection(parseSync(never(), { input: "anything", panics })),
 	];
 	expectEqual({
 		label: "the primitives reject bad values with a SchemaIssue",
@@ -147,7 +153,9 @@ function exercisePrimitives(): void {
 	});
 	expectEqual({
 		label: "formatIssue renders a SchemaIssue",
-		actual: typeof formatIssue(rejection(parseSync(miniString(), 1))),
+		actual: typeof formatIssue(
+			rejection(parseSync(miniString(), { input: 1, panics })),
+		),
 		expected: "string",
 	});
 }
@@ -159,10 +167,14 @@ function exerciseComposites(): void {
 	});
 	expectEqual({
 		label: "a mini object parses and strips nothing it declares",
-		actual: unwrap(parseSync(user, { name: "Ada", age: undefined })),
+		actual: unwrap(
+			parseSync(user, { input: { name: "Ada", age: undefined }, panics }),
+		),
 		expected: { name: "Ada", age: undefined },
 	});
-	const failed = rejection(parseSync(user, { name: 1, extra: true }));
+	const failed = rejection(
+		parseSync(user, { input: { name: 1, extra: true }, panics }),
+	);
 	expectEqual({
 		label:
 			"a mini object reports every failure with its path, a missing key too",
@@ -181,15 +193,31 @@ function exerciseComposites(): void {
 	expectEqual({
 		label: "the other mini composites parse",
 		actual: [
-			unwrap(parseSync(shape, { kind: "square", side: 2 })).kind,
-			unwrap(parseSync(arrayOf({ item: nullable(miniNumber()) }), [1, null])),
-			unwrap(parseSync(tuple([miniString(), miniNumber()]), ["a", 1])),
+			unwrap(parseSync(shape, { input: { kind: "square", side: 2 }, panics }))
+				.kind,
 			unwrap(
-				parseSync(record({ key: miniString(), value: miniNumber() }), { a: 1 }),
+				parseSync(arrayOf({ item: nullable(miniNumber()) }), {
+					input: [1, null],
+					panics,
+				}),
 			),
-			unwrap(parseSync(unionOf([miniString(), miniNumber()]), 3)),
-			unwrap(parseSync(enumOf(["red", "green"]), "green")),
-			unwrap(parseSync(tree, ["x"])),
+			unwrap(
+				parseSync(tuple([miniString(), miniNumber()]), {
+					input: ["a", 1],
+					panics,
+				}),
+			),
+			unwrap(
+				parseSync(record({ key: miniString(), value: miniNumber() }), {
+					input: { a: 1 },
+					panics,
+				}),
+			),
+			unwrap(
+				parseSync(unionOf([miniString(), miniNumber()]), { input: 3, panics }),
+			),
+			unwrap(parseSync(enumOf(["red", "green"]), { input: "green", panics })),
+			unwrap(parseSync(tree, { input: ["x"], panics })),
 		],
 		expected: ["square", [1, null], ["a", 1], { a: 1 }, 3, "green", ["x"]],
 	});
@@ -215,14 +243,20 @@ function exerciseAlgebra(): void {
 	expectEqual({
 		label: "the mini algebra reshapes, combines and freezes",
 		actual: [
-			unwrap(parseSync(visible, { name: "Ada", password: "x" })),
-			unwrap(parseSync(named, { name: "Ada", password: "x" })),
-			isErr(parseSync(strict, { name: "Ada", password: "x" })),
-			unwrap(parseSync(either, 1)),
-			unwrap(parseSync(either2, "b")),
-			Object.isFrozen(unwrap(parseSync(frozen, ["a"]))),
-			Object.isFrozen(unwrap(parseSync(frozen2, { a: 1 }))),
-			unwrap(parseSync(id, "u1")),
+			unwrap(
+				parseSync(visible, { input: { name: "Ada", password: "x" }, panics }),
+			),
+			unwrap(
+				parseSync(named, { input: { name: "Ada", password: "x" }, panics }),
+			),
+			isErr(
+				parseSync(strict, { input: { name: "Ada", password: "x" }, panics }),
+			),
+			unwrap(parseSync(either, { input: 1, panics })),
+			unwrap(parseSync(either2, { input: "b", panics })),
+			Object.isFrozen(unwrap(parseSync(frozen, { input: ["a"], panics }))),
+			Object.isFrozen(unwrap(parseSync(frozen2, { input: { a: 1 }, panics }))),
+			unwrap(parseSync(id, { input: "u1", panics })),
 		],
 		expected: [
 			{ name: "Ada" },
@@ -255,8 +289,8 @@ function exerciseDescriptions(): void {
 		expected: ["Name", "?", true, 1, true, false],
 	});
 
-	const isText = guard(miniString());
-	const isNumber = is(number());
+	const isText = guard(miniString(), { panics });
+	const isNumber = is(number(), { panics });
 	expectEqual({
 		label: "a schema is a type guard",
 		actual: [isText("a"), isText(1), [1, "b", 2].filter(isNumber)],
@@ -297,7 +331,9 @@ function exerciseMain(): void {
 	type UserId = Branded<string, "UserId">;
 	const userId = string().with.or(number()).map(String).with.brand("UserId");
 	const ids = userId.array().with.readonly();
-	const parsedIds: readonly UserId[] = unwrap(ids.parseSync(["u1", 2]));
+	const parsedIds: readonly UserId[] = unwrap(
+		ids.parseSync({ input: ["u1", 2], panics }),
+	);
 	const user = rootObject({
 		shape: {
 			name: string({ minLength: 1 }).annotate([
@@ -312,13 +348,13 @@ function exerciseMain(): void {
 	expectEqual({
 		label: "the main API chains methods and keeps typed views",
 		actual: [
-			unwrap(port.parseSync(" 3000 ")),
-			unwrap(port.parseSync("http")),
+			unwrap(port.parseSync({ input: " 3000 ", panics })),
+			unwrap(port.parseSync({ input: "http", panics })),
 			parsedIds,
 			Object.isFrozen(parsedIds),
-			unwrap(user.shape.name.parseSync("Ada")),
-			unwrap(patch.parseSync({})),
-			isOk(union([string(), number()]).parseSync(1)),
+			unwrap(user.shape.name.parseSync({ input: "Ada", panics })),
+			unwrap(patch.parseSync({ input: {}, panics })),
+			isOk(union([string(), number()]).parseSync({ input: 1, panics })),
 			user instanceof Schema,
 			string().map((text) => text.length) instanceof Schema,
 		],
@@ -348,7 +384,7 @@ async function exerciseAsync(): Promise<void> {
 	});
 	expectEqual({
 		label: "parseSync reports an async parse instead of awaiting it",
-		actual: isErr(parseSync(later, "a")),
+		actual: isErr(parseSync(later, { input: "a", panics })),
 		expected: true,
 	});
 
@@ -408,8 +444,8 @@ async function exerciseStandard(): Promise<void> {
 	expectEqual({
 		label: "fromStandard wraps a Standard Schema, sync or async",
 		actual: [
-			unwrap(back.parseSync(3)),
-			unwrap(parseSync(backMini, "b")),
+			unwrap(back.parseSync({ input: 3, panics })),
+			unwrap(parseSync(backMini, { input: "b", panics })),
 			entries(unwrapErr(fromAsync)).map(({ error }) => error.message),
 		],
 		expected: [3, "b", ["not a number"]],

@@ -49,9 +49,12 @@ export interface BooleanSchemaOptions {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { boolean } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(unwrap(parseSync(boolean(), true)), true);
- * assertEquals(isErr(parseSync(boolean(), "true")), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(unwrap(parseSync(boolean(), { input: true, panics })), true);
+ * assertEquals(isErr(parseSync(boolean(), { input: "true", panics })), true);
  * ```
  *
  * @example
@@ -60,14 +63,17 @@ export interface BooleanSchemaOptions {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { boolean } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const strict = boolean({ coerce: true });
- * assertEquals(unwrap(parseSync(strict, "false")), false);
- * assertEquals(unwrap(parseSync(strict, 1)), true);
- * assertEquals(isErr(parseSync(strict, "maybe")), true);
+ * assertEquals(unwrap(parseSync(strict, { input: "false", panics })), false);
+ * assertEquals(unwrap(parseSync(strict, { input: 1, panics })), true);
+ * assertEquals(isErr(parseSync(strict, { input: "maybe", panics })), true);
  *
  * const native = boolean({ coerce: "native" });
- * assertEquals(unwrap(parseSync(native, "false")), true);
+ * assertEquals(unwrap(parseSync(native, { input: "false", panics })), true);
  * ```
  */
 export function boolean(

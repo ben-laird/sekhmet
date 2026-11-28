@@ -23,21 +23,13 @@ import {
 } from "@sekhmet/enum/result/mini";
 import type { PanicBoundary } from "@sekhmet/panic/mini/runtime";
 import { fromCaught } from "@sekhmet/panic/outcome/mini/convert";
-import {
-	type Outcome,
-	Ok as OutcomeOk,
-	Panicked,
-} from "@sekhmet/panic/outcome/mini/core";
+import type { Outcome } from "@sekhmet/panic/outcome/mini/core";
 import { getStructParams, Struct } from "@sekhmet/primordials/struct";
 import type { Vow } from "@sekhmet/vow/mini/core";
-import {
-	map as mapVow,
-	resolved,
-	vowWithResolver,
-} from "@sekhmet/vow/mini/impl";
+import { map as mapVow } from "@sekhmet/vow/mini/impl";
 import type { Annotation } from "./annotation.ts";
 import { Opaque, SchemaNode, type TransformStep } from "./node.ts";
-import { isPromiseLike, proceed, settled, step } from "./parsing.ts";
+import { proceed, settled, step } from "./parsing.ts";
 import { type PipeView, type TransformView, viewed } from "./view.ts";
 
 /**
@@ -120,11 +112,14 @@ export interface ParseOptions<I> {
  * import { assertEquals } from "@std/assert";
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { parse, parseSync, type Runner, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const text = new Schema({ parse: (input: string) => Ok(input) });
  * const traced: Runner<string, string, never> = (options) => parse(text, options);
  *
- * assertEquals(unwrap(parseSync(new Schema({ run: traced }), "a")), "a");
+ * assertEquals(unwrap(parseSync(new Schema({ run: traced }), { input: "a", panics })), "a");
  * ```
  */
 export type Runner<I, O, E> = (
@@ -147,6 +142,9 @@ export type Runner<I, O, E> = (
  * import { assertEquals } from "@std/assert";
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const even = new Schema({
  * 	parse: (input: number) => {
@@ -154,7 +152,7 @@ export type Runner<I, O, E> = (
  * 	},
  * });
  *
- * assertEquals(unwrap(parseSync(even, 4)), 4);
+ * assertEquals(unwrap(parseSync(even, { input: 4, panics })), 4);
  * ```
  */
 export class Schema<I, O, E> extends Struct<SchemaParams<I, O, E>> {
@@ -476,76 +474,33 @@ interface Unwinding {
 }
 
 /**
- * {@linkcode parseSync}'s boundary, one per call. While `parseSync` runs, it
- * catches nothing, so a throw in user code unwinds to its caller, as an
- * unguarded call's would. Once `parseSync` has returned, what is left of an
- * asynchronous parse runs with nobody to unwind to: a throw or rejection
- * then settles the abandoned parse as `Panicked`, which nothing reads, so
- * it never escapes as an unhandled rejection.
+ * {@linkcode parseSync}'s boundary over the caller's `panics`, one per call.
+ * While `parseSync` runs, it catches nothing that user code throws, so a
+ * throw unwinds to `parseSync`'s caller, who is waiting (rule 1). A promise
+ * it returns is adopted under `panics`, and once `parseSync` has returned,
+ * what is left of the parse runs under `panics` too: nobody waits on it, so
+ * a panic there is reported once and settles the abandoned parse as
+ * `Panicked` (rules 2 and 3).
  */
-function unwinding(): Unwinding {
+function unwinding(panics: PanicBoundary): Unwinding {
 	let abandoned = false;
-
-	const run = <T>(
-		fn: () => T | PromiseLike<T>,
-	): Outcome<T | PromiseLike<T>, never, unknown> => {
-		if (!abandoned) return OutcomeOk(fn());
-
-		try {
-			return OutcomeOk(fn());
-		} catch (payload: unknown) {
-			return Panicked(payload);
-		}
-	};
 
 	return {
 		panics: {
 			catchUnwind: <T>(
 				fn: () => T | PromiseLike<T>,
 			): Vow<Outcome<T, never, unknown>> => {
-				return match(run(fn))<Vow<Outcome<T, never, unknown>>>({
-					Ok: (returned) => {
-						if (!isPromiseLike(returned)) return resolved(OutcomeOk(returned));
+				if (abandoned) return panics.catchUnwind(fn);
 
-						return later(returned);
-					},
-					Err: (impossible) => impossible,
-					Panicked: (payload) => resolved(Panicked(payload)),
-				});
+				const returned = fn();
+				return panics.catchUnwind(() => returned);
 			},
-			resumeUnwind: (payload: unknown): never => {
-				throw payload;
-			},
+			resumeUnwind: panics.resumeUnwind,
 		},
 		abandon: () => {
 			abandoned = true;
 		},
 	};
-}
-
-/**
- * Only an abandoned parse awaits: a rejection settles it as `Panicked`, and
- * a dependent that throws is dropped with it, since nothing reads it.
- */
-function later<T>(promise: PromiseLike<T>): Vow<Outcome<T, never, unknown>> {
-	const { vow, resolve } = vowWithResolver<Outcome<T, never, unknown>>();
-	const settle = (outcome: Outcome<T, never, unknown>): void => {
-		try {
-			resolve(outcome);
-		} catch {
-			// The abandoned parse's own continuation threw; nobody reads it
-		}
-	};
-
-	void Promise.resolve()
-		.then(() => promise)
-		.then(
-			(value) => settle(OutcomeOk(value)),
-			(payload: unknown) => settle(Panicked(payload)),
-		);
-	// {}
-
-	return vow;
 }
 
 /**
@@ -638,17 +593,20 @@ export function ParseError<E>(error: E): ParseSyncError<E> {
  * This function will return an error if the schema requires asynchronous
  * validation. Use this when you need guaranteed synchronous parsing.
  *
- * It takes no panic runtime: a throw in user code is not caught, and
- * unwinds to the caller, as any unguarded call's would. A schema that turns
- * out to be asynchronous is not waited for: its parse is abandoned, and a
- * panic it raises later settles the abandoned parse, unreported, rather
- * than escape as an unhandled rejection. Use {@linkcode parse} for either.
+ * A throw in user code while `parseSync` runs is not caught: it unwinds to
+ * the caller, who is waiting, as any unguarded call's would. A schema that
+ * turns out to be asynchronous is not waited for: its parse is abandoned,
+ * and what is left of it runs later, with nobody waiting, under
+ * `options.panics`. A panic there is reported to that runtime's hook once
+ * and settles the abandoned parse as `Panicked`, so nothing is left
+ * uncaught or unreported. Use {@linkcode parse} to wait for an async parse.
  *
  * @template I The input type
  * @template O The output type
  * @template E The error type
  * @param self The schema to use for parsing
- * @param input The input to parse
+ * @param options The input, and the panic runtime an abandoned async parse
+ *   runs under
  * @returns A Result that is either the output or a ParseSyncError
  *
  * @example
@@ -656,21 +614,27 @@ export function ParseError<E>(error: E): ParseSyncError<E> {
  * import { assertEquals } from "@std/assert";
  * import { unionKinds } from "@sekhmet/enum/core/mini/exit";
  * import { Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
  *
+ * const panics = definePanicRuntime();
  * const now = new Schema({ parse: (input: string) => Ok(input) });
  * const later = new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) });
  *
- * assertEquals(unwrap(parseSync(now, "a")), "a");
- * assertEquals(unionKinds(unwrapErr(parseSync(later, "a"))), "UnexpectedAsyncParse");
+ * assertEquals(unwrap(parseSync(now, { input: "a", panics })), "a");
+ * assertEquals(
+ * 	unionKinds(unwrapErr(parseSync(later, { input: "a", panics }))),
+ * 	"UnexpectedAsyncParse",
+ * );
  * ```
  */
 export function parseSync<I, O, E>(
 	self: Schema<I, O, E>,
-	input: I,
+	options: ParseOptions<I>,
 ): Result<O, ParseSyncError<E>> {
 	type Synchronous = Result<O, ParseSyncError<E>>;
-	const { panics, abandon } = unwinding();
+	const { input } = options;
+	const { panics, abandon } = unwinding(options.panics);
 	let parsing: Vow<Outcome<O, E, unknown>>;
 	try {
 		parsing = parse(self, { input, panics });
@@ -684,9 +648,8 @@ export function parseSync<I, O, E>(
 			return match(outcome)<Synchronous>({
 				Ok: (output) => Ok(output),
 				Err: (error) => Err(ParseError(error)),
-				Panicked: (payload) => {
-					throw payload;
-				},
+				// Already reported: resume it, so no boundary reports it again
+				Panicked: (payload) => panics.resumeUnwind(payload),
 			});
 		},
 	});
@@ -713,11 +676,14 @@ export function parseSync<I, O, E>(
  * import { assertEquals } from "@std/assert";
  * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { map, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const text = new Schema({ parse: (input: string) => Ok(input) });
  * const length = map(text, (value) => value.length);
  *
- * assertEquals(unwrap(parseSync(length, "four")), 4);
+ * assertEquals(unwrap(parseSync(length, { input: "four", panics })), 4);
  * ```
  */
 export function map<I, O, E, P, S extends Schema<I, O, E>>(
@@ -753,11 +719,14 @@ export function map<I, O, E, P, S extends Schema<I, O, E>>(
  * import { union } from "@sekhmet/enum/core/mini/exit";
  * import { Err, unwrapErr } from "@sekhmet/enum/result/mini";
  * import { mapErr, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const reject = new Schema({ parse: (_input: string) => Err(404) });
  * const described = mapErr(reject, (code) => `error ${code}`);
  *
- * assertEquals(union(unwrapErr(parseSync(described, "a"))), "error 404");
+ * assertEquals(union(unwrapErr(parseSync(described, { input: "a", panics }))), "error 404");
  * ```
  */
 export function mapErr<I, O, E, F, S extends Schema<I, O, E>>(
@@ -793,6 +762,9 @@ export function mapErr<I, O, E, F, S extends Schema<I, O, E>>(
  * import { assertEquals } from "@std/assert";
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync, pipe, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const digits = new Schema({
  * 	parse: (input: string) => {
@@ -801,7 +773,7 @@ export function mapErr<I, O, E, F, S extends Schema<I, O, E>>(
  * });
  * const integer = new Schema({ parse: (input: string) => Ok(Number(input)) });
  *
- * assertEquals(unwrap(parseSync(pipe(digits, integer), "42")), 42);
+ * assertEquals(unwrap(parseSync(pipe(digits, integer), { input: "42", panics })), 42);
  * ```
  */
 export function pipe<
@@ -887,6 +859,9 @@ export interface FilterOptions<O, F, P extends O> {
  * import { union } from "@sekhmet/enum/core/mini/exit";
  * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
  * import { filter, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const integer = new Schema({ parse: (input: number) => Ok<number, string>(input) });
  * const positive = filter(integer, {
@@ -894,7 +869,7 @@ export interface FilterOptions<O, F, P extends O> {
  * 	predicate: (n): n is number => n > 0,
  * });
  *
- * assertEquals(union(unwrapErr(parseSync(positive, -1))), "-1 is not positive");
+ * assertEquals(union(unwrapErr(parseSync(positive, { input: -1, panics }))), "-1 is not positive");
  * ```
  */
 export function filter<I, O, E, P extends O, F, S extends Schema<I, O, E>>(
@@ -994,6 +969,9 @@ function continueWith<I, O, E, P, F, S extends Schema<I, O, E>>(
  * import { union } from "@sekhmet/enum/core/mini/exit";
  * import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
  * import { andThen, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const text = new Schema({ parse: (input: string) => Ok(input) });
  * const integer = andThen(text, (value) => {
@@ -1001,8 +979,8 @@ function continueWith<I, O, E, P, F, S extends Schema<I, O, E>>(
  * 	return Number.isNaN(parsed) ? Err("not an integer") : Ok(parsed);
  * });
  *
- * assertEquals(unwrap(parseSync(integer, "42")), 42);
- * assertEquals(union(unwrapErr(parseSync(integer, "x"))), "not an integer");
+ * assertEquals(unwrap(parseSync(integer, { input: "42", panics })), 42);
+ * assertEquals(union(unwrapErr(parseSync(integer, { input: "x", panics }))), "not an integer");
  * ```
  */
 export function andThen<I, O, E, P, F, S extends Schema<I, O, E>>(
@@ -1048,6 +1026,9 @@ export function andThen<I, O, E, P, F, S extends Schema<I, O, E>>(
  * import { assertEquals } from "@std/assert";
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { orElse, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const port = new Schema({
  * 	parse: (input: string) => {
@@ -1060,8 +1041,8 @@ export function andThen<I, O, E, P, F, S extends Schema<I, O, E>>(
  * });
  * const withDefault = orElse(port, () => Ok(8080));
  *
- * assertEquals(unwrap(parseSync(withDefault, "3000")), 3000);
- * assertEquals(unwrap(parseSync(withDefault, "")), 8080);
+ * assertEquals(unwrap(parseSync(withDefault, { input: "3000", panics })), 3000);
+ * assertEquals(unwrap(parseSync(withDefault, { input: "", panics })), 8080);
  * ```
  */
 export function orElse<I, O, E, F, S extends Schema<I, O, E>>(
@@ -1102,6 +1083,9 @@ export function orElse<I, O, E, F, S extends Schema<I, O, E>>(
  * import { assertEquals } from "@std/assert";
  * import { Ok } from "@sekhmet/enum/result/mini";
  * import { inspect, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const seen: string[] = [];
  * const text = new Schema({ parse: (input: string) => Ok(input) });
@@ -1109,7 +1093,7 @@ export function orElse<I, O, E, F, S extends Schema<I, O, E>>(
  * 	seen.push(value);
  * });
  *
- * parseSync(logged, "a");
+ * parseSync(logged, { input: "a", panics });
  * assertEquals(seen, ["a"]);
  * ```
  */
@@ -1149,6 +1133,9 @@ export function inspect<I, O, E, S extends Schema<I, O, E>>(
  * import { assertEquals } from "@std/assert";
  * import { Err } from "@sekhmet/enum/result/mini";
  * import { inspectErr, parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const seen: string[] = [];
  * const reject = new Schema({ parse: (_input: string) => Err("rejected") });
@@ -1156,7 +1143,7 @@ export function inspect<I, O, E, S extends Schema<I, O, E>>(
  * 	seen.push(error);
  * });
  *
- * parseSync(logged, "a");
+ * parseSync(logged, { input: "a", panics });
  * assertEquals(seen, ["rejected"]);
  * ```
  */
@@ -1200,6 +1187,9 @@ export function inspectErr<I, O, E, S extends Schema<I, O, E>>(
  * import { assertEquals } from "@std/assert";
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync, preprocess, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const digits = new Schema({
  * 	parse: (input: string) => {
@@ -1212,7 +1202,7 @@ export function inspectErr<I, O, E, S extends Schema<I, O, E>>(
  * });
  * const trimmed = preprocess(digits, (input: string) => input.trim());
  *
- * assertEquals(unwrap(parseSync(trimmed, " 42 ")), 42);
+ * assertEquals(unwrap(parseSync(trimmed, { input: " 42 ", panics })), 42);
  * ```
  */
 export function preprocess<J, I, O, E, S extends Schema<I, O, E>>(

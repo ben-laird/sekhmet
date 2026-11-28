@@ -129,8 +129,14 @@ Deno.test("filter's error adds to the schema's, as andThen's does", () => {
 
 	// Then: it fails with either error
 	assertType<IsExact<ErrorOf<typeof nonEmpty>, "x" | "empty">>(true);
-	assertEquals(nonEmpty.parseSync("").unwrapErr(), ParseError("empty"));
-	assertEquals(nonEmpty.parseSync(1).unwrapErr(), ParseError("x"));
+	assertEquals(
+		nonEmpty.parseSync({ input: "", panics }).unwrapErr(),
+		ParseError("empty"),
+	);
+	assertEquals(
+		nonEmpty.parseSync({ input: 1, panics }).unwrapErr(),
+		ParseError("x"),
+	);
 	// @ts-expect-error its error is not only the schema's own
 	const narrowed: Schema<unknown, string, "x"> = nonEmpty;
 	assertInstanceOf(narrowed, Schema);
@@ -187,7 +193,7 @@ Deno.test("Schema.fromMiniView copies a view onto a main Schema, from mini or ma
 	// Then: each is a new main Schema over the same params, with the view
 	assertEquals(fromMini.label, "text");
 	assertEquals(fromMain.label, "main");
-	assertEquals(fromMini.parseSync("a").unwrap(), "a");
+	assertEquals(fromMini.parseSync({ input: "a", panics }).unwrap(), "a");
 	assertEquals(fromMain === main, false);
 	assertInstanceOf(fromMini, Schema);
 	assertInstanceOf(fromMain, Schema);
@@ -212,10 +218,10 @@ const digits = new Schema({
 Deno.test("parseSync returns enum's main Result, so its methods chain", () => {
 	// Given: a schema that accepts digit strings
 	// When: parsing a valid and an invalid input and chaining Result methods
-	const parsed = digits.parseSync("21");
+	const parsed = digits.parseSync({ input: "21", panics });
 	const doubled = parsed.map((n) => n * 2).unwrapOr(0);
 	const fallback = digits
-		.parseSync("abc")
+		.parseSync({ input: "abc", panics })
 		.map((n) => n * 2)
 		.unwrapOr(0);
 
@@ -297,7 +303,7 @@ Deno.test(".with's methods return main Schemas that keep chaining", async () => 
 	// {}
 
 	// When: parsing a valid list and an invalid one
-	const parsed = unwrap(id.parseSync(["a", 1, true]));
+	const parsed = unwrap(id.parseSync({ input: ["a", 1, true], panics }));
 	const found = unwrapErr(
 		resume(await wait(id.parse({ input: [null], panics }))),
 	);
@@ -358,7 +364,7 @@ Deno.test(".array() parses every element with the receiver, and chains", async (
 	const all = digits.array();
 
 	// When: parsing a valid array and one with a failing element
-	const parsed = unwrap(all.parseSync(["1", "22"]));
+	const parsed = unwrap(all.parseSync({ input: ["1", "22"], panics }));
 	const found = unwrapErr(
 		resume(await wait(all.parse({ input: ["1", "x"], panics }))),
 	);
@@ -375,11 +381,14 @@ Deno.test(".optional() and .nullable() pass undefined and null through", () => {
 
 	// When: parsing undefined, null, a valid and an invalid number
 	// Then: the modifiers pass their value through and the rest is checked
-	assertEquals(unwrap(maybe.parseSync(undefined)), undefined);
-	assertEquals(unwrap(maybe.parseSync(null)), null);
-	assertEquals(unwrap(maybe.parseSync(1)), 1);
 	assertEquals(
-		unwrapErr(maybe.parseSync(-1)),
+		unwrap(maybe.parseSync({ input: undefined, panics })),
+		undefined,
+	);
+	assertEquals(unwrap(maybe.parseSync({ input: null, panics })), null);
+	assertEquals(unwrap(maybe.parseSync({ input: 1, panics })), 1);
+	assertEquals(
+		unwrapErr(maybe.parseSync({ input: -1, panics })),
 		ParseError(
 			TooSmall({ input: -1, origin: "number", minimum: 0, inclusive: true }),
 		),
@@ -482,7 +491,10 @@ Deno.test("each transform method views its receiver, exactly", () => {
 	// Then: .inner is the receiver with its view, and .next the piped schema
 	assertEquals(name.inner, user);
 	assertEquals(piped.inner, text);
-	assertEquals(checked.inner.shape.name.parseSync("a").unwrap(), "a");
+	assertEquals(
+		checked.inner.shape.name.parseSync({ input: "a", panics }).unwrap(),
+		"a",
+	);
 	assertEquals(piped.next, digits);
 	assertType<IsExact<typeof name.inner, typeof user>>(true);
 	assertType<IsExact<typeof checked.inner, typeof user>>(true);
@@ -499,7 +511,10 @@ Deno.test("a transform's view holds the receiver's view, not its own", () => {
 
 	// Then: the view reaches the object through each step, and no step
 	// claims the object's shape as its own
-	assertEquals(maybeName.inner.inner.shape.name.parseSync("a").unwrap(), "a");
+	assertEquals(
+		maybeName.inner.inner.shape.name.parseSync({ input: "a", panics }).unwrap(),
+		"a",
+	);
 	// @ts-expect-error a mapped schema's view is .inner, not the receiver's .shape
 	assertEquals(user.map((value) => value.name).shape, undefined);
 });
@@ -543,13 +558,16 @@ Deno.test("a long chain of transforms and modifiers type-checks, keeping every s
 	// {}
 
 	// When: parsing with it, and walking its view back
-	const parsed = chain.parseSync("four").unwrap();
+	const parsed = chain.parseSync({ input: "four", panics }).unwrap();
 	const optionalStep = chain.inner.inner.inner.inner.inner;
 
 	// Then: it parses through every step, and the view reaches back
 	assertEquals(parsed, 4);
 	assertType<IsExact<Output<typeof chain>, number>>(true);
-	assertEquals(optionalStep.parseSync(undefined).unwrap(), undefined);
+	assertEquals(
+		optionalStep.parseSync({ input: undefined, panics }).unwrap(),
+		undefined,
+	);
 });
 
 Deno.test(".with keeps the receiver's view: readonly views it, brand keeps it", () => {
@@ -568,7 +586,10 @@ Deno.test(".with keeps the receiver's view: readonly views it, brand keeps it", 
 	assertType<
 		IsExact<Output<typeof branded>, Branded<{ name: string }, "User">>
 	>(true);
-	assertEquals(branded.shape.name.parseSync("a").unwrap(), "a");
+	assertEquals(
+		branded.shape.name.parseSync({ input: "a", panics }).unwrap(),
+		"a",
+	);
 	assertInstanceOf(frozen, Schema);
 	assertInstanceOf(branded, Schema);
 });
@@ -610,7 +631,7 @@ Deno.test("brand returns a main subclass instance itself, keeping its members", 
 	assertEquals(viaWith === tagged, true);
 	assertEquals(viaFunction === tagged, true);
 	assertEquals(viaWith.tag, "t");
-	assertEquals(viaWith.parseSync("x").unwrap(), "x");
+	assertEquals(viaWith.parseSync({ input: "x", panics }).unwrap(), "x");
 	assertType<IsExact<Output<typeof viaWith>, Branded<string, "B">>>(true);
 	// @ts-expect-error a plain string is not the branded output
 	const plain: Schema<string, Branded<string, "B">, never> = tagged;
@@ -629,6 +650,6 @@ Deno.test("brand converts a mini receiver to a main Schema with its view", () =>
 
 	// Then: it is a main copy over the same params, with the view
 	assertEquals(branded.label, "text");
-	assertEquals(branded.parseSync("a").unwrap(), "a");
+	assertEquals(branded.parseSync({ input: "a", panics }).unwrap(), "a");
 	assertInstanceOf(branded, Schema);
 });

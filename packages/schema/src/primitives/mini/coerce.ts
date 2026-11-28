@@ -36,12 +36,15 @@
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { type CoerceMode, number } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const strict: CoerceMode = true;
  * const native: CoerceMode = "native";
  *
- * assertEquals(isErr(parseSync(number({ coerce: strict }), "")), true);
- * assertEquals(unwrap(parseSync(number({ coerce: native }), "")), 0);
+ * assertEquals(isErr(parseSync(number({ coerce: strict }), { input: "", panics })), true);
+ * assertEquals(unwrap(parseSync(number({ coerce: native }), { input: "", panics })), 0);
  * ```
  */
 export type CoerceMode = boolean | "native";

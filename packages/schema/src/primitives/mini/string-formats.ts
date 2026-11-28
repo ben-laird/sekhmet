@@ -53,12 +53,15 @@ export const UUID_PATTERN: RegExp =
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { type StringFormat, string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const format: StringFormat = "date-time";
  * const instant = string({ format });
  *
- * assertEquals(isOk(parseSync(instant, "2026-11-16T09:30+05:30")), true);
- * assertEquals(isErr(parseSync(instant, "2026-11-16T09:30:00")), true);
+ * assertEquals(isOk(parseSync(instant, { input: "2026-11-16T09:30+05:30", panics })), true);
+ * assertEquals(isErr(parseSync(instant, { input: "2026-11-16T09:30:00", panics })), true);
  * ```
  */
 export type StringFormat =
@@ -93,14 +96,17 @@ export type OffsetRule = "required" | "allowed" | "forbidden";
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { type TimeFormat, string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const millis: TimeFormat = { name: "date-time", precision: 3 };
  * const local: TimeFormat = { name: "date-time", offset: "forbidden" };
  *
- * assertEquals(isOk(parseSync(string({ format: millis }), "2026-11-16T09:30:00.250Z")), true);
- * assertEquals(isErr(parseSync(string({ format: millis }), "2026-11-16T09:30:00Z")), true);
- * assertEquals(isOk(parseSync(string({ format: local }), "2026-11-16T09:30")), true);
- * assertEquals(isErr(parseSync(string({ format: local }), "2026-11-16T09:30Z")), true);
+ * assertEquals(isOk(parseSync(string({ format: millis }), { input: "2026-11-16T09:30:00.250Z", panics })), true);
+ * assertEquals(isErr(parseSync(string({ format: millis }), { input: "2026-11-16T09:30:00Z", panics })), true);
+ * assertEquals(isOk(parseSync(string({ format: local }), { input: "2026-11-16T09:30", panics })), true);
+ * assertEquals(isErr(parseSync(string({ format: local }), { input: "2026-11-16T09:30Z", panics })), true);
  * ```
  */
 export interface TimeFormat {

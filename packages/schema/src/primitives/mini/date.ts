@@ -85,13 +85,16 @@ function maximum(bound: Bound<Date>): Inspect<Date> {
  * import { isErr, isOk } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { date } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(isOk(parseSync(date(), new Date(0))), true);
- * assertEquals(isErr(parseSync(date(), new Date("nope"))), true);
- * assertEquals(isErr(parseSync(date(), "1970-01-01")), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(isOk(parseSync(date(), { input: new Date(0), panics })), true);
+ * assertEquals(isErr(parseSync(date(), { input: new Date("nope"), panics })), true);
+ * assertEquals(isErr(parseSync(date(), { input: "1970-01-01", panics })), true);
  *
  * const modern = date({ min: new Date("2000-01-01T00:00:00Z") });
- * assertEquals(isErr(parseSync(modern, new Date(0))), true);
+ * assertEquals(isErr(parseSync(modern, { input: new Date(0), panics })), true);
  * ```
  */
 export function date(

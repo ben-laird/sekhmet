@@ -94,9 +94,12 @@ function frozenCopy(value: unknown): unknown {
  * import { object } from "@sekhmet/schema/composites/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const user = readonly(object({ shape: { name: string() } }));
- * const parsed = unwrap(parseSync(user, { name: "Ada" }));
+ * const parsed = unwrap(parseSync(user, { input: { name: "Ada" }, panics }));
  *
  * assertEquals(parsed, { name: "Ada" });
  * assertEquals(Object.isFrozen(parsed), true);

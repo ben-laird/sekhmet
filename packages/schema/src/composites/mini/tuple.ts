@@ -154,6 +154,9 @@ function tooLong({
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { tuple } from "@sekhmet/schema/composites/mini";
  * import { parseSync, Schema } from "@sekhmet/schema/core/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const text = new Schema({
  * 	parse: (input: unknown) => {
@@ -166,7 +169,7 @@ function tooLong({
  * 	},
  * });
  *
- * assertEquals(unwrap(parseSync(tuple([text, count]), ["apples", 3])), ["apples", 3]);
+ * assertEquals(unwrap(parseSync(tuple([text, count]), { input: ["apples", 3], panics })), ["apples", 3]);
  * ```
  */
 export function tuple<const T extends readonly AnySchema[]>(

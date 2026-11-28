@@ -131,9 +131,12 @@ export interface StringSchemaOptions {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(unwrap(parseSync(string(), "hello")), "hello");
- * assertEquals(isErr(parseSync(string(), 123)), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(unwrap(parseSync(string(), { input: "hello", panics })), "hello");
+ * assertEquals(isErr(parseSync(string(), { input: 123, panics })), true);
  * ```
  *
  * @example
@@ -142,15 +145,18 @@ export interface StringSchemaOptions {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const email = string({ trim: true, minLength: 3, format: "email" });
  * const slug = string({ regex: /^[a-z0-9-]+$/ });
  * const config = string({ startsWith: "config/", endsWith: ".json" });
  *
- * assertEquals(unwrap(parseSync(email, " ada@example.com ")), "ada@example.com");
- * assertEquals(isErr(parseSync(email, "ada@localhost")), true);
- * assertEquals(isErr(parseSync(slug, "Not a slug")), true);
- * assertEquals(isErr(parseSync(config, "config/app.yaml")), true);
+ * assertEquals(unwrap(parseSync(email, { input: " ada@example.com ", panics })), "ada@example.com");
+ * assertEquals(isErr(parseSync(email, { input: "ada@localhost", panics })), true);
+ * assertEquals(isErr(parseSync(slug, { input: "Not a slug", panics })), true);
+ * assertEquals(isErr(parseSync(config, { input: "config/app.yaml", panics })), true);
  * ```
  *
  * @example
@@ -159,11 +165,14 @@ export interface StringSchemaOptions {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const handle = string({ trim: true, case: "lower", startsWith: "@" });
  *
- * assertEquals(unwrap(parseSync(handle, " @Ada ")), "@ada");
- * assertEquals(isErr(parseSync(handle, "Ada")), true);
+ * assertEquals(unwrap(parseSync(handle, { input: " @Ada ", panics })), "@ada");
+ * assertEquals(isErr(parseSync(handle, { input: "Ada", panics })), true);
  * ```
  *
  * @example
@@ -172,13 +181,16 @@ export interface StringSchemaOptions {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { string } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const strict = string({ coerce: true });
- * assertEquals(unwrap(parseSync(strict, 123)), "123");
- * assertEquals(isErr(parseSync(strict, null)), true);
+ * assertEquals(unwrap(parseSync(strict, { input: 123, panics })), "123");
+ * assertEquals(isErr(parseSync(strict, { input: null, panics })), true);
  *
  * const native = string({ coerce: "native" });
- * assertEquals(unwrap(parseSync(native, null)), "null");
+ * assertEquals(unwrap(parseSync(native, { input: null, panics })), "null");
  * ```
  */
 export function string(

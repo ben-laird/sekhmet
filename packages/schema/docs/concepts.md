@@ -130,20 +130,24 @@ import { unwrap } from "@sekhmet/enum/result/mini";
 import { map, parseSync } from "@sekhmet/schema/core/mini";
 import { string } from "@sekhmet/schema/primitives";
 import { string as miniString } from "@sekhmet/schema/primitives/mini";
+import { definePanicRuntime } from "@sekhmet/panic";
+
+const panics = definePanicRuntime();
 
 const viaMain = string().map((text) => text.length);
 const viaMini = map(miniString(), (text) => text.length);
 
-assertEquals(unwrap(viaMain.parseSync("four")), 4);
-assertEquals(unwrap(parseSync(viaMini, "four")), 4);
+assertEquals(unwrap(viaMain.parseSync({ input: "four", panics })), 4);
+assertEquals(unwrap(parseSync(viaMini, { input: "four", panics })), 4);
 ```
 
 Methods are kept for what reads as a chain: the shape modifiers (`.array()`,
 `.optional()`, `.nullable()`), the transforms (`.map`, `.filter`, `.andThen`
 and the rest), parsing, `.annotate`, and the algebra behind `.with`.
-Everything else stays a function, even in main. `is(schema)` builds a guard
-you pass around (`values.filter(is(number()))`), which a method would have to
-be bound for. `toStandard` lives in its own feature, so the core `Schema` type
+Everything else stays a function, even in main. `is(schema, { panics })`
+builds a guard you pass around (`values.filter(is(number(), { panics }))`),
+which a method would have to be bound for. `toStandard` lives in its own
+feature, so the core `Schema` type
 doesn't take on the Standard Schema interface.
 
 ## Sync and async
@@ -177,9 +181,12 @@ Most libraries choose for you: everything is a promise, or async schemas
 throw when parsed synchronously. Here the caller chooses. `parse` works for
 every schema: read a settled vow at once with `value`, or `wait` for a
 `Promise`. `parseSync` answers at once, and reports an async schema as an
-`UnexpectedAsyncParse` error rather than blocking or guessing; it takes no
-panic runtime, so a throw in your code unwinds to its caller. A type guard
-can't return an error, so `is` panics on an async schema instead.
+`UnexpectedAsyncParse` error rather than blocking or guessing. A throw in
+your code while it runs unwinds to its caller. It takes a panic runtime all
+the same: an async schema's parse is abandoned, not cancelled, and what is
+left of it runs later under that runtime, which reports a panic there once.
+A type guard can't return an error, so `is` panics on an async schema
+instead.
 
 ## Schemas describe themselves
 

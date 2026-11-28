@@ -12,6 +12,9 @@
  * import { assertEquals } from "@std/assert";
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { Schema } from "@sekhmet/schema/core";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const digits = new Schema({
  * 	parse: (input: string) => {
@@ -20,7 +23,7 @@
  * });
  * const doubled = digits.map(Number).map((n) => n * 2);
  *
- * assertEquals(unwrap(doubled.parseSync("21")), 42);
+ * assertEquals(unwrap(doubled.parseSync({ input: "21", panics })), 42);
  * ```
  *
  * @module
@@ -155,6 +158,9 @@ export {
  * import { assertEquals } from "@std/assert";
  * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
  * import { Schema } from "@sekhmet/schema/core";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const even = new Schema({
  * 	parse: (input: number) => {
@@ -162,7 +168,7 @@ export {
  * 	},
  * });
  *
- * assertEquals(unwrap(even.parseSync(4)), 4);
+ * assertEquals(unwrap(even.parseSync({ input: 4, panics })), 4);
  * ```
  */
 export class Schema<I, O, E> extends mini.Schema<I, O, E> {
@@ -227,11 +233,14 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { unwrap } from "@sekhmet/enum/option/mini";
 	 * import { Ok, unwrap as unwrapResult } from "@sekhmet/enum/result/mini";
 	 * import { annotation, Schema, title } from "@sekhmet/schema/core";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const text = new Schema({ parse: (input: string) => Ok(input) });
 	 * const name = text.annotate([title("Name"), title("Full name")]);
 	 *
-	 * assertEquals(unwrapResult(name.parseSync("Ada")), "Ada");
+	 * assertEquals(unwrapResult(name.parseSync({ input: "Ada", panics })), "Ada");
 	 * assertEquals(unwrap(annotation({ schema: name, key: title })), "Full name");
 	 * ```
 	 * @see {@link mini.annotate}
@@ -265,6 +274,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { union } from "@sekhmet/enum/core/mini/exit";
 	 * import { Err, Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const text = new Schema({ parse: (input: string) => Ok(input) });
 	 * const integer = text.andThen((value) => {
@@ -272,8 +284,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * 	return Number.isNaN(parsed) ? Err("not an integer") : Ok(parsed);
 	 * });
 	 *
-	 * assertEquals(unwrap(integer.parseSync("42")), 42);
-	 * assertEquals(union(unwrapErr(integer.parseSync("x"))), "not an integer");
+	 * assertEquals(unwrap(integer.parseSync({ input: "42", panics })), 42);
+	 * assertEquals(union(unwrapErr(integer.parseSync({ input: "x", panics }))), "not an integer");
 	 * ```
 	 * @see {@link mini.andThen}
 	 */
@@ -302,6 +314,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { union } from "@sekhmet/enum/core/mini/exit";
 	 * import { Ok, unwrapErr } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const integer = new Schema({ parse: (input: number) => Ok<number, string>(input) });
 	 * const positive = integer.filter({
@@ -309,7 +324,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * 	predicate: (n): n is number => n > 0,
 	 * });
 	 *
-	 * assertEquals(union(unwrapErr(positive.parseSync(-1))), "-1 is not positive");
+	 * assertEquals(union(unwrapErr(positive.parseSync({ input: -1, panics }))), "-1 is not positive");
 	 * ```
 	 * @see {@link mini.filter}
 	 */
@@ -335,6 +350,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { assertEquals } from "@std/assert";
 	 * import { Ok } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const seen: string[] = [];
 	 * const text = new Schema({ parse: (input: string) => Ok(input) });
@@ -342,7 +360,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * 	seen.push(value);
 	 * });
 	 *
-	 * logged.parseSync("a");
+	 * logged.parseSync({ input: "a", panics });
 	 * assertEquals(seen, ["a"]);
 	 * ```
 	 * @see {@link mini.inspect}
@@ -369,6 +387,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { assertEquals } from "@std/assert";
 	 * import { Err } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const seen: string[] = [];
 	 * const reject = new Schema({ parse: (_input: string) => Err("rejected") });
@@ -376,7 +397,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * 	seen.push(error);
 	 * });
 	 *
-	 * logged.parseSync("a");
+	 * logged.parseSync({ input: "a", panics });
 	 * assertEquals(seen, ["rejected"]);
 	 * ```
 	 * @see {@link mini.inspectErr}
@@ -402,11 +423,14 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { assertEquals } from "@std/assert";
 	 * import { Ok, unwrap } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const text = new Schema({ parse: (input: string) => Ok(input) });
 	 * const length = text.map((value) => value.length);
 	 *
-	 * assertEquals(unwrap(length.parseSync("four")), 4);
+	 * assertEquals(unwrap(length.parseSync({ input: "four", panics })), 4);
 	 * ```
 	 * @see {@link mini.map}
 	 */
@@ -432,11 +456,14 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { union } from "@sekhmet/enum/core/mini/exit";
 	 * import { Err, unwrapErr } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const reject = new Schema({ parse: (_input: string) => Err(404) });
 	 * const described = reject.mapErr((code) => `error ${code}`);
 	 *
-	 * assertEquals(union(unwrapErr(described.parseSync("a"))), "error 404");
+	 * assertEquals(union(unwrapErr(described.parseSync({ input: "a", panics }))), "error 404");
 	 * ```
 	 * @see {@link mini.mapErr}
 	 */
@@ -467,6 +494,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { assertEquals } from "@std/assert";
 	 * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const port = new Schema({
 	 * 	parse: (input: string) => {
@@ -479,8 +509,8 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * });
 	 * const withDefault = port.orElse(() => Ok(8080));
 	 *
-	 * assertEquals(unwrap(withDefault.parseSync("3000")), 3000);
-	 * assertEquals(unwrap(withDefault.parseSync("")), 8080);
+	 * assertEquals(unwrap(withDefault.parseSync({ input: "3000", panics })), 3000);
+	 * assertEquals(unwrap(withDefault.parseSync({ input: "", panics })), 8080);
 	 * ```
 	 * @see {@link mini.orElse}
 	 */
@@ -550,31 +580,39 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * This function will return an error if the schema requires asynchronous
 	 * validation. Use this when you need guaranteed synchronous parsing.
 	 *
-	 * It takes no panic runtime: a throw in user code is not caught, and
-	 * unwinds to the caller, as any unguarded call's would. A schema that turns
-	 * out to be asynchronous is not waited for: its parse is abandoned, and a
-	 * panic it raises later settles the abandoned parse, unreported, rather
-	 * than escape as an unhandled rejection. Use {@linkcode parse} for either.
+	 * A throw in user code while `parseSync` runs is not caught: it unwinds to
+	 * the caller, who is waiting, as any unguarded call's would. A schema that
+	 * turns out to be asynchronous is not waited for: its parse is abandoned,
+	 * and what is left of it runs later, with nobody waiting, under
+	 * `options.panics`. A panic there is reported to that runtime's hook once
+	 * and settles the abandoned parse as `Panicked`, so nothing is left
+	 * uncaught or unreported. Use {@linkcode parse} to wait for an async parse.
 	 *
-	 * @param input - The input to parse
+	 * @param options - The input, and the panic runtime an abandoned async parse
+	 * runs under
 	 * @returns A Result that is either the output or a ParseSyncError
 	 * @example
 	 * ```ts
 	 * import { assertEquals } from "@std/assert";
 	 * import { unionKinds } from "@sekhmet/enum/core/mini/exit";
 	 * import { Ok, unwrap, unwrapErr } from "@sekhmet/enum/result/mini";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
 	 * import { Schema } from "@sekhmet/schema/core";
 	 *
+	 * const panics = definePanicRuntime();
 	 * const now = new Schema({ parse: (input: string) => Ok(input) });
 	 * const later = new Schema({ parse: (input: string) => Promise.resolve(Ok(input)) });
 	 *
-	 * assertEquals(unwrap(now.parseSync("a")), "a");
-	 * assertEquals(unionKinds(unwrapErr(later.parseSync("a"))), "UnexpectedAsyncParse");
+	 * assertEquals(unwrap(now.parseSync({ input: "a", panics })), "a");
+	 * assertEquals(
+	 * 	unionKinds(unwrapErr(later.parseSync({ input: "a", panics }))),
+	 * 	"UnexpectedAsyncParse",
+	 * );
 	 * ```
 	 * @see {@link mini.parseSync}
 	 */
-	parseSync(input: I): Result<O, mini.ParseSyncError<E>> {
-		return Result.fromMini(mini.parseSync(this, input));
+	parseSync(options: mini.ParseOptions<I>): Result<O, mini.ParseSyncError<E>> {
+		return Result.fromMini(mini.parseSync(this, options));
 	}
 
 	/**
@@ -593,6 +631,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { assertEquals } from "@std/assert";
 	 * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const digits = new Schema({
 	 * 	parse: (input: string) => {
@@ -601,7 +642,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * });
 	 * const integer = new Schema({ parse: (input: string) => Ok(Number(input)) });
 	 *
-	 * assertEquals(unwrap((digits.pipe(integer)).parseSync("42")), 42);
+	 * assertEquals(unwrap((digits.pipe(integer)).parseSync({ input: "42", panics })), 42);
 	 * ```
 	 * @see {@link mini.pipe}
 	 */
@@ -631,6 +672,9 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { assertEquals } from "@std/assert";
 	 * import { Err, Ok, unwrap } from "@sekhmet/enum/result/mini";
 	 * import { Schema } from "@sekhmet/schema/core";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const digits = new Schema({
 	 * 	parse: (input: string) => {
@@ -643,7 +687,7 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * });
 	 * const trimmed = digits.preprocess((input: string) => input.trim());
 	 *
-	 * assertEquals(unwrap(trimmed.parseSync(" 42 ")), 42);
+	 * assertEquals(unwrap(trimmed.parseSync({ input: " 42 ", panics })), 42);
 	 * ```
 	 * @see {@link mini.preprocess}
 	 */
@@ -665,10 +709,13 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { assertEquals } from "@std/assert";
 	 * import { unwrap } from "@sekhmet/enum/result/mini";
 	 * import { string } from "@sekhmet/schema/primitives";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const tags = string().array();
 	 *
-	 * assertEquals(unwrap(tags.parseSync(["a", "b"])), ["a", "b"]);
+	 * assertEquals(unwrap(tags.parseSync({ input: ["a", "b"], panics })), ["a", "b"]);
 	 * ```
 	 * @see {@link composites.array}
 	 */
@@ -694,11 +741,14 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
 	 * import { object } from "@sekhmet/schema/composites";
 	 * import { string } from "@sekhmet/schema/primitives";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const user = object({ shape: { middle: string().optional() } });
 	 *
-	 * assertEquals(unwrap(user.parseSync({ middle: undefined })), { middle: undefined });
-	 * assertEquals(isErr(user.parseSync({})), true);
+	 * assertEquals(unwrap(user.parseSync({ input: { middle: undefined }, panics })), { middle: undefined });
+	 * assertEquals(isErr(user.parseSync({ input: {}, panics })), true);
 	 * ```
 	 * @see {@link composites.optional}
 	 */
@@ -716,8 +766,11 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { assertEquals } from "@std/assert";
 	 * import { unwrap } from "@sekhmet/enum/result/mini";
 	 * import { string } from "@sekhmet/schema/primitives";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
 	 *
-	 * assertEquals(unwrap(string().nullable().parseSync(null)), null);
+	 * const panics = definePanicRuntime();
+	 *
+	 * assertEquals(unwrap(string().nullable().parseSync({ input: null, panics })), null);
 	 * ```
 	 * @see {@link composites.nullable}
 	 */
@@ -736,10 +789,13 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
 	 * import { assertEquals } from "@std/assert";
 	 * import { unwrap } from "@sekhmet/enum/result/mini";
 	 * import { number, string } from "@sekhmet/schema/primitives";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const id = string().with.or(number()).map(String);
 	 *
-	 * assertEquals(unwrap(id.parseSync(7)), "7");
+	 * assertEquals(unwrap(id.parseSync({ input: 7, panics })), "7");
 	 * ```
 	 */
 	get with(): SchemaWith<I, O, E, this> {
@@ -755,10 +811,13 @@ export class Schema<I, O, E> extends mini.Schema<I, O, E> {
  * import { assertEquals } from "@std/assert";
  * import { unwrap } from "@sekhmet/enum/result/mini";
  * import { number, string } from "@sekhmet/schema/primitives";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const id = string().with.or(number()).map(String);
  *
- * assertEquals(unwrap(id.parseSync(7)), "7");
+ * assertEquals(unwrap(id.parseSync({ input: 7, panics })), "7");
  * ```
  */
 export class SchemaWith<
@@ -792,10 +851,13 @@ export class SchemaWith<
 	 * import { assertEquals } from "@std/assert";
 	 * import { unwrap } from "@sekhmet/enum/result/mini";
 	 * import { boolean, number, string } from "@sekhmet/schema/primitives";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const scalar = string().with.or(number()).with.or(boolean());
 	 *
-	 * assertEquals(unwrap(scalar.parseSync(true)), true);
+	 * assertEquals(unwrap(scalar.parseSync({ input: true, panics })), true);
 	 * ```
 	 * @see {@link algebra.or}
 	 */
@@ -819,9 +881,12 @@ export class SchemaWith<
 	 * import { unwrap } from "@sekhmet/enum/result/mini";
 	 * import type { Branded } from "@sekhmet/schema/algebra";
 	 * import { string } from "@sekhmet/schema/primitives";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
+	 *
+	 * const panics = definePanicRuntime();
 	 *
 	 * const userId = string({ minLength: 1 }).with.brand("UserId");
-	 * const id: Branded<string, "UserId"> = unwrap(userId.parseSync("u1"));
+	 * const id: Branded<string, "UserId"> = unwrap(userId.parseSync({ input: "u1", panics }));
 	 *
 	 * assertEquals(id, "u1");
 	 * ```
@@ -847,8 +912,11 @@ export class SchemaWith<
 	 * import { assertEquals } from "@std/assert";
 	 * import { unwrap } from "@sekhmet/enum/result/mini";
 	 * import { string } from "@sekhmet/schema/primitives";
+	 * import { definePanicRuntime } from "@sekhmet/panic";
 	 *
-	 * const tags = unwrap(string().array().with.readonly().parseSync(["a"]));
+	 * const panics = definePanicRuntime();
+	 *
+	 * const tags = unwrap(string().array().with.readonly().parseSync({ input: ["a"], panics }));
 	 *
 	 * assertEquals(Object.isFrozen(tags), true);
 	 * ```

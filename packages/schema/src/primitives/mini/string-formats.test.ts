@@ -1,5 +1,6 @@
 import { Err, Ok } from "@sekhmet/enum/result/mini";
 import { matrix } from "@sekhmet/matrix";
+import { definePanicRuntime } from "@sekhmet/panic";
 import { block } from "@sekhmet/primordials/scoping";
 import { assertEquals } from "@std/assert";
 import { assertType, type IsExact } from "@std/testing/types";
@@ -15,6 +16,8 @@ import {
 	UUID_PATTERN,
 } from "./string-formats.ts";
 
+const panics = definePanicRuntime();
+
 /** One format's cases: the strings it accepts and those it rejects. */
 interface Table {
 	readonly format: string;
@@ -29,7 +32,7 @@ function runTable(table: Table): void {
 		for (const input of table.valid) {
 			// Given: the format's schema
 			// When: parsing a valid string
-			const result = parseSync(table.schema, input);
+			const result = parseSync(table.schema, { input: input, panics });
 
 			// Then: it is accepted unchanged
 			assertEquals(result, Ok(input), input);
@@ -39,7 +42,7 @@ function runTable(table: Table): void {
 		for (const input of table.invalid) {
 			// Given: the format's schema
 			// When: parsing an invalid string
-			const result = parseSync(table.schema, input);
+			const result = parseSync(table.schema, { input: input, panics });
 
 			// Then: it fails naming the format (and its pattern, if any)
 			const issue = block(() => {
@@ -265,7 +268,7 @@ for (const { name, offset, zone } of matrix<{
 		const input = stamp({ name, time: `09:30:00${zone}` });
 
 		// When: parsing a time with or without a UTC offset
-		const result = parseSync(schema, input);
+		const result = parseSync(schema, { input: input, panics });
 
 		// Then: an offset passes unless forbidden, and none unless required
 		const accepted = block(() => {
@@ -306,7 +309,7 @@ for (const { name, offset, zone } of matrix<{
 		const input = stamp({ name, time: `09:30:00${zone}` });
 
 		// When: parsing a time with a malformed offset
-		const result = parseSync(schema, input);
+		const result = parseSync(schema, { input: input, panics });
 
 		// Then: it fails naming the format
 		assertEquals(result, outcome({ accepted: false, input, name }));
@@ -328,7 +331,7 @@ for (const { name, precision, digits } of matrix<{
 		const input = stamp({ name, time: `23:59:59${fraction(digits)}Z` });
 
 		// When: parsing a time with some number of fraction digits
-		const result = parseSync(schema, input);
+		const result = parseSync(schema, { input: input, panics });
 
 		// Then: exactly `precision` digits pass, and any other count fails
 		assertEquals(
@@ -357,7 +360,7 @@ for (const { name, precision, zone } of matrix<{
 		const input = stamp({ name, time: `23:59:60${fraction(digits)}${zone}` });
 
 		// When: parsing second 60, which only a leap second has
-		const result = parseSync(schema, input);
+		const result = parseSync(schema, { input: input, panics });
 
 		// Then: it fails, since these formats have no leap second
 		assertEquals(result, outcome({ accepted: false, input, name }));
@@ -372,15 +375,18 @@ Deno.test("a precision makes the seconds required", () => {
 	// When: parsing a time without seconds, and the times they want
 	// Then: the time without seconds fails both, and the wanted ones pass
 	assertEquals(
-		parseSync(whole, "09:30"),
+		parseSync(whole, { input: "09:30", panics }),
 		outcome({ accepted: false, input: "09:30", name: "time" }),
 	);
 	assertEquals(
-		parseSync(millis, "09:30"),
+		parseSync(millis, { input: "09:30", panics }),
 		outcome({ accepted: false, input: "09:30", name: "time" }),
 	);
-	assertEquals(parseSync(whole, "09:30:15"), Ok("09:30:15"));
-	assertEquals(parseSync(millis, "09:30:15.250"), Ok("09:30:15.250"));
+	assertEquals(parseSync(whole, { input: "09:30:15", panics }), Ok("09:30:15"));
+	assertEquals(
+		parseSync(millis, { input: "09:30:15.250", panics }),
+		Ok("09:30:15.250"),
+	);
 });
 
 Deno.test("without a precision, the seconds and any fraction are optional", () => {
@@ -392,11 +398,11 @@ Deno.test("without a precision, the seconds and any fraction are optional", () =
 	// When: parsing times at minute, second and long fraction precision
 	// Then: all pass, but a bare decimal mark or a comma fails
 	for (const input of valid) {
-		assertEquals(parseSync(schema, input), Ok(input), input);
+		assertEquals(parseSync(schema, { input: input, panics }), Ok(input), input);
 	}
 	for (const input of invalid) {
 		assertEquals(
-			parseSync(schema, input),
+			parseSync(schema, { input: input, panics }),
 			outcome({ accepted: false, input, name: "time" }),
 			input,
 		);
@@ -414,7 +420,7 @@ Deno.test("a time format with options still checks the time of day", () => {
 	// Then: each fails naming the format
 	for (const input of invalid) {
 		assertEquals(
-			parseSync(schema, input),
+			parseSync(schema, { input: input, panics }),
 			outcome({ accepted: false, input, name: "time" }),
 			input,
 		);
@@ -441,11 +447,11 @@ Deno.test("a date-time format with options still checks the calendar", () => {
 	// When: parsing real and impossible dates, and malformed date-times
 	// Then: only the real, well-formed ones pass
 	for (const input of valid) {
-		assertEquals(parseSync(schema, input), Ok(input), input);
+		assertEquals(parseSync(schema, { input: input, panics }), Ok(input), input);
 	}
 	for (const input of invalid) {
 		assertEquals(
-			parseSync(schema, input),
+			parseSync(schema, { input: input, panics }),
 			outcome({ accepted: false, input, name: "date-time" }),
 			input,
 		);
@@ -466,10 +472,10 @@ Deno.test("a bare time name is its TimeFormat with every option left out", () =>
 	for (const name of NAMES) {
 		// When: parsing them with the bare name and the object without options
 		const bare = inputs.map((input) => {
-			return parseSync(string({ format: name }), input);
+			return parseSync(string({ format: name }), { input: input, panics });
 		});
 		const spelled = inputs.map((input) => {
-			return parseSync(string({ format: { name } }), input);
+			return parseSync(string({ format: { name } }), { input: input, panics });
 		});
 
 		// Then: the two agree on every input

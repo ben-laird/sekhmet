@@ -47,12 +47,15 @@ function sameAs<T extends Literal>(value: T): (input: unknown) => input is T {
  * import { isErr, unwrap } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { literal } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
+ *
+ * const panics = definePanicRuntime();
  *
  * const admin = literal("admin");
- * const role: "admin" = unwrap(parseSync(admin, "admin"));
+ * const role: "admin" = unwrap(parseSync(admin, { input: "admin", panics }));
  *
  * assertEquals(role, "admin");
- * assertEquals(isErr(parseSync(admin, "user")), true);
+ * assertEquals(isErr(parseSync(admin, { input: "user", panics })), true);
  * ```
  */
 export function literal<const T extends Literal>(

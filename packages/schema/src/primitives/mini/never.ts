@@ -23,8 +23,11 @@ import { Schema } from "@/src/core/mini/schema.ts";
  * import { isErr } from "@sekhmet/enum/result/mini";
  * import { parseSync } from "@sekhmet/schema/core/mini";
  * import { never } from "@sekhmet/schema/primitives/mini";
+ * import { definePanicRuntime } from "@sekhmet/panic";
  *
- * assertEquals(isErr(parseSync(never(), undefined)), true);
+ * const panics = definePanicRuntime();
+ *
+ * assertEquals(isErr(parseSync(never(), { input: undefined, panics })), true);
  * ```
  */
 export function never(): Schema<unknown, never, SchemaIssue> {

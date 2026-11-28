@@ -49,7 +49,7 @@ Deno.test("array parses every element", () => {
 	const counts = array({ item: count });
 
 	// When: parsing a numeric array
-	const parsed = unwrap(parseSync(counts, [1, 2, 3]));
+	const parsed = unwrap(parseSync(counts, { input: [1, 2, 3], panics }));
 
 	// Then: every element is kept, in order
 	assertEquals(parsed, [1, 2, 3]);
@@ -119,8 +119,8 @@ Deno.test("minItems and maxItems bound the array's length, inclusively", async (
 	await t.step("lengths within the bounds pass", () => {
 		// When: parsing arrays of one and two numbers
 		// Then: both pass
-		assertEquals(unwrap(parseSync(bounded, [1])), [1]);
-		assertEquals(unwrap(parseSync(bounded, [1, 2])), [1, 2]);
+		assertEquals(unwrap(parseSync(bounded, { input: [1], panics })), [1]);
+		assertEquals(unwrap(parseSync(bounded, { input: [1, 2], panics })), [1, 2]);
 	});
 
 	await t.step("too short fails with TooSmall at the root", async () => {

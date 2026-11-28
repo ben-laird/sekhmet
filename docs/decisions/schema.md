@@ -903,9 +903,39 @@ those sections are kept as history.
   parse raises later settles it as `Panicked`, which nothing reads and no
   hook reports. _Revised after review (2026-11-20):_ the first version's
   boundary never caught, so such a panic escaped as an unhandled rejection.
+  _Superseded on 2026-11-28 by #114's rule 3_ (both this decision and its
+  2026-11-20 revision): see "parseSync takes a panic runtime (#114)" below.
 - **`toStandard({ schema, panics })`** takes a runtime. `validate` returns
   the Standard result when the vow is already resolved and `wait(…)`
   otherwise; a panic is reported, then resumed with `resumeUnwind`, so it
   throws (or rejects) out of `validate` to the foreign caller.
   `fromStandard` passes a foreign promise through the parse's boundary, so a
   rejection is `Panicked`.
+
+## parseSync takes a panic runtime (#114)
+
+Status: **Implemented** (2026-11-28), owner. Supersedes "`parseSync(schema,
+input)` keeps its shape and takes no runtime" and its 2026-11-20 revision,
+in "Parsing to a Vow of an Outcome (#84)"; those are kept as history.
+
+- **`parseSync(schema, { input, panics })` takes a required
+  `panics: PanicBoundary`**, like `parse`; main's method is
+  `schema.parseSync({ input, panics })`. `is(schema, { panics })` takes one
+  too, since it parses with `parseSync`.
+- **Why:** #114's panic protocol. The 2026-11-20 boundary caught a panic in
+  an abandoned async parse without reporting it, so it vanished (rule 3:
+  never catch without reporting). That remainder runs later with nobody
+  waiting, so it belongs under a boundary (rule 2), and without a runtime
+  the only other legal move, propagating, would leave an unreported
+  unhandled rejection, as the first version did.
+- **While `parseSync` runs, nothing is caught**, so a throw in user code
+  unwinds to its waiting caller (rule 1). A promise user code returns is
+  adopted under `panics`, and once `parseSync` returns, what is left of an
+  abandoned parse runs under `panics`: a panic there is reported once and
+  settles the abandoned parse as `Panicked`. A `Panicked` that `parseSync`
+  does see is resumed with `panics.resumeUnwind`, so no boundary reports it
+  again.
+- **Rejected:** an optional `panics` keeping the old behaviour when absent
+  (it keeps the rule-3 break as the default), and stopping the abandoned
+  parse's continuations (a rejecting async schema would still leave an
+  unhandled rejection).
