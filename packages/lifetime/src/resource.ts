@@ -14,11 +14,10 @@ import {
 	isPanicked,
 	type Outcome,
 	Ok as OutcomeOk,
-	Panicked,
 	unwrap as unwrapOutcome,
 	unwrapPanicked,
 } from "@sekhmet/panic/outcome/mini";
-import { andThen, map, poll, resolved, type Vow } from "@sekhmet/vow/mini";
+import { andThen, poll, resolved, type Vow } from "@sekhmet/vow/mini";
 import { Lifetime } from "./lifetime.ts";
 import type { EndReport } from "./phase.ts";
 import { asPanic } from "./teardown.ts";
@@ -163,7 +162,9 @@ export class Resource<I, T, C> {
 	 * `resume_unwind` does.
 	 *
 	 * The payload is `init`'s panic, a `Panic (InitFailed)` around what it
-	 * threw unless that already was a `Panic`. If tearing `setup` down fails
+	 * threw unless that already was a `Panic`. That wrapper is what the hook
+	 * reports, once, with the original payload as its cause, so unwrapping it
+	 * into an outer boundary of the same runtime doesn't report it again. If tearing `setup` down fails
 	 * too, the payload carries both: a `Panic (SetupTeardownFailed)` whose
 	 * cause, a {@linkcode SetupTeardownFailure}, holds `init`'s panic and
 	 * each of setup's cleanup panics. Read it with
@@ -249,10 +250,13 @@ export class Resource<I, T, C> {
 			lifetime.defer((cause) => this.#deinit(value, cause));
 			return OutcomeOk(lifetime);
 		};
-		// Settles as Panicked once setup is torn down, with its failures too.
+		// Settles as Panicked once setup is torn down, with its failures too. The
+		// carrier holds panics already reported, so it is resumed into the
+		// boundary: recorded as reported without reaching the hook again.
 		const afterSetup = (failure: Panic<unknown>): Vow<Started> => {
-			return map(setup.ended.toVow(), (report) => {
-				return Panicked(withSetupFailures({ init: failure, report }));
+			return andThen(setup.ended.toVow(), (report) => {
+				const payload = withSetupFailures({ init: failure, report });
+				return panics.catchUnwind(() => panics.resumeUnwind(payload));
 			});
 		};
 		// Tears setup down; throws only on a synchronous double fault in it.
@@ -263,7 +267,10 @@ export class Resource<I, T, C> {
 
 		let caught: Vow<Outcome<T, never, unknown>>;
 		try {
-			caught = panics.catchUnwind(() => this.#init(input, setup));
+			// init's panic is thrown as its wrapper, so the wrapper is what's reported
+			caught = panics.catchUnwind(
+				throwingInitFailed(() => this.#init(input, setup)),
+			);
 		} catch (doubleFault: unknown) {
 			try {
 				fail(initFailed(doubleFault));
@@ -300,6 +307,37 @@ export class Resource<I, T, C> {
 
 function initFailed(payload: unknown): Panic<unknown> {
 	return asPanic({ payload, name: "InitFailed" });
+}
+
+/**
+ * `init`, throwing or rejecting with its `Panic (InitFailed)` wrapper in
+ * place of what it threw or rejected with. Run inside the boundary, the
+ * wrapper is what gets reported, once, and what travels in `Panicked`: an
+ * outer boundary it is unwrapped into doesn't report it again, and the
+ * original payload, its cause, is never reported apart from it. A returned
+ * thenable's `then` is read once and called with the wrapping callbacks.
+ */
+function throwingInitFailed<T>(
+	init: () => T | PromiseLike<T>,
+): () => T | PromiseLike<T> {
+	return () => {
+		try {
+			const returned = init();
+			const then: unknown =
+				typeof returned === "object" && returned !== null
+					? Reflect.get(returned, "then")
+					: undefined;
+			if (typeof then !== "function") return returned;
+			return Reflect.apply(then, returned, [
+				(value: T) => value,
+				(reason: unknown) => {
+					throw initFailed(reason);
+				},
+			]);
+		} catch (payload: unknown) {
+			throw initFailed(payload);
+		}
+	};
 }
 
 /**

@@ -59,10 +59,17 @@ function watchedRejection(reason: unknown): {
 	return { promise, reject: () => fail(reason) };
 }
 
-/** What escaped the first callback the boundary gave `promise`. */
+/**
+ * What escaped the last callback chained onto `promise`: the boundary's, at
+ * the end of the chain of first `then`s (start wraps init's rejection in a
+ * `then` of its own before the boundary adopts it).
+ */
 function escapedFrom(promise: WatchedPromise<unknown>): Promise<unknown> {
-	const [callback] = promise.derived;
+	let callback = promise.derived[0];
 	assert(callback !== undefined, "the boundary should have called then");
+	while (callback instanceof WatchedPromise && callback.derived[0]) {
+		callback = callback.derived[0];
+	}
 	return callback.then(
 		() => undefined,
 		(reason: unknown) => reason,
@@ -381,6 +388,58 @@ Deno.test("a started lifetime takes the dispose cause given to start", () => {
 });
 
 // --- Double faults: the panic hook throws while reporting ---
+
+Deno.test("init's panic is reported once, as its wrapper, even when unwrapped into an outer boundary", async (t) => {
+	await t.step("a sync throw", () => {
+		// Given: a resource whose init throws, under a recording runtime
+		const { panics, reported } = recordingPanics();
+		const thrown = new Error("handshake failed");
+		const flaky = new Resource<undefined, never, Cause>({
+			init: () => {
+				throw thrown;
+			},
+			deinit: () => {},
+		});
+
+		// When: it's started, and the Panicked is unwrapped into an outer boundary
+		const started = settled(flaky.start({ input: undefined, panics }));
+		const outer = settled(panics.catchUnwind(() => unwrap(started)));
+
+		// Then: the hook saw one report, the wrapper, with the original as its cause
+		assertEquals(reported.length, 1);
+		const [wrapper] = reported;
+		assert(wrapper instanceof Panic);
+		assertEquals(wrapper.name, "Panic (InitFailed)");
+		assertEquals(wrapper.cause, thrown);
+		assert(unwrapPanicked(outer) === wrapper);
+	});
+
+	await t.step(
+		"an async rejection whose setup teardown fails too",
+		async () => {
+			// Given: an init that acquires something that fails to release, then rejects
+			const { panics, reported } = recordingPanics();
+			const flaky = new Resource<undefined, never, Cause>({
+				init: (_input, setup) => {
+					setup.defer(() => {
+						throw new Error("lock already released");
+					});
+					return Promise.reject(new Error("timed out"));
+				},
+				deinit: () => {},
+			});
+
+			// When: it's started, and the carrier is unwrapped into an outer boundary
+			const started = await wait(flaky.start({ input: undefined, panics }));
+			const outer = settled(panics.catchUnwind(() => unwrap(started)));
+
+			// Then: the hook saw init's wrapper and the cleanup's panic, never the carrier
+			assertEquals(reported.length, 2);
+			assert(!reported.some((payload) => isSetupTeardownPanic(payload)));
+			assert(isSetupTeardownPanic(unwrapPanicked(outer)));
+		},
+	);
+});
 
 Deno.test("a double fault in a sync init tears setup down, then start rethrows it", () => {
 	// Given: under a throwing hook, an init that acquires something, then throws
