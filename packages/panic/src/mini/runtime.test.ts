@@ -772,6 +772,80 @@ Deno.test("A hook that throws on async work escapes after the vow settles", asyn
 	assertStrictEquals(reason.cause.payload, payload);
 });
 
+Deno.test("A hook that throws on a synchronous rejection escapes catchUnwind", async (t) => {
+	const brokenRuntime = (): PanicRuntime => {
+		const runtime = definePanicRuntime();
+		runtime.setHook(() => {
+			throw new Error("reporter offline");
+		});
+		return runtime;
+	};
+	const rejectsAtOnce = (payload: unknown): PromiseLike<number> => {
+		return {
+			// biome-ignore lint/suspicious/noThenProperty: a thenable is the subject under test
+			then: (_onFulfilled, onRejected) => {
+				onRejected?.(payload);
+				return new Promise<never>(() => {});
+			},
+		};
+	};
+
+	await t.step("a thenable that rejects synchronously", () => {
+		// Given: a runtime whose hook throws, and a thenable that rejects at once
+		const runtime = brokenRuntime();
+		const payload = boom();
+
+		// When: catching a function that returns it
+		const thrown = assertThrows(() => {
+			runtime.catchUnwind(() => rejectsAtOnce(payload));
+		});
+
+		// Then: the Panic (PanicHook) escapes synchronously, as when then throws
+		assert(isPanicHookFailure(thrown));
+		assertStrictEquals(thrown.cause.payload, payload);
+	});
+
+	await t.step("a thenable whose then throws", () => {
+		// Given: a runtime whose hook throws, and a thenable whose then throws
+		const runtime = brokenRuntime();
+		const payload = boom();
+		const hostile: PromiseLike<number> = {
+			// biome-ignore lint/suspicious/noThenProperty: a thenable is the subject under test
+			then: () => {
+				throw payload;
+			},
+		};
+
+		// When: catching a function that returns it
+		const thrown = assertThrows(() => runtime.catchUnwind(() => hostile));
+
+		// Then: the Panic (PanicHook) escapes synchronously
+		assert(isPanicHookFailure(thrown));
+		assertStrictEquals(thrown.cause.payload, payload);
+	});
+
+	await t.step("a nested thenable that rejects synchronously", () => {
+		// Given: a thenable that fulfils at once with one that rejects at once
+		const runtime = brokenRuntime();
+		const payload = boom();
+		const outer = {
+			// biome-ignore lint/suspicious/noThenProperty: a thenable is the subject under test
+			then: (onFulfilled: (value: PromiseLike<number>) => void): void => {
+				onFulfilled(rejectsAtOnce(payload));
+			},
+		};
+
+		// When: catching a function that returns the outer one
+		const thrown = assertThrows(() => {
+			runtime.catchUnwind<unknown>(() => outer);
+		});
+
+		// Then: the Panic (PanicHook) escapes through both levels
+		assert(isPanicHookFailure(thrown));
+		assertStrictEquals(thrown.cause.payload, payload);
+	});
+});
+
 Deno.test("A hook that throws on a throwing dependent escapes its callback", async () => {
 	// Given: a runtime whose hook throws, async work, and a throwing dependent
 	const runtime = definePanicRuntime();
