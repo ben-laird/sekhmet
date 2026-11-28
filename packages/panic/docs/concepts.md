@@ -142,13 +142,14 @@ boundary then reports and catches the `Panic (PanicHook)` like any other
 unwind; with no outer boundary, the host reports it as an uncaught error.
 
 Async work has no caller to throw to: the rejection was adopted in a promise
-callback, and a `Vow` cannot reject. So the vow still settles as `Panicked`
-with the payload, and the `Panic (PanicHook)` then escapes that callback as
-an unhandled rejection, which the Deno and Node defaults treat as fatal: the
+callback, and a `Vow` cannot reject. So the vow settles as `Panicked` with
+the payload first, and its dependents see it; only then does the
+`Panic (PanicHook)` escape that callback, as an unhandled rejection, which the Deno and Node defaults treat as fatal: the
 closest JavaScript comes to Rust's abort. A hook that throws while reporting
 a throwing dependent of the vow escapes the same way. Before the boundary
 was one `catchUnwind`, its async form rejected its promise instead.
 
 This is the second difference from Rust: a throwing hook doesn't abort, it
-escalates to the next boundary out. `isPanicHookFailure` recognizes the
+escalates to the next boundary out, or, on async work, settles the vow first
+and then escapes. `isPanicHookFailure` recognizes the
 escalated panic, and accepts only one a boundary threw.

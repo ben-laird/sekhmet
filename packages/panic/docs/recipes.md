@@ -157,7 +157,9 @@ assertEquals(result, Err("config is missing a port"));
 ## How to recover from async work
 
 `catchUnwind` adopts a returned promise, or any other thenable, as `await`
-does. It catches a rejection, a `then` that throws and a synchronous throw
+does, with one difference by design: it reads the thenable's `then` once and
+calls it at once, inside `catchUnwind`, not on a microtask, so a thenable
+that calls back synchronously settles the vow before `catchUnwind` returns. It catches a rejection, a `then` that throws and a synchronous throw
 from the function alike, so it never leaves an unhandled rejection, unless
 the hook itself throws while reporting one (see below). Wait for
 the vow with `wait` from `@sekhmet/vow`; until it settles, `poll` reads it as

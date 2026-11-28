@@ -84,9 +84,10 @@ export interface PanicRuntime {
 	 * A returned thenable is adopted, as `await` does: its value is the `Ok`,
 	 * and its rejection, or a `then` that throws, is `Panicked`, matching
 	 * "throw means panic". A thenable it fulfils with is followed in turn,
-	 * and only the first callback of each counts. Its `then` is called at
-	 * once rather than on a microtask, so one that calls back synchronously
-	 * settles the vow at once. A sync function that returns a thenable as
+	 * and only the first callback of each counts. By design, its `then` is
+	 * read once and called at once, inside `catchUnwind`, not on a microtask
+	 * as `await` would: one that calls back synchronously settles the vow
+	 * before `catchUnwind` returns, so sync stays sync. A sync function that returns a thenable as
 	 * data is flattened too. To keep one as a value, box it
 	 * (`() => ({ thenable })`). An expected failure is classified at the
 	 * edge: return a `Result` (`promise.then(Ok, Err)`), and flatten the
@@ -104,13 +105,14 @@ export interface PanicRuntime {
 	 * reports and catches it as a new unwind.
 	 *
 	 * Async work has no caller to throw to, and a `Vow` cannot reject. So
-	 * when the hook throws while reporting a rejection, the vow still
-	 * settles as `Panicked` with the payload, and the `Panic (PanicHook)`
-	 * then escapes the settle callback as an unhandled rejection, which
-	 * crashes the process under the Deno and Node defaults. The same goes
-	 * for a hook that throws while reporting a throwing dependent. This is
-	 * deliberate, and a change from the old `catchUnwindAsync`, which
-	 * rejected its promise. The default hook never throws. A thenable that
+	 * when the hook throws while reporting a rejection, the vow settles as
+	 * `Panicked` with the payload first, and only then does the
+	 * `Panic (PanicHook)` escape the settle callback, as an unhandled
+	 * rejection, which crashes the process under the Deno and Node defaults.
+	 * Its dependents see the `Panicked` either way. The same goes for a hook
+	 * that throws while reporting a throwing dependent. This order is the
+	 * contract, and a change from the old `catchUnwindAsync`, which rejected
+	 * its promise. The default hook never throws. A thenable that
 	 * rejects inside its own `then` call, or a `then` that throws, has a
 	 * caller: then the `Panic (PanicHook)` escapes `catchUnwind` itself.
 	 *
