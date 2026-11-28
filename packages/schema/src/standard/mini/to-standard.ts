@@ -7,10 +7,8 @@
  */
 
 import { match } from "@sekhmet/enum/core/mini/exit";
-import { expectReady } from "@sekhmet/enum/poll/mini";
 import type { PanicBoundary } from "@sekhmet/panic/mini/runtime";
 import type { Outcome } from "@sekhmet/panic/outcome/mini/core";
-import { poll } from "@sekhmet/vow/mini/accessors";
 import { wait } from "@sekhmet/vow/mini/impl";
 import {
 	formatIssue,
@@ -78,8 +76,11 @@ export interface ToStandardOptions<O, E> {
  * The schema's input must be `unknown`, as Standard Schema's `validate` takes
  * any value. `validate` returns its result synchronously when the parse
  * settled synchronously, and a `Promise` (through `wait`) otherwise. A
- * panic in the parse, or in `toIssue`, is reported to `panics`' hook and
- * resumed: `validate` throws the payload, or its promise rejects with it. A `SchemaIssue` error becomes
+ * panic in the parse is reported to `panics`' hook and resumed: `validate`
+ * throws the payload, or its promise rejects with it. `toIssue` runs inside
+ * `validate`'s call, or its promise chain, where the caller waits, so a
+ * panic in it is not caught: it propagates out of `validate` the same way,
+ * unreported, for the caller's own boundary to report. A `SchemaIssue` error becomes
  * one Standard issue with `formatIssue`'s message, and an
  * `Issues<SchemaIssue>` one issue per entry, with the entry's path. Any other
  * error needs a `toIssue` option, and the types require it.
@@ -169,17 +170,8 @@ export function toStandard<O, E>(options: {
 	): StandardResult<O> => {
 		return match(outcome)<StandardResult<O>>({
 			Ok: (value) => ({ value }),
-			Err: (error) => {
-				// toIssue is user code: a throw is a panic, reported, then resumed
-				const caught = panics.catchUnwind(() => issuesOf(error));
-				const converted = expectReady(poll(caught), "issuesOf is sync");
-
-				return match(converted)<StandardResult<O>>({
-					Ok: (result) => result,
-					Err: (impossible) => impossible,
-					Panicked: (payload) => panics.resumeUnwind(payload),
-				});
-			},
+			// toIssue runs where validate's caller waits: a throw propagates to it
+			Err: issuesOf,
 			Panicked: (payload) => panics.resumeUnwind(payload),
 		});
 	};

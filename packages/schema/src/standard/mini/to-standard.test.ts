@@ -306,13 +306,13 @@ Deno.test("toStandard's types enforce its contract", async (t) => {
 		});
 
 		// When: validating
-		// Then: the broken contract panics, reported to the runtime first
+		// Then: the broken contract panics, propagating to the caller unreported
 		assertThrows(
 			() => standard["~standard"].validate(0),
 			TypeError,
 			"needs a toIssue option",
 		);
-		assertEquals(reported.length, 1);
+		assertEquals(reported, []);
 	});
 });
 
@@ -387,13 +387,14 @@ Deno.test("toStandard reports a panic, then resumes it out of validate", async (
 			// When: validating a failing value
 			const validate = (): unknown => standard["~standard"].validate(0);
 
-			// Then: validate throws (or rejects with) the payload, reported once
+			// Then: validate throws (or rejects with) the payload, which
+			// propagates to the waiting caller without being reported
 			if (timing === "synchronous") {
 				assertThrows(validate, Error, "bug");
 			} else {
 				await assertRejects(() => Promise.resolve(validate()), Error, "bug");
 			}
-			assertEquals(reported, [bug]);
+			assertEquals(reported, []);
 		});
 	}
 });
