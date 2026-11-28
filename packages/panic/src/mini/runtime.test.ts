@@ -721,6 +721,30 @@ Deno.test("catchUnwind() follows a thenable a thenable fulfils with", async () =
 	assertEquals(reports, []);
 });
 
+Deno.test("catchUnwind() reads a thenable's then once", async () => {
+	// Given: a thenable whose then getter counts its reads, and one it fulfils with
+	const { runtime } = recordingRuntime();
+	let reads = 0;
+	const counted = (value: unknown) => {
+		return {
+			// biome-ignore lint/suspicious/noThenProperty: a thenable is the subject under test
+			get then() {
+				reads++;
+				return (onFulfilled: (value: unknown) => void) => onFulfilled(value);
+			},
+		};
+	};
+
+	// When: catching a function that returns a thenable of a thenable of 3
+	const result = await wait(
+		runtime.catchUnwind<unknown>(() => counted(counted(3))),
+	);
+
+	// Then: each then was read once, as await reads it
+	assertEquals(result, Ok(3));
+	assertEquals(reads, 2);
+});
+
 Deno.test("catchUnwind() heeds only a thenable's first callback", () => {
 	// Given: a thenable that fulfils, then rejects, then throws
 	const { runtime, reports } = recordingRuntime();
