@@ -285,7 +285,8 @@ promise's `then` callback does, so there is no `try` to put it in. Its
 dependents' errors go to the panic runtime whose `catchUnwind` made it.
 
 1. Make the vow with `catchUnwind` on the panic runtime your program runs in.
-2. Set that runtime's hook to report faults; it receives the `AggregateError`.
+2. Set that runtime's hook to report faults; it receives each dependent's
+   throw on its own, unwrapped from the `AggregateError`.
 
 ```ts
 import { assertEquals, assertInstanceOf } from "@std/assert";
@@ -304,5 +305,5 @@ map(loaded, () => {
 
 assertEquals(await wait(loaded), Ok(1));
 assertEquals(reported.length, 1);
-assertInstanceOf(reported[0], AggregateError);
+assertInstanceOf(reported[0], Error);
 ```
